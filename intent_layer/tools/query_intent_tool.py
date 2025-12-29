@@ -29,6 +29,10 @@ QUERY_INTENT_TOOL = {
                     "description": PRODUCT_QUERY_DESCRIPTION,
                     "type": "object",
                     "properties": {
+                        "query_text": {
+                            "type": "string",
+                            "description": "Free-form semantic description of what the user is looking for to be used for embeddings",
+                        },
                         "category": {
                             "type": "string",
                             "description": "Product category like 'shirt', 'shoes', 'pants'.",

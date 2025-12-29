@@ -9,7 +9,6 @@ client = OpenAI()
 def embed_text(text: str) -> list[float]:
     text = (text or "").strip()
     if not text:
-        # You can choose to return None and skip vector search; but for now:
-        text = " "  # minimal non-empty input
+        text = " "  # minimal non-empty input but probably want to just return to avoid making the call in general
     resp = client.embeddings.create(model=EMBEDDING_MODEL, input=text)
     return resp.data[0].embedding

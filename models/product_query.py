@@ -11,3 +11,4 @@ class ProductQuery(BaseModel):
     size_numeric: Optional[float] = None
     size_unit: Optional[str] = None
     gender: Optional[str] = None
+    query_text: Optional[str] = None

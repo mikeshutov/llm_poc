@@ -14,6 +14,7 @@ def get_conn() -> psycopg.Connection:
     register_vector(conn)
     return conn
 
+# main product search with filters
 def search_products(
     filters: Optional[ProductQuery],
     query_embedding: list[float],
@@ -61,10 +62,8 @@ def search_products(
         LIMIT %s
     """
 
-    print(sql)
-    # IMPORTANT: query vector is used twice (SELECT distance and ORDER BY)
+        # IMPORTANT: query vector is used twice (SELECT distance and ORDER BY)
     params2 = [query_embedding, *params, query_embedding, limit]
 
     with get_conn() as conn:
-        df = pd.read_sql(sql, conn, params=params2)
-        return df
+        return pd.read_sql(sql, conn, params=params2)

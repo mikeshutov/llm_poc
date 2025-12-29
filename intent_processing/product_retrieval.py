@@ -1,19 +1,13 @@
 import pandas as pd
 from typing import Optional
 from models.product_query import ProductQuery
+from intent_processing.product_embeddings import embed_text
+from intent_processing.db_product_search import search_products
 
-from intent_processing.category_resolution import resolve_category
 
-def normalize_filters(pq):
-    if pq and pq.category:
-        pq.category = resolve_category(pq.category)
-    return pq
+def find_products(filters: Optional[ProductQuery]) -> pd.DataFrame:
+    qvec = embed_text("".join(p for p in [filters.query_text, filters.style] if p))
+    df = search_products(filters=filters, query_embedding=qvec, limit=20)
 
-def find_products(filters: Optional[ProductQuery]):
-    result = df.copy()
-    if filters.category:
-        result = result[result["category"] == filters.category]
-    if filters.color:
-        result = result[result["color"] == filters.color]
-
-    return result.head(10)
+    #add web search results here as well maybe create new type for return
+    return df

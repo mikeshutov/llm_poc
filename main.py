@@ -25,25 +25,18 @@ if user_query:
     match parsedQuery.intent:
         case Intent.FIND_PRODUCTS:
             st.subheader("2️⃣ Retrieved products")
-            # create query embedding (same model as seeding)
-            qvec = embed_text(parsedQuery.product_query.category)
-
-            # hybrid search
-            df = search_products(filters=parsedQuery.product_query, query_embedding=qvec, limit=20)
-
+            df = find_products(parsedQuery.product_query)
             st.dataframe(df)
 
-            # pass records to response layer (exclude embedding; include distance if you want)
-            records = df.drop(columns=[], errors="ignore").to_dict(orient="records")
+            # pass records to response layer (exclude embedding and ID; were keeping distance in case we want to use it)
+            records = df.drop(columns=["embedding", "id"], errors="ignore").to_dict(orient="records")
             answer = generate_response(
                 user_query=user_query,
                 parsedRequest=parsedQuery,
                 query_results=json.dumps(records),
             )
             st.subheader("3️⃣ LLM recommendation")
-            st.write(answer)  # can pretty this up later
-
-
+            st.write(answer)
 
         case Intent.UNKNOWN:
             st.write("Sorry, I don't understand you.")
