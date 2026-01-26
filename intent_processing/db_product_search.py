@@ -24,13 +24,9 @@ def search_products(
     params: list[Any] = []
 
     if filters is not None:
-        # if filters.category:
-        #     where.append("LOWER(category) = LOWER(%s)")
-        #     params.append(filters.category)
-        #
-        # if filters.color:
-        #     where.append("LOWER(color) = LOWER(%s)")
-        #     params.append(filters.color)
+        if filters.color:
+             where.append("LOWER(color) = LOWER(%s)")
+             params.append(filters.color)
 
         if filters.price_min is not None:
             where.append("price >= %s")
@@ -45,7 +41,7 @@ def search_products(
             params.append(filters.gender)
 
         if filters.style:
-            where.append("style=LOWER(%s)")
+            where.append("LOWER(style)=LOWER(%s)")
             params.append(f"%{filters.style}%")
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
@@ -62,7 +58,7 @@ def search_products(
         LIMIT %s
     """
 
-        # IMPORTANT: query vector is used twice (SELECT distance and ORDER BY)
+    # IMPORTANT: query vector is used twice (SELECT distance and ORDER BY)
     params2 = [query_embedding, *params, query_embedding, limit]
 
     with get_conn() as conn:

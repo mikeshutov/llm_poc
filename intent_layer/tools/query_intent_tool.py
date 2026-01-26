@@ -2,7 +2,6 @@ from models.intent import Intent
 
 QUERY_INTENT_DESCRIPTION = (
         "Determines user intent as well as any qualifying queries."
-        "Current intent valid values are find_products or unknown."
 )
 
 PRODUCT_QUERY_DESCRIPTION = (
@@ -22,7 +21,7 @@ QUERY_INTENT_TOOL = {
             "properties": {
                 "intent": {
                     "type": "string",
-                    "description": "User intent, usually 'find_products' or 'unknown'.",
+                    "description": "User's likely intent based on provided enum.",
                     "enum": [i.value for i in Intent],
                 },
                 "product_query":{
