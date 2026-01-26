@@ -1,4 +1,6 @@
 import json
+from dataclasses import asdict
+
 from dotenv import load_dotenv
 from uuid import UUID
 
@@ -164,14 +166,12 @@ if userQuery:
             productResultTitle = "Product Results"
             productResponse = find_products(parsedQuery.product_query)
             st.session_state.messages.append(
-                {"role": "debug", "content": productResponse.to_dict(orient="records"), "title": productResultTitle})
-            debug_render_message(productResponse.to_dict(orient="records"), productResultTitle)
+                {"role": "debug", "content": [asdict(p) for p in productResponse], "title": productResultTitle})
+            debug_render_message([asdict(p) for p in productResponse], productResultTitle)
 
-            # pass records to response layer (exclude embedding and ID; were keeping distance in case we want to use it)
-            records = productResponse.drop(columns=["embedding", "id"], errors="ignore").to_dict(orient="records")
             answer = generate_response(
                 parsedRequest=roundtrips_with_latest,
-                query_results=json.dumps(records),
+                query_results=json.dumps(productResponse, default=str),
             )
             st.session_state.messages.append({"role": "assistant", "content": answer})
             with st.chat_message("assistant"):
@@ -182,7 +182,7 @@ if userQuery:
                 conversation_repository.set_conversation_title(st.session_state.conversation_id, generated_title)
                 st.rerun()
 
-            summary_row = conversation_repository.get_summary(UUID(cid))
+            #summary_row = conversation_repository.get_summary(UUID(cid))
         # general information intent to demonstrate web data lookups
         case Intent.GENERAL_INFORMATION:
             search_results_title = "Search Results"

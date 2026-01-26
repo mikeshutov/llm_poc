@@ -121,7 +121,7 @@ class ConversationRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT conversation_id, summary, created_at, metadata
+                SELECT conversation_id, summary, created_at
                 FROM conversation_summary
                 WHERE conversation_id = %s
                 """, (conversation_id,)
