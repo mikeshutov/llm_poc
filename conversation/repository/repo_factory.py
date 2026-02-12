@@ -2,7 +2,7 @@ import streamlit as st
 import psycopg
 import os
 from psycopg.rows import dict_row
-from conversation.conversation_repository import ConversationRepository
+from conversation.repository.conversation_repository import ConversationRepository
 
 @st.cache_resource
 def get_conversation_repo() -> ConversationRepository:

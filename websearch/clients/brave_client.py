@@ -3,16 +3,23 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 import requests
 from requests import Response
 
-from models.search_type import SearchType
-
+from rendering.rendering import debug_render_message
 
 class BraveSearchError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class ShoppingSearchResult:
+    query: str
+    sources: List[str]
+    results: List[Dict[str, Any]]
+    raw: Dict[str, Any]
 
 
 @dataclass
@@ -50,13 +57,23 @@ class BraveSearchClient:
                 f"Brave API error {resp.status_code} on {path}: {body}"
             )
 
-        return resp.json()
+        payload = resp.json()
+        debug_render_message(
+            {
+                "service": "brave_search",
+                "path": path,
+                "params": params,
+                "status": resp.status_code,
+                "response": payload,
+            },
+            "Debug: Brave search request",
+        )
+        return payload
 
 
     def web_search(
         self,
         q: str,
-        search_type: SearchType,
         count: int = 10,
         offset: int = 0,
         country: str = "CA",
@@ -80,4 +97,49 @@ class BraveSearchClient:
         return self._get("/suggest/search", {"q": q, "country": country, "count": count, **params})
 
 
-    #next i also want to add some catalog searching functions to go along our product search
+    def shopping_search(
+        self,
+        q: str,
+        *,
+        sources: Optional[list[str]] = None,
+        count: int = 10,
+        offset: int = 0,
+        country: str = "US",
+        search_lang: str = "en",
+        **extra_params: Any,
+    ) -> ShoppingSearchResult:
+        if not q or not q.strip():
+            raise ValueError("Query must be a non-empty string.")
+        source_list = sources or ["amazon", "google_shopping"]
+        responses: Dict[str, Any] = {}
+        combined_results: list[Dict[str, Any]] = []
+
+        for source in source_list:
+            source_key = source.strip().lower()
+            if source_key == "amazon":
+                query = f"{q} site:amazon.com"
+            elif source_key in {"google_shopping", "google-shopping", "gshopping"}:
+                query = f"{q} site:shopping.google.com"
+            else:
+                query = f"{q} site:{source}"
+
+            resp = self.web_search(
+                query,
+                count=count,
+                offset=offset,
+                country=country,
+                search_lang=search_lang,
+                **extra_params,
+            )
+            responses[source_key] = resp
+
+            web_results = resp.get("web", {}).get("results", [])
+            if isinstance(web_results, list):
+                combined_results.extend(web_results)
+
+        return ShoppingSearchResult(
+            query=q,
+            sources=source_list,
+            results=combined_results,
+            raw=responses,
+        )

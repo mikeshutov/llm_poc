@@ -7,5 +7,6 @@ CREATE TABLE conversation (
   user_id TEXT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  tone_state JSONB NOT NULL DEFAULT '{}'::jsonb
 );

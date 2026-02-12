@@ -1,4 +1,6 @@
-from models.intent import Intent
+from intent_layer.models.intent import Intent
+from websearch.models.search_type import SearchType
+from personalization.tone.models import ToneLabel
 
 QUERY_INTENT_DESCRIPTION = (
         "Determines user intent as well as any qualifying queries."
@@ -10,7 +12,7 @@ PRODUCT_QUERY_DESCRIPTION = (
         "Price fields are numbers, interpreted as the user's currency."
 )
 
-# Tool used to determine user intent
+# Tool used to determine user intent and common parameters
 QUERY_INTENT_TOOL = {
     "type": "function",
     "function": {
@@ -24,54 +26,74 @@ QUERY_INTENT_TOOL = {
                     "description": "User's likely intent based on provided enum.",
                     "enum": [i.value for i in Intent],
                 },
-                "product_query":{
-                    "description": PRODUCT_QUERY_DESCRIPTION,
+                "tone": {
                     "type": "object",
+                    "description": "Desired response tone inferred from the user's prompt.",
                     "properties": {
-                        "query_text": {
+                        "label": {
                             "type": "string",
-                            "description": "Free-form semantic description of what the user is looking for to be used for embeddings",
+                            "enum": [t.value for t in ToneLabel],
+                            "description": "Tone label.",
                         },
-                        "category": {
-                            "type": "string",
-                            "description": "Product category like 'shirt', 'shoes', 'pants'.",
+                        "score": {
+                            "type": "number",
+                            "description": "Confidence score from 0 to 1.",
                         },
+                        "override": {
+                            "type": "boolean",
+                            "description": "True if tone should switch due to a rapid change in conversation.",
+                        },
+                    },
+                    "required": ["label", "score", "override"],
+                },
+                "common_properties": {
+                    "type": "object",
+                    "description": "Common properties reusable across intents.",
+                    "properties": {
                         "color": {
                             "type": "string",
-                            "description": "Color mentioned by the user, e.g. 'red', 'blue'.",
+                            "description": "Color filter when applicable.",
                         },
                         "price_min": {
                             "type": "number",
-                            "description": "Minimal price if the user mentions something like 'over 50'.",
+                            "description": "Minimum price if specified.",
                         },
                         "price_max": {
                             "type": "number",
-                            "description": "Max price if user mentions 'under 50', 'less than 100', etc.",
-                        },
-                        "style": {
-                            "type": "string",
-                            "description": "Style or context, e.g. 'gym', 'formal', 'casual'.",
-                        },
-                        "size_label": {
-                            "type": "string",
-                            "description": "Size label like 'S', 'M', 'L', 'XL', 'XXL', 'small', 'medium', 'large'. Use this only if the user explicitly uses a label."
-                        },
-                        "size_numeric": {
-                            "type": "number",
-                            "description": "Numeric size if the user mentions measurements like '16.5 inch', '42 chest', '32 waist'."
-                        },
-                        "size_unit": {
-                            "type": "string",
-                            "description": "Unit of the numeric size (e.g. 'inch', 'cm', 'waist', 'neck', 'chest')."
+                            "description": "Maximum price if specified.",
                         },
                         "gender": {
                             "type": "string",
-                            "description": "The gender of the user or product. Valid options are (men, women)"
+                            "description": "Gender filter when applicable. Valid options are (men, women).",
                         },
-                    }
-                }
+                    },
+                },
+                "query_details": {
+                    "type": "object",
+                    "description": "Common query metadata usable across intents.",
+                    "properties": {
+                        "query_text": {
+                            "type": "string",
+                            "description": "Normalized query text capturing the user's core ask.",
+                        },
+                        "keywords": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Key terms extracted from the user's request.",
+                        },
+                        "language": {
+                            "type": "string",
+                            "description": "ISO language code for the user's request, e.g. 'en', 'fr'.",
+                        },
+                        "search_type": {
+                            "type": "string",
+                            "description": "Search modality for general information requests.",
+                            "enum": [s.value for s in SearchType],
+                        },
+                    },
+                },
             },
-            "required": ["intent"],
+            "required": ["intent", "tone"],
             "additionalProperties": False,
         },
     },

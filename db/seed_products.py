@@ -1,12 +1,16 @@
 import os
 import random
+from pathlib import Path
 from typing import Any
 
 import psycopg
 from datasets import load_dataset
 from openai import OpenAI
+from dotenv import load_dotenv
 
+load_dotenv()
 DB_URL = os.getenv("DATABASE_URL", "postgresql://app:app@localhost:5432/products")
+IMAGE_DIR = Path(os.getenv("PRODUCT_IMAGE_DIR", "db/images"))
 
 # arbitrary price range since the products do not have a price
 CATEGORY_PRICE_RANGES = {
@@ -39,12 +43,50 @@ def build_embedding_text(row: dict[str, Any]) -> str:
     style = row.get("usage") or ""
     return f"Name: {name}\nStyle: {style}"
 
+def extract_image_url(value: Any) -> str | None:
+    def is_thumbnail(val: str) -> bool:
+        lowered = val.lower()
+        return "thumb" in lowered or "thumbnail" in lowered
+
+    if isinstance(value, str):
+        return None if is_thumbnail(value) else value
+    if isinstance(value, dict):
+        candidates: list[str] = []
+        for key in ("url", "path", "image_url"):
+            v = value.get(key)
+            if isinstance(v, str) and v:
+                candidates.append(v)
+        for v in candidates:
+            if not is_thumbnail(v):
+                return v
+        if candidates:
+            return candidates[0]
+        return None
+    filename = getattr(value, "filename", None)
+    if isinstance(filename, str) and filename:
+        return filename
+    return None
+
+def save_image(value: Any, pid: str) -> str | None:
+    if value is None:
+        return None
+    save_path = IMAGE_DIR / f"{pid}.jpg"
+    try:
+        value.save(save_path, format="JPEG")
+    except Exception:
+        pass
+    if save_path.exists():
+        return str(save_path)
+    return None
+
 def main():
-    client = OpenAI()
+    allow_image_backfill = os.getenv("ALLOW_IMAGE_BACKFILL", "0") == "1"
+    force_image_refresh = os.getenv("FORCE_IMAGE_REFRESH", "0") == "1"
+    client = OpenAI() if not allow_image_backfill else None
+    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
     ds = load_dataset("ashraq/fashion-product-images-small", split="train")
     rows = [ds[i] for i in range(len(ds))]
-
     # Create stable IDs
     def row_id(i: int, r: dict[str, Any]) -> str:
         return str(r.get("id") or i)
@@ -53,9 +95,54 @@ def main():
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM products;")
             existing = cur.fetchone()[0]
-            if existing and existing > 0:
+            if existing and existing > 0 and not allow_image_backfill:
                 print(f"products already has {existing} rows; exiting (delete table if you want reseed).")
                 return
+
+        if allow_image_backfill:
+            with conn.cursor() as cur:
+                update_batch: list[tuple] = []
+                for i, r in enumerate(rows):
+                    pid = row_id(i, r)
+                    img = r.get("image")
+                    image_url = save_image(img, pid)
+                    if image_url is None:
+                        image_url = (
+                            extract_image_url(r.get("image"))
+                            or extract_image_url(r.get("img"))
+                            or extract_image_url(r.get("image_url"))
+                        )
+
+                    if not image_url:
+                        continue
+
+                    update_batch.append((image_url, pid))
+
+                    if len(update_batch) >= 500:
+                        cur.executemany(
+                            """
+                            UPDATE products
+                            SET image_url = %s
+                            WHERE id = %s
+                            """,
+                            update_batch,
+                        )
+                        conn.commit()
+                        update_batch.clear()
+                        print(f"Backfilled {i+1}/{len(rows)}")
+
+                if update_batch:
+                    cur.executemany(
+                        """
+                        UPDATE products
+                        SET image_url = %s
+                        WHERE id = %s
+                        """,
+                        update_batch,
+                    )
+                    conn.commit()
+            print("Done.")
+            return
 
         BATCH = int(os.getenv("EMBED_BATCH_SIZE", "128"))
         embed_batch: list[str] = []
@@ -74,7 +161,15 @@ def main():
                 price = gen_price(category)
 
                 embed_batch.append(build_embedding_text(r))
-                meta_batch.append((pid, name, category, color, style, gender, season, year, price))
+                img = r.get("image")
+                image_url = save_image(img, pid)
+                if image_url is None:
+                    image_url = (
+                        extract_image_url(r.get("image"))
+                        or extract_image_url(r.get("img"))
+                        or extract_image_url(r.get("image_url"))
+                    )
+                meta_batch.append((pid, name, category, color, style, gender, season, year, price, image_url))
 
                 if len(embed_batch) >= BATCH:
                     # Embeddings call (batch). Use an embedding model (not chat).
@@ -87,10 +182,13 @@ def main():
                     cur.executemany(
                         """
                         INSERT INTO products
-                        (id, name, category, color, style, gender, season, year, price, embedding)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        (id, name, category, color, style, gender, season, year, price, image_url, embedding)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (id) DO UPDATE
+                        SET image_url = EXCLUDED.image_url
+                        WHERE %s OR products.image_url IS NULL OR products.image_url = '';
                         """,
-                        [(*meta_batch[j], vectors[j]) for j in range(len(meta_batch))],
+                        [(*meta_batch[j], force_image_refresh) for j in range(len(meta_batch))],
                     )
                     conn.commit()
 
@@ -108,10 +206,13 @@ def main():
                 cur.executemany(
                     """
                     INSERT INTO products
-                    (id, name, category, color, style, gender, season, year, price, embedding)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    (id, name, category, color, style, gender, season, year, price, image_url, embedding)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT (id) DO UPDATE
+                    SET image_url = EXCLUDED.image_url
+                    WHERE %s OR products.image_url IS NULL OR products.image_url = '';
                     """,
-                    [(*meta_batch[j], vectors[j]) for j in range(len(meta_batch))],
+                    [(*meta_batch[j], force_image_refresh) for j in range(len(meta_batch))],
                 )
                 conn.commit()
 

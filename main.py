@@ -3,12 +3,23 @@ from dataclasses import asdict
 
 from dotenv import load_dotenv
 from uuid import UUID
-
-from conversation.conversation import generate_conversation_title
-from db import get_conversation_repo
+from conversation.conversation import generate_conversation_title, generate_conversation_summary
+from conversation.repository.repo_factory import get_conversation_repo
 from intent_processing.generic_search import generic_web_search
-from llm.llm_message_builder import compose_messages_from_roundtrips
-from websearch.web_search import process_search_intent
+from conversation.context_builder import build_roundtrip_context
+from rendering.rendering import render_message, debug_render_message
+from rendering.sidebar import render_sidebar
+from rendering.messages import ensure_messages_loaded, render_messages, append_assistant_response
+
+
+def setup_conversation(conversation_repository, cid):
+    if cid:
+        st.session_state.conversation_id = cid
+    else:
+        conv = conversation_repository.create_conversation(user_id="anonymous", metadata={"source": "streamlit"})
+        st.session_state.conversation_id = str(conv.id)
+        st.query_params["cid"] = st.session_state.conversation_id  # persist in URL
+
 
 load_dotenv()
 import streamlit as st
@@ -16,7 +27,12 @@ import streamlit as st
 from intent_layer.intent_layer import parse_query
 from intent_processing.product_retrieval import find_products
 from response_layer.response_layer import generate_response
-from models.intent import Intent
+from intent_layer.models.intent import Intent
+from response_layer.models.response_payload import ResponsePayload
+from websearch.models.search_type import SearchType
+from response_layer.cards_mapper import news_results_to_cards, product_results_to_cards
+from personalization.tone import update_tone_state
+from intent_layer.models.parsed_request import QueryDetails
 
 #Page title
 st.set_page_config(page_title="Product Finder", page_icon="🛒")
@@ -27,117 +43,25 @@ cid = qp.get("cid")
 
 conversation_repository = get_conversation_repo()
 
-#util to move
-def render_message(msg):
-    role = msg["role"]
-    content = msg["content"]
-    contentTitle = msg.get("title", "Debug")
-    if role == "debug":
-        debug_render_message(content,contentTitle)
-    else:
-        with st.chat_message(role):
-            if role == "assistant":
-                st.info(content)
-            else:
-                st.write(content)
-
-
-def debug_render_message(content, contentTitle):
-    with st.chat_message("assistant", avatar="🧪"):
-        st.markdown(contentTitle)
-        with st.expander("Debug"):
-            st.json(content)
-
-if cid:
-    st.session_state.conversation_id = cid
-else:
-    conv = conversation_repository.create_conversation(user_id="anonymous", metadata={"source": "streamlit"})
-    st.session_state.conversation_id = str(conv.id)
-    st.query_params["cid"] = st.session_state.conversation_id  # persist in URL
+setup_conversation(conversation_repository, cid)
+current_conversation = conversation_repository.get_conversation(UUID(st.session_state.conversation_id))
+if current_conversation and current_conversation.tone_state:
+    st.session_state.tone_state = current_conversation.tone_state
 
 # sidebar to do hold conversation list and title
 with st.sidebar:
-    st.title("LLM Powered Store/Searcher")
-    st.caption("Conversation")
-    st.code(st.session_state.conversation_id)
+    render_sidebar(conversation_repository)
 
-    if st.button("🗑️ Delete this conversation", type="secondary"):
-        conversation_repository.delete_conversation(UUID(st.session_state.conversation_id),user_id="anonymous")
-        latest = conversation_repository.get_latest_conversation("anonymous")
-
-        if latest:
-            st.session_state.conversation_id = str(latest.id)
-        else:
-            conv = conversation_repository.create_conversation(
-                user_id="anonymous",
-                metadata={"source": "streamlit"},
-            )
-            st.session_state.conversation_id = str(conv.id)
-
-        st.query_params["cid"] = st.session_state.conversation_id
-        st.session_state.loaded_cid = None
-        st.session_state.messages = []
-        st.rerun()
-
-    if st.button("➕ New chat"):
-        conv = conversation_repository.create_conversation(user_id="anonymous", metadata={"source": "streamlit"})
-        st.session_state.conversation_id = str(conv.id)
-        st.session_state.messages = []
-        st.session_state.debug_turns = []
-        st.rerun()
-
-    st.divider()
-    st.caption("Conversations")
-    conversations = conversation_repository.list_conversations(user_id="anonymous", limit=50)
-
-    # Build labels + stable mapping
-    items = []
-    id_by_label = {}
-    for c in conversations:
-        title = (c.title or "Untitled").strip()
-        label = f"{title}  ·  {str(c.id)[:8]}"
-        items.append(label)
-        id_by_label[label] = str(c.id)
-
-    # Pick current index
-    current_id = st.session_state.conversation_id
-    current_index = 0
-    for i, label in enumerate(items):
-        if id_by_label[label] == current_id:
-            current_index = i
-            break
-
-    selected = st.radio(
-        label="Conversations",
-        options=items,
-        index=current_index if items else 0,
-        label_visibility="collapsed",
-    )
-
-    if items:
-        new_id = id_by_label[selected]
-        if new_id != current_id:
-            st.session_state.conversation_id = new_id
-            st.query_params["cid"] = new_id
-            st.session_state.loaded_cid = None
-            st.rerun()
-
-if "messages" not in st.session_state or st.session_state.get("loaded_cid") != st.session_state.conversation_id:
-    roundtrips = conversation_repository.list_roundtrips(
-        UUID(st.session_state.conversation_id),
-        limit=10,
-    )
-    st.session_state.messages = []
-    for rt in roundtrips:
-        st.session_state.messages.append({"role": "user", "content": rt.user_prompt})
-        st.session_state.messages.append({"role": "assistant", "content": rt.generated_response})
-    st.session_state.loaded_cid = st.session_state.conversation_id
+ensure_messages_loaded(
+    conversation_repository,
+    st.session_state.conversation_id,
+    limit=10,
+)
 
 
 
 # output whole chat
-for msg in st.session_state.messages:
-    render_message(msg)
+render_messages(st.session_state.messages, render_message)
 
 # prompt area
 # needs to be heavily refactored but it was a good way to get started on figuring this thing out
@@ -148,63 +72,123 @@ if userQuery:
     with st.chat_message("user"):
         st.write(userQuery)
 
-    #prepare to submit the query by getting all roundtrips
-    conversation_roundtrips = conversation_repository.list_roundtrips(UUID(st.session_state.conversation_id), limit=10)
-    roundtrips_with_latest = [*compose_messages_from_roundtrips(conversation_roundtrips),
-                              {"role": "user", "content": userQuery}]
+    with st.spinner("Thinking..."):
+        #prepare to submit the query by getting all roundtrips
+        roundtrips_with_latest = build_roundtrip_context(
+            conversation_repository,
+            st.session_state.conversation_id,
+            userQuery,
+            limit=5,
+        )
 
-    parsedQuery = parse_query(roundtrips_with_latest)
-    queryDebugTitle = "**Debug: Parsed intent and tools**"
-    st.session_state.messages.append({"role": "debug", "content": parsedQuery.model_dump(), "title": queryDebugTitle})
-    with st.chat_message("assistant", avatar="🧪"):
-        st.markdown(queryDebugTitle)
-        with st.expander("Debug"):
-            st.json(parsedQuery.model_dump())
-
-    match parsedQuery.intent:
-        case Intent.FIND_PRODUCTS:
-            productResultTitle = "Product Results"
-            productResponse = find_products(parsedQuery.product_query)
-            st.session_state.messages.append(
-                {"role": "debug", "content": [asdict(p) for p in productResponse], "title": productResultTitle})
-            debug_render_message([asdict(p) for p in productResponse], productResultTitle)
-
-            answer = generate_response(
-                parsedRequest=roundtrips_with_latest,
-                query_results=json.dumps(productResponse, default=str),
+        parsedQuery = parse_query(roundtrips_with_latest)
+        st.session_state.tone_state = update_tone_state(
+            st.session_state.get("tone_state"),
+            parsedQuery.tone,
+        )
+        if st.session_state.get("tone_state"):
+            tone_state_dict = st.session_state.tone_state.model_dump()
+            conversation_repository.update_tone_state(
+                UUID(st.session_state.conversation_id),
+                tone_state_dict,
             )
-            st.session_state.messages.append({"role": "assistant", "content": answer})
-            with st.chat_message("assistant"):
-                st.info(answer)
-            appendResult = conversation_repository.append_roundtrip(st.session_state.conversation_id,userQuery,answer)
-            if appendResult.message_index == 0:
-                generated_title = generate_conversation_title(userQuery)
-                conversation_repository.set_conversation_title(st.session_state.conversation_id, generated_title)
-                st.rerun()
+            tone_label = tone_state_dict.get("label")
+        else:
+            tone_label = None
+        queryDebugTitle = "**Debug: Parsed intent and tools**"
+        st.session_state.messages.append({"role": "debug", "content": parsedQuery.model_dump(), "title": queryDebugTitle})
+        debug_render_message(parsedQuery.model_dump(), queryDebugTitle)
 
-            #summary_row = conversation_repository.get_summary(UUID(cid))
-        # general information intent to demonstrate web data lookups
-        case Intent.GENERAL_INFORMATION:
-            search_results_title = "Search Results"
-            search_intent_results = process_search_intent(userQuery)
-            st.session_state.messages.append(
-                {"role": "debug", "content": search_intent_results, "title": search_results_title})
-            search_results = generic_web_search(q=search_intent_results.search_query, search_type=search_intent_results.search_type)
-            answer = generate_response(
-                parsedRequest=roundtrips_with_latest,
-                query_results=json.dumps(search_results),
-            )
-            # we need to parse out some of the data for the searches we perform but its a start
-            st.session_state.messages.append({"role": "assistant", "content": answer})
-            appendResult = conversation_repository.append_roundtrip(st.session_state.conversation_id, userQuery, answer)
-            if appendResult.message_index == 0:
-                generated_title = generate_conversation_title(userQuery)
-                conversation_repository.set_conversation_title(st.session_state.conversation_id, generated_title)
-                st.rerun()
-            with st.chat_message("assistant"):
-                st.info(answer)
+        match parsedQuery.intent:
+            case Intent.FIND_PRODUCTS:
+                productResultTitle = "Product Results"
+                product_query_text = parsedQuery.query_details.query_text if parsedQuery.query_details else ""
+                productResponse = find_products(product_query_text, parsedQuery.common_properties)
+                debug_render_message(
+                    {
+                        "internal_results": [asdict(p) for p in productResponse.internal_results],
+                        "external_results": [asdict(p) for p in productResponse.external_results],
+                    },
+                    productResultTitle,
+                )
 
-        # unknown intent just in case we cant figure out what the user wants
-        case Intent.UNKNOWN:
-            st.session_state.messages.append({"role": "assistant", "content": "Sorry, I don't understand you."})
-            st.error("Sorry, I don't understand you.")
+                answer = generate_response(
+                    conversation_entries=roundtrips_with_latest,
+                    query_results=json.dumps(
+                        {
+                            "internal_results": productResponse.internal_results,
+                            "external_results": productResponse.external_results,
+                        },
+                        default=str,
+                    ),
+                    tone_label=tone_label,
+                )
+                
+                if not answer.cards:
+                    answer = ResponsePayload(
+                        response=answer.response,
+                        cards=product_results_to_cards(productResponse, limit=10),
+                        follow_up=answer.follow_up,
+                    )
+
+                print(answer)
+                append_assistant_response(
+                    conversation_repository,
+                    st.session_state.conversation_id,
+                    userQuery,
+                    answer,
+                    generate_conversation_title,
+                    generate_conversation_summary,
+                    parsed_query=parsedQuery.model_dump(),
+                )
+
+            # general information intent to demonstrate web data lookups
+            case Intent.GENERAL_INFORMATION:
+                search_results_title = "Search Results"
+                if not parsedQuery.query_details:
+                    clarification = ResponsePayload(
+                        response="Can you clarify what you want to search for?",
+                        cards=[],
+                        follow_up="For example: the topic, timeframe, and source type (news or web).",
+                    )
+                    append_assistant_response(
+                        conversation_repository,
+                        st.session_state.conversation_id,
+                        userQuery,
+                        clarification,
+                        generate_conversation_title,
+                        generate_conversation_summary,
+                        parsed_query=parsedQuery.model_dump(),
+                    )
+                else:
+                    search_results = generic_web_search(parsedQuery.query_details)
+                    answer = generate_response(
+                        conversation_entries=roundtrips_with_latest,
+                        query_results=json.dumps(search_results),
+                        tone_label=tone_label,
+                    )
+                    search_type = parsedQuery.query_details.search_type
+                    debug_render_message(parsedQuery.query_details.model_dump(), search_results_title)
+                    if search_type == SearchType.NEWS_SEARCH and not answer.cards:
+                        news_cards = news_results_to_cards(search_results, limit=5)
+                        if news_cards:
+                            answer = ResponsePayload(
+                                response=answer.response,
+                                cards=news_cards,
+                                follow_up=answer.follow_up,
+                            )
+                    # we need to parse out some of the data for the searches we perform but its a start
+                    append_assistant_response(
+                        conversation_repository,
+                        st.session_state.conversation_id,
+                        userQuery,
+                        answer,
+                        generate_conversation_title,
+                        generate_conversation_summary,
+                        parsed_query=parsedQuery.model_dump(),
+                    )
+
+            # unknown intent just in case we cant figure out what the user wants
+            case Intent.UNKNOWN:
+                st.session_state.messages.append({"role": "assistant", "content": "Sorry, I don't understand you."})
+                st.error("Sorry, I don't understand you.")

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from models.product_source import ProductSource
+from products.models.product_source import ProductSource
 
 
 @dataclass(frozen=False)
@@ -15,6 +15,8 @@ class ProductResult:
     season: Optional[str]
     year: Optional[int]
     price: Optional[float]
+    url: Optional[str] = None
+    image_url: Optional[str] = None
 
     # Ranking/debug fields (DB vector distance, RAG similarity, etc.)
     score: Optional[float] = None

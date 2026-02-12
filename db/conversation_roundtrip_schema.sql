@@ -6,6 +6,8 @@ CREATE TABLE conversation_roundtrip (
   message_index INTEGER NOT NULL,        -- turn_index within a conversation_id
   user_prompt TEXT NOT NULL,
   generated_response TEXT NOT NULL,
+  response_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  parsed_query JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
 

@@ -10,6 +10,7 @@ CREATE TABLE products (
   season TEXT,
   year INT,
   price NUMERIC,
+  image_url TEXT,
   embedding vector(1536)
 );
 

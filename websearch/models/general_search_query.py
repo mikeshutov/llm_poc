@@ -1,5 +1,6 @@
 from pydantic import BaseModel
-from models.search_type import SearchType
+
+from websearch.models.search_type import SearchType
 
 
 class GeneralSearchQuery(BaseModel):

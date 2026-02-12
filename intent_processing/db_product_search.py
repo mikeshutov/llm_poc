@@ -5,7 +5,7 @@ import psycopg
 import pandas as pd
 from pgvector.psycopg import register_vector
 
-from models.product_query import ProductQuery
+from websearch.models.common_properties import CommonProperties
 
 DB_URL = os.getenv("DATABASE_URL", "postgresql://app:app@localhost:5432/products")
 
@@ -16,33 +16,30 @@ def get_conn() -> psycopg.Connection:
 
 # main product search with filters
 def search_products(
-    filters: Optional[ProductQuery],
+    common_filters: Optional[CommonProperties],
     query_embedding: list[float],
     limit: int = 20,
 ) -> pd.DataFrame:
     where = []
     params: list[Any] = []
 
-    if filters is not None:
-        if filters.color:
+    if common_filters is not None:
+        if common_filters.color:
              where.append("LOWER(color) = LOWER(%s)")
-             params.append(filters.color)
+             params.append(common_filters.color)
 
-        if filters.price_min is not None:
+        if common_filters.price_min is not None:
             where.append("price >= %s")
-            params.append(filters.price_min)
+            params.append(common_filters.price_min)
 
-        if filters.price_max is not None:
+        if common_filters.price_max is not None:
             where.append("price <= %s")
-            params.append(filters.price_max)
+            params.append(common_filters.price_max)
 
-        if filters.gender is not None:
+        if common_filters.gender is not None:
             where.append("gender=%s")
-            params.append(filters.gender)
+            params.append(common_filters.gender)
 
-        if filters.style:
-            where.append("LOWER(style)=LOWER(%s)")
-            params.append(f"%{filters.style}%")
 
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
