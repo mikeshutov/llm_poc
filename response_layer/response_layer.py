@@ -1,6 +1,10 @@
 from typing import Any, Dict
+from uuid import UUID
 
+from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM
+from conversation.repository.repo_factory import get_conversation_repo
 from llm.clients.llm_client import LlmClient
+from personalization.tone import resolve_conversation_tone_label
 from response_layer.prompts.response_generation_prompt import RESPONSE_SYSTEM_PROMPT
 from response_layer.prompts.response_tones import (
     FRIENDLY_TONE_PROMPT,
@@ -42,9 +46,27 @@ def _tone_prompt(label: str | None) -> str:
             return NEUTRAL_TONE_PROMPT
 
 
-def generate_response(conversation_entries: list[dict], query_results: str, tone_label: str | None = None) -> ResponsePayload:
+def _resolve_tone_label(conversation_id: str | None) -> str | None:
+    if not conversation_id:
+        return None
+    try:
+        return resolve_conversation_tone_label(
+            conversation_repository=get_conversation_repo(),
+            conversation_id=UUID(conversation_id),
+            parsed_tone=None,
+        )
+    except Exception:
+        return None
+
+
+def generate_response(
+    conversation_entries: list[dict],
+    query_results: str,
+    conversation_id: str | None = None,
+) -> ResponsePayload:
     llm = LlmClient()
-    messages = [*conversation_entries, {"role": "system", "content": query_results}]
+    tone_label = _resolve_tone_label(conversation_id)
+    messages = [*conversation_entries, {ROLE_KEY: ROLE_SYSTEM, CONTENT_KEY: query_results}]
     system_prompt = RESPONSE_SYSTEM_PROMPT + "\n" + _tone_prompt(tone_label)
     result = llm.call_with_tools(
         system_prompt,

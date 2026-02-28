@@ -1,18 +1,22 @@
-import json
-from dataclasses import asdict
+import os
 
 from dotenv import load_dotenv
 from uuid import UUID
-from conversation.conversation import generate_conversation_title, generate_conversation_summary
+from agent.agent import run_agent
 from conversation.repository.repo_factory import get_conversation_repo
-from intent_processing.generic_search import generic_web_search
 from conversation.context_builder import build_roundtrip_context
-from rendering.rendering import render_message, debug_render_message
+from debug import debug_render_message, emit_tool_trace_debug
+from rendering.rendering import render_message
 from rendering.sidebar import render_sidebar
 from rendering.messages import ensure_messages_loaded, render_messages, append_assistant_response
+from tool_registry import register_default_tools
+from common.message_constants import CONTENT_KEY, ROLE_DEBUG, ROLE_KEY, ROLE_USER
 
 
-def setup_conversation(conversation_repository, cid):
+def use_langchain_enabled() -> bool:
+    return os.getenv("useLangChain", "false").strip().lower() == "true"
+
+def setup_conversation(cid):
     if cid:
         st.session_state.conversation_id = cid
     else:
@@ -21,18 +25,29 @@ def setup_conversation(conversation_repository, cid):
         st.query_params["cid"] = st.session_state.conversation_id  # persist in URL
 
 
-load_dotenv()
-import streamlit as st
+def prepare_query_context(user_query: str, limit: int = 5):
+    roundtrips_with_latest = build_roundtrip_context(
+        conversation_repository,
+        st.session_state.conversation_id,
+        user_query,
+        limit=limit,
+    )
+    parsed_query = parse_query(roundtrips_with_latest)
+    resolve_conversation_tone_label(
+        conversation_repository=conversation_repository,
+        conversation_id=UUID(st.session_state.conversation_id),
+        parsed_tone=parsed_query.tone,
+    )
 
+    return roundtrips_with_latest, parsed_query
+
+
+load_dotenv()
+register_default_tools()
+import streamlit as st
+from langchainagent.agent import run_langchain_agent
 from intent_layer.intent_layer import parse_query
-from intent_processing.product_retrieval import find_products
-from response_layer.response_layer import generate_response
-from intent_layer.models.intent import Intent
-from response_layer.models.response_payload import ResponsePayload
-from websearch.models.search_type import SearchType
-from response_layer.cards_mapper import news_results_to_cards, product_results_to_cards
-from personalization.tone import update_tone_state
-from intent_layer.models.parsed_request import QueryDetails
+from personalization.tone import resolve_conversation_tone_label
 
 #Page title
 st.set_page_config(page_title="Product Finder", page_icon="🛒")
@@ -43,10 +58,7 @@ cid = qp.get("cid")
 
 conversation_repository = get_conversation_repo()
 
-setup_conversation(conversation_repository, cid)
-current_conversation = conversation_repository.get_conversation(UUID(st.session_state.conversation_id))
-if current_conversation and current_conversation.tone_state:
-    st.session_state.tone_state = current_conversation.tone_state
+setup_conversation(cid)
 
 # sidebar to do hold conversation list and title
 with st.sidebar:
@@ -58,8 +70,6 @@ ensure_messages_loaded(
     limit=10,
 )
 
-
-
 # output whole chat
 render_messages(st.session_state.messages, render_message)
 
@@ -68,127 +78,37 @@ render_messages(st.session_state.messages, render_message)
 userQuery = st.chat_input("What are you looking for? e.g. red red shirts under 50")
 if userQuery:
     # store the promopt
-    st.session_state.messages.append({"role": "user", "content": userQuery})
-    with st.chat_message("user"):
+    st.session_state.messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: userQuery})
+    with st.chat_message(ROLE_USER):
         st.write(userQuery)
 
     with st.spinner("Thinking..."):
-        #prepare to submit the query by getting all roundtrips
-        roundtrips_with_latest = build_roundtrip_context(
-            conversation_repository,
+        roundtrips_with_latest, parsedQuery = prepare_query_context(userQuery, limit=5)
+        queryDebugTitle = "**Debug: Parsed intent and tools**"
+        st.session_state.messages.append(
+            {ROLE_KEY: ROLE_DEBUG, CONTENT_KEY: parsedQuery.model_dump(), "title": queryDebugTitle}
+        )
+        debug_render_message(parsedQuery.model_dump(), queryDebugTitle)
+        if use_langchain_enabled():
+
+            planner_result = run_langchain_agent(
+                conversation_entries=roundtrips_with_latest,
+                parsed_query=parsedQuery,
+                conversation_id=st.session_state.conversation_id,
+                on_trace=emit_tool_trace_debug,
+            )
+        else:
+            planner_result = run_agent(
+                conversation_entries=roundtrips_with_latest,
+                parsed_query=parsedQuery,
+                conversation_id=st.session_state.conversation_id,
+                on_trace=emit_tool_trace_debug,
+        )
+        debug_render_message(planner_result.debug_trace, "Agent Planner Trace")
+        append_assistant_response(
             st.session_state.conversation_id,
             userQuery,
-            limit=5,
+            planner_result.answer,
+            parsed_query=parsedQuery.model_dump(),
+            tool_traces=planner_result.tool_traces,
         )
-
-        parsedQuery = parse_query(roundtrips_with_latest)
-        st.session_state.tone_state = update_tone_state(
-            st.session_state.get("tone_state"),
-            parsedQuery.tone,
-        )
-        if st.session_state.get("tone_state"):
-            tone_state_dict = st.session_state.tone_state.model_dump()
-            conversation_repository.update_tone_state(
-                UUID(st.session_state.conversation_id),
-                tone_state_dict,
-            )
-            tone_label = tone_state_dict.get("label")
-        else:
-            tone_label = None
-        queryDebugTitle = "**Debug: Parsed intent and tools**"
-        st.session_state.messages.append({"role": "debug", "content": parsedQuery.model_dump(), "title": queryDebugTitle})
-        debug_render_message(parsedQuery.model_dump(), queryDebugTitle)
-
-        match parsedQuery.intent:
-            case Intent.FIND_PRODUCTS:
-                productResultTitle = "Product Results"
-                product_query_text = parsedQuery.query_details.query_text if parsedQuery.query_details else ""
-                productResponse = find_products(product_query_text, parsedQuery.common_properties)
-                debug_render_message(
-                    {
-                        "internal_results": [asdict(p) for p in productResponse.internal_results],
-                        "external_results": [asdict(p) for p in productResponse.external_results],
-                    },
-                    productResultTitle,
-                )
-
-                answer = generate_response(
-                    conversation_entries=roundtrips_with_latest,
-                    query_results=json.dumps(
-                        {
-                            "internal_results": productResponse.internal_results,
-                            "external_results": productResponse.external_results,
-                        },
-                        default=str,
-                    ),
-                    tone_label=tone_label,
-                )
-                
-                if not answer.cards:
-                    answer = ResponsePayload(
-                        response=answer.response,
-                        cards=product_results_to_cards(productResponse, limit=10),
-                        follow_up=answer.follow_up,
-                    )
-
-                print(answer)
-                append_assistant_response(
-                    conversation_repository,
-                    st.session_state.conversation_id,
-                    userQuery,
-                    answer,
-                    generate_conversation_title,
-                    generate_conversation_summary,
-                    parsed_query=parsedQuery.model_dump(),
-                )
-
-            # general information intent to demonstrate web data lookups
-            case Intent.GENERAL_INFORMATION:
-                search_results_title = "Search Results"
-                if not parsedQuery.query_details:
-                    clarification = ResponsePayload(
-                        response="Can you clarify what you want to search for?",
-                        cards=[],
-                        follow_up="For example: the topic, timeframe, and source type (news or web).",
-                    )
-                    append_assistant_response(
-                        conversation_repository,
-                        st.session_state.conversation_id,
-                        userQuery,
-                        clarification,
-                        generate_conversation_title,
-                        generate_conversation_summary,
-                        parsed_query=parsedQuery.model_dump(),
-                    )
-                else:
-                    search_results = generic_web_search(parsedQuery.query_details)
-                    answer = generate_response(
-                        conversation_entries=roundtrips_with_latest,
-                        query_results=json.dumps(search_results),
-                        tone_label=tone_label,
-                    )
-                    search_type = parsedQuery.query_details.search_type
-                    debug_render_message(parsedQuery.query_details.model_dump(), search_results_title)
-                    if search_type == SearchType.NEWS_SEARCH and not answer.cards:
-                        news_cards = news_results_to_cards(search_results, limit=5)
-                        if news_cards:
-                            answer = ResponsePayload(
-                                response=answer.response,
-                                cards=news_cards,
-                                follow_up=answer.follow_up,
-                            )
-                    # we need to parse out some of the data for the searches we perform but its a start
-                    append_assistant_response(
-                        conversation_repository,
-                        st.session_state.conversation_id,
-                        userQuery,
-                        answer,
-                        generate_conversation_title,
-                        generate_conversation_summary,
-                        parsed_query=parsedQuery.model_dump(),
-                    )
-
-            # unknown intent just in case we cant figure out what the user wants
-            case Intent.UNKNOWN:
-                st.session_state.messages.append({"role": "assistant", "content": "Sorry, I don't understand you."})
-                st.error("Sorry, I don't understand you.")

@@ -188,7 +188,7 @@ def main():
                         SET image_url = EXCLUDED.image_url
                         WHERE %s OR products.image_url IS NULL OR products.image_url = '';
                         """,
-                        [(*meta_batch[j], force_image_refresh) for j in range(len(meta_batch))],
+                        [(*meta_batch[j], vectors[j], force_image_refresh) for j in range(len(meta_batch))],
                     )
                     conn.commit()
 
@@ -212,7 +212,7 @@ def main():
                     SET image_url = EXCLUDED.image_url
                     WHERE %s OR products.image_url IS NULL OR products.image_url = '';
                     """,
-                    [(*meta_batch[j], force_image_refresh) for j in range(len(meta_batch))],
+                    [(*meta_batch[j], vectors[j], force_image_refresh) for j in range(len(meta_batch))],
                 )
                 conn.commit()
 

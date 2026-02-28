@@ -1,6 +1,7 @@
 from typing import Any, Dict
 
 from websearch.models.search_type import SearchType
+from websearch.models.web_search_params import WebSearchParams
 from intent_layer.models.parsed_request import QueryDetails
 from websearch.clients.brave_client import BraveSearchClient
 
@@ -21,6 +22,13 @@ def generic_web_search(
         case SearchType.SUGGESTION_SEARCH:
             search_results = brave_client.suggest(details.query_text)
         case _:
-            search_results = brave_client.web_search(details.query_text, country=country, count=count, **params)
+            search_results = brave_client.web_search(
+                WebSearchParams(
+                    q=details.query_text,
+                    country=country,
+                    count=count,
+                    extra_params=params,
+                )
+            )
 
     return search_results

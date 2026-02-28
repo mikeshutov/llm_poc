@@ -6,6 +6,7 @@ from openai import OpenAI
 load_dotenv()
 from llm.clients.tool_response_parser import parse_tool_args
 from llm.models.tool_call import ToolCall, ToolCallResult
+from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM
 
 # We can probably expand on this client to be able to handle a bunch of different models not just openai models
 class LlmClient:
@@ -24,7 +25,7 @@ class LlmClient:
         resp = self.client.chat.completions.create(
             model=model or self.default_model,
             messages=[
-                {"role": "system", "content": system_prompt},
+                {ROLE_KEY: ROLE_SYSTEM, CONTENT_KEY: system_prompt},
                 *messages,
             ],
             tools=list(tools),

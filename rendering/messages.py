@@ -1,8 +1,13 @@
 from uuid import UUID
+from dataclasses import asdict
 
 import streamlit as st
 
+from agent.repository.repo_factory import get_tool_call_repo
+from conversation.conversation import generate_conversation_title, generate_conversation_summary
+from conversation.repository.repo_factory import get_conversation_repo
 from rendering.rendering import render_assistant_content
+from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_KEY, ROLE_USER
 
 
 def ensure_messages_loaded(conversation_repository, conversation_id: str, limit: int = 10) -> None:
@@ -13,12 +18,12 @@ def ensure_messages_loaded(conversation_repository, conversation_id: str, limit:
         )
         st.session_state.messages = []
         for rt in roundtrips:
-            st.session_state.messages.append({"role": "user", "content": rt.user_prompt})
+            st.session_state.messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: rt.user_prompt})
             payload = rt.response_payload if isinstance(rt.response_payload, dict) else None
             st.session_state.messages.append(
                 {
-                    "role": "assistant",
-                    "content": rt.generated_response,
+                    ROLE_KEY: ROLE_ASSISTANT,
+                    CONTENT_KEY: rt.generated_response,
                     "payload": payload,
                 }
             )
@@ -31,15 +36,16 @@ def render_messages(messages, render_message) -> None:
 
 
 def append_assistant_response(
-    conversation_repository,
     conversation_id: str,
     user_query: str,
     answer,
-    generate_title_fn,
-    generate_summary_fn,
     parsed_query: dict | None = None,
+    tool_traces: list | None = None,
     summary_every: int = 5,
 ) -> None:
+    conversation_repository = get_conversation_repo()
+    tool_call_repository = get_tool_call_repo()
+
     payload = {
         "response": answer.response,
         "cards": answer.cards,
@@ -47,12 +53,12 @@ def append_assistant_response(
     }
     st.session_state.messages.append(
         {
-            "role": "assistant",
-            "content": answer.response,
+            ROLE_KEY: ROLE_ASSISTANT,
+            CONTENT_KEY: answer.response,
             "payload": payload,
         }
     )
-    with st.chat_message("assistant"):
+    with st.chat_message(ROLE_ASSISTANT):
         render_assistant_content(answer.response, payload)
 
     append_result = conversation_repository.append_roundtrip(
@@ -63,6 +69,13 @@ def append_assistant_response(
         parsed_query=parsed_query,
         metadata={},
     )
+    if tool_traces:
+        trace_dicts = [asdict(t) if hasattr(t, "__dataclass_fields__") else t for t in tool_traces]
+        tool_call_repository.append_tool_calls(
+            append_result.id,
+            trace_dicts,
+        )
+            
     if summary_every > 0 and (append_result.message_index + 1) % summary_every == 0:
         latest_summary = conversation_repository.get_latest_summary(UUID(conversation_id))
         last_cutoff = latest_summary.message_index_cutoff if latest_summary else -1
@@ -71,7 +84,7 @@ def append_assistant_response(
             limit=summary_every,
             after_message_index=last_cutoff,
         )
-        summary_text = generate_summary_fn(
+        summary_text = generate_conversation_summary(
             latest_summary.summary if latest_summary else None,
             new_roundtrips,
         )
@@ -81,6 +94,5 @@ def append_assistant_response(
             message_index_cutoff=append_result.message_index,
         )
     if append_result.message_index == 0:
-        generated_title = generate_title_fn(user_query)
-        conversation_repository.set_conversation_title(conversation_id, generated_title)
+        conversation_repository.set_conversation_title(conversation_id, generate_conversation_title(user_query))
         st.rerun()

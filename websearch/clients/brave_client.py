@@ -8,7 +8,8 @@ from typing import Any, Dict, Optional, List
 import requests
 from requests import Response
 
-from rendering.rendering import debug_render_message
+from debug.rendering import debug_render_message
+from websearch.models.web_search_params import WebSearchParams
 
 class BraveSearchError(RuntimeError):
     pass
@@ -73,22 +74,9 @@ class BraveSearchClient:
 
     def web_search(
         self,
-        q: str,
-        count: int = 10,
-        offset: int = 0,
-        country: str = "CA",
-        search_lang: str = "en",
-        **extra_params: Any,
+        params: WebSearchParams,
     ) -> Dict[str, Any]:
-        params: Dict[str, Any] = {
-            "q": q,
-            "count": count,
-            "offset": offset,
-            "country": country,
-            "search_lang": search_lang,
-            **extra_params,
-        }
-        return self._get("/web/search", params)
+        return self._get("/web/search", params.to_api_params())
 
     def news_search(self, q: str, **params: Any) -> Dict[str, Any]:
         return self._get("/news/search", {"q": q, **params})
@@ -110,26 +98,28 @@ class BraveSearchClient:
     ) -> ShoppingSearchResult:
         if not q or not q.strip():
             raise ValueError("Query must be a non-empty string.")
-        source_list = sources or ["amazon", "google_shopping"]
+        selected_source = "amazon"
         responses: Dict[str, Any] = {}
         combined_results: list[Dict[str, Any]] = []
 
-        for source in source_list:
+        for source in [selected_source]:
             source_key = source.strip().lower()
             if source_key == "amazon":
                 query = f"{q} site:amazon.com"
             elif source_key in {"google_shopping", "google-shopping", "gshopping"}:
-                query = f"{q} site:shopping.google.com"
+                query = f"{q} site:google.com/search"
             else:
                 query = f"{q} site:{source}"
 
             resp = self.web_search(
-                query,
-                count=count,
-                offset=offset,
-                country=country,
-                search_lang=search_lang,
-                **extra_params,
+                WebSearchParams(
+                    q=query,
+                    count=count,
+                    offset=offset,
+                    country=country,
+                    search_lang=search_lang,
+                    extra_params=extra_params,
+                )
             )
             responses[source_key] = resp
 
@@ -139,7 +129,7 @@ class BraveSearchClient:
 
         return ShoppingSearchResult(
             query=q,
-            sources=source_list,
+            sources=[selected_source],
             results=combined_results,
             raw=responses,
         )

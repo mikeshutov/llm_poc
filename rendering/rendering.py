@@ -1,6 +1,8 @@
 import streamlit as st
 
+from debug.rendering import debug_render_message
 from rendering.cards import render_cards
+from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
 
 
 def render_assistant_content(content: str, payload: dict | None) -> None:
@@ -32,21 +34,14 @@ def render_assistant_content(content: str, payload: dict | None) -> None:
 
 
 def render_message(msg: dict) -> None:
-    role = msg["role"]
-    content = msg["content"]
+    role = msg[ROLE_KEY]
+    content = msg[CONTENT_KEY]
     content_title = msg.get("title", "Debug")
-    if role == "debug":
+    if role == ROLE_DEBUG:
         debug_render_message(content, content_title)
     else:
         with st.chat_message(role):
-            if role == "assistant":
+            if role == ROLE_ASSISTANT:
                 render_assistant_content(content, msg.get("payload"))
             else:
                 st.write(content)
-
-
-def debug_render_message(content, content_title: str) -> None:
-    with st.chat_message("assistant", avatar="🧪"):
-        st.markdown(content_title)
-        with st.expander("Debug"):
-            st.json(content)

@@ -5,6 +5,19 @@ from personalization.tone.models import ToneLabel
 QUERY_INTENT_DESCRIPTION = (
         "Determines user intent as well as any qualifying queries."
 )
+SAFETY_FLAGS = [
+    "self_harm",
+    "suicide",
+    "kill_myself",
+    "bomb",
+    "weapon",
+    "malware",
+    "ransomware",
+    "exploit",
+    "bypass",
+    "credential_stuffing",
+    "ddos",
+]
 
 PRODUCT_QUERY_DESCRIPTION = (
         "Extracts structured filters from a user's product search query. "
@@ -91,6 +104,14 @@ QUERY_INTENT_TOOL = {
                             "enum": [s.value for s in SearchType],
                         },
                     },
+                },
+                "safety_flags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": SAFETY_FLAGS,
+                    },
+                    "description": "Safety-sensitive flags inferred from the user's request. Empty or omitted when none.",
                 },
             },
             "required": ["intent", "tone"],

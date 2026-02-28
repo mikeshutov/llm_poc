@@ -16,3 +16,4 @@ class ParsedRequest(BaseModel):
     tone: Optional[Tone] = None
     query_details: Optional[QueryDetails] = None
     common_properties: Optional[CommonProperties] = None
+    safety_flags: Optional[List[str]] = None

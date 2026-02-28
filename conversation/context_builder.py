@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from llm.llm_message_builder import compose_messages_from_roundtrips
+from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
 
 
 def build_roundtrip_context(conversation_repository, conversation_id: str, user_query: str, limit: int = 5):
@@ -13,11 +14,11 @@ def build_roundtrip_context(conversation_repository, conversation_id: str, user_
     )
     roundtrips_with_latest = [
         *(
-            [{"role": "system", "content": f"Conversation summary:\n{latest_summary.summary}"}]
+            [{ROLE_KEY: ROLE_SYSTEM, CONTENT_KEY: f"Conversation summary:\n{latest_summary.summary}"}]
             if latest_summary
             else []
         ),
         *compose_messages_from_roundtrips(conversation_roundtrips),
-        {"role": "user", "content": user_query},
+        {ROLE_KEY: ROLE_USER, CONTENT_KEY: user_query},
     ]
     return roundtrips_with_latest

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 
 class ProductQuery(BaseModel):
+    category: Optional[str] = None
     style: Optional[str] = None
     size_label: Optional[str] = None
     size_numeric: Optional[float] = None

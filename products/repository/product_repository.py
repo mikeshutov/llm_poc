@@ -12,12 +12,12 @@ from products.models.product_result import ProductResult
 from products.models.product_result_model import ProductResultModel
 from products.models.product_source import ProductSource
 from pgvector.psycopg import register_vector
-from intent_processing.product_embeddings import embed_text
 
 DB_URL = os.getenv(
     "DATABASE_URL",
     "postgresql://app:app@localhost:5432/products",
 )
+MAX_VECTOR_DISTANCE = float(os.getenv("MAX_VECTOR_DISTANCE", "1.05"))
 
 class ProductRepository:
     def __init__(self):
@@ -34,7 +34,6 @@ class ProductRepository:
     ) -> list[ProductResult]:
         sql, params = self._build_search_sql(query_embedding, common_filters, product_filters, limit)
 
-        print(sql)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
@@ -61,39 +60,20 @@ class ProductRepository:
             results.append(ProductResult(**validated))
         return results
 
-    def search_products_filtered(
-            self,
-            query_text: str,
-            common_filters: Optional["CommonProperties"] = None,
-            product_filters: Optional[ProductQuery] = None,
-            limit: int = 20,
-    ) -> list[ProductResult]:
-        query_embedding = embed_text(query_text or "")
-        sql, params = self._build_search_sql(query_embedding, common_filters, product_filters, limit)
-
+    def list_categories(self, limit: int = 200) -> list[str]:
         with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(sql, params)
+            cur.execute(
+                """
+                SELECT DISTINCT category
+                FROM products
+                WHERE category IS NOT NULL AND BTRIM(category) <> ''
+                ORDER BY category
+                LIMIT %s
+                """,
+                [limit],
+            )
             rows = cur.fetchall()
-
-        results: list[ProductResult] = []
-        for r in rows:
-            validated = ProductResultModel.model_validate({
-                "id": str(r["id"]),
-                "name": r["name"],
-                "category": r.get("category"),
-                "color": r.get("color"),
-                "style": r.get("style"),
-                "gender": r.get("gender"),
-                "season": r.get("season"),
-                "year": r.get("year"),
-                "price": r.get("price"),
-                "url": None,
-                "image_url": r.get("image_url"),
-                "score": None,
-                "source": ProductSource.DB,
-            }).model_dump()
-            results.append(ProductResult(**validated))
-        return results
+        return [str(r["category"]) for r in rows if r.get("category")]
 
     def _build_search_sql(
         self,
@@ -119,14 +99,19 @@ class ProductRepository:
                 params.append(common_filters.price_max)
 
             if getattr(common_filters, "gender", None) is not None:
-                where.append("gender = %s")
+                where.append("LOWER(gender) = LOWER(%s)")
                 params.append(common_filters.gender)
 
         if product_filters:
+            if getattr(product_filters, "category", None):
+                where.append("LOWER(category) = LOWER(%s)")
+                params.append(product_filters.category)
+
             if getattr(product_filters, "style", None):
                 where.append("LOWER(style) LIKE LOWER(%s)")
                 params.append(f"%{product_filters.style}%")
 
+        where.append("(embedding <-> (%s)::vector) <= %s")
         where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
         sql = f"""
@@ -139,5 +124,5 @@ class ProductRepository:
             LIMIT %s
         """
 
-        final_params = [list(query_embedding), *params, list(query_embedding), limit]
+        final_params = [list(query_embedding), *params, list(query_embedding), MAX_VECTOR_DISTANCE, list(query_embedding), limit]
         return sql, final_params

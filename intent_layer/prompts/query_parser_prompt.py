@@ -20,4 +20,8 @@ Also populate query_details:
 
 Also populate common_properties when applicable:
 - color, price_min, price_max, gender are shared filters used across searches
+
+Also populate safety_flags when applicable:
+- use only: self_harm, suicide, kill_myself, bomb, weapon, malware, ransomware, exploit, bypass, credential_stuffing, ddos
+- return [] or omit when none apply
 """
