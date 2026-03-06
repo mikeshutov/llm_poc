@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import os
-
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
 from rendering.debug import build_plan_status_message, emit_status_message
@@ -12,9 +9,6 @@ from agent.models import AgentResult, Plan
 from agent.planner.prompts.planner_prompt import build_planner_prompt
 from agent.tool.tools import tools
 load_dotenv()
-
-# for now this is here
-llm = ChatOpenAI(model=os.getenv("AGENT_MODEL", "gpt-4.1"), temperature=0)
 
 tool_list = "\n".join(
     f'- {tool.name}: {getattr(tool, "description", "")}'.strip()
@@ -42,7 +36,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         task=agent_state.task,
         previous_calls=agent_state.iteration_trace,
     )
-    raw = llm.invoke(prompt).content
+    raw = agent_state.llm.invoke(prompt).content
     raw = _strip_code_fences(raw)
 
     try:

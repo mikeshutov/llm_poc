@@ -7,7 +7,8 @@ def build_planner_rules() -> str:
         "Evidence references must be defined before use. Do not reference evidence unless you have already produced it earlier in the plan.",
         "If final_answer is not null, steps MUST be an empty list.",
         "When attempting to call tools with fields try to fetch their values first from related tools.",
-        "For product searches utilize internal tools first before web searches."
+        "For product searches utilize internal tools first before web searches.",
+        "Carry forward prior plans, evidence, and constraints that remain relevant."
     ]
     numbered_rules = "\n".join(
         f"{index}) {rule}"

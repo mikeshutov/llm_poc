@@ -1,10 +1,11 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 import streamlit as st
 
 from conversation.conversation import generate_conversation_summary, generate_conversation_title
 from conversation.repository.repo_factory import get_conversation_repo
-from rendering.rendering import render_assistant_content
+from rendering.rendering import render_assistant_content, _format_timestamp
 from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_KEY, ROLE_USER
 
 
@@ -16,13 +17,15 @@ def ensure_messages_loaded(conversation_repository, conversation_id: str, limit:
         )
         st.session_state.messages = []
         for rt in roundtrips:
-            st.session_state.messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: rt.user_prompt})
+            ts = rt.created_at if hasattr(rt, "created_at") else None
+            st.session_state.messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: rt.user_prompt, "timestamp": ts})
             payload = rt.response_payload if isinstance(rt.response_payload, dict) else None
             st.session_state.messages.append(
                 {
                     ROLE_KEY: ROLE_ASSISTANT,
                     CONTENT_KEY: rt.generated_response,
                     "payload": payload,
+                    "timestamp": ts,
                 }
             )
         st.session_state.loaded_cid = conversation_id
@@ -71,15 +74,18 @@ def append_assistant_response(
             "cards": answer.cards,
             "follow_up": answer.follow_up,
         }
+
+    now = datetime.now(timezone.utc)
     st.session_state.messages.append(
         {
             ROLE_KEY: ROLE_ASSISTANT,
             CONTENT_KEY: response_text,
             "payload": payload,
+            "timestamp": now,
         }
     )
     with st.chat_message(ROLE_ASSISTANT):
-        render_assistant_content(response_text, payload)
+        render_assistant_content(response_text, payload, _format_timestamp(now))
 
     append_result = conversation_repository.append_roundtrip(
         conversation_id,

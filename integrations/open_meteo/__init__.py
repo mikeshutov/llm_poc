@@ -4,9 +4,10 @@ from integrations.open_meteo.errors import (
     WeatherGeocodingError,
     WeatherNotFoundError,
 )
-from integrations.open_meteo.models import DailyWeather, GeocodedLocation, MonthlyWeatherSummary
+from integrations.open_meteo.models import CurrentWeather, DailyWeather, GeocodedLocation, MonthlyWeatherSummary
 
 __all__ = [
+    "CurrentWeather",
     "DailyWeather",
     "GeocodedLocation",
     "MonthlyWeatherSummary",

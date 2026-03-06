@@ -4,7 +4,7 @@ import streamlit as st
 
 
 def render_sidebar(conversation_repository) -> None:
-    st.title("LLM Powered Store/Searcher")
+    st.title("LLM Agentic Chat")
     st.caption("Conversation")
     st.code(st.session_state.conversation_id)
 

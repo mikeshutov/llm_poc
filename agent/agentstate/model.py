@@ -1,5 +1,8 @@
+import os
 from dataclasses import dataclass, field
 from typing import Any
+
+from langchain_openai import ChatOpenAI
 
 from agent.models import AgentResult, Plan
 
@@ -31,6 +34,9 @@ class AgentState:
     iteration_trace: list[IterationState] = field(default_factory=list)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
     goal_reached: bool = False
+    llm: Any = field(
+        default_factory=lambda: ChatOpenAI(model=os.getenv("AGENT_MODEL", "gpt-4.1"), temperature=0)
+    )
 
     @classmethod
     def new(

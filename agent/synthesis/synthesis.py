@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import os
-
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
 from langsmith import traceable
 
 from agent.agentstate.model import AgentState
@@ -11,8 +8,6 @@ from agent.models.agent_result import AgentResult
 from agent.models.synthesized_result import SynthesisResult
 from agent.synthesis.prompts.solver_prompt import build_solver_prompt
 load_dotenv()
-
-llm = ChatOpenAI(model=os.getenv("AGENT_MODEL", "gpt-4.1"), temperature=0)
 
 
 def _strip_code_fences(s: str) -> str:
@@ -56,7 +51,7 @@ def run_synthesis(state: AgentState) -> AgentState:
     # e.g. if last_plan.final_answer: state.result = last_plan.final_answer; ...
 
     prompt = build_solver_prompt(plan_block=plan_block, task=state.task)
-    raw = llm.invoke(prompt).content
+    raw = state.llm.invoke(prompt).content
     raw = _strip_code_fences(raw)
 
     try:

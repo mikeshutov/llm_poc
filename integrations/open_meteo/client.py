@@ -12,19 +12,21 @@ from integrations.open_meteo.errors import (
     WeatherGeocodingError,
     WeatherNotFoundError,
 )
-from integrations.open_meteo.models import DailyWeather, GeocodedLocation, MonthlyWeatherSummary
+from integrations.open_meteo.models import CurrentWeather, DailyWeather, GeocodedLocation, MonthlyWeatherSummary
 
 
 class OpenMeteoClient:
     def __init__(
         self,
         base_url_weather: str = "https://archive-api.open-meteo.com/v1",
+        base_url_forecast: str = "https://api.open-meteo.com/v1",
         base_url_geo: str = "https://geocoding-api.open-meteo.com/v1",
         timeout_s: float = 20.0,
         ttl: timedelta = DEFAULT_TTL,
         http: HttpClient | None = None,
     ):
         self.base_url_weather = base_url_weather.rstrip("/")
+        self.base_url_forecast = base_url_forecast.rstrip("/")
         self.base_url_geo = base_url_geo.rstrip("/")
         self._http = http or HttpClient(timeout_s=timeout_s, ttl=ttl)
 
@@ -151,6 +153,46 @@ class OpenMeteoClient:
             avg_wind_max_kmh=avg_wind,
             daily=daily,
         )
+
+
+    def get_current(self, latitude: float, longitude: float, timezone: str = "auto") -> CurrentWeather:
+        data = self._get_json(
+            f"{self.base_url_forecast}/forecast",
+            params={
+                "latitude": latitude,
+                "longitude": longitude,
+                "current_weather": "true",
+                "timezone": timezone,
+            },
+            error_cls=WeatherArchiveError,
+        )
+        cw = data["current_weather"]
+        units = data.get("current_weather_units", {
+            "temperature": "\u00b0C",
+            "windspeed": "km/h",
+            "winddirection": "\u00b0",
+        })
+        return CurrentWeather(
+            latitude=data["latitude"],
+            longitude=data["longitude"],
+            timezone=data.get("timezone", timezone),
+            elevation=data.get("elevation", 0.0),
+            time=cw["time"],
+            temperature=cw["temperature"],
+            windspeed=cw["windspeed"],
+            winddirection=cw["winddirection"],
+            weathercode=cw["weathercode"],
+            is_day=bool(cw.get("is_day", 1)),
+            units=units,
+        )
+
+    def get_current_for_location(self, location_name: str) -> tuple[GeocodedLocation, CurrentWeather] | None:
+        try:
+            loc = self.geocode_city(location_name)
+        except WeatherNotFoundError:
+            return None
+        weather = self.get_current(loc.latitude, loc.longitude, timezone=loc.timezone or "auto")
+        return loc, weather
 
 
 def _to_float_or_none(value: Any) -> float | None:

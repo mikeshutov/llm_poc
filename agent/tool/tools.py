@@ -3,6 +3,7 @@ from agent.tool.exchange_rates_lookup import exchange_rates_lookup
 from agent.tool.exchange_rates_time_series import exchange_rates_time_series
 from agent.tool.find_products import find_products
 from agent.tool.generic_web_search import generic_web_search
+from agent.tool.get_current_weather import get_current_weather
 from agent.tool.get_historical_month_weather import get_historical_month_weather
 from agent.tool.list_product_categories import list_product_categories
 from agent.tool.public_holidays_lookup import public_holidays_lookup
@@ -13,6 +14,7 @@ from agent.tool.wikipedia_search import wikipedia_search
 tools = [
     find_products,
     resolve_city_location,
+    get_current_weather,
     get_historical_month_weather,
     public_holidays_lookup,
     exchange_rates_lookup,

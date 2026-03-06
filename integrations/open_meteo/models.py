@@ -32,3 +32,17 @@ class MonthlyWeatherSummary(BaseModel):
     total_precip_mm: Optional[float] = None
     avg_wind_max_kmh: Optional[float] = None
     daily: Optional[DailyWeather] = None
+
+
+class CurrentWeather(BaseModel):
+    latitude: float
+    longitude: float
+    timezone: str
+    elevation: float
+    time: str
+    temperature: float
+    windspeed: float
+    winddirection: float
+    weathercode: int
+    is_day: bool
+    units: dict[str, str] = {}
