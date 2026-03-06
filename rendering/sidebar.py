@@ -29,6 +29,8 @@ def render_sidebar(conversation_repository) -> None:
     if st.button("➕ New chat"):
         conv = conversation_repository.create_conversation(user_id="anonymous", metadata={"source": "streamlit"})
         st.session_state.conversation_id = str(conv.id)
+        st.query_params["cid"] = st.session_state.conversation_id
+        st.session_state.loaded_cid = None
         st.session_state.messages = []
         st.session_state.debug_turns = []
         st.rerun()

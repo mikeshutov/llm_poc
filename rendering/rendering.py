@@ -1,6 +1,6 @@
 import streamlit as st
 
-from debug.rendering import debug_render_message
+from rendering.debug import debug_render_message
 from rendering.cards import render_cards
 from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
 
@@ -37,7 +37,10 @@ def render_message(msg: dict) -> None:
     role = msg[ROLE_KEY]
     content = msg[CONTENT_KEY]
     content_title = msg.get("title", "Debug")
-    if role == ROLE_DEBUG:
+    if msg.get("status"):
+        with st.chat_message("assistant", avatar=":material/more_horiz:"):
+            st.markdown(content)
+    elif role == ROLE_DEBUG:
         debug_render_message(content, content_title)
     else:
         with st.chat_message(role):

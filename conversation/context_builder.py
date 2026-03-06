@@ -1,10 +1,12 @@
 from uuid import UUID
 
-from llm.llm_message_builder import compose_messages_from_roundtrips
+from conversation.repository.repo_factory import get_conversation_repo
+from rendering.messages.compose import compose_messages_from_roundtrips
 from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
 
 
-def build_roundtrip_context(conversation_repository, conversation_id: str, user_query: str, limit: int = 5):
+def build_roundtrip_context(conversation_id: str, user_query: str, limit: int = 5):
+    conversation_repository = get_conversation_repo()
     latest_summary = conversation_repository.get_latest_summary(UUID(conversation_id))
     after_index = latest_summary.message_index_cutoff if latest_summary else None
     conversation_roundtrips = conversation_repository.list_roundtrips(

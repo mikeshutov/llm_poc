@@ -1,3 +1,4 @@
+import html
 import os
 from pathlib import Path
 from typing import Any, Iterable
@@ -27,7 +28,13 @@ def render_cards(
                     if isinstance(image_url, str) and image_url.strip():
                         image_value = image_url.strip()
                         if image_value.startswith(("http://", "https://")):
-                            st.image(image_value, width="stretch")
+                            st.markdown(
+                                (
+                                    f'<img src="{html.escape(image_value, quote=True)}" '
+                                    'style="width: 100%; height: auto;" />'
+                                ),
+                                unsafe_allow_html=True,
+                            )
                         else:
                             image_path = Path(image_value)
                             if image_path.is_absolute():

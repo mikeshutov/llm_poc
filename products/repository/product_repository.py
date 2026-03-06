@@ -7,7 +7,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from products.models.product_query import ProductQuery
-from websearch.models.common_properties import CommonProperties
+from integrations.models.common_properties import CommonProperties
 from products.models.product_result import ProductResult
 from products.models.product_result_model import ProductResultModel
 from products.models.product_source import ProductSource

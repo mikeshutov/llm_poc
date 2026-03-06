@@ -13,6 +13,7 @@ SQL_FILES = [
     "db/conversation_roundtrip_schema.sql",
     "db/conversation_summary_schema.sql",
     "db/tool_calls_schema.sql",
+    "db/rest_cache_schema.sql",
 ]
 
 

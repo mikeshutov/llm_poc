@@ -1,0 +1,3 @@
+PLAN_EDGE = "plan"
+EXECUTE_TOOLS_EDGE = "execute_tools"
+SYNTHESIZE_EDGE = "synthesize"
