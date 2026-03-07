@@ -1,5 +1,6 @@
 from typing import Any, Iterable, List
 
+from integrations.brave.models import NewsSearchResponse
 from products.models.product_search_results import ProductSearchResults
 
 
@@ -22,29 +23,17 @@ def product_results_to_cards(results: ProductSearchResults, limit: int = 10) -> 
     return cards
 
 
-# to fix this is just reusing the same properties
-def news_results_to_cards(payload: dict, limit: int = 5) -> list[dict]:
-    results = payload.get("news", {}).get("results", [])
+def news_response_to_cards(response: NewsSearchResponse, limit: int = 5) -> list[dict]:
     cards: list[dict] = []
-    for idx, item in enumerate(results):
-        title = item.get("title") or item.get("name") or ""
-        url = item.get("url") or item.get("link")
-        description = item.get("description") or item.get("snippet") or ""
-        thumbnail = item.get("thumbnail")
-        image_url = None
-        if isinstance(thumbnail, dict):
-            image_url = thumbnail.get("original") or thumbnail.get("src")
-        elif isinstance(thumbnail, str):
-            image_url = thumbnail
-
+    for idx, item in enumerate(response.results):
         cards.append(
             {
-                "id": url or f"news-{idx}",
-                "name": title or "Untitled article",
-                "description": description,
+                "id": item.url or f"news-{idx}",
+                "name": item.title or "Untitled article",
+                "description": item.description,
                 "price": None,
-                "url": url,
-                "image_url": image_url,
+                "url": item.url,
+                "image_url": item.thumbnail_url,
                 "source": "news",
             }
         )

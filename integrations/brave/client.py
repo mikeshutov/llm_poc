@@ -8,14 +8,12 @@ from typing import Any, Dict, Optional
 from integrations.models.web_search_params import WebSearchParams
 from integrations.http_client import HttpClient, HttpClientError, DEFAULT_TTL
 from integrations.brave.models import (
-    NewsResult,
     NewsSearchResponse,
     ShoppingSearchResult,
     SuggestResponse,
     WebSearchResponse,
     WebSearchResult,
 )
-from integrations.brave.normalize import normalize_web_item
 
 
 class BraveSearchError(RuntimeError):
@@ -60,26 +58,15 @@ class BraveSearchClient:
 
     def web_search(self, params: WebSearchParams) -> WebSearchResponse:
         raw = self._get("/web/search", params.to_api_params())
-        web_payload = raw.get("web") if isinstance(raw, dict) else None
-        raw_results = web_payload.get("results", []) if isinstance(web_payload, dict) else []
-        results = [normalize_web_item(item) for item in raw_results if isinstance(item, dict)]
-        return WebSearchResponse(query=params.q, results=results)
+        if not isinstance(raw, dict):
+            return WebSearchResponse(query=params.q)
+        return WebSearchResponse.model_validate({"query": params.q, **raw})
 
     def news_search(self, q: str, **params: Any) -> NewsSearchResponse:
         raw = self._get("/news/search", {"q": q, **params})
-        news_payload = raw.get("news") if isinstance(raw, dict) else None
-        raw_results = news_payload.get("results", []) if isinstance(news_payload, dict) else []
-        results = [
-            NewsResult(
-                title=str(item.get("title") or ""),
-                url=item.get("url") if isinstance(item.get("url"), str) else None,
-                description=str(item.get("description") or ""),
-                age=item.get("age") if isinstance(item.get("age"), str) else None,
-            )
-            for item in raw_results
-            if isinstance(item, dict)
-        ]
-        return NewsSearchResponse(query=q, results=results)
+        if not isinstance(raw, dict):
+            return NewsSearchResponse()
+        return NewsSearchResponse.model_validate(raw)
 
     def suggest(
         self,
@@ -90,22 +77,11 @@ class BraveSearchClient:
         **params: Any,
     ) -> SuggestResponse:
         raw = self._get("/suggest/search", {"q": q, "country": country, "count": count, **params})
-        suggestions: list[str] = []
         if isinstance(raw, dict):
-            for item in raw.get("results", []):
-                if isinstance(item, dict):
-                    s = item.get("query") or item.get("suggestion") or ""
-                    if s:
-                        suggestions.append(str(s))
-        elif isinstance(raw, list):
-            for item in raw:
-                if isinstance(item, str):
-                    suggestions.append(item)
-                elif isinstance(item, dict):
-                    s = item.get("query") or item.get("suggestion") or ""
-                    if s:
-                        suggestions.append(str(s))
-        return SuggestResponse(query=q, suggestions=suggestions)
+            return SuggestResponse.model_validate({"query": q, **raw})
+        if isinstance(raw, list):
+            return SuggestResponse.model_validate({"query": q, "results": raw})
+        return SuggestResponse.model_validate({"query": q})
 
     def shopping_search(
         self,
@@ -144,8 +120,4 @@ class BraveSearchClient:
             )
             combined_results.extend(resp.results)
 
-        return ShoppingSearchResult(
-            query=q,
-            sources=[selected_source],
-            results=combined_results,
-        )
+        return ShoppingSearchResult.model_validate({"query": q, "sources": [selected_source], "results": combined_results})

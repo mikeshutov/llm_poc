@@ -32,41 +32,29 @@ def setup_conversation(cid):
 
 setup_conversation(cid)
 
-if "agent_running" not in st.session_state:
-    st.session_state.agent_running = False
-
 with st.sidebar:
     render_sidebar(conversation_repository)
 
 render_messages(conversation_repository, st.session_state.conversation_id, render_message, limit=10)
 
-# prompt area
-if st.session_state.agent_running:
-    st.chat_input("Agent is thinking...", disabled=True)
-    if st.button("⏹ Stop", type="secondary"):
-        st.session_state.agent_running = False
-        st.rerun()
-else:
-    userQuery = st.chat_input("What are you looking for or trying to learn about?")
-    if userQuery:
-        st.session_state.agent_running = True
-        now = datetime.now(timezone.utc)
-        st.session_state.messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: userQuery, "timestamp": now})
-        with st.chat_message(ROLE_USER):
-            st.write(userQuery)
-            ts = _format_timestamp(now)
-            if ts:
-                st.caption(ts)
+userQuery = st.chat_input("What are you looking for or trying to learn about?")
+if userQuery:
+    now = datetime.now(timezone.utc)
+    st.session_state.messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: userQuery, "timestamp": now})
+    with st.chat_message(ROLE_USER):
+        st.write(userQuery)
+        ts = _format_timestamp(now)
+        if ts:
+            st.caption(ts)
 
-        with st.spinner("Thinking..."):
-            agent_result = run_agent_for_query(
-                conversation_id=st.session_state.conversation_id,
-                user_query=userQuery,
-            )
-            append_assistant_response(
-                st.session_state.conversation_id,
-                userQuery,
-                agent_result,
-            )
+    with st.spinner("Thinking..."):
+        agent_result = run_agent_for_query(
+            conversation_id=st.session_state.conversation_id,
+            user_query=userQuery,
+        )
 
-        st.session_state.agent_running = False
+    append_assistant_response(
+        st.session_state.conversation_id,
+        userQuery,
+        agent_result,
+    )

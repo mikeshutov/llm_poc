@@ -29,9 +29,4 @@ def _first_matching_attribute(data: dict, keys: tuple[str, ...]) -> str | None:
 
 
 def normalize_web_item(item: dict) -> WebSearchResult:
-    return WebSearchResult(
-        title=_first_str(item, _TITLE_KEYS),
-        url=_first_matching_attribute(item, _URL_KEYS),
-        description=_first_str(item, _DESC_KEYS),
-        image_url=_first_matching_attribute(item, _IMAGE_KEYS),
-    )
+    return WebSearchResult.model_validate(item)

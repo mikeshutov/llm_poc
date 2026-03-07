@@ -73,13 +73,7 @@ class OpenMeteoClient:
         except (KeyError, TypeError, ValueError) as exc:
             raise WeatherGeocodingError(f"Malformed geocoding result payload: {exc}") from exc
 
-        return GeocodedLocation(
-            name=name,
-            country=country,
-            latitude=latitude,
-            longitude=longitude,
-            timezone=timezone_str,
-        )
+        return GeocodedLocation(name=name, country=country, latitude=latitude, longitude=longitude, timezone=timezone_str)
 
     def get_historical_month(self, city: str, year: int, month: int) -> MonthlyWeatherSummary:
         city_norm = (city or "").strip()

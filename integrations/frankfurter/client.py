@@ -130,11 +130,7 @@ class FrankfurterClient:
             else self._normalize_currency_code(fallback_base, label="Base currency")
         )
 
-        return ExchangeRatesSnapshot(
-            base=base_code,
-            date=date_str,
-            rates=self._parse_rates_map(rates_payload),
-        )
+        return ExchangeRatesSnapshot(base=base_code, date=date_str, rates=self._parse_rates_map(rates_payload))
 
     def _parse_series(
         self,
@@ -168,12 +164,7 @@ class FrankfurterClient:
                 continue
             parsed_rates[date_key] = self._parse_rates_map(day_rates)
 
-        return ExchangeRatesSeries(
-            base=base_code,
-            start_date=start_date,
-            end_date=end_date,
-            rates=parsed_rates,
-        )
+        return ExchangeRatesSeries(base=base_code, start_date=start_date, end_date=end_date, rates=parsed_rates)
 
     def _parse_rates_map(self, rates_payload: dict[str, Any]) -> dict[str, float]:
         parsed: dict[str, float] = {}

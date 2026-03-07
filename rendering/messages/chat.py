@@ -66,6 +66,7 @@ def append_assistant_response(
             "response": response_text,
             "cards": answer.cards,
             "follow_up": answer.follow_up,
+            "clarifying_question": answer.clarifying_question,
         }
     else:
         response_text = answer.response
@@ -73,6 +74,7 @@ def append_assistant_response(
             "response": answer.response,
             "cards": answer.cards,
             "follow_up": answer.follow_up,
+            "clarifying_question": getattr(answer, "clarifying_question", ""),
         }
 
     now = datetime.now(timezone.utc)

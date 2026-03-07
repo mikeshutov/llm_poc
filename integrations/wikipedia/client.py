@@ -72,13 +72,7 @@ class WikipediaClient:
         for title, description, url in zip(titles, descriptions, urls):
             if not isinstance(title, str) or not isinstance(url, str):
                 continue
-            results.append(
-                WikipediaSearchResult(
-                    title=title,
-                    description=description if isinstance(description, str) else "",
-                    url=url,
-                )
-            )
+            results.append(WikipediaSearchResult(title=title, description=description if isinstance(description, str) else "", url=url))
         return results
 
     def get_page_summary(self, title: str, sentences: int = 2) -> WikipediaPageSummary:
@@ -124,9 +118,4 @@ class WikipediaClient:
             page_slug = quote(resolved_title.replace(" ", "_"), safe="()")
             url = f"{self.base_url}/wiki/{page_slug}"
 
-        return WikipediaPageSummary(
-            title=resolved_title,
-            summary=summary,
-            url=url,
-            page_id=page_id_value,
-        )
+        return WikipediaPageSummary(title=resolved_title, summary=summary, url=url, page_id=page_id_value)

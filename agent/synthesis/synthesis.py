@@ -67,6 +67,7 @@ def run_synthesis(state: AgentState) -> AgentState:
         state=state,
         answer=synthesis_result.result,
         follow_up=synthesis_result.follow_up,
+        clarifying_question=synthesis_result.clarifying_question,
     )
     state.goal_reached = True
     return state

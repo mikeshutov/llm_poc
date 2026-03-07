@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from integrations.brave.models import NewsSearchResponse
 from products.models.product_search_results import ProductSearchResults
-from rendering.cards_mapper import product_results_to_cards
+from rendering.cards_mapper import news_response_to_cards, product_results_to_cards
 
 if TYPE_CHECKING:
     from agent.agentstate.model import AgentState
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
 class AgentResult:
     answer: list[str]
     follow_up: str = ""
+    clarifying_question: str = ""
     cards: list[dict[str, Any]] = field(default_factory=list)
 
     @classmethod
@@ -22,6 +24,7 @@ class AgentResult:
         *,
         answer: list[str],
         follow_up: str | None = "",
+        clarifying_question: str | None = "",
         state: AgentState,
     ) -> "AgentResult":
         cards: list[dict[str, Any]] = []
@@ -29,10 +32,14 @@ class AgentResult:
 
         for iteration in state.iteration_trace:
             for result in iteration.results.values():
-                if not isinstance(result, ProductSearchResults):
+                if isinstance(result, ProductSearchResults):
+                    new_cards = product_results_to_cards(result)
+                elif isinstance(result, NewsSearchResponse):
+                    new_cards = news_response_to_cards(result)
+                else:
                     continue
 
-                for card in product_results_to_cards(result):
+                for card in new_cards:
                     card_id = str(card.get("id") or "")
                     if card_id and card_id in seen_ids:
                         continue
@@ -43,5 +50,6 @@ class AgentResult:
         return cls(
             answer=answer,
             follow_up=follow_up or "",
+            clarifying_question=clarifying_question or "",
             cards=cards,
         )
