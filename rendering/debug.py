@@ -45,6 +45,12 @@ def emit_status_message(content: str) -> None:
         pass
 
 
+def build_classify_status_message(categories: list[str]) -> str:
+    if categories:
+        return f"**Classified as:** {', '.join(categories)}"
+    return "**Classification:** no matching categories, using all tools"
+
+
 def build_plan_status_message(step_plans: list[str], final_answer: str | None = None) -> str:
     if step_plans:
         plan_text = "\n".join(

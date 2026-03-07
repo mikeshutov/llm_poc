@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from langsmith import traceable
 
-from agent.agentstate.model import AgentState
+from agent.agentstate.model import AgentState, flatten_conversation_entries
+from agent.classify.classify import classify
 from agent.executor.executor import run_executor
-from agent.graph_constants import EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
+from agent.graph_constants import CLASSIFICATION_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
 from agent.models.agent_result import AgentResult
 from agent.planner.planner import run_planner
 from agent.router.router import router
@@ -13,13 +14,6 @@ from agent.validator.validator import validator
 from langgraph.graph import END, StateGraph
 
 
-def flatten_messages(messages: list[dict], limit: int = 12) -> str:
-    return "\n".join(
-        f"{m['role'].upper()}: {m['content']}"
-        for m in messages[-limit:]
-        if m.get("content")
-    )
-
 @traceable(name="Agent Node")
 def run_agent(
     conversation_entries: list[dict],
@@ -27,12 +21,18 @@ def run_agent(
     max_turns: int = 10,
 ) -> AgentResult:
     #Agent state and set up hybrid ReWoo Loop
-    agentState = AgentState.new(flatten_messages(conversation_entries),max_turns)
+    agentState = AgentState.new(
+        task=flatten_conversation_entries(conversation_entries),
+        max_turns=max_turns,
+        conversation_entries=conversation_entries,
+    )
     builder = StateGraph(AgentState)
+    builder.add_node(CLASSIFICATION_EDGE, classify)
     builder.add_node(PLAN_EDGE, run_planner)
     builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
     builder.add_node(SYNTHESIZE_EDGE, run_synthesis)
-    builder.set_entry_point(PLAN_EDGE)
+    builder.set_entry_point(CLASSIFICATION_EDGE)
+    builder.add_edge(CLASSIFICATION_EDGE,PLAN_EDGE)
     builder.add_conditional_edges(
         PLAN_EDGE,
         validator,
@@ -51,12 +51,12 @@ def run_agent(
     builder.add_edge(SYNTHESIZE_EDGE, END)
     agent_graph = builder.compile()
 
-    # # create a graph to see what our chain looks like
-    # png = agent_graph.get_graph(xray=1).draw_mermaid_png(
-    #     background_color="white"
-    # )
-    # with open("graph.png", "wb") as f:
-    #     f.write(png)
+    # create a graph to see what our chain looks like
+    png = agent_graph.get_graph(xray=1).draw_mermaid_png(
+        background_color="white"
+    )
+    with open("graph.png", "wb") as f:
+        f.write(png)
 
     final_state = agent_graph.invoke(
         agentState,

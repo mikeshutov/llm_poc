@@ -26,22 +26,18 @@ def _format_timestamp(ts) -> str | None:
 def render_assistant_content(content: str, payload: dict | None, timestamp: str | None = None) -> None:
     cards = None
     follow_up = None
-    clarifying_question = None
     if isinstance(payload, dict):
         cards = payload.get("cards")
         if cards is None:
             cards = payload.get("products")
         follow_up = payload.get("follow_up")
-        clarifying_question = payload.get("clarifying_question")
-
     has_cards = isinstance(cards, list) and bool(cards)
     has_follow_up = isinstance(follow_up, str) and bool(follow_up)
-    has_clarifying = isinstance(clarifying_question, str) and bool(clarifying_question)
 
     if has_follow_up and not has_cards:
-        st.info(f"{content}\n\n{follow_up}")
+        st.markdown(f"{content}\n\n{follow_up}")
     else:
-        st.info(content)
+        st.markdown(content)
 
     if has_cards:
         render_cards(
@@ -53,7 +49,7 @@ def render_assistant_content(content: str, payload: dict | None, timestamp: str 
         )
 
     if has_follow_up and has_cards:
-        st.info(follow_up)
+        st.markdown(follow_up)
 
     if timestamp:
         st.caption(timestamp)

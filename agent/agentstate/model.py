@@ -3,8 +3,22 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel
 
 from agent.models import AgentResult, Plan
+
+
+def flatten_conversation_entries(entries: list[dict]) -> str:
+    return "\n".join(
+        f"{m['role'].upper()}: {m['content']}"
+        for m in entries
+        if m.get("content")
+    )
+
+
+class ClassificationResults(BaseModel):
+    applicable_tool_categories: list[str] = []
+
 
 @dataclass
 class IterationState:
@@ -31,6 +45,7 @@ class AgentState:
     max_turns: int
     conversation_entries: list[dict[str, Any]] = field(default_factory=list)
     conversation_id: str | None = None
+    classification_results: ClassificationResults = field(default_factory=ClassificationResults)
     iteration_trace: list[IterationState] = field(default_factory=list)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
     goal_reached: bool = False

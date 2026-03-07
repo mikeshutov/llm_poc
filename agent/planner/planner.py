@@ -31,11 +31,7 @@ def _strip_code_fences(s: str) -> str:
 def run_planner(agent_state: AgentState) -> AgentState:
     it_state = IterationState.new()
 
-    prompt = build_planner_prompt(
-        tool_list=tool_list,
-        task=agent_state.task,
-        previous_calls=agent_state.iteration_trace,
-    )
+    prompt = build_planner_prompt(state=agent_state)
     raw = agent_state.llm.invoke(prompt).content
     raw = _strip_code_fences(raw)
 

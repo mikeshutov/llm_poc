@@ -60,7 +60,7 @@ class BraveSearchClient:
         raw = self._get("/web/search", params.to_api_params())
         if not isinstance(raw, dict):
             return WebSearchResponse(query=params.q)
-        return WebSearchResponse.model_validate({"query": params.q, **raw})
+        return WebSearchResponse.model_validate({"query": params.q, "web": raw.get("web")})
 
     def news_search(self, q: str, **params: Any) -> NewsSearchResponse:
         raw = self._get("/news/search", {"q": q, **params})
