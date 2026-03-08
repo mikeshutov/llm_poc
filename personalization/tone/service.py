@@ -3,9 +3,11 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
+from conversation.repository.conversation_repository import ConversationRepository
 from personalization.tone.models import Tone
 from personalization.tone.tone_manager import update_tone_state
 
+# this is still experimental i probably want to create one big personalization object and maintain it per user.
 
 def _coerce_tone(value: Tone | dict[str, Any] | None) -> Tone | None:
     if value is None:
@@ -21,13 +23,13 @@ def _coerce_tone(value: Tone | dict[str, Any] | None) -> Tone | None:
 
 
 def resolve_conversation_tone_state(
-    conversation_repository: Any,
     conversation_id: UUID,
     parsed_tone: Tone | dict[str, Any] | None,
 ) -> Tone | None:
+    repo = ConversationRepository()
     previous_tone: Tone | None = None
     try:
-        conversation = conversation_repository.get_conversation(conversation_id)
+        conversation = repo.get_conversation(conversation_id)
         previous_tone = _coerce_tone(conversation.tone_state if conversation else None)
     except Exception:
         previous_tone = None
@@ -36,7 +38,7 @@ def resolve_conversation_tone_state(
     if next_tone is not None:
         try:
             if previous_tone != next_tone:
-                conversation_repository.update_tone_state(conversation_id, next_tone.model_dump())
+                repo.update_tone_state(conversation_id, next_tone.model_dump())
         except Exception:
             # Tone persistence should not block the response flow.
             pass
@@ -44,12 +46,10 @@ def resolve_conversation_tone_state(
 
 
 def resolve_conversation_tone_label(
-    conversation_repository: Any,
     conversation_id: UUID,
     parsed_tone: Tone | dict[str, Any] | None,
 ) -> str | None:
     tone_state = resolve_conversation_tone_state(
-        conversation_repository=conversation_repository,
         conversation_id=conversation_id,
         parsed_tone=parsed_tone,
     )

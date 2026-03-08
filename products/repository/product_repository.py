@@ -6,21 +6,18 @@ from typing import Any, Optional, Sequence
 import psycopg
 from psycopg.rows import dict_row
 
+from db.connection import get_connection
 from products.models.product_query import ProductQuery
 from products.models.product_result import ProductResult
 from products.models.product_result_model import ProductResultModel
 from products.models.product_source import ProductSource
 from pgvector.psycopg import register_vector
 
-DB_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://app:app@localhost:5432/products",
-)
 MAX_VECTOR_DISTANCE = float(os.getenv("MAX_VECTOR_DISTANCE", "1.05"))
 
 class ProductRepository:
     def __init__(self):
-        conn = psycopg.connect(DB_URL)
+        conn = get_connection()
         register_vector(conn)
         self._conn = conn
 

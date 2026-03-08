@@ -49,23 +49,4 @@ class NagerDateClient:
         if not isinstance(payload, list):
             raise NagerDateClientError("Malformed Nager.Date response: expected a list of holidays.")
 
-        holidays: list[PublicHoliday] = []
-        for item in payload:
-            if not isinstance(item, dict):
-                continue
-
-            holidays.append(
-                PublicHoliday(
-                    date=str(item.get("date") or ""),
-                    local_name=str(item.get("localName") or ""),
-                    name=str(item.get("name") or ""),
-                    country_code=str(item.get("countryCode") or country),
-                    fixed=item.get("fixed") if isinstance(item.get("fixed"), bool) else None,
-                    global_holiday=item.get("global") if isinstance(item.get("global"), bool) else None,
-                    counties=item.get("counties") if isinstance(item.get("counties"), list) else None,
-                    launch_year=item.get("launchYear") if isinstance(item.get("launchYear"), int) else None,
-                    types=item.get("types") if isinstance(item.get("types"), list) else None,
-                )
-            )
-
-        return holidays
+        return [PublicHoliday.model_validate(item) for item in payload if isinstance(item, dict)]

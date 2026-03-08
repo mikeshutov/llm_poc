@@ -7,6 +7,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from db.connection import get_connection
 from conversation.models.conversation_models import (
     Conversation,
     ConversationRoundtrip,
@@ -15,8 +16,8 @@ from conversation.models.conversation_models import (
 
 
 class ConversationRepository:
-    def __init__(self, conn: psycopg.Connection):
-        self._conn = conn
+    def __init__(self, conn: psycopg.Connection | None = None):
+        self._conn = conn or get_connection()
 
 
     def create_conversation(self, user_id: str, metadata: Optional[dict[str, Any]] = None) -> Conversation:

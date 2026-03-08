@@ -11,7 +11,7 @@ def generate_conversation_title(prompt: str) -> str:
         SYSTEM_PROMPT,
         [{ROLE_KEY: ROLE_USER, CONTENT_KEY: prompt}],
         tools=[],
-        temperature=0.2,
+        temperature=0, #experiment with 0
     )
     title = (res.raw_message.content or "").strip()[:60]
     return title or " ".join(prompt.split()).strip()[:60] or "Untitled"

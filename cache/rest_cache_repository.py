@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from datetime import timedelta
 from typing import Any
 
@@ -10,13 +9,12 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-
-DB_URL = os.getenv("DATABASE_URL", "postgresql://app:app@localhost:5432/products")
+from db.connection import get_connection
 
 # should be dynamo PG for now
 class RestCacheRepository:
-    def __init__(self, conn: psycopg.Connection):
-        self._conn = conn
+    def __init__(self, conn: psycopg.Connection | None = None):
+        self._conn = conn or get_connection()
 
     @staticmethod
     def _params_hash(params: dict[str, Any]) -> str:

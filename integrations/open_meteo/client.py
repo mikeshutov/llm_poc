@@ -63,17 +63,11 @@ class OpenMeteoClient:
         if not first:
             raise WeatherGeocodingError("Malformed geocoding response (first result is not an object).")
 
+        first.setdefault("name", city_norm)
         try:
-            name = str(first.get("name") or city_norm)
-            country = str(first.get("country") or "")
-            latitude = float(first["latitude"])
-            longitude = float(first["longitude"])
-            timezone = first.get("timezone")
-            timezone_str = str(timezone) if isinstance(timezone, str) else None
-        except (KeyError, TypeError, ValueError) as exc:
+            return GeocodedLocation.model_validate(first)
+        except Exception as exc:
             raise WeatherGeocodingError(f"Malformed geocoding result payload: {exc}") from exc
-
-        return GeocodedLocation(name=name, country=country, latitude=latitude, longitude=longitude, timezone=timezone_str)
 
     def get_historical_month(self, city: str, year: int, month: int) -> MonthlyWeatherSummary:
         city_norm = (city or "").strip()
@@ -161,24 +155,11 @@ class OpenMeteoClient:
             error_cls=WeatherArchiveError,
         )
         cw = data["current_weather"]
-        units = data.get("current_weather_units", {
-            "temperature": "\u00b0C",
-            "windspeed": "km/h",
-            "winddirection": "\u00b0",
+        return CurrentWeather.model_validate({
+            **data,
+            **cw,
+            "units": data.get("current_weather_units", {"temperature": "°C", "windspeed": "km/h", "winddirection": "°"}),
         })
-        return CurrentWeather(
-            latitude=data["latitude"],
-            longitude=data["longitude"],
-            timezone=data.get("timezone", timezone),
-            elevation=data.get("elevation", 0.0),
-            time=cw["time"],
-            temperature=cw["temperature"],
-            windspeed=cw["windspeed"],
-            winddirection=cw["winddirection"],
-            weathercode=cw["weathercode"],
-            is_day=bool(cw.get("is_day", 1)),
-            units=units,
-        )
 
     def get_current_for_location(self, location_name: str) -> tuple[GeocodedLocation, CurrentWeather] | None:
         try:

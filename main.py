@@ -15,6 +15,24 @@ from rendering.sidebar import render_sidebar
 
 st.set_page_config(page_title="LLM Agentic Chat", page_icon="🤖")
 
+st.markdown(
+    """<style>
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stSidebarHeader"],
+    button[aria-label="Close sidebar"],
+    button[aria-label="Open sidebar"] {
+        display: none !important;
+    }
+    [data-testid="stSidebar"] .stButton button p {
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    </style>""",
+    unsafe_allow_html=True,
+)
+
 conversation_repository = get_conversation_repo()
 
 qp = st.query_params

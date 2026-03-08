@@ -43,13 +43,11 @@ class WikidataSparqlClient:
         if not isinstance(payload, dict):
             raise WikidataSparqlClientError("Unexpected non-object response from Wikidata SPARQL endpoint.")
 
-        head = payload.get("head")
-        results = payload.get("results")
-        return SparqlResult(
-            sparql=sparql_norm,
-            vars=head.get("vars") if isinstance(head, dict) else [],
-            bindings=results.get("bindings") if isinstance(results, dict) else [],
-        )
+        return SparqlResult.model_validate({
+            "sparql": sparql_norm,
+            "vars": (payload.get("head") or {}).get("vars", []),
+            "bindings": (payload.get("results") or {}).get("bindings", []),
+        })
 
     def select(self, sparql: str) -> list[dict[str, Any]]:
         result = self.query(sparql)
