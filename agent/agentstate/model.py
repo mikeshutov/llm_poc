@@ -18,6 +18,8 @@ def flatten_conversation_entries(entries: list[dict]) -> str:
 
 class ClassificationResults(BaseModel):
     applicable_tool_categories: list[str] = []
+    can_answer_without_tools: bool = False
+    confidence: float = 0.0
 
 
 @dataclass

@@ -17,7 +17,6 @@ def build_classify_prompt(agent_state: AgentState) -> str:
     return (
         "You are a request classifier. Given the user's request, return only the category names that are relevant.\n\n"
         f"{conversation_block}"
-        f"User request: {agent_state.task}\n\n"
         f"Available categories:\n{category_lines}\n\n"
         f"Response Schema: {CLASSIFY_SCHEMA}"
     )

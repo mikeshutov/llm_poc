@@ -29,6 +29,9 @@ st.markdown(
         overflow: hidden !important;
         text-overflow: ellipsis !important;
     }
+    button[data-testid="stBaseButton-secondary"] > div {
+        justify-content: flex-start !important;
+    }
     </style>""",
     unsafe_allow_html=True,
 )

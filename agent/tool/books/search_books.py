@@ -26,7 +26,7 @@ class SearchBooksArgs(BaseModel):
     "search_books",
     args_schema=SearchBooksArgs,
     description="""
-Search the Open Library catalog for books by title, author, subject, or keyword.
+Search the Open Library catalog for books by a title, author, subject, or keyword.
 
 Required fields:
 - query (string)

@@ -4,6 +4,7 @@ from agent.agentstate.model import AgentState
 from agent.graph_constants import PLAN_EDGE, SYNTHESIZE_EDGE
 
 
+# this can effectively become a statemachine fairly soon
 def router(state: AgentState) -> str:
     # Stop if goal reached
     if state.goal_reached:

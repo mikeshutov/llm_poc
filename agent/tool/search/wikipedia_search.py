@@ -50,7 +50,7 @@ Optional fields:
 Example valid call:
 {
   "query": "Toronto weather",
-  "limit": 3,
+  "limit": 5,
   "summary_sentences": 2
 }
 """,

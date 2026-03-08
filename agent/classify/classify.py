@@ -21,4 +21,8 @@ def classify(agent_state: AgentState) -> AgentState:
         build_classify_status_message(agent_state.classification_results.applicable_tool_categories)
     )
 
+    if(agent_state.classification_results.can_answer_without_tools and 
+       agent_state.classification_results.confidence >=0.8):
+        agent_state.goal_reached = True
+
     return agent_state

@@ -32,7 +32,17 @@ def run_agent(
     builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
     builder.add_node(SYNTHESIZE_EDGE, run_synthesis)
     builder.set_entry_point(CLASSIFICATION_EDGE)
-    builder.add_edge(CLASSIFICATION_EDGE,PLAN_EDGE)
+    
+    # Check for potentially already being ready to answer during classification
+    builder.add_conditional_edges(
+        CLASSIFICATION_EDGE,
+        router,
+        {
+            SYNTHESIZE_EDGE: SYNTHESIZE_EDGE,
+            PLAN_EDGE: PLAN_EDGE,  
+        },
+    )
+
     builder.add_conditional_edges(
         PLAN_EDGE,
         validator,
@@ -40,6 +50,7 @@ def run_agent(
             EXECUTE_TOOLS_EDGE: EXECUTE_TOOLS_EDGE, 
             SYNTHESIZE_EDGE: SYNTHESIZE_EDGE},
     )
+
     builder.add_conditional_edges(
         EXECUTE_TOOLS_EDGE,
         router,
@@ -52,7 +63,7 @@ def run_agent(
     builder.add_edge(SYNTHESIZE_EDGE, END)
     agent_graph = builder.compile()
 
-    # create a graph to see what our chain looks like
+    #create a graph to see what our chain looks like
     # png = agent_graph.get_graph(xray=1).draw_mermaid_png(
     #     background_color="white"
     # )

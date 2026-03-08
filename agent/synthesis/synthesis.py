@@ -24,7 +24,8 @@ def _strip_code_fences(s: str) -> str:
 
 @traceable(name="Synthesis Node")
 def run_synthesis(state: AgentState) -> AgentState:
-    if not state.iteration_trace:
+    # exit we may need to modify
+    if not state.iteration_trace and not state.goal_reached:
         state.result = AgentResult(answer=[])
         state.goal_reached = True
         return state

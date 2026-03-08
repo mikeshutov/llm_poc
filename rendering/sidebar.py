@@ -33,16 +33,6 @@ def render_sidebar(conversation_repository) -> None:
         st.rerun()
 
     st.divider()
-    # move the random styles somewhere else later
-    st.markdown(
-        """<style>
-        button[data-testid="stBaseButton-secondary"] > div {
-            justify-content: flex-start !important;
-        }
-        </style>""",
-        unsafe_allow_html=True,
-    )
-
     st.caption("Conversations")
     conversations = conversation_repository.list_conversations(user_id="anonymous", limit=50)
     current_id = st.session_state.conversation_id
@@ -55,7 +45,6 @@ def render_sidebar(conversation_repository) -> None:
         col_title, col_delete = st.columns([5, 1])
         with col_title:
             if is_active:
-                # move these somewhere else later on if wanna keep
                 st.markdown(
                     f'<div style="'
                     f'background:rgba(99,136,219,0.2);'
