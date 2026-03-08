@@ -28,6 +28,8 @@ def _substitute_refs(obj, results: dict):
 
 @traceable(name="Executor Node")
 def run_executor(agent_state: AgentState) -> AgentState:
+    # we probably want to set up some sort of 
+    # "policy" or gating layer here or after planning 
     iteration = agent_state.iteration_trace[-1]  # current iteration
     while (step := _next_step(iteration)) is not None:
         args = _substitute_refs(step.args, iteration.results)

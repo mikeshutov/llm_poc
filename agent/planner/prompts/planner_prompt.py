@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 import json
 
 from agent.agentstate.model import AgentState, IterationState
+from agent.planner.models.compiled_planner_context import CompiledPlannerContext
 from agent.planner.prompts.planner_rules import build_planner_rules
 from agent.planner.prompts.planner_schema_prompt import PLANNER_SCHEMA
 from agent.tool.tools import TOOL_CATEGORIES, tools as all_tools
@@ -20,27 +21,35 @@ def current_time_block(*,timezone = "America/Toronto") -> str:
     )
 
 # we build the tools and rules dynamically here based on the state before we pass this on to the planner
-def _compile_tools_rools_from_state(state: AgentState) -> tuple[list[str], list]:
+def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext:
     applicable = state.classification_results.applicable_tool_categories
     if applicable:
-        tools = [t for cat in applicable if cat in TOOL_CATEGORIES for t in TOOL_CATEGORIES[cat].tools]
+        tools, rules = [], {}
+        for cat in applicable:
+            if cat in TOOL_CATEGORIES:
+                tools.extend(TOOL_CATEGORIES[cat].tools)
+                if TOOL_CATEGORIES[cat].rules:
+                    rules[cat] = TOOL_CATEGORIES[cat].rules
     else:
-        # temp fallback
+        # for now just fallback to all tools and no rules
         tools = all_tools
-    rules: list[str] = []
-    return rules, tools
+        rules = {}
+    compiled_tools = "\n".join(f"- {t.name}: {t.description}".strip() for t in tools)
+    return CompiledPlannerContext(tools=tools, compiled_tools=compiled_tools, rules=rules)
 
 
 def build_planner_prompt(state: AgentState) -> str:
-    planner_prompt =  (
-        f"{current_time_block()}\n\n"
+    context = _compile_tools_rules_from_state(state)
+    planner_prompt = (
         "You are a planning agent. Utilize data from 'Previous Iterations:' when it is provided.\n\n"
-        f"Allowed TOOLs: {_compile_tools_rools_from_state(state)}\n\n"
-        f"{PLANNER_SCHEMA}\n\n"
-        f"{build_planner_rules()}\n\n"
+        # Personalization section. For now just a time prompt.
+        f"{current_time_block()}\n\n"
         "TASK:\n"
         f"{state.task}\n"
+        f"Allowed Tools:\n{context.compiled_tools}\n\n"
+        f"{build_planner_rules(context.rules)}\n\n"
     )
+    
     # Build append previous call plan and results.
     if state.iteration_trace:
             blocks: list[str] = []
@@ -65,5 +74,7 @@ def build_planner_prompt(state: AgentState) -> str:
                 blocks.append(f"Iteration {i}:\n" + "\n".join(step_lines))
 
             planner_prompt += "\n\nPrevious Iterations:\n" + "\n\n".join(blocks) + "\n"
+
+    planner_prompt+= f"{PLANNER_SCHEMA}\n\n"
 
     return planner_prompt

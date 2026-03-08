@@ -7,26 +7,16 @@ from pydantic import BaseModel, Field
 
 from agent.tool.common import model_to_dict
 from integrations.brave import find_products as _find_products
-from integrations.models.common_properties import CommonProperties
 from products.models.product_query import ProductQuery
 
 
-class CommonFiltersArgs(BaseModel):
+class ProductFiltersArgs(BaseModel):
+    category: list[str] | str | None = Field(default=None, description="Optional category filter. One or more values. Prefer categories returned by list_product_categories.")
+    style: str | None = Field(default=None, description="Optional style filter. Example: 'casual'.")
     color: str | None = Field(default=None, description="Optional color filter. Example: 'black'.")
     price_min: float | None = Field(default=None, description="Optional minimum price.")
     price_max: float | None = Field(default=None, description="Optional maximum price.")
-    gender: str | None = Field(
-        default=None,
-        description="Optional gender filter. Example: 'Men' or 'Women'.",
-    )
-
-
-class ProductFiltersArgs(BaseModel):
-    category: str | None = Field(
-        default=None,
-        description="Optional category filter. Prefer categories returned by list_product_categories.",
-    )
-    style: str | None = Field(default=None, description="Optional style filter. Example: 'casual'.")
+    gender: str | None = Field(default=None, description="Optional gender filter. Example: 'Men' or 'Women'.")
 
 
 class FindProductsArgs(BaseModel):
@@ -34,13 +24,9 @@ class FindProductsArgs(BaseModel):
         ...,
         description="Short product search query. Example: 'summer clothing'. Use a single string, not a tuple or list.",
     )
-    common_filters: CommonFiltersArgs | None = Field(
-        default=None,
-        description="Optional shared filters like color and price.",
-    )
     product_filters: ProductFiltersArgs | None = Field(
         default=None,
-        description="Optional product-specific filters like category and style.",
+        description="Optional filters: category, style, color, price_min, price_max, gender.",
     )
     web_count: int = Field(
         default=5,
@@ -63,8 +49,7 @@ Required fields:
 - query_text (string)
 
 Optional fields:
-- common_filters (object)
-- product_filters (object)
+- product_filters (object): category, style, color, price_min, price_max, gender
 - web_count (integer)
 - allow_web_fallback (boolean)
 
@@ -75,8 +60,10 @@ Important:
 
 Example valid call:
 {
-  "query_text": "summer clothing",
+  "query_text": "men's clothing",
   "product_filters": {
+    "gender": "Men",
+    "price_max": 40,
     "category": "Shirts"
   }
 }
@@ -84,16 +71,13 @@ Example valid call:
 )
 def find_products(
     query_text: str,
-    common_filters: dict[str, Any] | None = None,
     product_filters: dict[str, Any] | None = None,
     web_count: int = 5,
     allow_web_fallback: bool = True,
 ):
-    common_dict = model_to_dict(common_filters)
     product_dict = model_to_dict(product_filters)
     return _find_products(
         query_text=query_text,
-        common_filters=CommonProperties(**common_dict) if common_dict else None,
         product_filters=ProductQuery(**product_dict) if product_dict else None,
         web_count=web_count,
         allow_web_fallback=allow_web_fallback,

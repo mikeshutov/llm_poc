@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from agent.tool.products.find_products import find_products
 from agent.tool.products.list_product_categories import list_product_categories
@@ -18,6 +18,7 @@ from agent.tool.calendar.public_holidays_lookup import public_holidays_lookup
 class ToolCategory:
     tools: list
     description: str
+    rules: list[str] = field(default_factory=list)
 
 
 PRODUCT_TOOLS = [find_products, list_product_categories]
@@ -27,11 +28,29 @@ SEARCH_TOOLS = [generic_web_search, news_search, wikipedia_search, structured_fa
 CALENDAR_TOOLS = [public_holidays_lookup]
 
 TOOL_CATEGORIES: dict[str, ToolCategory] = {
-    "products": ToolCategory(tools=PRODUCT_TOOLS, description="Search and browse products and product categories from the catalog."),
-    "weather": ToolCategory(tools=WEATHER_TOOLS, description="Look up current or historical weather conditions for a city."),
-    "finance": ToolCategory(tools=FINANCE_TOOLS, description="Retrieve currency exchange rates and historical rate time series."),
-    "search": ToolCategory(tools=SEARCH_TOOLS, description="Search the web, news, Wikipedia, or structured knowledge for general information."),
-    "calendar": ToolCategory(tools=CALENDAR_TOOLS, description="Look up public holidays for a country and year."),
+    "products": ToolCategory(
+        tools=PRODUCT_TOOLS,
+        description="Search and browse products and product categories from the catalog.",
+        rules=["For product searches utilize internal tools first before web searches."
+               "Make sure that previous context is taken into account when providing filters unless explicitely told not to."],
+    ),
+    "weather": ToolCategory(
+        tools=WEATHER_TOOLS,
+        description="Look up current or historical weather conditions for a city.",
+    ),
+    "finance": ToolCategory(
+        tools=FINANCE_TOOLS,
+        description="Retrieve currency exchange rates and historical rate time series.",
+    ),
+    "search": ToolCategory(
+        tools=SEARCH_TOOLS,
+        description="Search the web, news, Wikipedia, or structured knowledge for general information.",
+        rules=["If you use Brave/WebSearch tools, use at most ONE of them in the entire plan."],
+    ),
+    "calendar": ToolCategory(
+        tools=CALENDAR_TOOLS,
+        description="Look up public holidays for a country and year.",
+    ),
 }
 
 tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *SEARCH_TOOLS, *CALENDAR_TOOLS]

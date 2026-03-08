@@ -7,7 +7,6 @@ import psycopg
 from psycopg.rows import dict_row
 
 from products.models.product_query import ProductQuery
-from integrations.models.common_properties import CommonProperties
 from products.models.product_result import ProductResult
 from products.models.product_result_model import ProductResultModel
 from products.models.product_source import ProductSource
@@ -28,11 +27,10 @@ class ProductRepository:
     def search_products(
             self,
             query_embedding: Sequence[float],
-            common_filters: Optional["CommonProperties"] = None,
             product_filters: Optional[ProductQuery] = None,
             limit: int = 20,
     ) -> list[ProductResult]:
-        sql, params = self._build_search_sql(query_embedding, common_filters, product_filters, limit)
+        sql, params = self._build_search_sql(query_embedding, product_filters, limit)
 
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
@@ -78,36 +76,34 @@ class ProductRepository:
     def _build_search_sql(
         self,
         query_embedding: Sequence[float],
-        common_filters: Optional["CommonProperties"],
         product_filters: Optional["ProductQuery"],
         limit: int,
     ) -> tuple[str, list[Any]]:
         where: list[str] = []
         params: list[Any] = []
 
-        if common_filters:
-            if getattr(common_filters, "color", None):
-                where.append("LOWER(color) = LOWER(%s)")
-                params.append(common_filters.color)
-
-            if getattr(common_filters, "price_min", None) is not None:
-                where.append("price >= %s")
-                params.append(common_filters.price_min)
-
-            if getattr(common_filters, "price_max", None) is not None:
-                where.append("price <= %s")
-                params.append(common_filters.price_max)
-
-            if getattr(common_filters, "gender", None) is not None:
-                where.append("LOWER(gender) = LOWER(%s)")
-                params.append(common_filters.gender)
-
         if product_filters:
-            if getattr(product_filters, "category", None):
-                where.append("LOWER(category) = LOWER(%s)")
-                params.append(product_filters.category)
+            if product_filters.color:
+                where.append("LOWER(color) = LOWER(%s)")
+                params.append(product_filters.color)
 
-            if getattr(product_filters, "style", None):
+            if product_filters.price_min is not None:
+                where.append("price >= %s")
+                params.append(product_filters.price_min)
+
+            if product_filters.price_max is not None:
+                where.append("price <= %s")
+                params.append(product_filters.price_max)
+
+            if product_filters.gender is not None:
+                where.append("LOWER(gender) = LOWER(%s)")
+                params.append(product_filters.gender)
+
+            if product_filters.category:
+                where.append("LOWER(category) = ANY(%s)")
+                params.append([c.lower() for c in product_filters.category])
+
+            if product_filters.style:
                 where.append("LOWER(style) LIKE LOWER(%s)")
                 params.append(f"%{product_filters.style}%")
 

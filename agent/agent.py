@@ -14,7 +14,7 @@ from agent.validator.validator import validator
 from langgraph.graph import END, StateGraph
 
 
-@traceable(name="Agent Node")
+@traceable(name="Main Agent")
 def run_agent(
     conversation_entries: list[dict],
     conversation_id: str,
@@ -48,15 +48,16 @@ def run_agent(
             SYNTHESIZE_EDGE: SYNTHESIZE_EDGE,
         },
     )
+
     builder.add_edge(SYNTHESIZE_EDGE, END)
     agent_graph = builder.compile()
 
     # create a graph to see what our chain looks like
-    png = agent_graph.get_graph(xray=1).draw_mermaid_png(
-        background_color="white"
-    )
-    with open("graph.png", "wb") as f:
-        f.write(png)
+    # png = agent_graph.get_graph(xray=1).draw_mermaid_png(
+    #     background_color="white"
+    # )
+    # with open("graph.png", "wb") as f:
+    #     f.write(png)
 
     final_state = agent_graph.invoke(
         agentState,

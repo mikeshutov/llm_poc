@@ -4,6 +4,7 @@ from typing import Optional
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
+from requests.exceptions import RequestException
 
 from integrations.open_meteo import OpenMeteoClient
 from integrations.open_meteo.models import CurrentWeather, GeocodedLocation
@@ -40,9 +41,12 @@ Example valid call:
 }
 """,
 )
-def get_current_weather(location: str) -> Optional[CurrentWeatherResult]:
-    result = _weather_client.get_current_for_location(location)
-    if result is None:
-        return None
-    loc, weather = result
-    return CurrentWeatherResult(location=loc, weather=weather)
+def get_current_weather(location: str) -> CurrentWeatherResult | str:
+    try:
+        result = _weather_client.get_current_for_location(location)
+        if result is None:
+            return None
+        loc, weather = result
+        return CurrentWeatherResult(location=loc, weather=weather)
+    except RequestException as e:
+        return f"Weather service unavailable: {e}"
