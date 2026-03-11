@@ -13,6 +13,7 @@ CREATE TABLE tool_calls (
   duration_ms INTEGER NULL,
   goal TEXT NULL,
   done BOOLEAN NULL,
+  summary TEXT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   CONSTRAINT uq_tool_calls_roundtrip_idx UNIQUE (roundtrip_id, call_index)

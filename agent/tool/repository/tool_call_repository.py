@@ -3,14 +3,15 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from db.connection import get_connection
+
 
 class ToolCallRepository:
-    def __init__(self, conn: psycopg.Connection):
-        self._conn = conn
+    def __init__(self):
+        self._conn = get_connection()
 
     def append_tool_calls(
         self,
@@ -34,9 +35,10 @@ class ToolCallRepository:
                         error_message,
                         duration_ms,
                         goal,
-                        done
+                        done,
+                        summary
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         roundtrip_id,
@@ -50,5 +52,6 @@ class ToolCallRepository:
                         trace.get("duration_ms"),
                         trace.get("goal"),
                         trace.get("done"),
+                        trace.get("summary"),
                     ),
                 )

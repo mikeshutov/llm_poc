@@ -7,7 +7,7 @@ def build_planner_rules(extra_rules: dict[str, list[str]] | None = None) -> str:
         "If final_answer is not null, steps MUST be an empty list.",
         "When attempting to call tools with fields try to fetch their values first from related tools.",
         "Carry forward prior plans, evidence, and constraints that remain relevant."
-        "When a question depends on the result of another tool try to sequence them dependency is obvious from the request and available context."
+        "When a question depends on the result of another tool try to sequence them when it is obvious from the request and available context."
     ]
     bullet_rules = "\n".join(f"- {rule}" for rule in rules)
     result = f"Rules:\n{bullet_rules}"
