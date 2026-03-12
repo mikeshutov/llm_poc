@@ -43,6 +43,7 @@ LANGUAGE_TOOLS = [define_word]
 FOOD_TOOLS = [search_meals, search_cocktails]
 FUN_TOOLS = [get_advice]
 
+# if this were to grow much larger I would probably create sub categories or a tree structure of tools
 TOOL_CATEGORIES: dict[str, ToolCategory] = {
     "products": ToolCategory(
         tools=PRODUCT_TOOLS,

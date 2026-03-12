@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from agent.agentstate.model import IterationState
 from db.connection import get_connection
 
 
@@ -16,42 +16,49 @@ class ToolCallRepository:
     def append_tool_calls(
         self,
         roundtrip_id: UUID,
-        traces: list[dict[str, Any]],
+        iteration_trace: list[IterationState],
     ) -> None:
-        if not traces:
+        if not iteration_trace:
             return
+
+        call_index = 0
         with self._conn.cursor(row_factory=dict_row) as cur:
-            for trace in traces:
-                cur.execute(
-                    """
-                    INSERT INTO tool_calls (
-                        roundtrip_id,
-                        call_index,
-                        tool_name,
-                        status,
-                        reason,
-                        input_payload,
-                        output_payload,
-                        error_message,
-                        duration_ms,
-                        goal,
-                        done,
-                        summary
+            for iteration in iteration_trace:
+                plan = iteration.plan
+                plan_id = plan.db_id if plan else None
+
+                for step in (plan.steps if plan else []):
+                    result = iteration.results.get(step.id)
+                    status = "completed" if result is not None else "pending"
+                    output = result if isinstance(result, dict) else {"result": str(result)} if result is not None else None
+
+                    cur.execute(
+                        """
+                        INSERT INTO tool_calls (
+                            roundtrip_id,
+                            plan_id,
+                            plan_step_id,
+                            step_index,
+                            call_index,
+                            tool_name,
+                            status,
+                            input_payload,
+                            output_payload,
+                            goal
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            roundtrip_id,
+                            plan_id,
+                            step.id,
+                            step.step_index,
+                            call_index,
+                            step.tool,
+                            status,
+                            Jsonb(step.args or {}),
+                            Jsonb(output) if output is not None else None,
+                            step.plan,
+                        ),
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        roundtrip_id,
-                        trace.get("call_index"),
-                        trace.get("tool_name"),
-                        trace.get("status"),
-                        trace.get("reason"),
-                        Jsonb(trace.get("input_payload") or {}),
-                        Jsonb(trace.get("output_payload")) if trace.get("output_payload") is not None else None,
-                        trace.get("error_message"),
-                        trace.get("duration_ms"),
-                        trace.get("goal"),
-                        trace.get("done"),
-                        trace.get("summary"),
-                    ),
-                )
+                    call_index += 1
