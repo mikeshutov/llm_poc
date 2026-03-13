@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import UUID
 
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
@@ -47,6 +48,7 @@ class AgentState:
     max_turns: int
     conversation_entries: list[dict[str, Any]] = field(default_factory=list)
     conversation_id: str | None = None
+    roundtrip_id: UUID | None = None
     classification_results: ClassificationResults = field(default_factory=ClassificationResults)
     iteration_trace: list[IterationState] = field(default_factory=list)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))

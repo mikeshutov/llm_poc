@@ -45,9 +45,11 @@ def emit_status_message(content: str) -> None:
         pass
 
 
-def build_classify_status_message(categories: list[str]) -> str:
+def build_classify_status_message(categories: list[str], can_answer_without_tools: bool = False, confidence: float = 0.0) -> str:
+    if can_answer_without_tools:
+        return f"**Classification:** can answer directly (confidence: {confidence:.0%})"
     if categories:
-        return f"**Classified as:** {', '.join(categories)}"
+        return f"**Classified as:** {', '.join(categories)} (confidence: {confidence:.0%})"
     return "**Classification:** no matching categories, using all tools"
 
 

@@ -7,6 +7,7 @@ from rendering.debug import build_plan_status_message, emit_status_message
 from agent.agentstate.model import AgentState, IterationState
 from agent.models import AgentResult, Plan
 from agent.planner.prompts.planner_prompt import build_planner_prompt
+from agent.tool.repository.plan_repository import PlanRepository
 from agent.tool.tools import tools
 load_dotenv()
 
@@ -34,15 +35,19 @@ def run_planner(agent_state: AgentState) -> AgentState:
     prompt = build_planner_prompt(state=agent_state)
     raw = agent_state.llm.invoke(prompt).content
     raw = _strip_code_fences(raw)
-
     try:
         plan = Plan.model_validate_json(raw)
     except Exception as e:
+        print(e)
         agent_state.goal_reached = True
         agent_state.result = AgentResult(
             answer=f"Planner produced invalid JSON plan: {e}\nRaw:\n{raw}"
         )
         return agent_state
+
+    print(plan)
+    if agent_state.roundtrip_id:
+        plan.db_id = PlanRepository().save_plan(agent_state.roundtrip_id, plan)
 
     it_state.plan = plan
     agent_state.add_iteration(it_state)
