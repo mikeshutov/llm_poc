@@ -9,6 +9,7 @@ CREATE TABLE conversation_roundtrip (
   response_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
   parsed_query JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
 
   CONSTRAINT uq_roundtrip_conversation_turn UNIQUE (conversation_id, message_index) -- an index can only appear once within a conversation

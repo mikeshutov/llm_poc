@@ -35,20 +35,18 @@ class ToolCallRepository:
                     plan_id,
                     plan_step_id,
                     step_index,
-                    call_index,
                     tool_name,
                     status,
                     input_payload,
                     output_payload,
                     goal
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     roundtrip_id,
                     plan_id,
                     step.db_id,
-                    step.step_index,
                     step.step_index,
                     step.tool,
                     status,

@@ -8,6 +8,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from db.connection import get_connection
+from agent.models.agent_result import AgentResult
 from conversation.models.conversation_models import (
     Conversation,
     ConversationRoundtrip,
@@ -34,6 +35,47 @@ class ConversationRepository:
             row = cur.fetchone()
             assert row is not None
             return Conversation(**row)
+
+    def create_pending_roundtrip(
+        self,
+        conversation_id: UUID,
+        user_prompt: str,
+    ) -> ConversationRoundtrip:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO conversation_roundtrip (conversation_id, message_index, user_prompt, generated_response, response_payload, parsed_query, metadata)
+                SELECT %s, COALESCE(MAX(message_index), -1) + 1, %s, '', '{}'::jsonb, '{}'::jsonb, '{}'::jsonb
+                FROM conversation_roundtrip
+                WHERE conversation_id = %s
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, response_payload, parsed_query, created_at, metadata
+                """,
+                (conversation_id, user_prompt, conversation_id),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            return ConversationRoundtrip(**row)
+
+    def update_roundtrip(
+        self,
+        roundtrip_id: UUID,
+        result: AgentResult,
+    ) -> None:
+        payload = {
+            "response": result.raw_response,
+            "cards": result.cards,
+            "follow_up": result.follow_up,
+            "clarifying_question": result.clarifying_question,
+        }
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                UPDATE conversation_roundtrip
+                SET generated_response = %s, response_payload = %s, updated_at = now()
+                WHERE id = %s
+                """,
+                (result.raw_response, Jsonb(payload), roundtrip_id),
+            )
 
     def append_roundtrip(
         self,

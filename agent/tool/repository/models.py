@@ -13,7 +13,6 @@ class ToolCall(BaseModel):
     plan_id: Optional[UUID] = None
     plan_step_id: Optional[UUID] = None
     step_index: Optional[int] = None
-    call_index: int
     tool_name: str
     status: str
     input_payload: dict[str, Any] = {}

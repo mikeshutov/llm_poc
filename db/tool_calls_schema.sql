@@ -4,9 +4,8 @@ CREATE TABLE tool_calls (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   roundtrip_id UUID NOT NULL REFERENCES conversation_roundtrip(id) ON DELETE CASCADE,
   plan_id UUID NULL REFERENCES plans(id) ON DELETE SET NULL,
-  plan_step_id UUID NULL,      -- matches PlanStep.id stored in plans.steps JSONB
+  plan_step_id UUID NULL,      -- matches PlanStep.db_id stored in plans.steps JSONB
   step_index INTEGER NULL,     -- position of the step within the plan for ordering
-  call_index INTEGER NOT NULL,
   tool_name TEXT NOT NULL,
   status TEXT NOT NULL,
   input_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -17,7 +16,7 @@ CREATE TABLE tool_calls (
   summary TEXT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  CONSTRAINT uq_tool_calls_roundtrip_idx UNIQUE (roundtrip_id, call_index)
+  CONSTRAINT uq_tool_calls_plan_step UNIQUE (roundtrip_id, plan_step_id)
 );
 
 CREATE INDEX idx_tool_calls_roundtrip_id ON tool_calls(roundtrip_id);

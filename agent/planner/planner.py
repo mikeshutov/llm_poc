@@ -38,14 +38,12 @@ def run_planner(agent_state: AgentState) -> AgentState:
     try:
         plan = Plan.model_validate_json(raw)
     except Exception as e:
-        print(e)
         agent_state.goal_reached = True
         agent_state.result = AgentResult(
             answer=f"Planner produced invalid JSON plan: {e}\nRaw:\n{raw}"
         )
         return agent_state
 
-    print(plan)
     if agent_state.roundtrip_id:
         plan.db_id = PlanRepository().save_plan(agent_state.roundtrip_id, plan)
 

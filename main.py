@@ -32,7 +32,7 @@ st.markdown(
     button[data-testid="stBaseButton-secondary"] > div {
         justify-content: flex-start !important;
     }
-    </style>""",
+</style>""",
     unsafe_allow_html=True,
 )
 
@@ -69,7 +69,7 @@ if userQuery:
             st.caption(ts)
 
     with st.spinner("Thinking..."):
-        agent_result = run_agent_for_query(
+        agent_result, roundtrip = run_agent_for_query(
             conversation_id=st.session_state.conversation_id,
             user_query=userQuery,
         )
@@ -78,4 +78,5 @@ if userQuery:
         st.session_state.conversation_id,
         userQuery,
         agent_result,
+        roundtrip=roundtrip,
     )

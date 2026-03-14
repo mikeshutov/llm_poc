@@ -12,19 +12,23 @@ from agent.router.router import router
 from agent.synthesis.synthesis import run_synthesis
 from agent.validator.validator import validator
 from langgraph.graph import END, StateGraph
+from uuid import UUID
 
 
 @traceable(name="Main Agent")
 def run_agent(
     conversation_entries: list[dict],
     conversation_id: str,
+    roundtrip_id: str | None = None, #might want to create a conversation context object
     max_turns: int = 10,
 ) -> AgentResult:
     #Agent state and set up hybrid ReWoo Loop
+
     agentState = AgentState.new(
         task=flatten_conversation_entries(conversation_entries),
         max_turns=max_turns,
         conversation_entries=conversation_entries,
+        roundtrip_id=UUID(roundtrip_id) if roundtrip_id else None,
     )
     builder = StateGraph(AgentState)
     builder.add_node(CLASSIFICATION_EDGE, classify)

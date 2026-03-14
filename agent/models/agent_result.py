@@ -18,6 +18,10 @@ class AgentResult:
     clarifying_question: str = ""
     cards: list[dict[str, Any]] = field(default_factory=list)
 
+    @property
+    def raw_response(self) -> str:
+        return "\n\n".join(p for p in self.answer if p)
+
     @classmethod
     def from_state(
         cls,

@@ -64,12 +64,14 @@ class AgentState:
         max_turns: int,
         conversation_entries: list[dict[str, Any]] | None = None,
         conversation_id: str | None = None,
+        roundtrip_id: UUID | None = None,
     ) -> "AgentState":
         return cls(
             task=task,
             max_turns=max_turns,
             conversation_entries=[] if conversation_entries is None else conversation_entries,
             conversation_id=conversation_id,
+            roundtrip_id=roundtrip_id,
         )
 
     def add_iteration(self, iteration: IterationState) -> IterationState:
