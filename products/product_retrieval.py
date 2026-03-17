@@ -12,6 +12,7 @@ from integrations.brave.client import BraveSearchClient, BraveSearchError
 from integrations.brave.models import ShoppingSearchResult
 from integrations.brave.query_builder import build_web_query
 
+
 def _extract_price(text: str) -> Optional[float]:
     if not text:
         return None

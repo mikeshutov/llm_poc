@@ -6,7 +6,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from agent.tool.common import model_to_dict
-from integrations.brave import find_products as _find_products
+from products.product_retrieval import find_products as _find_products
 from products.models.product_query import ProductQuery
 
 

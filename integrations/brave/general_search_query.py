@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 
-from integrations.models.search_type import SearchType
+from integrations.brave.search_type import SearchType
 
 
 class GeneralSearchQuery(BaseModel):

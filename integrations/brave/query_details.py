@@ -1,6 +1,6 @@
 from typing import Optional, List
 from pydantic import BaseModel
-from integrations.models.search_type import SearchType
+from integrations.brave.search_type import SearchType
 
 
 class QueryDetails(BaseModel):

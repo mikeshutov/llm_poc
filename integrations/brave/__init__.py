@@ -7,8 +7,6 @@ from integrations.brave.models import (
     WebSearchResponse,
     WebSearchResult,
 )
-from integrations.brave.product_retrieval import find_products
-
 __all__ = [
     "BraveSearchClient",
     "BraveSearchError",
@@ -18,5 +16,4 @@ __all__ = [
     "SuggestResponse",
     "WebSearchResponse",
     "WebSearchResult",
-    "find_products",
 ]

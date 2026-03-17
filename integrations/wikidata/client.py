@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-from integrations.http_client import HttpClient, HttpClientError, DEFAULT_TTL
+from common.http import HttpClient, HttpClientError, DEFAULT_TTL
 from integrations.wikidata.models import SparqlResult
 
 
@@ -18,10 +18,9 @@ class WikidataSparqlClient:
         timeout_s: float = 20.0,
         user_agent: str = "POCProductSearch/1.0 (Wikidata SPARQL client)",
         ttl: timedelta = DEFAULT_TTL,
-        http: HttpClient | None = None,
     ):
         self.base_url = base_url.rstrip("/")
-        self._http = http or HttpClient(
+        self._http = HttpClient(
             timeout_s=timeout_s,
             headers={
                 "Accept": "application/sparql-results+json",

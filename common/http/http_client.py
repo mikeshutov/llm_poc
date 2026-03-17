@@ -8,6 +8,20 @@ import requests
 from cache.rest_cache_repository import RestCacheRepository
 
 DEFAULT_TTL = timedelta(hours=1)
+DEFAULT_USER_AGENT = "POCProductSearch/1.0"
+
+_DEFAULT_HEADERS = {
+    "Accept": "application/json",
+    "User-Agent": DEFAULT_USER_AGENT,
+}
+
+
+def build_headers(user_agent: str | None = None, **extra: str) -> dict[str, str]:
+    headers = {**_DEFAULT_HEADERS}
+    if user_agent:
+        headers["User-Agent"] = user_agent
+    headers.update(extra)
+    return headers
 
 
 class HttpClientError(RuntimeError):
@@ -23,7 +37,7 @@ class HttpClient:
         ttl: timedelta = DEFAULT_TTL,
     ):
         self._timeout_s = timeout_s
-        self._headers = headers or {}
+        self._headers = {**_DEFAULT_HEADERS, **(headers or {})}
         self._cache = cache
         self._ttl = ttl
 

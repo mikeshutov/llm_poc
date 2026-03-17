@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any, Dict, Optional
 
-from integrations.models.web_search_params import WebSearchParams
-from integrations.http_client import HttpClient, HttpClientError, DEFAULT_TTL
+from integrations.brave.web_search_params import WebSearchParams
+from common.http import HttpClient, HttpClientError, DEFAULT_TTL, build_headers
 from integrations.brave.models import (
     NewsSearchResponse,
     ShoppingSearchResult,
@@ -28,26 +28,22 @@ class BraveSearchClient:
     max_retries: int = 3
     backoff_s: float = 0.75
     ttl: timedelta = field(default=DEFAULT_TTL)
-    http: HttpClient = field(default=None)
-
     def __post_init__(self):
-        if self.http is None:
-            self.http = HttpClient(
-                timeout_s=self.timeout_s,
-                headers={
-                    "Accept": "application/json",
-                    "Accept-Encoding": "gzip",
-                    "X-Subscription-Token": self.api_key,
-                },
-                ttl=self.ttl,
-            )
+        self.http = HttpClient(
+            timeout_s=self.timeout_s,
+            headers=build_headers(**{
+                "Accept-Encoding": "gzip",
+                "X-Subscription-Token": self.api_key,
+            }),
+            ttl=self.ttl,
+        )
 
     @classmethod
-    def from_env(cls, http: HttpClient | None = None, ttl: timedelta = DEFAULT_TTL) -> "BraveSearchClient":
+    def from_env(cls, ttl: timedelta = DEFAULT_TTL) -> "BraveSearchClient":
         api_key = os.getenv("BRAVE_SEARCH_API_KEY")
         if not api_key:
             raise ValueError("Missing BRAVE_SEARCH_API_KEY in environment")
-        return cls(api_key=api_key, http=http, ttl=ttl)
+        return cls(api_key=api_key, ttl=ttl)
 
     def _get(self, path: str, params: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"

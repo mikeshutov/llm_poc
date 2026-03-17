@@ -7,8 +7,8 @@ from pydantic import BaseModel, Field
 
 from integrations.brave import BraveSearchClient
 from integrations.brave.models import NewsSearchResponse, SuggestResponse, WebSearchResponse
-from integrations.models.search_type import SearchType
-from integrations.models.web_search_params import WebSearchParams
+from integrations.brave.search_type import SearchType
+from integrations.brave.web_search_params import WebSearchParams
 
 
 class GenericWebSearchArgs(BaseModel):

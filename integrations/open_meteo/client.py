@@ -6,7 +6,7 @@ from typing import Any
 
 from datetime import timedelta
 
-from integrations.http_client import HttpClient, HttpClientError, DEFAULT_TTL
+from common.http import HttpClient, HttpClientError, DEFAULT_TTL
 from integrations.open_meteo.errors import (
     WeatherArchiveError,
     WeatherGeocodingError,
@@ -23,12 +23,11 @@ class OpenMeteoClient:
         base_url_geo: str = "https://geocoding-api.open-meteo.com/v1",
         timeout_s: float = 20.0,
         ttl: timedelta = DEFAULT_TTL,
-        http: HttpClient | None = None,
     ):
         self.base_url_weather = base_url_weather.rstrip("/")
         self.base_url_forecast = base_url_forecast.rstrip("/")
         self.base_url_geo = base_url_geo.rstrip("/")
-        self._http = http or HttpClient(timeout_s=timeout_s, ttl=ttl)
+        self._http = HttpClient(timeout_s=timeout_s, ttl=ttl)
 
     def _get_json(self, url: str, params: dict[str, Any], error_cls: type[Exception]) -> dict[str, Any]:
         try:

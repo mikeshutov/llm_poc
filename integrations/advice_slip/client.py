@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Optional
 
-from integrations.http_client import HttpClient, HttpClientError
+from common.http import HttpClient, HttpClientError
 from integrations.advice_slip.models import AdviceSlip
 
 
@@ -17,14 +16,12 @@ class AdviceSlipClient:
         base_url: str = "https://api.adviceslip.com",
         timeout_s: float = 10.0,
         user_agent: str = "POCProductSearch/1.0 (AdviceSlip client)",
-        # Short TTL — random advice should vary between calls
         ttl: timedelta = timedelta(seconds=30),
-        http: HttpClient | None = None,
     ):
         self.base_url = base_url.rstrip("/")
-        self._http = http or HttpClient(
+        self._http = HttpClient(
             timeout_s=timeout_s,
-            headers={"Accept": "application/json", "User-Agent": user_agent},
+            
             ttl=ttl,
         )
 

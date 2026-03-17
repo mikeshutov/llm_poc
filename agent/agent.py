@@ -23,7 +23,6 @@ def run_agent(
     max_turns: int = 10,
 ) -> AgentResult:
     #Agent state and set up hybrid ReWoo Loop
-
     agentState = AgentState.new(
         task=flatten_conversation_entries(conversation_entries),
         max_turns=max_turns,

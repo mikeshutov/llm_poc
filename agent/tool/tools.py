@@ -7,8 +7,6 @@ from agent.tool.weather.get_historical_month_weather import get_historical_month
 from agent.tool.weather.resolve_city_location import resolve_city_location
 from agent.tool.finance.exchange_rates_lookup import exchange_rates_lookup
 from agent.tool.finance.exchange_rates_time_series import exchange_rates_time_series
-from agent.tool.finance.crypto_ticker import get_crypto_ticker
-from agent.tool.finance.list_currencies import list_currencies
 from agent.tool.finance.crypto_markets import get_crypto_markets
 from agent.tool.finance.latest_exchange_rates import get_latest_exchange_rates
 from agent.tool.search.generic_web_search import generic_web_search
@@ -34,7 +32,7 @@ class ToolCategory:
 
 PRODUCT_TOOLS = [find_products, list_product_categories]
 WEATHER_TOOLS = [resolve_city_location, get_current_weather, get_historical_month_weather]
-FINANCE_TOOLS = [exchange_rates_lookup, exchange_rates_time_series, get_crypto_ticker, list_currencies, get_crypto_markets, get_latest_exchange_rates]
+FINANCE_TOOLS = [exchange_rates_lookup, exchange_rates_time_series, get_crypto_markets, get_latest_exchange_rates]
 SEARCH_TOOLS = [generic_web_search, news_search, wikipedia_search, structured_facts_lookup, hn_search]
 CALENDAR_TOOLS = [public_holidays_lookup]
 LOCATION_TOOLS = [get_caller_location]

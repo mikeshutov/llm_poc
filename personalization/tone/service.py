@@ -40,11 +40,11 @@ def resolve_conversation_tone_state(
             if previous_tone != next_tone:
                 repo.update_tone_state(conversation_id, next_tone.model_dump())
         except Exception:
-            # Tone persistence should not block the response flow.
             pass
     return next_tone
 
 
+# experimental will be excluded for now
 def resolve_conversation_tone_label(
     conversation_id: UUID,
     parsed_tone: Tone | dict[str, Any] | None,

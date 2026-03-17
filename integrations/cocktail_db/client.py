@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from integrations.http_client import HttpClient, HttpClientError, DEFAULT_TTL
+from common.http import HttpClient, HttpClientError, DEFAULT_TTL
 from integrations.cocktail_db.models import Cocktail, CocktailSearchResult
 
 
@@ -17,12 +17,11 @@ class CocktailDbClient:
         timeout_s: float = 20.0,
         user_agent: str = "POCProductSearch/1.0 (CocktailDB client)",
         ttl: timedelta = DEFAULT_TTL,
-        http: HttpClient | None = None,
     ):
         self.base_url = base_url.rstrip("/")
-        self._http = http or HttpClient(
+        self._http = HttpClient(
             timeout_s=timeout_s,
-            headers={"Accept": "application/json", "User-Agent": user_agent},
+            
             ttl=ttl,
         )
 
