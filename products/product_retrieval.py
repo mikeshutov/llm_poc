@@ -1,6 +1,5 @@
 import re
 from typing import Optional
-from urllib.parse import urlparse
 
 from llm.clients.embeddings import embed_text
 from products.models.product_query import ProductQuery
@@ -28,18 +27,13 @@ def _extract_price(text: str) -> Optional[float]:
 def _web_results_to_products(
     payload: ShoppingSearchResult,
     limit: int,
-) -> tuple[list[ProductResult], dict[str, object]]:
+) -> list[ProductResult]:
     results: list[ProductResult] = []
-    fallback_domain_breakdown: dict[str, int] = {}
     for idx, item in enumerate(payload.results):
         if not item.title.strip():
             continue
         if not _is_high_confidence_product_detail_url(item.url):
             continue
-        price = _extract_price(item.description)
-        if item.url:
-            domain = (urlparse(item.url).hostname or "unknown").lower()
-            fallback_domain_breakdown[domain] = fallback_domain_breakdown.get(domain, 0) + 1
         results.append(
             ProductResult(
                 id=item.url or f"web-{idx}",
@@ -50,7 +44,7 @@ def _web_results_to_products(
                 gender=None,
                 season=None,
                 year=None,
-                price=price,
+                price=_extract_price(item.description),
                 url=item.url,
                 image_url=item.image_url,
                 score=None,
@@ -59,11 +53,7 @@ def _web_results_to_products(
         )
         if len(results) >= limit:
             break
-    return results, {
-        "fallback_candidate_count": len(payload.results),
-        "fallback_valid_count": len(results),
-        "fallback_domain_breakdown": fallback_domain_breakdown,
-    }
+    return results
 
 
 def _is_high_confidence_product_detail_url(url: Optional[str]) -> bool:
@@ -99,9 +89,9 @@ def find_products(
     if not internal_results and allow_web_fallback:
         web_query = ((query_text or "").strip() or build_web_query(product_filters).strip() or "products")
         try:
-            brave_client = BraveSearchClient.from_env()
+            brave_client = BraveSearchClient()
             web_payload = brave_client.shopping_search(web_query, count=20)
-            external_results, _ = _web_results_to_products(web_payload, max(1, web_count))
+            external_results = _web_results_to_products(web_payload, max(1, web_count))
         except (ValueError, BraveSearchError):
             pass
 

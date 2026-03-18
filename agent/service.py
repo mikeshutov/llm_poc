@@ -22,7 +22,6 @@ def run_agent_for_query(
     )
 
     # gateway: cache lookup, validation, gating (future) not sure if here or inside the agent execution
-
     result = run_agent(
         conversation_entries=conversation_entries,
         conversation_id=conversation_id,

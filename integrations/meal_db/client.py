@@ -15,7 +15,6 @@ class MealDbClient:
         self,
         base_url: str = "https://www.themealdb.com/api/json/v1/1",
         timeout_s: float = 20.0,
-        user_agent: str = "POCProductSearch/1.0 (MealDB client)",
         ttl: timedelta = DEFAULT_TTL,
     ):
         self.base_url = base_url.rstrip("/")

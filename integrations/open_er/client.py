@@ -15,7 +15,6 @@ class OpenErClient:
         self,
         base_url: str = "https://open.er-api.com/v6",
         timeout_s: float = 10.0,
-        user_agent: str = "POCProductSearch/1.0 (OpenER client)",
         ttl: timedelta = DEFAULT_TTL,
     ):
         self.base_url = base_url.rstrip("/")

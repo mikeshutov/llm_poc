@@ -30,4 +30,4 @@ Example valid call:
 """,
 )
 def news_search(q: str) -> NewsSearchResponse:
-    return BraveSearchClient.from_env().news_search(q)
+    return BraveSearchClient().news_search(q)

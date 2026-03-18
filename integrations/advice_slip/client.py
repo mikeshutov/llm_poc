@@ -15,7 +15,6 @@ class AdviceSlipClient:
         self,
         base_url: str = "https://api.adviceslip.com",
         timeout_s: float = 10.0,
-        user_agent: str = "POCProductSearch/1.0 (AdviceSlip client)",
         ttl: timedelta = timedelta(seconds=30),
     ):
         self.base_url = base_url.rstrip("/")

@@ -22,28 +22,24 @@ class BraveSearchError(RuntimeError):
 
 @dataclass
 class BraveSearchClient:
-    api_key: str
     base_url: str = "https://api.search.brave.com/res/v1"
     timeout_s: float = 20.0
     max_retries: int = 3
     backoff_s: float = 0.75
     ttl: timedelta = field(default=DEFAULT_TTL)
+
     def __post_init__(self):
+        api_key = os.getenv("BRAVE_SEARCH_API_KEY")
+        if not api_key:
+            raise ValueError("Missing BRAVE_SEARCH_API_KEY in environment")
         self.http = HttpClient(
             timeout_s=self.timeout_s,
             headers=build_headers(**{
                 "Accept-Encoding": "gzip",
-                "X-Subscription-Token": self.api_key,
+                "X-Subscription-Token": api_key,
             }),
             ttl=self.ttl,
         )
-
-    @classmethod
-    def from_env(cls, ttl: timedelta = DEFAULT_TTL) -> "BraveSearchClient":
-        api_key = os.getenv("BRAVE_SEARCH_API_KEY")
-        if not api_key:
-            raise ValueError("Missing BRAVE_SEARCH_API_KEY in environment")
-        return cls(api_key=api_key, ttl=ttl)
 
     def _get(self, path: str, params: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"

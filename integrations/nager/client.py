@@ -16,7 +16,6 @@ class NagerDateClient:
         self,
         base_url: str = "https://date.nager.at/api/v3",
         timeout_s: float = 20.0,
-        user_agent: str = "POCProductSearch/1.0 (Nager.Date client)",
         ttl: timedelta = DEFAULT_TTL,
     ):
         self.base_url = base_url.rstrip("/")

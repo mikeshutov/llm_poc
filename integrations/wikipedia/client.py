@@ -21,7 +21,6 @@ class WikipediaClient:
         self,
         base_url: str = "https://en.wikipedia.org",
         timeout_s: float = 20.0,
-        user_agent: str = "POCProductSearch/1.0 (Wikipedia client)",
         ttl: timedelta = DEFAULT_TTL,
     ):
         self.base_url = base_url.rstrip("/")

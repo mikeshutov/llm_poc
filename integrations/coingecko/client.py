@@ -16,13 +16,11 @@ class CoinGeckoClient:
         self,
         base_url: str = "https://api.coingecko.com/api/v3",
         timeout_s: float = 15.0,
-        user_agent: str = "POCProductSearch/1.0 (CoinGecko client)",
         ttl: timedelta = timedelta(minutes=5),
     ):
         self.base_url = base_url.rstrip("/")
         self._http = HttpClient(
-            timeout_s=timeout_s,
-            
+            timeout_s=timeout_s,  
             ttl=ttl,
         )
 

@@ -72,7 +72,7 @@ def generic_web_search(
     count: int = 5,
     params: dict[str, Any] | None = None,
 ) -> Union[WebSearchResponse, NewsSearchResponse, SuggestResponse]:
-    brave_client = BraveSearchClient.from_env()
+    brave_client = BraveSearchClient()
     match _coerce_search_type(search_type):
         case SearchType.NEWS_SEARCH:
             return brave_client.news_search(query_text)

@@ -15,13 +15,11 @@ class FreeDictionaryClient:
         self,
         base_url: str = "https://api.dictionaryapi.dev/api/v2/entries",
         timeout_s: float = 10.0,
-        user_agent: str = "POCProductSearch/1.0 (FreeDictionary client)",
         ttl: timedelta = DEFAULT_TTL,
     ):
         self.base_url = base_url.rstrip("/")
         self._http = HttpClient(
             timeout_s=timeout_s,
-            
             ttl=ttl,
         )
 
