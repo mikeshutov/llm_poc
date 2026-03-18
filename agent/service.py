@@ -1,7 +1,9 @@
+import threading
 from uuid import UUID
 
 from agent.agent import run_agent
 from agent.models.agent_result import AgentResult
+from agent.tool.summarize_tool_call import summarize_tool_calls
 from conversation.context_builder import build_roundtrip_context
 from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo
@@ -28,6 +30,7 @@ def run_agent_for_query(
         roundtrip_id=str(roundtrip.id),
     )
 
-    repo.update_roundtrip(roundtrip.id, result)
-
+    repo.update_roundtrip(roundtrip.id, result.raw_response, result.to_payload_for_update_roundtrip())
+    #TODO: enable this once we improve summarization.
+    #threading.Thread(target=summarize_tool_calls, args=(roundtrip.id,), daemon=True).start()
     return result, roundtrip

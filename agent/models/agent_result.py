@@ -22,6 +22,14 @@ class AgentResult:
     def raw_response(self) -> str:
         return "\n\n".join(p for p in self.answer if p)
 
+    def to_payload_for_update_roundtrip(self) -> dict[str, Any]:
+        return {
+            "response": self.raw_response,
+            "cards": self.cards,
+            "follow_up": self.follow_up,
+            "clarifying_question": self.clarifying_question,
+        }
+
     @classmethod
     def from_state(
         cls,

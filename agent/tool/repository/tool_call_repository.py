@@ -56,6 +56,13 @@ class ToolCallRepository:
                 ),
             )
 
+    def update_tool_call_summary(self, tool_call_id: UUID, summary: str) -> None:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "UPDATE tool_calls SET summary = %s WHERE id = %s",
+                (summary, tool_call_id),
+            )
+
     def get_tool_call(self, tool_call_id: UUID) -> ToolCall | None:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -64,3 +71,22 @@ class ToolCallRepository:
             )
             row = cur.fetchone()
             return ToolCall(**row) if row else None
+
+    #TODO{: figure out how we handle cases where the data is stale. But for now its probably fine.}
+    def get_tool_calls_by_roundtrips(self, roundtrip_ids: list[UUID]) -> dict[UUID, list[ToolCall]]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT * FROM tool_calls
+                WHERE roundtrip_id = ANY(%s)
+                ORDER BY step_index ASC
+                """,
+                (roundtrip_ids,),
+            )
+            rows = cur.fetchall()
+
+        result: dict[UUID, list[ToolCall]] = {rid: [] for rid in roundtrip_ids}
+        for row in rows:
+            tc = ToolCall(**row)
+            result[tc.roundtrip_id].append(tc)
+        return result

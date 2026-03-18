@@ -8,7 +8,6 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from db.connection import get_connection
-from agent.models.agent_result import AgentResult
 from conversation.models.conversation_models import (
     Conversation,
     ConversationRoundtrip,
@@ -59,14 +58,9 @@ class ConversationRepository:
     def update_roundtrip(
         self,
         roundtrip_id: UUID,
-        result: AgentResult,
+        response: str,
+        payload: dict[str, Any],
     ) -> None:
-        payload = {
-            "response": result.raw_response,
-            "cards": result.cards,
-            "follow_up": result.follow_up,
-            "clarifying_question": result.clarifying_question,
-        }
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -74,7 +68,7 @@ class ConversationRepository:
                 SET generated_response = %s, response_payload = %s, updated_at = now()
                 WHERE id = %s
                 """,
-                (result.raw_response, Jsonb(payload), roundtrip_id),
+                (response, Jsonb(payload), roundtrip_id),
             )
 
     def append_roundtrip(
