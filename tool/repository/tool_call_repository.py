@@ -7,7 +7,7 @@ from psycopg.types.json import Jsonb
 
 from agent.agentstate.model import IterationState
 from agent.models.plan import PlanStep
-from agent.tool.repository.models import ToolCall
+from tool.repository.models import ToolCall
 from db.connection import get_connection
 
 

@@ -1,4 +1,4 @@
-from tool_registry.global_registry import (
+from tool.registry.global_registry import (
     GLOBAL_TOOL_REGISTRY,
     ToolRegistryError,
     UnknownToolError,

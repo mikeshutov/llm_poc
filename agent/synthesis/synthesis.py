@@ -1,30 +1,16 @@
 from __future__ import annotations
 
-from dotenv import load_dotenv
 from langsmith import traceable
 
 from agent.agentstate.model import AgentState
 from agent.models.agent_result import AgentResult
 from agent.models.synthesized_result import SynthesisResult
 from agent.synthesis.prompts.solver_prompt import build_solver_prompt
-load_dotenv()
-
-
-def _strip_code_fences(s: str) -> str:
-    s = s.strip()
-    if s.startswith("```"):
-        parts = s.split("```")
-        if len(parts) >= 3:
-            s = parts[1]
-            s = s.lstrip()
-            if s.startswith("json"):
-                s = s[4:].lstrip()
-    return s.strip()
+from common.parsing import strip_code_fences
 
 
 @traceable(name="Synthesis Node")
 def run_synthesis(state: AgentState) -> AgentState:
-    # exit we may need to modify
     if not state.iteration_trace and not state.goal_reached:
         state.result = AgentResult(answer=[])
         state.goal_reached = True
@@ -47,13 +33,9 @@ def run_synthesis(state: AgentState) -> AgentState:
                 f"evidence: {evidence}\n"
             )
     plan_block = "\n\n".join(lines).strip()
-
-    # If you add final_answer/clarifying_question to Plan, you could short-circuit here
-    # e.g. if last_plan.final_answer: state.result = last_plan.final_answer; ...
-
     prompt = build_solver_prompt(plan_block=plan_block, task=state.task)
     raw = state.llm.invoke(prompt).content
-    raw = _strip_code_fences(raw)
+    raw = strip_code_fences(raw)
 
     try:
         synthesis_result = SynthesisResult.model_validate_json(raw)

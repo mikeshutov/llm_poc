@@ -1,40 +1,26 @@
 from __future__ import annotations
 
-from dotenv import load_dotenv
 from langsmith import traceable
 
 from rendering.debug import build_plan_status_message, emit_status_message
 from agent.agentstate.model import AgentState, IterationState
 from agent.models import AgentResult, Plan
 from agent.planner.prompts.planner_prompt import build_planner_prompt
-from agent.tool.repository.plan_repository import PlanRepository
-from agent.tool.tools import tools
-load_dotenv()
+from common.parsing import strip_code_fences
+from tool.repository.plan_repository import PlanRepository
+from tool.tools import tools
 
 tool_list = "\n".join(
     f'- {tool.name}: {getattr(tool, "description", "")}'.strip()
     for tool in tools
 )
 
-# handle special cases wher ethe payload has additional fences
-def _strip_code_fences(s: str) -> str:
-    s = s.strip()
-    if s.startswith("```"):
-        parts = s.split("```")
-        if len(parts) >= 3:
-            s = parts[1]
-            s = s.lstrip()
-            if s.startswith("json"):
-                s = s[4:].lstrip()
-    return s.strip()
-
 @traceable(name="Planner Node")
 def run_planner(agent_state: AgentState) -> AgentState:
     it_state = IterationState.new()
 
     prompt = build_planner_prompt(state=agent_state)
-    raw = agent_state.llm.invoke(prompt).content
-    raw = _strip_code_fences(raw)
+    raw = strip_code_fences(agent_state.llm.invoke(prompt).content)
     try:
         plan = Plan.model_validate_json(raw)
     except Exception as e:

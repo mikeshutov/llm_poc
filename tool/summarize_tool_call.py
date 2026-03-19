@@ -1,7 +1,7 @@
 from uuid import UUID
 
-from agent.tool.repository.models import ToolCall
-from agent.tool.repository.tool_call_repository import ToolCallRepository
+from tool.repository.models import ToolCall
+from tool.repository.tool_call_repository import ToolCallRepository
 from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from llm.clients.llm_client import LlmClient
 

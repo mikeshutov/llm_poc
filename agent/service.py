@@ -3,7 +3,7 @@ from uuid import UUID
 
 from agent.agent import run_agent
 from agent.models.agent_result import AgentResult
-from agent.tool.summarize_tool_call import summarize_tool_calls
+from tool.summarize_tool_call import summarize_tool_calls
 from conversation.context_builder import build_roundtrip_context
 from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo

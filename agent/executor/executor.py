@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from langsmith import traceable
 from agent.agentstate.model import AgentState, IterationState
-from agent.tool.repository.tool_call_repository import ToolCallRepository
+from tool.repository.tool_call_repository import ToolCallRepository
 from rendering.debug import build_step_status_message, emit_status_message
-from tool_registry import call_tool
+from tool.registry import call_tool
 
 def _next_step(iteration: IterationState):
     if iteration.plan is None:
@@ -31,7 +31,7 @@ def _substitute_refs(obj, results: dict):
 def run_executor(agent_state: AgentState) -> AgentState:
     # we probably want to set up some sort of
     # "policy" or gating layer here or after planning
-    iteration = agent_state.iteration_trace[-1]  # current iteration
+    iteration = agent_state.iteration_trace[-1] 
     tool_repo = ToolCallRepository() if agent_state.roundtrip_id else None
 
     while (step := _next_step(iteration)) is not None:

@@ -5,7 +5,6 @@ from typing import Any
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from agent.tool.common import model_to_dict
 from products.product_retrieval import find_products as _find_products
 from products.models.product_query import ProductQuery
 
@@ -75,10 +74,9 @@ def find_products(
     web_count: int = 5,
     allow_web_fallback: bool = True,
 ):
-    product_dict = model_to_dict(product_filters)
     return _find_products(
         query_text=query_text,
-        product_filters=ProductQuery(**product_dict) if product_dict else None,
+        product_filters=ProductQuery(**product_filters) if product_filters else None,
         web_count=web_count,
         allow_web_fallback=allow_web_fallback,
     )

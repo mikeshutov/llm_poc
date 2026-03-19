@@ -15,9 +15,9 @@ class PlanStatus(str, Enum):
 
 
 class PlanStep(BaseModel):
-    id: str                                    # LLM reference e.g. "E1", used for arg substitution
-    db_id: UUID = Field(default_factory=uuid4) # UUID for DB storage
-    step_index: int = 0                        # assigned by Plan validator
+    id: str        
+    db_id: UUID = Field(default_factory=uuid4) 
+    step_index: int = 0                       
     plan: str
     tool: str
     args: dict[str, Any] = Field(default_factory=dict)
@@ -26,8 +26,8 @@ class PlanStep(BaseModel):
 class Plan(BaseModel):
     steps: list[PlanStep]
     final_answer: str | None = None
-    db_id: Optional[UUID] = None          # set after persisting to plans table
-    current_step_index: int = 0           # tracks progress for failure recovery
+    db_id: Optional[UUID] = None      
+    current_step_index: int = 0        
     status: PlanStatus = PlanStatus.PENDING
 
     @model_validator(mode="after")

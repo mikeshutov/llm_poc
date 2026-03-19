@@ -1,30 +1,30 @@
 from dataclasses import dataclass, field
 
-from agent.tool.products.find_products import find_products
-from agent.tool.products.list_product_categories import list_product_categories
-from agent.tool.weather.get_current_weather import get_current_weather
-from agent.tool.weather.get_historical_month_weather import get_historical_month_weather
-from agent.tool.weather.resolve_city_location import resolve_city_location
-from agent.tool.finance.exchange_rates_lookup import exchange_rates_lookup
-from agent.tool.finance.exchange_rates_time_series import exchange_rates_time_series
-from agent.tool.finance.crypto_markets import get_crypto_markets
-from agent.tool.finance.latest_exchange_rates import get_latest_exchange_rates
-from agent.tool.search.generic_web_search import generic_web_search
-from agent.tool.search.brave_news_search import news_search
-from agent.tool.search.wikipedia_search import wikipedia_search
-from agent.tool.search.structured_facts_lookup import structured_facts_lookup
-from agent.tool.calendar.public_holidays_lookup import public_holidays_lookup
-from agent.tool.location.get_caller_location import get_caller_location
-from agent.tool.books.search_books import search_books
-from agent.tool.news.hn_search import hn_search
-from agent.tool.language.define_word import define_word
-from agent.tool.food.search_meals import search_meals
-from agent.tool.food.search_cocktails import search_cocktails
-from agent.tool.fun.get_advice import get_advice
-from agent.tool.fun.get_quote import get_quote
-from agent.tool.fun.astronomy_picture import get_astronomy_picture
-from agent.tool.search.country_lookup import country_lookup
-from agent.tool.calendar.world_time import get_world_time
+from agent.tool_adapter.products.find_products import find_products
+from agent.tool_adapter.products.list_product_categories import list_product_categories
+from agent.tool_adapter.weather.get_current_weather import get_current_weather
+from agent.tool_adapter.weather.get_historical_month_weather import get_historical_month_weather
+from agent.tool_adapter.weather.resolve_city_location import resolve_city_location
+from agent.tool_adapter.finance.exchange_rates_lookup import exchange_rates_lookup
+from agent.tool_adapter.finance.exchange_rates_time_series import exchange_rates_time_series
+from agent.tool_adapter.finance.crypto_markets import get_crypto_markets
+from agent.tool_adapter.finance.latest_exchange_rates import get_latest_exchange_rates
+from agent.tool_adapter.search.generic_web_search import generic_web_search
+from agent.tool_adapter.search.brave_news_search import news_search
+from agent.tool_adapter.search.wikipedia_search import wikipedia_search
+from agent.tool_adapter.search.structured_facts_lookup import structured_facts_lookup
+from agent.tool_adapter.calendar.public_holidays_lookup import public_holidays_lookup
+from agent.tool_adapter.location.get_caller_location import get_caller_location
+from agent.tool_adapter.books.search_books import search_books
+from agent.tool_adapter.news.hn_search import hn_search
+from agent.tool_adapter.language.define_word import define_word
+from agent.tool_adapter.food.search_meals import search_meals
+from agent.tool_adapter.food.search_cocktails import search_cocktails
+from agent.tool_adapter.fun.get_advice import get_advice
+from agent.tool_adapter.fun.get_quote import get_quote
+from agent.tool_adapter.fun.astronomy_picture import get_astronomy_picture
+from agent.tool_adapter.search.country_lookup import country_lookup
+from agent.tool_adapter.calendar.world_time import get_world_time
 
 
 @dataclass

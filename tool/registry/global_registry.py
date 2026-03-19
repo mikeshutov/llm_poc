@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from rendering.debug import emit_debug_message
-from agent.tool.tools import tools
+from tool.tools import tools
 
 
 class ToolRegistryError(Exception):

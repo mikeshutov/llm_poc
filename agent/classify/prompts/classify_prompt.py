@@ -1,6 +1,6 @@
 from agent.agentstate.model import AgentState, flatten_conversation_entries
 from agent.classify.prompts.classify_schema_prompt import CLASSIFY_SCHEMA
-from agent.tool.tools import TOOL_CATEGORIES
+from tool.tools import TOOL_CATEGORIES
 
 
 def build_classify_prompt(agent_state: AgentState) -> str:

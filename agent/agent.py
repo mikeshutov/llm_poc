@@ -22,7 +22,6 @@ def run_agent(
     roundtrip_id: str | None = None, #might want to create a conversation context object
     max_turns: int = 10,
 ) -> AgentResult:
-    #Agent state and set up hybrid ReWoo Loop
     agentState = AgentState.new(
         task=flatten_conversation_entries(conversation_entries),
         max_turns=max_turns,
@@ -35,8 +34,7 @@ def run_agent(
     builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
     builder.add_node(SYNTHESIZE_EDGE, run_synthesis)
     builder.set_entry_point(CLASSIFICATION_EDGE)
-    
-    # Check for potentially already being ready to answer during classification
+
     builder.add_conditional_edges(
         CLASSIFICATION_EDGE,
         router,
