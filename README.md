@@ -7,15 +7,15 @@ Rough Breakdown of the agentic loop flow.
 1. Prompt comes in and we assemble our context.
 2. Pass the context to the state and set up an agent state to track execution.
 3. Classifier checks if the context can satisfy the users request (using previous tool call data etc)
-   a. If theres sufficient context we just go to answering right away.
-   b. Categorize the request, this will determine which tools need to be provided.
+   - If theres sufficient context we just go to answering right away.
+   - Categorize the request, this will determine which tools need to be provided.
 4. We call our planner and provide tools matching the categories from classifier.
-   a. The idea here is we could likely have thousands of tools and it seems like a good idea to only pass whats needed.
-   b. There are tool specific rules which get added depending on the categories and tools (minimal but seems to be useful long term)
+   - The idea here is we could likely have thousands of tools and it seems like a good idea to only pass whats needed.
+   - There are tool specific rules which get added depending on the categories and tools (minimal but seems to be useful long term)
 5. Executor executes the tool calls in the plan and stores them in state.
 6. Planner checks if we have sufficient context to answer. 
-   a. If goal reached or we reach our iteration limit create our response.
-   b. If not we replan with tool calls made.
+   - If goal reached or we reach our iteration limit create our response.
+   - If not we replan with tool calls made.
 7. Response gets generated
 
 We also do store the conversation/tool calls and so on for the next prompt.
