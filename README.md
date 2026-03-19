@@ -4,6 +4,7 @@ This project was created with the idea of exploring how to build things that uti
 
 ## Flows of the App
 Currently the flow is when a prompt comes in we assemble the context and begin our agentic flow. if the classifier determines we already have enough context to answer we just go to the answer rigth away, this is for cases where the question may be applicable to existing context. Otherwise we enter our hybrid loop where we plan tool calls and execute said tool calls. The planner then determines if additional tool calls are required or if we have enough data. Additionally we have a limiter on the number of iterations we allow the agent to go through.
+The diagrams provided are just to illustrate at a high level what this looks like.
 
 ```mermaid
 flowchart TD
@@ -22,6 +23,9 @@ flowchart TD
 
 ## How is Context Assembled
 Currently it is assemebled by combining the summary and all messages after the index of that summary. That means that if the last summary was at message 30 we will include messages after 30. Not perfect but provides a way to understand context assembly.
+
+Simple diagram to illustrate what this looks like.
+
 ```mermaid
 flowchart TD
     A[Context Builder] -->B 
