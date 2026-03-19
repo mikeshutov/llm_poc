@@ -1,9 +1,24 @@
 # LLM Powered agentic chat with a bunch of tooling
-This project was created with the idea of exploring how to build things that utilize LLM's. Over time it has grown from just a simple chat bot that looks at a local product catalog to what it is today.
+This project was created with the idea of exploring how to build things that utilize LLM's. Over time it has grown from just a simple chat bot that looks at a local product catalog to what it is today. The product catalog used is just open data we have fed into the DB to have a pretend store (which is how this started) which is where we utilize embeddings for product searching.
 
 
 ## Flows of the App
-Currently the flow is when a prompt comes in we assemble the context and begin our agentic flow. if the classifier determines we already have enough context to answer we just go to the answer rigth away, this is for cases where the question may be applicable to existing context. Otherwise we enter our hybrid loop where we plan tool calls and execute said tool calls. The planner then determines if additional tool calls are required or if we have enough data. Additionally we have a limiter on the number of iterations we allow the agent to go through.
+Rough Breakdown of the agentic loop flow.
+1. Prompt comes in and we assemble our context.
+2. Pass the context to the state and set up an agent state to track execution.
+3. Classifier checks if the context can satisfy the users request (using previous tool call data etc)
+    a. If theres sufficient context we just go to answering right away.
+    b. Categorize the request, this will determine which tools need to be provided.
+4. We call our planner and provide tools matching the categories from classifier.
+    a. The idea here is we could likely have thousands of tools and it seems like a good idea to only pass whats needed.
+    b. There are tool specific rules which get added depending on the categories and tools (minimal but seems to be useful long term)
+5. Executor executes the tool calls in the plan and stores them in state.
+6. Planner checks if we have sufficient context to answer. 
+    a. If goal reached or we reach our iteration limit create our response.
+    b. If not we replan with tool calls made.
+7. Response gets generated
+
+We also do store the conversation/tool calls and so on for the next prompt.
 The diagrams provided are just to illustrate at a high level what this looks like.
 
 ```mermaid
