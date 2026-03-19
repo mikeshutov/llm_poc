@@ -21,6 +21,10 @@ from agent.tool.language.define_word import define_word
 from agent.tool.food.search_meals import search_meals
 from agent.tool.food.search_cocktails import search_cocktails
 from agent.tool.fun.get_advice import get_advice
+from agent.tool.fun.get_quote import get_quote
+from agent.tool.fun.astronomy_picture import get_astronomy_picture
+from agent.tool.search.country_lookup import country_lookup
+from agent.tool.calendar.world_time import get_world_time
 
 
 @dataclass
@@ -33,13 +37,13 @@ class ToolCategory:
 PRODUCT_TOOLS = [find_products, list_product_categories]
 WEATHER_TOOLS = [resolve_city_location, get_current_weather, get_historical_month_weather]
 FINANCE_TOOLS = [exchange_rates_lookup, exchange_rates_time_series, get_crypto_markets, get_latest_exchange_rates]
-SEARCH_TOOLS = [generic_web_search, news_search, wikipedia_search, structured_facts_lookup, hn_search]
-CALENDAR_TOOLS = [public_holidays_lookup]
+SEARCH_TOOLS = [generic_web_search, news_search, wikipedia_search, structured_facts_lookup, hn_search, country_lookup]
+CALENDAR_TOOLS = [public_holidays_lookup, get_world_time]
 LOCATION_TOOLS = [get_caller_location]
 BOOKS_TOOLS = [search_books]
 LANGUAGE_TOOLS = [define_word]
 FOOD_TOOLS = [search_meals, search_cocktails]
-FUN_TOOLS = [get_advice]
+FUN_TOOLS = [get_advice, get_quote, get_astronomy_picture]
 
 # if this were to grow much larger I would probably create sub categories or a tree structure of tools
 TOOL_CATEGORIES: dict[str, ToolCategory] = {
@@ -59,12 +63,12 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     ),
     "search": ToolCategory(
         tools=SEARCH_TOOLS,
-        description="Search the web, news, Wikipedia, or structured knowledge for general information.",
+        description="Search the web, news, Wikipedia, structured knowledge, or country information for general information.",
         rules=["If you use Brave/WebSearch tools, use at most ONE of them in the entire plan."],
     ),
     "calendar": ToolCategory(
         tools=CALENDAR_TOOLS,
-        description="Look up public holidays for a country and year.",
+        description="Look up public holidays for a country and year, or get the current time for a timezone.",
     ),
     "location": ToolCategory(
         tools=LOCATION_TOOLS,
@@ -84,7 +88,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     ),
     "fun": ToolCategory(
         tools=FUN_TOOLS,
-        description="Suggest a random activity or hobby idea when the user is bored.",
+        description="Retrieve fun or interesting content: advice slips, number trivia, inspirational quotes, and NASA astronomy pictures.",
     ),
 }
 

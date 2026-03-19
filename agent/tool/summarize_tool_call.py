@@ -5,7 +5,8 @@ from agent.tool.repository.tool_call_repository import ToolCallRepository
 from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from llm.clients.llm_client import LlmClient
 
-# This is just a start but we need more dynamic prompts so that tools that require more context maintain it.
+# This is just a start but we need more dynamic prompts so that tools 
+# that require more context maintain it. As it stands we lose too much context
 SYSTEM_PROMPT = "Summarize the following tool call in one concise sentence. Focus on what was looked up and what the result was."
 
 llm = LlmClient()
