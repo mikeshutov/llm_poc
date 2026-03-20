@@ -55,7 +55,7 @@ flowchart TD
     A[Context Builder] -->B 
     subgraph B[Conversation Context]
         direction TB
-        M1["Conversation Summary with Summary Index"]
+        M1["Conversation Summary + Tool Call Summary\n with Summary Index"]
         M2["Array of Previous Roundtrips Past Summary Index"]
         M3["Latest Prompt"]
         M1 --> M2 --> M3 

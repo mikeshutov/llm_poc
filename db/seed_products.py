@@ -7,6 +7,7 @@ import psycopg
 from datasets import load_dataset
 from openai import OpenAI
 from dotenv import load_dotenv
+from common.model_constants import EMBEDDING_MODEL
 
 load_dotenv()
 DB_URL = os.getenv("DATABASE_URL", "postgresql://app:app@localhost:5432/products")
@@ -174,7 +175,7 @@ def main():
                 if len(embed_batch) >= BATCH:
                     # Embeddings call (batch). Use an embedding model (not chat).
                     emb = client.embeddings.create(
-                        model="text-embedding-3-small",
+                        model=EMBEDDING_MODEL,
                         input=embed_batch,
                     )
                     vectors = [d.embedding for d in emb.data]

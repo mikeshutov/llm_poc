@@ -1,6 +1,6 @@
-SYSTEM_PROMPT = """
-You summarize conversations for a shopping/search assistant.
+from conversation.prompts.summary_schema_prompt import SUMMARY_SCHEMA_PROMPT
 
-Return a concise, factual summary that preserves user preferences, constraints,
-and any decisions made. Avoid unnecessary detail. Keep it under 10 bullet points.
-"""
+SYSTEM_PROMPT = """You summarize conversations for an assistant that works on multiple topics."""
+
+def build_prompt() -> str:
+    return f"{SYSTEM_PROMPT}\n\n{SUMMARY_SCHEMA_PROMPT}"

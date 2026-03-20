@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
@@ -7,14 +6,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from agent.models import AgentResult, Plan
-
-
-def flatten_conversation_entries(entries: list[dict]) -> str:
-    return "\n".join(
-        f"{m['role'].upper()}: {m['content']}"
-        for m in entries
-        if m.get("content")
-    )
+from common.model_constants import AGENT_MODEL
 
 
 class ClassificationResults(BaseModel):
@@ -54,7 +46,7 @@ class AgentState:
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
     goal_reached: bool = False
     llm: Any = field(
-        default_factory=lambda: ChatOpenAI(model=os.getenv("AGENT_MODEL", "gpt-4.1"), temperature=0)
+        default_factory=lambda: ChatOpenAI(model=AGENT_MODEL, temperature=0)
     )
 
     @classmethod

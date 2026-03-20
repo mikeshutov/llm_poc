@@ -118,15 +118,16 @@ class ConversationRepository:
         conversation_id: UUID,
         summary: str,
         message_index_cutoff: int,
+        tool_summary: str = "",
     ) -> ConversationSummary:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO conversation_summary (conversation_id, summary, message_index_cutoff)
-                VALUES (%s, %s, %s)
-                RETURNING id, conversation_id, summary, message_index_cutoff, created_at
+                INSERT INTO conversation_summary (conversation_id, summary, tool_summary, message_index_cutoff)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id, conversation_id, summary, tool_summary, message_index_cutoff, created_at
                 """,
-                (conversation_id, summary, message_index_cutoff),
+                (conversation_id, summary, tool_summary, message_index_cutoff),
             )
             row = cur.fetchone()
             assert row is not None
@@ -139,7 +140,7 @@ class ConversationRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT id, conversation_id, summary, message_index_cutoff, created_at
+                SELECT id, conversation_id, summary, tool_summary, message_index_cutoff, created_at
                 FROM conversation_summary
                 WHERE conversation_id = %s
                 """, (conversation_id,)
@@ -197,7 +198,7 @@ class ConversationRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT id, conversation_id, summary, message_index_cutoff, created_at
+                SELECT id, conversation_id, summary, tool_summary, message_index_cutoff, created_at
                 FROM conversation_summary
                 WHERE conversation_id = %s
                 ORDER BY created_at DESC

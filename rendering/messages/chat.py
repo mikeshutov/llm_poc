@@ -5,9 +5,11 @@ import streamlit as st
 
 from conversation.conversation import generate_conversation_summary, generate_conversation_title
 from conversation.models.conversation_models import ConversationRoundtrip
+from agent.models.agent_result import AgentResult
 from conversation.repository.repo_factory import get_conversation_repo
 from rendering.rendering import render_assistant_content, _format_timestamp
 from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_KEY, ROLE_USER
+from tool.repository.tool_call_repository import ToolCallRepository
 
 
 def ensure_messages_loaded(conversation_repository, conversation_id: str, limit: int = 10) -> None:
@@ -41,7 +43,7 @@ def render_messages(conversation_repository, conversation_id: str, render_messag
 def append_assistant_response(
     conversation_id: str,
     user_query: str,
-    answer,
+    answer: AgentResult,
     roundtrip: ConversationRoundtrip,
     summary_every: int = 5,
 ) -> None:
@@ -74,14 +76,18 @@ def append_assistant_response(
             limit=summary_every,
             after_message_index=last_cutoff,
         )
-        summary_text = generate_conversation_summary(
+        roundtrip_ids = [rt.id for rt in new_roundtrips]
+        tool_calls_by_roundtrip = ToolCallRepository().get_tool_calls_by_roundtrips(roundtrip_ids)
+        summary = generate_conversation_summary(
             latest_summary.summary if latest_summary else None,
             new_roundtrips,
+            tool_call_map=tool_calls_by_roundtrip,
         )
         conversation_repository.create_summary(
             UUID(conversation_id),
-            summary_text,
+            summary.conversation_summary,
             message_index_cutoff=roundtrip.message_index,
+            tool_summary=summary.tool_summary,
         )
     if roundtrip.message_index == 0:
         conversation_repository.set_conversation_title(

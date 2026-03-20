@@ -1,7 +1,6 @@
-import os
 from openai import OpenAI
 
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+from common.model_constants import EMBEDDING_MODEL
 
 client = OpenAI()
 

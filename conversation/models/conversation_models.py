@@ -2,6 +2,20 @@ from dataclasses import dataclass
 from typing import Any, Optional
 from uuid import UUID
 
+from pydantic import BaseModel, field_validator
+
+
+class ConversationSummaryResponse(BaseModel):
+    conversation_summary: str = ""
+    tool_summary: str = ""
+
+    @field_validator("conversation_summary", "tool_summary", mode="before")
+    @classmethod
+    def coerce_list_to_str(cls, v):
+        if isinstance(v, list):
+            return "\n".join(str(item) for item in v)
+        return v
+
 
 @dataclass(frozen=False)
 class Conversation:
@@ -31,5 +45,6 @@ class ConversationSummary:
     id: UUID
     conversation_id: UUID
     summary: str
+    tool_summary: str
     message_index_cutoff: int
     created_at: str  # or datetime

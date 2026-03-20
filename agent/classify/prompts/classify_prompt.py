@@ -1,4 +1,5 @@
-from agent.agentstate.model import AgentState, flatten_conversation_entries
+from agent.agentstate.model import AgentState
+from conversation.utils import flatten_conversation_entries
 from agent.classify.prompts.classify_schema_prompt import CLASSIFY_SCHEMA
 from tool.tools import TOOL_CATEGORIES
 
@@ -6,8 +7,7 @@ from tool.tools import TOOL_CATEGORIES
 def build_classify_prompt(agent_state: AgentState) -> str:
     conversation_block = ""
     if agent_state.conversation_entries:
-        flat = flatten_conversation_entries(agent_state.conversation_entries)
-        conversation_block = f"Conversation history:\n{flat}\n\n"
+        conversation_block = f"Conversation history:\n{flatten_conversation_entries(agent_state.conversation_entries)}\n\n"
 
     category_lines = "\n".join(
         f"- Category: {name} | Category Description: {cat.description}"

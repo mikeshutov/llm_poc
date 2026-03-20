@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from langsmith import traceable
 
-from agent.agentstate.model import AgentState, flatten_conversation_entries
+from agent.agentstate.model import AgentState
+from conversation.utils import flatten_conversation_entries
 from agent.classify.classify import classify
 from agent.executor.executor import run_executor
 from agent.graph_constants import CLASSIFICATION_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
