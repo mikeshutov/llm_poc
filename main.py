@@ -6,7 +6,7 @@ load_dotenv()
 
 import streamlit as st
 
-from agent.service import run_agent_for_query
+from agents.general.service import run_agent_for_query
 from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from conversation.repository.repo_factory import get_conversation_repo
 from rendering.messages.chat import append_assistant_response, render_messages

@@ -5,8 +5,8 @@ from uuid import UUID
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from agent.agentstate.model import IterationState
-from agent.models.plan import PlanStep
+from agents.general.agentstate.model import IterationState
+from agents.general.models.plan import PlanStep
 from tool.repository.models import ToolCall
 from db.connection import get_connection
 
