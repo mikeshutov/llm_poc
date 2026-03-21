@@ -11,8 +11,7 @@ from common.model_constants import AGENT_MODEL
 
 class ClassificationResults(BaseModel):
     applicable_tool_categories: list[str] = []
-    can_answer_without_tools: bool = False
-    confidence: float = 0.0
+    can_answer_confidence: float = 0.0
 
 
 @dataclass
