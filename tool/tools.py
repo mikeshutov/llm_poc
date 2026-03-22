@@ -67,7 +67,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     "search": ToolCategory(
         tools=SEARCH_TOOLS,
         description="Search the web, news, Wikipedia, structured knowledge, or country information for general information.",
-        rules=["If you use Brave/WebSearch tools, use at most ONE of them in the entire plan."],
+        rules=["If you use Brave/WebSearch tools, use at most ONE of them in the entire plan.","You can use the Wiki tools multiple times as needed."],
     ),
     "calendar": ToolCategory(
         tools=CALENDAR_TOOLS,

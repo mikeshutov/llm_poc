@@ -76,7 +76,7 @@ def find_products(
 ):
     return _find_products(
         query_text=query_text,
-        product_filters=ProductQuery(**product_filters) if product_filters else None,
+        product_filters=ProductQuery(**product_filters.model_dump()) if product_filters else None,
         web_count=web_count,
         allow_web_fallback=allow_web_fallback,
     )

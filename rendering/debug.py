@@ -47,9 +47,9 @@ def emit_status_message(content: str) -> None:
 
 def build_classify_status_message(categories: list[str], can_answer_confidence: float = 0.0) -> str:
     if can_answer_confidence >= 0.8:
-        return f"**Classification:** can answer directly (can answer confidence: {can_answer_confidence:.0%})"
+        return f"**Classification:** can answer directly (can answer without tool calls confidence: {can_answer_confidence:.0%})"
     if categories:
-        return f"**Classified as:** {', '.join(categories)} (can answer confidence: {can_answer_confidence:.0%})"
+        return f"**Classified as:** {', '.join(categories)} (can answer without tool calls confidence: {can_answer_confidence:.0%})"
     return "**Classification:** no matching categories, using all tools"
 
 
@@ -68,6 +68,7 @@ def build_plan_status_message(step_plans: list[str], final_answer: str | None = 
 
 def build_step_status_message(step_plan: str, tool_name: str, args: dict) -> str:
     return (
+        f"**Tool Call**\n\n"
         f"Working on: {step_plan}\n\n"
         f"Using `{tool_name}` with:\n"
         f"```json\n{json.dumps(args, indent=2, sort_keys=True)}\n```"
