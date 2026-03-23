@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from tool.repository.models import ToolCall
+from tool.models.tool_call import ToolCall
 from conversation.models.conversation_models import ConversationRoundtrip
 from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER, ROLE_ASSISTANT
 

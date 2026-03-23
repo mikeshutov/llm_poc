@@ -5,7 +5,7 @@ from uuid import UUID
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from agents.general.models.plan import Plan, PlanStatus
+from tool.models.plan import Plan, PlanStatus
 from db.connection import get_connection
 
 

@@ -5,7 +5,7 @@ import streamlit as st
 
 from conversation.conversation import generate_conversation_summary, generate_conversation_title
 from conversation.models.conversation_models import ConversationRoundtrip
-from agent.models.agent_result import AgentResult
+from agents.models.agent_result import AgentResult
 from conversation.repository.repo_factory import get_conversation_repo
 from rendering.rendering import render_assistant_content, _format_timestamp
 from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_KEY, ROLE_USER

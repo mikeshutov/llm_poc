@@ -7,7 +7,7 @@ from conversation.models.conversation_models import ConversationRoundtrip, Conve
 from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
 from common.parsing import strip_code_fences
 from conversation.utils import flatten_conversation_entries
-from tool.repository.models import ToolCall
+from tool.models.tool_call import ToolCall
 from tool.formatting import build_roundtrip_messages
 
 llm = LlmClient()
