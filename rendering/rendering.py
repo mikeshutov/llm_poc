@@ -7,7 +7,7 @@ from rendering.cards import render_cards
 from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
 
 
-def _format_timestamp(ts) -> str | None:
+def format_timestamp(ts) -> str | None:
     if ts is None:
         return None
     if isinstance(ts, str):
@@ -59,7 +59,7 @@ def render_message(msg: dict) -> None:
     role = msg[ROLE_KEY]
     content = msg[CONTENT_KEY]
     content_title = msg.get("title", "Debug")
-    timestamp = _format_timestamp(msg.get("timestamp"))
+    timestamp = format_timestamp(msg.get("timestamp"))
     if msg.get("status"):
         with st.chat_message("assistant", avatar=":material/more_horiz:"):
             st.markdown(content)

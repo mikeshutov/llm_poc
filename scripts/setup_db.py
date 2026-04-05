@@ -10,6 +10,8 @@ SQL_FILES = [
     "db/extensions.sql",
     "db/product_schema.sql",
     "db/conversation_schema.sql",
+    "db/file_schema.sql",
+    "db/file_chunk_schema.sql",
     "db/conversation_roundtrip_schema.sql",
     "db/conversation_summary_schema.sql",
     "db/tool_calls_schema.sql",

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 
+def format_prompt_bullet_list(items: list[str]) -> str:
+    return "\n".join(f"- {item}" for item in items) + "\n"
+
+
 def strip_code_fences(s: str) -> str:
     s = s.strip()
     if s.startswith("```"):

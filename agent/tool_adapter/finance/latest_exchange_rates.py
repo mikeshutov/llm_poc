@@ -30,7 +30,6 @@ Optional fields:
 Returns a map of currency codes to their exchange rates relative to the base.
 
 Example valid calls:
-{}
 {"base": "EUR"}
 """,
 )

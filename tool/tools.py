@@ -27,6 +27,8 @@ from agent.tool_adapter.fun.astronomy_picture import get_astronomy_picture
 from agent.tool_adapter.math.calculate import calculate
 from agent.tool_adapter.search.country_lookup import country_lookup
 from agent.tool_adapter.calendar.world_time import get_world_time
+from agent.tool_adapter.files.search_file_for_details import search_file_for_details
+from agent.tool_adapter.files.search_files import search_files
 
 
 @dataclass
@@ -34,6 +36,7 @@ class ToolCategory:
     tools: list
     description: str
     rules: list[str] = field(default_factory=list)
+    result_rules: list[str] = field(default_factory=list)
 
 
 PRODUCT_TOOLS = [find_products, list_product_categories]
@@ -47,14 +50,16 @@ LANGUAGE_TOOLS = [define_word]
 FOOD_TOOLS = [search_meals, search_cocktails]
 FUN_TOOLS = [get_advice, get_quote, get_astronomy_picture]
 MATH_TOOLS = [calculate]
+FILE_TOOLS = [search_files, search_file_for_details]
 
 # if this were to grow much larger I would probably create sub categories or a tree structure of tools
 TOOL_CATEGORIES: dict[str, ToolCategory] = {
     "products": ToolCategory(
         tools=PRODUCT_TOOLS,
         description="Search and browse products and product categories from the catalog.",
-        rules=["For product searches utilize internal tools first before web searches."
-               "Make sure that previous context is taken into account when providing filters unless explicitely told not to."],
+        rules=[
+            "For product searches utilize internal tools first before web searches."
+            "Make sure that previous context is taken into account when providing filters unless explicitely told not to."],
     ),
     "weather": ToolCategory(
         tools=WEATHER_TOOLS,
@@ -97,6 +102,22 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
         tools=MATH_TOOLS,
         description="Evaluate mathematical expressions and perform mathematical calculations.",
     ),
+    "files": ToolCategory(
+        tools=FILE_TOOLS,
+        description="Search and retrieve content from uploaded files. To be used when files are in the context either with a name or ID.",
+        rules=[
+            "Use search_files to discover files and obtain their file_id.",
+            "Use search_file_for_details with the file_id and a specific query to retrieve details from a file.",
+            "Always call search_file_for_details when answering questions about file content unless the exact answer is already explicitly present in the conversation context.",
+            "When there is any doubt call search_file_for_details over relying on context.",
+        ],
+        result_rules=[
+            "Summarize or extract relevant pieces unless a quote is more appropriate.",
+            "When referencing file content, cite the file name and add a clickable link.",
+            "When posting a list of files put them in a bullet list with links to the file.",
+            "Make sure to use markdown. Also ensure that spaces in file names are converted to %20."
+        ],
+    ),
 }
 
-tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *SEARCH_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *FUN_TOOLS, *MATH_TOOLS]
+tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *SEARCH_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *FUN_TOOLS, *MATH_TOOLS, *FILE_TOOLS]

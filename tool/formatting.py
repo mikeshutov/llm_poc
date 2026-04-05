@@ -8,7 +8,13 @@ from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER, ROLE_ASSI
 def format_tool_calls(response: str, tool_calls: list[ToolCall]) -> str:
     if not tool_calls:
         return response
-    summaries = [tc.summary if tc.summary else f"input={tc.input_payload} output={tc.output_payload}" for tc in tool_calls]
+    # search_file_for_details returns a fairly large of content. For now just going to exclude but a better option is possible likely.
+    CONTEXT_EXCLUDED_TOOLS = {"search_file_for_details"}
+    summaries = [
+        tc.summary if tc.summary else f"input={tc.input_payload} output={tc.output_payload}"
+        for tc in tool_calls
+        if tc.tool_name not in CONTEXT_EXCLUDED_TOOLS
+    ]
     return f"{response}\nPrevious Tool Calls:\n" + "\n".join(summaries)
 
 

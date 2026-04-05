@@ -9,8 +9,9 @@ import streamlit as st
 from agent.service import run_agent_for_query
 from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from conversation.repository.repo_factory import get_conversation_repo
+from rendering.file_upload import render_file_upload
 from rendering.messages.chat import append_assistant_response, render_messages
-from rendering.rendering import render_message, _format_timestamp
+from rendering.rendering import render_message, format_timestamp
 from rendering.sidebar import render_sidebar
 
 st.set_page_config(page_title="LLM Agentic Chat", page_icon="🤖")
@@ -57,6 +58,7 @@ with st.sidebar:
     render_sidebar(conversation_repository)
 
 render_messages(conversation_repository, st.session_state.conversation_id, render_message, limit=10)
+render_file_upload()
 
 userQuery = st.chat_input("What are you looking for or trying to learn about?")
 if userQuery:
@@ -64,9 +66,7 @@ if userQuery:
     st.session_state.messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: userQuery, "timestamp": now})
     with st.chat_message(ROLE_USER):
         st.write(userQuery)
-        ts = _format_timestamp(now)
-        if ts:
-            st.caption(ts)
+        st.caption(format_timestamp(now))
 
     with st.spinner("Thinking..."):
         agent_result, roundtrip = run_agent_for_query(

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 from uuid import UUID
 
@@ -22,7 +22,7 @@ class Conversation:
     id: UUID
     user_id: str
     title: Optional[str]
-    created_at: str  # or datetime
+    created_at: str  
     metadata: dict[str, Any]
     tone_state: dict[str, Any]
 
@@ -36,9 +36,8 @@ class ConversationRoundtrip:
     generated_response: str
     response_payload: dict[str, Any]
     parsed_query: dict[str, Any]
-    created_at: str  # or datetime
+    created_at: str  
     metadata: dict[str, Any]
-
 
 @dataclass(frozen=False)
 class ConversationSummary:
@@ -47,4 +46,4 @@ class ConversationSummary:
     summary: str
     tool_summary: str
     message_index_cutoff: int
-    created_at: str  # or datetime
+    created_at: str  
