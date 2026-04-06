@@ -46,23 +46,23 @@ def _coerce_search_type(search_type: str) -> SearchType:
 @tool(
     "generic_web_search",
     args_schema=GenericWebSearchArgs,
-    description="""
+    description=f"""
 Run a general web, news, or suggestion search.
 
 Required fields:
 - query_text (string)
 
 Optional fields:
-- search_type (web_search | news_search | suggestion_search)
+- search_type ({" | ".join(t.value for t in SearchType)})
 - country (string)
 - count (integer)
 - params (object)
 
 Example valid call:
-{
+{{
   "query_text": "best summer jackets",
   "search_type": "web_search"
-}
+}}
 """,
 )
 def generic_web_search(

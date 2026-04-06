@@ -14,7 +14,7 @@ class FileTypeFilter(str, Enum):
     image = "image"
 
 
-TOP_K = 5
+TOP_K = 10
 MAX_CHUNK_DISTANCE = float(os.getenv("MAX_CHUNK_DISTANCE", "0.7"))
 
 

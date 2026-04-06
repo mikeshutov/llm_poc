@@ -41,7 +41,8 @@ class ToolCategory:
 
 PRODUCT_TOOLS = [find_products, list_product_categories]
 WEATHER_TOOLS = [resolve_city_location, get_current_weather, get_historical_month_weather]
-FINANCE_TOOLS = [exchange_rates_lookup, exchange_rates_time_series, get_crypto_markets, get_latest_exchange_rates, get_stock_price]
+FINANCE_TOOLS = [exchange_rates_lookup, exchange_rates_time_series, get_latest_exchange_rates, get_stock_price]
+CRYPTO_TOOLS = [get_crypto_markets]
 SEARCH_TOOLS = [generic_web_search, news_search, wikipedia_search, structured_facts_lookup, hn_search, country_lookup]
 CALENDAR_TOOLS = [public_holidays_lookup, get_world_time]
 LOCATION_TOOLS = [get_caller_location]
@@ -67,11 +68,15 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     ),
     "finance": ToolCategory(
         tools=FINANCE_TOOLS,
-        description="Retrieve currency exchange rates, historical rate time series, and live cryptocurrency prices.",
+        description="Retrieve currency exchange rates, historical rate time series, stock prices, and commodity prices (e.g. gold, silver via futures tickers like GC=F, SI=F).",
+    ),
+    "finance_crypto": ToolCategory(
+        tools=CRYPTO_TOOLS,
+        description="Retrieve live cryptocurrency market data including prices, market cap, and volume.",
     ),
     "search": ToolCategory(
         tools=SEARCH_TOOLS,
-        description="Search the web, news, Wikipedia, structured knowledge, or country information for general information.",
+        description="Search the web, news, Wikipedia, structured knowledge, or country information for general information about any topic.",
         rules=["If you use Brave/WebSearch tools, use at most ONE of them in the entire plan.","You can use the Wiki tools multiple times as needed."],
     ),
     "calendar": ToolCategory(
@@ -108,16 +113,17 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
         rules=[
             "Use search_files to discover files and obtain their file_id.",
             "Use search_file_for_details with the file_id and a specific query to retrieve details from a file.",
-            "Always call search_file_for_details when answering questions about file content unless the exact answer is already explicitly present in the conversation context.",
-            "When there is any doubt call search_file_for_details over relying on context.",
+            "Always call search_file_for_details over relying on context when the question is concerning files.",
         ],
         result_rules=[
             "Summarize or extract relevant pieces unless a quote is more appropriate.",
             "When referencing file content, cite the file name and add a clickable link.",
             "When posting a list of files put them in a bullet list with links to the file.",
-            "Make sure to use markdown. Also ensure that spaces in file names are converted to %20."
+            "Make sure to use markdown. Also ensure that spaces in file names are converted to %20.",
+            "When evidence contains a file_path or name for an image (jpg, jpeg, png, webp), render it using markdown image syntax: ![file_name](/app/static/files/file_name).",
+            "When evidence contains a file_path or name for a document (pdf, txt, docx), render it as a markdown link: [file_name](/app/static/files/file_name).",
         ],
     ),
 }
 
-tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *SEARCH_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *FUN_TOOLS, *MATH_TOOLS, *FILE_TOOLS]
+tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *SEARCH_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *FUN_TOOLS, *MATH_TOOLS, *FILE_TOOLS]
