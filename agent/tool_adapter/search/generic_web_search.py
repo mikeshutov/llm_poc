@@ -76,8 +76,8 @@ def generic_web_search(
     match _coerce_search_type(search_type):
         case SearchType.NEWS_SEARCH:
             return brave_client.news_search(query_text)
-        case SearchType.SUGGESTION_SEARCH:
-            return brave_client.suggest(query_text)
+        #case SearchType.SUGGESTION_SEARCH:
+        #    return brave_client.suggest(query_text)
         case _:
             return brave_client.web_search(
                 WebSearchParams(q=query_text, country=country, count=count, extra_params=params or {})

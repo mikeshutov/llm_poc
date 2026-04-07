@@ -109,19 +109,15 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     ),
     "files": ToolCategory(
         tools=FILE_TOOLS,
-        description="Search and retrieve content from uploaded files. To be used when files are in the context either with a name or ID.",
+        description="To be utilized for any searches involving files. Search and retrieve content from uploaded files. To be used when files are in the context either with a name or ID.",
         rules=[
             "Use search_files to discover files and obtain their file_id.",
             "Use search_file_for_details with the file_id and a specific query to retrieve details from a file.",
-            "Always call search_file_for_details over relying on context when the question is concerning files.",
         ],
         result_rules=[
             "Summarize or extract relevant pieces unless a quote is more appropriate.",
-            "When referencing file content, cite the file name and add a clickable link.",
-            "When posting a list of files put them in a bullet list with links to the file.",
-            "Make sure to use markdown. Also ensure that spaces in file names are converted to %20.",
-            "When evidence contains a file_path or name for an image (jpg, jpeg, png, webp), render it using markdown image syntax: ![file_name](/app/static/files/file_name).",
-            "When evidence contains a file_path or name for a document (pdf, txt, docx), render it as a markdown link: [file_name](/app/static/files/file_name).",
+            "When referencing file content, cite the file name.",
+            "When rendering a list of files put them in a markdown list with links to the files.",
         ],
     ),
 }
