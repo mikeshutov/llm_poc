@@ -5,7 +5,7 @@ from typing import Any
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from products.product_retrieval import find_products as _find_products
+from products.product_retrieval import find_products as catalog_find_products
 from products.models.product_query import ProductQuery
 
 
@@ -27,34 +27,24 @@ class FindProductsArgs(BaseModel):
         default=None,
         description="Optional filters: category, style, color, price_min, price_max, gender.",
     )
-    web_count: int = Field(
-        default=5,
-        description="Maximum number of web fallback results when fallback is allowed.",
-        ge=1,
-    )
-    allow_web_fallback: bool = Field(
-        default=True,
-        description="Whether web fallback is allowed if local catalog results are insufficient.",
-    )
 
 
 @tool(
     "find_products",
     args_schema=FindProductsArgs,
     description="""
-Search the local product catalog first and optionally fall back to web results.
+Search the internal product catalog.
 
 Required fields:
 - query_text (string)
+- a description of the product and nothing more
 
 Optional fields:
 - product_filters (object): category, style, color, price_min, price_max, gender
-- web_count (integer)
-- allow_web_fallback (boolean)
 
 Important:
 - Pass a single object with named fields.
-- Do not pass tuples like ("summer clothing", "Toronto").
+- Do not pass tuples/arrays like ("summer clothing", "Toronto").
 - If you need weather context, use the weather tools separately before calling this tool.
 
 Example valid call:
@@ -71,12 +61,8 @@ Example valid call:
 def find_products(
     query_text: str,
     product_filters: dict[str, Any] | None = None,
-    web_count: int = 5,
-    allow_web_fallback: bool = True,
 ):
-    return _find_products(
+    return catalog_find_products(
         query_text=query_text,
         product_filters=ProductQuery(**product_filters.model_dump()) if product_filters else None,
-        web_count=web_count,
-        allow_web_fallback=allow_web_fallback,
     )

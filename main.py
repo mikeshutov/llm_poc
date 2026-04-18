@@ -11,7 +11,7 @@ from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from conversation.repository.repo_factory import get_conversation_repo
 from rendering.file_upload import render_file_upload
 from rendering.messages.chat import append_assistant_response, render_messages
-from rendering.rendering import render_message, format_timestamp
+from rendering.rendering import render_message
 from rendering.sidebar import render_sidebar
 
 st.set_page_config(page_title="LLM Agentic Chat", page_icon="🤖")
@@ -63,10 +63,18 @@ render_file_upload()
 userQuery = st.chat_input("What are you looking for or trying to learn about?")
 if userQuery:
     now = datetime.now(timezone.utc)
-    st.session_state.messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: userQuery, "timestamp": now})
-    with st.chat_message(ROLE_USER):
-        st.write(userQuery)
-        st.caption(format_timestamp(now))
+    uploaded_file_id = st.session_state.pop("uploaded_file_id", None)
+    uploaded_file_name = st.session_state.pop("uploaded_file_name", None)
+    uploaded_file_type = st.session_state.pop("uploaded_file_type", None)
+    attached_file = {"name": uploaded_file_name, "type": uploaded_file_type} if uploaded_file_id else None
+
+    msg = {ROLE_KEY: ROLE_USER, CONTENT_KEY: userQuery, "timestamp": now, "attached_file": attached_file}
+    st.session_state.messages.append(msg)
+    render_message(msg)
+
+    if uploaded_file_id:
+        st.session_state.file_uploader_key = st.session_state.get("file_uploader_key", 0) + 1
+        userQuery = f"{userQuery}\nuploaded file name: {uploaded_file_name}, file id: {uploaded_file_id}"
 
     with st.spinner("Thinking..."):
         agent_result, roundtrip = run_agent_for_query(

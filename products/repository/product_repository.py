@@ -96,9 +96,9 @@ class ProductRepository:
                 where.append("LOWER(gender) = LOWER(%s)")
                 params.append(product_filters.gender)
 
-            if product_filters.category:
-                where.append("LOWER(category) = ANY(%s)")
-                params.append([c.lower() for c in product_filters.category])
+            # if product_filters.category:
+            #     where.append("LOWER(category) = ANY(%s)")
+            #     params.append([c.lower() for c in product_filters.category])
 
             if product_filters.style:
                 where.append("LOWER(style) LIKE LOWER(%s)")

@@ -40,7 +40,7 @@ def _extract_text(file: UploadedFile) -> str:
 
 def process_uploaded_file(
     file: UploadedFile,
-) -> tuple[str, list[str]]:
+) -> tuple[str, str, list[str]]:
     file_path = os.path.join(FILES_DIR, file.name)
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, "wb") as f:
@@ -61,4 +61,4 @@ def process_uploaded_file(
     embedded_chunks = [(i, chunk, embed_text(chunk)) for i, chunk in enumerate(chunks)]
     FileChunkRepository().save_chunks(saved_file.id, embedded_chunks)
 
-    return file.name, chunks
+    return file.name, str(saved_file.id), chunks
