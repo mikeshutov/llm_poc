@@ -126,10 +126,10 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
         tools=FILE_TOOLS,
         description="To be utilized for any searches involving files. Search and retrieve content from uploaded files. To be used when files are in the context either with a name or ID.",
         rules=[
-            "Use search_files to discover files and obtain their file_id.",
-            "Use get_file_by_id with file id to get a summary about the file."
-            "Use search_file_for_details with the file_id and a specific query to search in the file description.",
-            "Use search_file_for_details when the context of the file is not loaded but is needed."
+            "When a file_id is present in the context, always call get_file_by_id first before using file content as input to any other tool. Never infer or guess file content from the file name alone.",
+            "Use search_files to discover files and obtain their file_id when no file_id is in context.",
+            "Use get_file_by_id with a known file_id to retrieve a preview of the file contents.",
+            "Use search_file_for_details with the file_id and a specific query to retrieve deeper details from a file.",
         ],
         result_rules=[
             "Summarize or extract relevant pieces unless a quote is more appropriate.",
