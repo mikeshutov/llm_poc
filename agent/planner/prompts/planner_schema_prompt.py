@@ -14,8 +14,8 @@ You MUST output valid JSON with this structure:
 }
 
 Schema Rules:
-- Set "needs_replan": true ONLY if previous tool results were insufficient and different tool calls are needed.
-- Set "needs_replan": false when you already have results to to answer. This is also the default.
+- Set "needs_replan": true if the current plan alone is not sufficient to answer the task and further tool calls will be needed after these results come back.
+- Set "needs_replan": false when the current plan steps are expected to produce enough data to answer the task when considering the full context. This is the default.
 - Never repeat a tool call with identical arguments if it has already been called and provided as data.
 """
 

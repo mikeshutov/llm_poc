@@ -46,23 +46,23 @@ def _coerce_search_type(search_type: str) -> SearchType:
 @tool(
     "generic_web_search",
     args_schema=GenericWebSearchArgs,
-    description="""
+    description=f"""
 Run a general web, news, or suggestion search.
 
 Required fields:
 - query_text (string)
 
 Optional fields:
-- search_type (web_search | news_search | suggestion_search)
+- search_type ({" | ".join(t.value for t in SearchType)})
 - country (string)
 - count (integer)
 - params (object)
 
 Example valid call:
-{
+{{
   "query_text": "best summer jackets",
   "search_type": "web_search"
-}
+}}
 """,
 )
 def generic_web_search(
@@ -76,8 +76,8 @@ def generic_web_search(
     match _coerce_search_type(search_type):
         case SearchType.NEWS_SEARCH:
             return brave_client.news_search(query_text)
-        case SearchType.SUGGESTION_SEARCH:
-            return brave_client.suggest(query_text)
+        #case SearchType.SUGGESTION_SEARCH:
+        #    return brave_client.suggest(query_text)
         case _:
             return brave_client.web_search(
                 WebSearchParams(q=query_text, country=country, count=count, extra_params=params or {})

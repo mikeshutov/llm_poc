@@ -1,12 +1,12 @@
+import base64
 from typing import Optional, Sequence
-
 from openai import OpenAI
-
 from common.model_constants import LLM_MODEL
 from llm.clients.tool_response_parser import parse_tool_args
 from llm.models.tool_call import ToolCall, ToolCallResult
-from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM
+from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
 
+CAPTION_MAX_TOKENS = 200
 # This is mostly for when we want to utilize our own LLM client
 # We can probably expand on this client to be able to handle a bunch of different models not just openai models
 class LlmClient:
@@ -49,3 +49,32 @@ class LlmClient:
             tool_calls_by_name=tool_calls_by_name,
             raw_message=msg,
         )
+
+    def generate_caption_from_image_file(self, path: str) -> str:
+        with open(path, "rb")   as f:
+            base64_image = base64.b64encode(f.read()).decode("utf-8")
+
+        response = self.client.chat.completions.create(
+            model=self.default_model,
+            messages=[
+                {
+                    ROLE_KEY: ROLE_USER,
+                    CONTENT_KEY: [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Describe this image for semantic search. "
+                                "Include details such as objects, colors, text, and context. Be specific yet concise."
+                            ),
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                        },
+                    ],
+                }
+            ],
+            max_tokens=CAPTION_MAX_TOKENS,
+        )
+
+        return response.choices[0].message.content

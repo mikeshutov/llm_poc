@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pydantic import ValidationError
 from langsmith import traceable
 from agent.agentstate.model import AgentState, IterationState
 from tool.repository.tool_call_repository import ToolCallRepository
@@ -39,7 +40,10 @@ def run_executor(agent_state: AgentState) -> AgentState:
 
         emit_status_message(build_step_status_message(step.plan, step.tool, args))
 
-        out = call_tool(name=step.tool, tool_input=args)
+        try:
+            out = call_tool(name=step.tool, tool_input=args)
+        except ValidationError as e:
+            out = {"error": f"Invalid arguments for tool '{step.tool}': {e.errors(include_url=False)}"}
         iteration.results[step.id] = out
 
         if tool_repo and agent_state.roundtrip_id:

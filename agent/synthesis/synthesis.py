@@ -33,7 +33,7 @@ def run_synthesis(state: AgentState) -> AgentState:
                 f"evidence: {evidence}\n"
             )
     plan_block = "\n\n".join(lines).strip()
-    prompt = build_solver_prompt(plan_block=plan_block, task=state.task)
+    prompt = build_solver_prompt(plan_block=plan_block, state=state)
     raw = state.llm.invoke(prompt).content
     raw = strip_code_fences(raw)
 

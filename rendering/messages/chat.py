@@ -7,10 +7,11 @@ from conversation.conversation import generate_conversation_summary, generate_co
 from conversation.models.conversation_models import ConversationRoundtrip
 from agent.models.agent_result import AgentResult
 from conversation.repository.repo_factory import get_conversation_repo
-from rendering.rendering import render_assistant_content, _format_timestamp
+from rendering.rendering import render_assistant_content, format_timestamp
 from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_KEY, ROLE_USER
 from tool.repository.tool_call_repository import ToolCallRepository
 
+SUMMARY_BATCH_SIZE = 5
 
 def ensure_messages_loaded(conversation_repository, conversation_id: str, limit: int = 10) -> None:
     if "messages" not in st.session_state or st.session_state.get("loaded_cid") != conversation_id:
@@ -39,13 +40,12 @@ def render_messages(conversation_repository, conversation_id: str, render_messag
     for msg in st.session_state.messages:
         render_message(msg)
 
-
 def append_assistant_response(
     conversation_id: str,
     user_query: str,
     answer: AgentResult,
     roundtrip: ConversationRoundtrip,
-    summary_every: int = 5,
+    summary_every: int = 7,
 ) -> None:
     conversation_repository = get_conversation_repo()
 
@@ -66,14 +66,14 @@ def append_assistant_response(
         }
     )
     with st.chat_message(ROLE_ASSISTANT):
-        render_assistant_content(answer.raw_response, payload, _format_timestamp(now))
+        render_assistant_content(answer.raw_response, payload, format_timestamp(now))
 
     if summary_every > 0 and (roundtrip.message_index + 1) % summary_every == 0:
         latest_summary = conversation_repository.get_latest_summary(UUID(conversation_id))
         last_cutoff = latest_summary.message_index_cutoff if latest_summary else -1
         new_roundtrips = conversation_repository.list_roundtrips(
             UUID(conversation_id),
-            limit=summary_every,
+            limit=SUMMARY_BATCH_SIZE,
             after_message_index=last_cutoff,
         )
         roundtrip_ids = [rt.id for rt in new_roundtrips]
@@ -86,7 +86,7 @@ def append_assistant_response(
         conversation_repository.create_summary(
             UUID(conversation_id),
             summary.conversation_summary,
-            message_index_cutoff=roundtrip.message_index,
+            message_index_cutoff=new_roundtrips[-1].message_index,
             tool_summary=summary.tool_summary,
         )
     if roundtrip.message_index == 0:

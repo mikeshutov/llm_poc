@@ -6,7 +6,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from agent.models import AgentResult, Plan
-from common.model_constants import AGENT_MODEL
+from common.model_constants import LLM_MODEL
 
 
 class ClassificationResults(BaseModel):
@@ -45,7 +45,7 @@ class AgentState:
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
     goal_reached: bool = False
     llm: Any = field(
-        default_factory=lambda: ChatOpenAI(model=AGENT_MODEL, temperature=0)
+        default_factory=lambda: ChatOpenAI(model=LLM_MODEL, temperature=0)
     )
 
     @classmethod

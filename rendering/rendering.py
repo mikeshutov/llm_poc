@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 
 import streamlit as st
@@ -5,9 +6,10 @@ import streamlit as st
 from rendering.debug import debug_render_message
 from rendering.cards import render_cards
 from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
+from common.file_constants import FILES_DIR, IMAGE_MIME_PREFIX
 
 
-def _format_timestamp(ts) -> str | None:
+def format_timestamp(ts) -> str | None:
     if ts is None:
         return None
     if isinstance(ts, str):
@@ -55,11 +57,25 @@ def render_assistant_content(content: str, payload: dict | None, timestamp: str 
         st.caption(timestamp)
 
 
+def _render_file_preview(attached_file: dict) -> None:
+    name = attached_file.get("name", "")
+    mime = attached_file.get("type", "")
+    path = os.path.join(FILES_DIR, name)
+    if mime.startswith(IMAGE_MIME_PREFIX) and os.path.exists(path):
+        st.image(path, width=200)
+    else:
+        icon = "📄" if "pdf" in mime else "📝"
+        st.markdown(
+            f"<span style='background:#f0f2f6;border-radius:6px;padding:3px 10px;font-size:0.85em'>{icon} {name}</span>",
+            unsafe_allow_html=True,
+        )
+
+
 def render_message(msg: dict) -> None:
     role = msg[ROLE_KEY]
     content = msg[CONTENT_KEY]
     content_title = msg.get("title", "Debug")
-    timestamp = _format_timestamp(msg.get("timestamp"))
+    timestamp = format_timestamp(msg.get("timestamp"))
     if msg.get("status"):
         with st.chat_message("assistant", avatar=":material/more_horiz:"):
             st.markdown(content)
@@ -71,5 +87,8 @@ def render_message(msg: dict) -> None:
                 render_assistant_content(content, msg.get("payload"), timestamp)
             else:
                 st.write(content)
+                attached_file = msg.get("attached_file")
+                if attached_file:
+                    _render_file_preview(attached_file)
                 if timestamp:
                     st.caption(timestamp)

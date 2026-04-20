@@ -9,7 +9,6 @@ from products.models.product_source import ProductSource
 from products.repository.product_repository import ProductRepository
 from integrations.brave.client import BraveSearchClient, BraveSearchError
 from integrations.brave.models import ShoppingSearchResult
-from integrations.brave.query_builder import build_web_query
 
 
 def _extract_price(text: str) -> Optional[float]:
@@ -74,8 +73,6 @@ def _is_high_confidence_product_detail_url(url: Optional[str]) -> bool:
 def find_products(
     query_text: str,
     product_filters: Optional[ProductQuery] = None,
-    web_count: int = 5,
-    allow_web_fallback: bool = True,
 ) -> ProductSearchResults:
     repo = ProductRepository()
     query_embedding = embed_text(query_text or "")
@@ -84,18 +81,19 @@ def find_products(
         product_filters=product_filters,
         limit=10,
     )
+    return ProductSearchResults(internal_results=internal_results, external_results=[])
 
+
+def find_products_web(
+    query_text: str,
+    count: int = 5,
+) -> ProductSearchResults:
+    web_query = (query_text or "").strip() or "products"
     external_results: list[ProductResult] = []
-    if not internal_results and allow_web_fallback:
-        web_query = ((query_text or "").strip() or build_web_query(product_filters).strip() or "products")
-        try:
-            brave_client = BraveSearchClient()
-            web_payload = brave_client.shopping_search(web_query, count=20)
-            external_results = _web_results_to_products(web_payload, max(1, web_count))
-        except (ValueError, BraveSearchError):
-            pass
-
-    return ProductSearchResults(
-        internal_results=internal_results,
-        external_results=external_results,
-    )
+    try:
+        brave_client = BraveSearchClient()
+        web_payload = brave_client.shopping_search(web_query, count=20)
+        external_results = _web_results_to_products(web_payload, max(1, count))
+    except (ValueError, BraveSearchError):
+        pass
+    return ProductSearchResults(internal_results=[], external_results=external_results)

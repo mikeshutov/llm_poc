@@ -1,3 +1,5 @@
+from common.parsing import format_prompt_bullet_list
+
 def build_planner_rules(extra_rules: dict[str, list[str]] | None = None) -> str:
     rules = [
         "Do not invent tool names. Use tool names exactly as provided.",
@@ -9,11 +11,10 @@ def build_planner_rules(extra_rules: dict[str, list[str]] | None = None) -> str:
         "If previous iterations have already gathered sufficient data to answer the task, set final_answer and return an empty steps list.",
         "When a question depends on the result of another tool try to sequence them when it is obvious from the request and available context.",
         "If a plan could have multiple independent tool calls including calls to the same tool with different inputs, include them all as separate steps in a single plan rather than one at a time.",
+        "Utilize multiple tools when it is appropriate to get full context."
     ]
-    bullet_rules = "\n".join(f"- {rule}" for rule in rules)
-    result = f"Rules:\n{bullet_rules}"
+    result = f"Rules:\n{format_prompt_bullet_list(rules)}"
     if extra_rules:
         for tool_name, tool_rules in extra_rules.items():
-            bullet_tool_rules = "\n".join(f"- {rule}" for rule in tool_rules)
-            result += f"\n\n{tool_name} Rules:\n{bullet_tool_rules}"
+            result += f"\n{tool_name} Rules:\n{format_prompt_bullet_list(tool_rules)}"
     return result
