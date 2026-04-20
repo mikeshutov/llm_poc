@@ -85,7 +85,7 @@ flowchart TD
     E --> F2[Split into 500-Token Chunks]
     F --> G[Create Embedding per Chunk]
     F2 --> G
-    G --> H[Save File + Chunks to DB]
+    G --> H[Save File Information + Chunks to DB]
 ```
 
 ## Interesting Notes/Decisions
