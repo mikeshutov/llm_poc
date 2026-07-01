@@ -3,6 +3,7 @@ from __future__ import annotations
 from langsmith import traceable
 
 from agent.agentstate.model import AgentState, RequestAnalysis
+from agent.prompt_constants import MAIN_AGENT_NAME, REQUEST_ANALYSIS_PROMPT_STEP
 from agent.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
 from conversation.repository.repo_factory import get_conversation_repo
 from rendering.debug import build_request_analysis_status_message, emit_status_message
@@ -36,8 +37,8 @@ def analyze_request(agent_state: AgentState) -> AgentState:
     if parsed_successfully and agent_state.roundtrip_id:
         get_conversation_repo().create_roundtrip_prompt(
             agent_state.roundtrip_id,
-            agent="main_agent",
-            prompt_step="request_analysis",
+            agent=MAIN_AGENT_NAME,
+            prompt_step=REQUEST_ANALYSIS_PROMPT_STEP,
             prompt=prompt.to_string(),
         )
 

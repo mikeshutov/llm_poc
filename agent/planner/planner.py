@@ -6,6 +6,7 @@ from rendering.debug import build_plan_status_message, emit_status_message
 from agent.agentstate.model import AgentState, IterationState
 from agent.models import AgentResult, Plan
 from agent.planner.prompts.planner_prompt import build_planner_prompt
+from agent.prompt_constants import MAIN_AGENT_NAME, PLANNER_PROMPT_STEP
 from common.parsing import strip_code_fences
 from conversation.repository.repo_factory import get_conversation_repo
 from tool.repository.plan_repository import PlanRepository
@@ -51,8 +52,8 @@ def run_planner(agent_state: AgentState) -> AgentState:
     if agent_state.roundtrip_id:
         get_conversation_repo().create_roundtrip_prompt(
             agent_state.roundtrip_id,
-            agent="main_agent",
-            prompt_step="planner",
+            agent=MAIN_AGENT_NAME,
+            prompt_step=PLANNER_PROMPT_STEP,
             prompt=prompt.to_string(),
         )
 
