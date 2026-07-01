@@ -7,6 +7,11 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from agent.agentstate.model import UserProfile
+from agent.prompt_constants import (
+    PLANNER_PROMPT_KIND,
+    REQUEST_ANALYSIS_PROMPT_KIND,
+    SYNTHESIS_PROMPT_KIND,
+)
 from conversation.models.conversation_models import ConversationContext
 from conversation.utils import build_conversation_context_json
 
@@ -98,7 +103,7 @@ class AgentPrompt:
         ])
 
     def to_string(self) -> str:
-        if self.prompt_kind == "request_analysis":
+        if self.prompt_kind == REQUEST_ANALYSIS_PROMPT_KIND:
             parts = [self.instruction.rstrip()]
             if self.user_profile:
                 parts.extend([
@@ -120,7 +125,7 @@ class AgentPrompt:
             self._append_latest_user_prompt(parts)
             return "\n\n".join(part for part in parts if part)
 
-        if self.prompt_kind == "planner":
+        if self.prompt_kind == PLANNER_PROMPT_KIND:
             parts = [self.instruction.rstrip()]
             if self.conversation_context:
                 parts.extend([
@@ -143,7 +148,7 @@ class AgentPrompt:
             self._append_latest_user_prompt(parts)
             return "\n\n".join(part for part in parts if part)
 
-        if self.prompt_kind == "synthesis":
+        if self.prompt_kind == SYNTHESIS_PROMPT_KIND:
             parts = [self.instruction.rstrip()]
             if self.user_profile:
                 parts.extend([

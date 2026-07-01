@@ -1,4 +1,5 @@
 from agent.agentstate.model import AgentState, UserProfile
+from agent.prompt_constants import REQUEST_ANALYSIS_PROMPT_KIND
 from agent.request_analysis.prompts.request_analysis_schema_prompt import REQUEST_ANALYSIS_SCHEMA
 from agent.prompts.agent_prompt import AgentPrompt
 from tool.tools import TOOL_CATEGORIES
@@ -11,7 +12,7 @@ def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
     )
 
     return AgentPrompt(
-        prompt_kind="request_analysis",
+        prompt_kind=REQUEST_ANALYSIS_PROMPT_KIND,
         instruction=(
             "You are a request analyzer. "
             "Infer the user's goal, decide whether tools are required, and return the relevant category names. "

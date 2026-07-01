@@ -2,6 +2,7 @@ import json
 
 from agent.agentstate.model import AgentState
 from agent.planner.models.compiled_planner_context import CompiledPlannerContext
+from agent.prompt_constants import PLANNER_PROMPT_KIND
 from agent.planner.prompts.planner_rules import build_planner_rules
 from agent.planner.prompts.planner_schema_prompt import PLANNER_SCHEMA
 from agent.prompts.agent_prompt import AgentPrompt, PreviousIteration, PreviousIterationStep
@@ -76,7 +77,7 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
             )
 
     return AgentPrompt(
-        prompt_kind="planner",
+        prompt_kind=PLANNER_PROMPT_KIND,
         instruction="You are a planning agent. Utilize data from 'Previous Iterations:' when it is provided.",
         conversation_context=_build_planner_context(state),
         task=_build_planner_task(state),
