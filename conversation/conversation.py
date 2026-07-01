@@ -25,11 +25,12 @@ def generate_conversation_title(prompt: str) -> str:
 def generate_conversation_summary(
     roundtrips: list[ConversationRoundtrip],
     tool_call_map: dict[UUID, list[ToolCall]] | None = None,
+    previous_summary: str | None = None,
 ) -> ConversationSummaryResponse:
     roundtrip_messages = build_roundtrip_messages(roundtrips, tool_call_map)
     messages = [{ROLE_KEY: ROLE_USER, CONTENT_KEY: flatten_conversation_entries(roundtrip_messages)}]
     result = llm.call_with_tools(
-        build_summary_prompt(),
+        build_summary_prompt(previous_summary),
         messages,
         tools=[],
     )
@@ -38,4 +39,3 @@ def generate_conversation_summary(
         return ConversationSummaryResponse.model_validate_json(raw)
     except Exception:
         return ConversationSummaryResponse(conversation_summary=raw)
-

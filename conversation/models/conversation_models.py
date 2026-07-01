@@ -36,6 +36,7 @@ class RecentRoundtripToolSummary(BaseModel):
 
 class ConversationContext(BaseModel):
     conversation_summary: str = ""
+    latest_conversation_summary: str = ""
     tool_summary: str = ""
     recent_roundtrip_summaries: list[RecentRoundtripSummary] = Field(default_factory=list)
     recent_roundtrip_tool_summaries: list[RecentRoundtripToolSummary] = Field(default_factory=list)

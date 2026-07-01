@@ -207,7 +207,10 @@ class ConversationRepository:
             )
             row = cur.fetchone()
             assert row is not None
+            return ConversationSummary(**row)
 
+    def update_conversation_summary(self, conversation_id: UUID, summary: str) -> None:
+        with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 UPDATE conversation
@@ -217,7 +220,6 @@ class ConversationRepository:
                 """,
                 (summary, conversation_id),
             )
-            return ConversationSummary(**row)
 
     def get_summary(
         self,

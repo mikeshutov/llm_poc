@@ -44,6 +44,7 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
 
     return ConversationContext(
         conversation_summary=conversation.summary if conversation else "",
+        latest_conversation_summary=latest_summary.summary if latest_summary else "",
         tool_summary=latest_summary.tool_summary if latest_summary else "",
         recent_roundtrip_summaries=recent_roundtrip_summaries,
         recent_roundtrip_tool_summaries=recent_roundtrip_tool_summaries,
