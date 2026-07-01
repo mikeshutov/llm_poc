@@ -28,7 +28,6 @@ Each result includes conversation_id, summary, last_used_date, and relevance_sco
 def search_memories(query: str) -> list[ConversationMemory]:
     query_embedding = embed_text(query)
     return get_conversation_repo().search_conversation_memories(
-        user_id="anonymous",
         query_embedding=query_embedding,
         limit=5,
     )

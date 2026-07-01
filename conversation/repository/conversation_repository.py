@@ -350,7 +350,6 @@ class ConversationRepository:
 
     def search_conversation_memories(
         self,
-        user_id: str,
         query_embedding: Sequence[float],
         limit: int = 5,
     ) -> list[ConversationMemory]:
@@ -363,13 +362,12 @@ class ConversationRepository:
                     updated_at AS last_used_date,
                     (summary_embedding <-> (%s)::vector) AS relevance_score
                 FROM conversation
-                WHERE user_id = %s
-                  AND summary_embedding IS NOT NULL
+                WHERE summary_embedding IS NOT NULL
                   AND BTRIM(summary) <> ''
                 ORDER BY summary_embedding <-> (%s)::vector ASC
                 LIMIT %s
                 """,
-                (list(query_embedding), user_id, list(query_embedding), limit),
+                (list(query_embedding), list(query_embedding), limit),
             )
             rows = cur.fetchall()
             return [

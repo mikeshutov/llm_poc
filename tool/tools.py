@@ -126,7 +126,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     ),
     "memories": ToolCategory(
         tools=MEMORY_TOOLS,
-        description="Search prior conversation summaries for the current user's relevant requests as memories.",
+        description="Search prior conversation summaries for relevant past requests and discussions as memories.",
     ),
     "files": ToolCategory(
         tools=FILE_TOOLS,
