@@ -5,6 +5,7 @@ import streamlit as st
 
 from rendering.debug import debug_render_message
 from rendering.cards import render_cards
+from rendering.feedback import render_feedback_controls
 from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
 from common.file_constants import FILES_DIR, IMAGE_MIME_PREFIX
 
@@ -25,7 +26,7 @@ def format_timestamp(ts) -> str | None:
     return None
 
 
-def render_assistant_content(content: str, payload: dict | None, timestamp: str | None = None) -> None:
+def render_assistant_content(content: str, payload: dict | None) -> None:
     cards = None
     follow_up = None
     if isinstance(payload, dict):
@@ -53,8 +54,6 @@ def render_assistant_content(content: str, payload: dict | None, timestamp: str 
     if has_follow_up and has_cards:
         st.markdown(follow_up)
 
-    if timestamp:
-        st.caption(timestamp)
 
 
 def _render_file_preview(attached_file: dict) -> None:
@@ -84,7 +83,13 @@ def render_message(msg: dict) -> None:
     else:
         with st.chat_message(role):
             if role == ROLE_ASSISTANT:
-                render_assistant_content(content, msg.get("payload"), timestamp)
+                render_assistant_content(content, msg.get("payload"))
+                render_feedback_controls(
+                    roundtrip_id=msg.get("roundtrip_id"),
+                    model=msg.get("model"),
+                    feedback_id=msg.get("feedback_id"),
+                    timestamp=timestamp,
+                )
             else:
                 st.write(content)
                 attached_file = msg.get("attached_file")

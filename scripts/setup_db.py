@@ -1,21 +1,22 @@
-import os
 import time
 from pathlib import Path
 
 import psycopg
 
+from db.constants import DB_URL
+from migrate_db import run_migrations
 
-DB_URL = os.getenv("DATABASE_URL", "postgresql://app:app@localhost:5432/products")
 SQL_FILES = [
-    "db/extensions.sql",
-    "db/product_schema.sql",
-    "db/conversation_schema.sql",
-    "db/file_schema.sql",
-    "db/file_chunk_schema.sql",
-    "db/conversation_roundtrip_schema.sql",
-    "db/conversation_summary_schema.sql",
-    "db/tool_calls_schema.sql",
-    "db/rest_cache_schema.sql",
+    "db/setup/extensions.sql",
+    "db/setup/product_schema.sql",
+    "db/setup/conversation_schema.sql",
+    "db/setup/file_schema.sql",
+    "db/setup/file_chunk_schema.sql",
+    "db/setup/conversation_roundtrip_schema.sql",
+    "db/setup/conversation_summary_schema.sql",
+    "db/setup/plans_schema.sql",
+    "db/setup/tool_calls_schema.sql",
+    "db/setup/rest_cache_schema.sql",
 ]
 
 
@@ -45,6 +46,7 @@ def main() -> None:
                 conn.commit()
         print(f"Applied {rel_path}")
 
+    run_migrations()
     print("Database setup complete.")
 
 

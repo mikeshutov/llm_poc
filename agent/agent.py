@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from langsmith import traceable
 
-from agent.agentstate.model import AgentState
-from conversation.utils import flatten_conversation_entries
-from agent.classify.classify import classify
+from agent.agentstate.model import AgentState, GeoMetadata
+from conversation.models.conversation_models import ConversationContext
+from agent.request_analysis.analyze_request import analyze_request
 from agent.executor.executor import run_executor
-from agent.graph_constants import CLASSIFICATION_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
+from agent.graph_constants import REQUEST_ANALYSIS_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
 from agent.models.agent_result import AgentResult
 from agent.planner.planner import run_planner
 from agent.router.router import router
@@ -18,30 +18,33 @@ from uuid import UUID
 
 @traceable(name="Main Agent")
 def run_agent(
-    conversation_entries: list[dict],
+    conversation_context: ConversationContext,
+    user_query: str,
     conversation_id: str,
-    roundtrip_id: str | None = None, #might want to create a conversation context object
+    roundtrip_id: str | None = None,
     max_turns: int = 10,
+    geometadata: GeoMetadata | None = None,
 ) -> AgentResult:
     agentState = AgentState.new(
-        task=flatten_conversation_entries(conversation_entries),
+        task=user_query,
         max_turns=max_turns,
-        conversation_entries=conversation_entries,
+        conversation_context=conversation_context,
+        geometadata=geometadata,
         roundtrip_id=UUID(roundtrip_id) if roundtrip_id else None,
     )
     builder = StateGraph(AgentState)
-    builder.add_node(CLASSIFICATION_EDGE, classify)
+    builder.add_node(REQUEST_ANALYSIS_EDGE, analyze_request)
     builder.add_node(PLAN_EDGE, run_planner)
     builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
     builder.add_node(SYNTHESIZE_EDGE, run_synthesis)
-    builder.set_entry_point(CLASSIFICATION_EDGE)
+    builder.set_entry_point(REQUEST_ANALYSIS_EDGE)
 
     builder.add_conditional_edges(
-        CLASSIFICATION_EDGE,
+        REQUEST_ANALYSIS_EDGE,
         router,
         {
             SYNTHESIZE_EDGE: SYNTHESIZE_EDGE,
-            PLAN_EDGE: PLAN_EDGE,  
+            PLAN_EDGE: PLAN_EDGE,
         },
     )
 
@@ -49,7 +52,7 @@ def run_agent(
         PLAN_EDGE,
         validator,
         {
-            EXECUTE_TOOLS_EDGE: EXECUTE_TOOLS_EDGE, 
+            EXECUTE_TOOLS_EDGE: EXECUTE_TOOLS_EDGE,
             SYNTHESIZE_EDGE: SYNTHESIZE_EDGE},
     )
 
@@ -65,13 +68,6 @@ def run_agent(
     builder.add_edge(SYNTHESIZE_EDGE, END)
     agent_graph = builder.compile()
 
-    #create a graph to see what our chain looks like
-    # png = agent_graph.get_graph(xray=1).draw_mermaid_png(
-    #     background_color="white"
-    # )
-    # with open("graph.png", "wb") as f:
-    #     f.write(png)
-
     final_state = agent_graph.invoke(
         agentState,
         config={"configurable": {"thread_id": conversation_id}},
@@ -80,5 +76,5 @@ def run_agent(
     final = final_state if isinstance(final_state, AgentState) else AgentState(**final_state)
     if final.result is None:
         raise ValueError("Agent finished without setting state.result")
-    
+
     return final.result

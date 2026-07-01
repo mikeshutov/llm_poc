@@ -1,17 +1,64 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from agent.models import AgentResult, Plan
+from conversation.models.conversation_models import ConversationContext
 from common.model_constants import LLM_MODEL
 
 
-class ClassificationResults(BaseModel):
+class RequestAnalysis(BaseModel):
+    goal: str = ""
     applicable_tool_categories: list[str] = []
-    can_answer_confidence: float = 0.0
+    requires_tools: bool = False
+    context_answer_confidence: float = 0.0
+
+
+class GeoLocation(BaseModel):
+    city: str | None = None
+    region: str | None = None
+    country: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    timezone: str | None = None
+
+
+class GeoMetadata(BaseModel):
+    current_datetime: str
+    current_date: str
+    current_weekday: str
+    timezone: str
+    location: GeoLocation | None = None
+
+
+class UserProfile(BaseModel):
+    geometadata: GeoMetadata | None = None
+
+
+def build_geometadata(
+    *,
+    timezone: str | None = "America/Toronto",
+    location: GeoLocation | None = None,
+) -> GeoMetadata:
+    resolved_timezone = (timezone or "").strip()
+    if not resolved_timezone and location is not None:
+        resolved_timezone = (location.timezone or "").strip()
+    if not resolved_timezone:
+        resolved_timezone = "America/Toronto"
+
+    now = datetime.now(ZoneInfo(resolved_timezone))
+    return GeoMetadata(
+        current_datetime=now.isoformat(),
+        current_date=now.date().isoformat(),
+        current_weekday=now.strftime("%A"),
+        timezone=resolved_timezone,
+        location=location,
+    )
 
 
 @dataclass
@@ -37,15 +84,16 @@ class IterationState:
 class AgentState:
     task: str
     max_turns: int
-    conversation_entries: list[dict[str, Any]] = field(default_factory=list)
+    conversation_context: ConversationContext = field(default_factory=ConversationContext)
+    geometadata: GeoMetadata = field(default_factory=build_geometadata)
     conversation_id: str | None = None
     roundtrip_id: UUID | None = None
-    classification_results: ClassificationResults = field(default_factory=ClassificationResults)
+    request_analysis: RequestAnalysis = field(default_factory=RequestAnalysis)
     iteration_trace: list[IterationState] = field(default_factory=list)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
     goal_reached: bool = False
     llm: Any = field(
-        default_factory=lambda: ChatOpenAI(model=LLM_MODEL, temperature=0)
+        default_factory=lambda: ChatOpenAI(model=LLM_MODEL)
     )
 
     @classmethod
@@ -53,14 +101,16 @@ class AgentState:
         cls,
         task: str,
         max_turns: int,
-        conversation_entries: list[dict[str, Any]] | None = None,
+        conversation_context: ConversationContext | None = None,
+        geometadata: GeoMetadata | None = None,
         conversation_id: str | None = None,
         roundtrip_id: UUID | None = None,
     ) -> "AgentState":
         return cls(
             task=task,
             max_turns=max_turns,
-            conversation_entries=[] if conversation_entries is None else conversation_entries,
+            conversation_context=ConversationContext() if conversation_context is None else conversation_context,
+            geometadata=build_geometadata() if geometadata is None else geometadata,
             conversation_id=conversation_id,
             roundtrip_id=roundtrip_id,
         )

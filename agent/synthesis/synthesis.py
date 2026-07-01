@@ -5,8 +5,11 @@ from langsmith import traceable
 from agent.agentstate.model import AgentState
 from agent.models.agent_result import AgentResult
 from agent.models.synthesized_result import SynthesisResult
+from agent.prompt_constants import MAIN_AGENT_NAME, SYNTHESIS_PROMPT_STEP
+from agent.prompts.agent_prompt import PlanEvidenceStep
 from agent.synthesis.prompts.solver_prompt import build_solver_prompt
 from common.parsing import strip_code_fences
+from conversation.repository.repo_factory import get_conversation_repo
 
 
 @traceable(name="Synthesis Node")
@@ -16,25 +19,24 @@ def run_synthesis(state: AgentState) -> AgentState:
         state.goal_reached = True
         return state
 
-    lines: list[str] = []
+    plan_with_evidence: list[PlanEvidenceStep] = []
     for iteration in state.iteration_trace:
         if iteration.plan is None:
             continue
 
         for step in iteration.plan.steps:
-            evidence = iteration.results.get(step.id, "")
-            # Keep it deterministic + readable for the solver
-            lines.append(
-                "STEP\n"
-                f"id: {step.id}\n"
-                f"plan: {step.plan}\n"
-                f"tool: {step.tool}\n"
-                f"args: {step.args}\n"
-                f"evidence: {evidence}\n"
+            plan_with_evidence.append(
+                PlanEvidenceStep(
+                    step_id=step.id,
+                    plan=step.plan,
+                    tool=step.tool,
+                    args=step.args,
+                    evidence=iteration.results.get(step.id, ""),
+                )
             )
-    plan_block = "\n\n".join(lines).strip()
-    prompt = build_solver_prompt(plan_block=plan_block, state=state)
-    raw = state.llm.invoke(prompt).content
+
+    prompt = build_solver_prompt(plan_with_evidence=plan_with_evidence, state=state)
+    raw = state.llm.invoke(prompt.to_string()).content
     raw = strip_code_fences(raw)
 
     try:
@@ -51,6 +53,17 @@ def run_synthesis(state: AgentState) -> AgentState:
         answer=synthesis_result.result,
         follow_up=synthesis_result.follow_up,
         clarifying_question=synthesis_result.clarifying_question,
+        roundtrip_summary=synthesis_result.roundtrip_summary,
+        tool_summary=synthesis_result.tool_summary.model_dump(),
     )
     state.goal_reached = True
+
+    if state.roundtrip_id:
+        get_conversation_repo().create_roundtrip_prompt(
+            state.roundtrip_id,
+            agent=MAIN_AGENT_NAME,
+            prompt_step=SYNTHESIS_PROMPT_STEP,
+            prompt=prompt.to_string(),
+        )
+
     return state

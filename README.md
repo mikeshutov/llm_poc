@@ -4,31 +4,32 @@ This is not meant to be a production piece of code. More just a way to explore t
 
 
 ## Flows of the App
-Rough Breakdown of the agentic loop flow.
-1. Prompt comes in and we assemble our context.
-2. Pass the context to the state and set up an agent state to track execution.
-3. Classifier checks if the context can satisfy the users request (using previous tool call data etc)
-   - If theres sufficient context we just go to answering right away.
-   - Categorize the request, this will determine which tools need to be provided.
-4. We call our planner and provide tools matching the categories from classifier.
-   - The idea here is we could likely have thousands of tools and it seems like a good idea to only pass whats needed.
-   - There are tool specific rules which get added depending on the categories and tools (minimal but seems to be useful long term)
-5. Executor executes the tool calls in the plan and stores them in state.
-6. Planner checks if we have sufficient context to answer. 
-   - If goal reached or we reach our iteration limit create our response.
-   - If not we replan with tool calls made.
-7. Response gets generated
+Rough breakdown of the current agent loop flow.
+1. Prompt comes in and we assemble conversation context.
+2. We pass that context plus the latest user prompt into agent state.
+3. We also prepare a small `User Profile` prompt section. Right now it mainly contains geo/location-aware metadata and is injected into `request_analysis` and `synthesis`, but not `planner`.
+4. `request_analysis` infers the user's goal, decides whether tools are required, and selects the relevant tool categories.
+   - If the existing context is strong enough, we can skip planning and go straight to synthesis.
+   - If tools are needed, the selected categories determine which tool groups and rules are loaded.
+5. We call the planner and give it the goal, prior tool-use context, available tools, and previous planner iterations.
+   - The idea here is we could likely have thousands of tools and it seems like a good idea to only pass what is needed.
+   - There are also tool-specific rules which get added depending on the active categories.
+6. The executor executes the tool calls in the plan and stores the results in state.
+7. The planner replans if needed.
+   - If the goal is reached or we hit the iteration limit, we move to synthesis.
+   - Otherwise we loop with the newly gathered evidence.
+8. Synthesis generates the final response, roundtrip summary, and tool summary.
 
-We also do store the conversation/tool calls and so on for the next prompt.
-The diagrams provided are just to illustrate at a high level what this looks like.
+We also store conversations, roundtrips, prompt rows, summaries, and tool calls for future prompts.
+The diagrams provided are just to illustrate the high-level shape of the flow.
 
 ```mermaid
 flowchart TD
     A[User Prompt] --> B[Context Assembly]
-    B --> C[Classification]
-    C --> D{Can Respond With Context?}
-    D -->|Yes| F[Response Generation]
-    D -->|No| E[Planner]
+    B --> C[Request Analysis]
+    C --> D{Needs Tools?}
+    D -->|No| F[Synthesis]
+    D -->|Yes| E[Planner]
     E --> H[Executor]
     H --> G{Goal Reached or Limit Reached?}
     G -->|No| E
@@ -38,38 +39,50 @@ flowchart TD
 
 
 ## How is Context Assembled
-Roundtrips all have this flow:
-1. We create a pending roundtrip with the users prompt.
-2. We execute the agentic logic.
-3. We update the pending roundtrip with our response data.
+Roundtrips have this flow:
+1. We create a pending roundtrip with the user's prompt and the model being used.
+2. We execute the agent logic.
+3. We update the pending roundtrip with the response data, roundtrip summary, tool summary, and any related metadata.
 
-During subsequent prompts these roundtrips are used to assemble the context by combining the summary and all messages after the index of that summary. That means that if the last summary was at message 30 we will include messages after 30. Not perfect but provides a way to understand context assembly.
-An important note is when we assemble the context we make sure to also include tool call data as part of the context (longterm would be a tool call summary of sorts). 
+For subsequent prompts, the context builder pulls together a few layers of history:
+1. `conversation.summary`, which is the continually refreshed top-level summary of the overall conversation.
+2. The latest rolling `conversation_summary` row, which summarizes an older batch window and carries its tool summary.
+3. Recent unsummarized roundtrip summaries and tool summaries after the latest batch cutoff.
 
-The idea is to provide that additional context so that the LLM could potentially reuse the data during classification and skip lookups entirely. 
+The latest user prompt is not embedded inside the stored conversation context anymore. It is passed separately into the prompt as the final section so the live request stays distinct from historical context.
+
+We also prepare a separate `User Profile` section for prompt construction. Right now that primarily carries geo/location-aware metadata, and it is included in `request_analysis` and `synthesis` but intentionally omitted from `planner`. The idea is this is needed to get the goal as well as to generate the final response but the planner does not need to worry about it.
+
+The idea is to give the request analysis and synthesis steps reusable historical context while still keeping the freshest user request explicit and easy to reason about.
 
 Simple diagram to illustrate what this looks like.
 
 ```mermaid
 flowchart TD
-    A[Context Builder] -->B 
+    A[Context Builder] --> B
     subgraph B[Conversation Context]
         direction TB
-        M1["Conversation Summary + Tool Call Summary\n with Summary Index"]
-        M2["Array of Previous Roundtrips Past Summary Index"]
-        M3["Latest Prompt"]
-        M1 --> M2 --> M3 
+        M1["conversation.summary"]
+        M2["Latest rolling conversation_summary summary + tool summary + cutoff"]
+        M3["Recent unsummarized roundtrip summaries"]
+        M4["Recent unsummarized tool summaries"]
+        M1 --> M2 --> M3 --> M4
     end
+
+    A --> D[Latest User Prompt passed separately]
+    A --> E[User Profile passed separately to request_analysis and synthesis]
 
     subgraph C[Roundtrip Element]
         direction TB
         N1["User Prompt"]
         N2["Assistant Response"]
-        N3["Tool Call Data"]
-        N1-->N2-->N3
+        N3["Roundtrip Summary"]
+        N4["Tool Summary"]
+        N1 --> N2 --> N3 --> N4
     end
 
- M2 --> C
+    M3 --> C
+    M4 --> C
 ```
 
 ## How File Searching with Uploads and Large files Works here
@@ -89,11 +102,11 @@ flowchart TD
 ```
 
 ## Interesting Notes/Decisions
-### Why Classifier
-With the number of tools growing I wanted to solve for the scaling problem of passing a bunch of tools to the planner which was going to happen. The idea here is:
-1. The classifier determines a category or categories which are applicable to the request.
-2. The planner prompt then handles injection of only tools and rules which fall under this category + any rules that are always present.
-This results in sending only the tools that are relevant at least thats the idea. If we had thousands of tools we could reduce them to a much smaller number, although I am certain that if the number of tools grows this problem will need another refactor.
+### Why Request Analysis
+With the number of tools growing I wanted to solve for the scaling problem of passing a large tool list to the planner. The idea here is:
+1. Request analysis determines the user's goal and the category or categories that are applicable to the request. Moreover this allows us to no longer need to send the whold conversation context when we use our planner so our planner can be focused on a refined goal.
+2. The planner prompt then injects only the tools and rules which fall under those categories plus any rules that are always present.
+This results in sending only the tools that are relevant, at least that is the idea. If we had thousands of tools we could reduce them to a much smaller number, although I am certain that if the number of tools grows this problem will need another refactor.
 
 ### What's with the Product Catalog
 Initially the goal was just to build a way to search through a catalog by using an LLM. So the first thing that I added was a catalog. As part of that I added embeddings and the ability to search through the catalog utilizing user input that was just a prompt. The goal was to understand embeddings and how those would work. This has since become just another tool on the agent/chat which checks for products in the internal catalog or looks for products on the search index (Brave used here).
@@ -118,14 +131,19 @@ BRAVE_SEARCH_API_KEY=...
 docker compose up -d
 ```
 
-2. Run DB setup (extensions + schemas)
+2. Run DB setup (extensions + schemas + migrations)
 ```
 python scripts/setup_db.py
 ```
 
+If you already have a local database from an older clone and just need to move it forward, run:
+```
+python scripts/migrate_db.py
+```
+
 3. (Optional) Seed products + embeddings
 ```
-python db/seed_products.py
+python scripts/seed_products.py
 ```
 
 4. Start the app
@@ -137,13 +155,13 @@ streamlit run main.py
 If you already seeded the DB and want to backfill images:
 ```
 setx ALLOW_IMAGE_BACKFILL 1
-python db/seed_products.py
+python scripts/seed_products.py
 ```
 
 To force refresh existing images:
 ```
 setx FORCE_IMAGE_REFRESH 1
-python db/seed_products.py
+python scripts/seed_products.py
 ```
 
 Product images are stored in `db/images/` for now. 

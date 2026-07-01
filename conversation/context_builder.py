@@ -1,12 +1,17 @@
 from uuid import UUID
 
+from conversation.models.conversation_models import (
+    ConversationContext,
+    RecentRoundtripSummary,
+    RecentRoundtripToolSummary,
+    ToolSummaryContext,
+)
 from conversation.repository.repo_factory import get_conversation_repo
-from rendering.messages.compose import compose_messages_from_roundtrips
-from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
 
 
-def build_roundtrip_context(conversation_id: str, user_query: str, limit: int = 5):
+def build_roundtrip_context(conversation_id: str, limit: int = 5) -> ConversationContext:
     conversation_repository = get_conversation_repo()
+    conversation = conversation_repository.get_conversation(UUID(conversation_id))
     latest_summary = conversation_repository.get_latest_summary(UUID(conversation_id))
     after_index = latest_summary.message_index_cutoff if latest_summary else None
     conversation_roundtrips = conversation_repository.list_roundtrips(
@@ -14,13 +19,33 @@ def build_roundtrip_context(conversation_id: str, user_query: str, limit: int = 
         limit=limit,
         after_message_index=after_index,
     )
-    roundtrips_with_latest = [
-        *(
-            [{ROLE_KEY: ROLE_SYSTEM, CONTENT_KEY: f"Conversation summary:\n{latest_summary.summary}"}]
-            if latest_summary
-            else []
-        ),
-        *compose_messages_from_roundtrips(conversation_roundtrips),
-        {ROLE_KEY: ROLE_USER, CONTENT_KEY: user_query},
+
+    recent_roundtrip_summaries = [
+        RecentRoundtripSummary(
+            message_index=rt.message_index,
+            roundtrip_summary=rt.roundtrip_summary,
+        )
+        for rt in conversation_roundtrips
+        if rt.roundtrip_summary
     ]
-    return roundtrips_with_latest
+
+    recent_roundtrip_tool_summaries = []
+    for rt in conversation_roundtrips:
+        payload = rt.response_payload if isinstance(rt.response_payload, dict) else {}
+        tool_summary = payload.get("tool_summary")
+        if not tool_summary:
+            continue
+        recent_roundtrip_tool_summaries.append(
+            RecentRoundtripToolSummary(
+                message_index=rt.message_index,
+                tool_summary=ToolSummaryContext.model_validate(tool_summary),
+            )
+        )
+
+    return ConversationContext(
+        conversation_summary=conversation.summary if conversation else "",
+        latest_conversation_summary=latest_summary.summary if latest_summary else "",
+        tool_summary=latest_summary.tool_summary if latest_summary else "",
+        recent_roundtrip_summaries=recent_roundtrip_summaries,
+        recent_roundtrip_tool_summaries=recent_roundtrip_tool_summaries,
+    )
