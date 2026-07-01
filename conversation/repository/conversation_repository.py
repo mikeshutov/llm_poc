@@ -14,6 +14,7 @@ from conversation.models.conversation_models import (
     ConversationRoundtrip,
     ConversationSummary,
     RoundtripFeedback,
+    RoundtripMemory,
     RoundtripPrompt,
 )
 from db.connection import get_connection
@@ -375,6 +376,51 @@ class ConversationRepository:
                     conversation_id=row['conversation_id'],
                     summary=row['summary'],
                     last_used_date=str(row['last_used_date']),
+                    relevance_score=float(row['relevance_score']),
+                )
+                for row in rows
+            ]
+
+    def search_roundtrip_memories(
+        self,
+        query_embedding: Sequence[float],
+        conversation_ids: Sequence[UUID],
+        limit: int = 5,
+    ) -> list[RoundtripMemory]:
+        if not conversation_ids:
+            return []
+
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT
+                    conversation_id,
+                    id AS roundtrip_id,
+                    message_index,
+                    user_prompt,
+                    generated_response,
+                    roundtrip_summary,
+                    created_at,
+                    (roundtrip_summary_embedding <-> (%s)::vector) AS relevance_score
+                FROM conversation_roundtrip
+                WHERE conversation_id = ANY(%s)
+                  AND roundtrip_summary_embedding IS NOT NULL
+                  AND BTRIM(COALESCE(roundtrip_summary, '')) <> ''
+                ORDER BY roundtrip_summary_embedding <-> (%s)::vector ASC
+                LIMIT %s
+                """,
+                (list(query_embedding), list(conversation_ids), list(query_embedding), limit),
+            )
+            rows = cur.fetchall()
+            return [
+                RoundtripMemory(
+                    conversation_id=row['conversation_id'],
+                    roundtrip_id=row['roundtrip_id'],
+                    message_index=row['message_index'],
+                    user_prompt=row['user_prompt'],
+                    generated_response=row['generated_response'],
+                    roundtrip_summary=row['roundtrip_summary'],
+                    created_at=str(row['created_at']),
                     relevance_score=float(row['relevance_score']),
                 )
                 for row in rows

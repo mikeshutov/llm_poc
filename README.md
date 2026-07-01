@@ -102,6 +102,18 @@ flowchart TD
 ```
 
 ## Interesting Notes/Decisions
+### Memories
+As more topics are explored one interesting topic is the idea of allowing the agent to recall previous conversations or topics discussed. The way it is done here is fairly straight forward and achieved via embeddings similar to how we handle rag through files. The data was restructured slightly to achive this but now what we have is the following:
+
+1. We have conversation summaries as well as an embedding for this summary generated on every single roundtrip. This means that we have what could be described as a persistant current state for the conversation.
+2. We have conversation roundtrip summaries with embeddings as well. This summary simply summarizes this particular back and forth. So a particular prompt being responded to.
+
+This comes together with the addition of two tools: search_memories, search_roundtrip_memories
+1. search_memories - Is used to search through past conversations using the conversation summary.
+2. search_roundtrip_memories - Is used to search through detailed roundtrips once we have found a relevant conversation.
+
+The idea here is to essentially allow the agent to on demand find data that is present in other conversations and to do that we use a similar approach to files where summaries are converted to embeddings and the data can be found using an embedding search. We order the data by relevance of course and provide a relevance score as well to help identify the correct data.
+
 ### Why Request Analysis
 With the number of tools growing I wanted to solve for the scaling problem of passing a large tool list to the planner. The idea here is:
 1. Request analysis determines the user's goal and the category or categories that are applicable to the request. Moreover this allows us to no longer need to send the whold conversation context when we use our planner so our planner can be focused on a refined goal.
