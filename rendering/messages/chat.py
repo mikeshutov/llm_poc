@@ -9,6 +9,7 @@ from conversation.conversation import generate_conversation_summary, generate_co
 from conversation.models.conversation_models import ConversationRoundtrip
 from agent.models.agent_result import AgentResult
 from conversation.repository.repo_factory import get_conversation_repo
+from llm.clients.embeddings import embed_text
 from rendering.feedback import render_feedback_controls
 from rendering.rendering import render_assistant_content, format_timestamp
 from common.message_constants import (
@@ -66,9 +67,12 @@ def _update_top_level_conversation_summary(
         all_roundtrips,
         tool_call_map=tool_calls_by_roundtrip,
     )
+    summary_text = top_level_summary.conversation_summary.strip()
+    summary_embedding = embed_text(summary_text) if summary_text else None
     conversation_repository.update_conversation_summary(
         UUID(conversation_id),
         top_level_summary.conversation_summary,
+        summary_embedding=summary_embedding,
     )
 
 

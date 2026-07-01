@@ -1,10 +1,15 @@
+import sys
 import time
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import psycopg
 
 from db.constants import DB_URL
-from migrate_db import run_migrations
+from scripts.migrate_db import run_migrations
 
 SQL_FILES = [
     "db/setup/extensions.sql",
