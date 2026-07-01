@@ -1,17 +1,29 @@
 import base64
 from typing import Any, Optional, Sequence
+
 from openai import OpenAI
+
+from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
 from common.model_constants import LLM_MODEL
 from llm.clients.tool_response_parser import parse_tool_args
 from llm.models.tool_call import ToolCall, ToolCallResult
-from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
 
 CAPTION_MAX_TOKENS = 200
+
+# mostly used for embeddings still
+def get_openai_client() -> OpenAI:
+    return OpenAI()
+
+# used for the rest of our requests
+def get_llm_client(default_model: str = LLM_MODEL) -> "LlmClient":
+    return LlmClient(default_model=default_model)
+
+
 # This is mostly for when we want to utilize our own LLM client
 # We can probably expand on this client to be able to handle a bunch of different models not just openai models
 class LlmClient:
     def __init__(self, client: Optional[OpenAI] = None, default_model: str = LLM_MODEL):
-        self.client = client or OpenAI()
+        self.client = client or get_openai_client()
         self.default_model = default_model
 
     def call_with_tools(
@@ -51,7 +63,7 @@ class LlmClient:
         )
 
     def generate_caption_from_image_file(self, path: str) -> str:
-        with open(path, "rb")   as f:
+        with open(path, "rb") as f:
             base64_image = base64.b64encode(f.read()).decode("utf-8")
 
         response = self.client.chat.completions.create(
@@ -78,6 +90,3 @@ class LlmClient:
         )
 
         return response.choices[0].message.content
-
-
-

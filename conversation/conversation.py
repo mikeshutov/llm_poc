@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from llm.clients.llm_client import LlmClient
+from llm.clients.llm_client import get_llm_client
 from conversation.prompts.title_prompt import SYSTEM_PROMPT
 from conversation.prompts.summary_prompt import build_prompt as build_summary_prompt
 from conversation.models.conversation_models import ConversationRoundtrip, ConversationSummaryResponse
@@ -10,10 +10,9 @@ from conversation.utils import flatten_conversation_entries
 from tool.repository.models import ToolCall
 from tool.formatting import build_roundtrip_messages
 
-llm = LlmClient()
 
 def generate_conversation_title(prompt: str) -> str:
-    res = llm.call_with_tools(
+    res = get_llm_client().call_with_tools(
         SYSTEM_PROMPT,
         [{ROLE_KEY: ROLE_USER, CONTENT_KEY: prompt}],
         tools=[],
@@ -29,7 +28,7 @@ def generate_conversation_summary(
 ) -> ConversationSummaryResponse:
     roundtrip_messages = build_roundtrip_messages(roundtrips, tool_call_map)
     messages = [{ROLE_KEY: ROLE_USER, CONTENT_KEY: flatten_conversation_entries(roundtrip_messages)}]
-    result = llm.call_with_tools(
+    result = get_llm_client().call_with_tools(
         build_summary_prompt(previous_summary),
         messages,
         tools=[],
