@@ -132,6 +132,8 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "Use search_file_for_details with the file_id and a specific query to retrieve deeper details from a file.",
         ],
         result_rules=[
+            "If a file_id is already known in the evidence or context, treat it as the authoritative file reference rather than implying a new file discovery step.",
+            "When a file_id is known, prefer conclusions grounded in get_file_by_id or search_file_for_details results over vague file-name inference.",
             "Summarize or extract relevant pieces unless a quote is more appropriate.",
             "When referencing file content, cite the file name.",
             "When rendering a list of files put them in a markdown list with links to the files.",

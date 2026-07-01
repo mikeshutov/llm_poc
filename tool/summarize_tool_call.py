@@ -30,6 +30,5 @@ def _summarize_tool_call(tc: ToolCall) -> str:
         SYSTEM_PROMPT,
         [{ROLE_KEY: ROLE_USER, CONTENT_KEY: prompt}],
         tools=[],
-        temperature=0,
     )
     return (res.raw_message.content or "").strip()

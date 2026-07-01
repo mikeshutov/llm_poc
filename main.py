@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -9,12 +11,13 @@ import streamlit as st
 from agent.service import run_agent_for_query
 from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from conversation.repository.repo_factory import get_conversation_repo
+from rendering.feedback import FEEDBACK_TARGET_KEY, clear_feedback_state, render_feedback_dialog
 from rendering.file_upload import render_file_upload
 from rendering.messages.chat import append_assistant_response, render_messages
 from rendering.rendering import render_message
 from rendering.sidebar import render_sidebar
 
-st.set_page_config(page_title="LLM Agentic Chat", page_icon="🤖")
+st.set_page_config(page_title="LLM Agentic Chat", page_icon=":robot_face:")
 
 st.markdown(
     """<style>
@@ -44,9 +47,13 @@ cid = qp.get("cid")
 
 
 def setup_conversation(cid):
+    current = st.session_state.get("conversation_id")
     if cid:
+        if current != cid:
+            clear_feedback_state()
         st.session_state.conversation_id = cid
     else:
+        clear_feedback_state()
         conv = conversation_repository.create_conversation(user_id="anonymous", metadata={"source": "streamlit"})
         st.session_state.conversation_id = str(conv.id)
         st.query_params["cid"] = st.session_state.conversation_id
@@ -58,6 +65,8 @@ with st.sidebar:
     render_sidebar(conversation_repository)
 
 render_messages(conversation_repository, st.session_state.conversation_id, render_message, limit=10)
+if st.session_state.get(FEEDBACK_TARGET_KEY):
+    render_feedback_dialog(conversation_repository)
 render_file_upload()
 
 userQuery = st.chat_input("What are you looking for or trying to learn about?")

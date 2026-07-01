@@ -7,6 +7,7 @@ from agent.agentstate.model import AgentState, IterationState
 from agent.models import AgentResult, Plan
 from agent.planner.prompts.planner_prompt import build_planner_prompt
 from common.parsing import strip_code_fences
+from conversation.repository.repo_factory import get_conversation_repo
 from tool.repository.plan_repository import PlanRepository
 from tool.tools import tools
 
@@ -20,7 +21,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
     it_state = IterationState.new()
 
     prompt = build_planner_prompt(state=agent_state)
-    raw = strip_code_fences(agent_state.llm.invoke(prompt).content)
+    raw = strip_code_fences(agent_state.llm.invoke(prompt.to_string()).content)
     try:
         plan = Plan.model_validate_json(raw)
     except Exception as e:
@@ -46,5 +47,13 @@ def run_planner(agent_state: AgentState) -> AgentState:
             final_answer=plan.final_answer,
         )
     )
+
+    if agent_state.roundtrip_id:
+        get_conversation_repo().create_roundtrip_prompt(
+            agent_state.roundtrip_id,
+            agent="main_agent",
+            prompt_step="planner",
+            prompt=prompt.to_string(),
+        )
 
     return agent_state

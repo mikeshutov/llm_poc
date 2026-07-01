@@ -75,14 +75,23 @@ class OpenMeteoClient:
         if month < 1 or month > 12:
             raise WeatherArchiveError("Month must be between 1 and 12.")
 
-        current_year = datetime.utcnow().year
+        today = datetime.utcnow().date()
+        current_year = today.year
         if year < 1940 or year > current_year:
             raise WeatherArchiveError(f"Year must be between 1940 and {current_year}.")
+        if year == current_year and month > today.month:
+            raise WeatherArchiveError(
+                f"Month must not be in the future. Today is {today.isoformat()}."
+            )
 
         geocoded = self.geocode_city(city_norm)
         last_day = calendar.monthrange(year, month)[1]
-        start_date = date(year, month, 1).isoformat()
-        end_date = date(year, month, last_day).isoformat()
+        start = date(year, month, 1)
+        end = date(year, month, last_day)
+        if year == today.year and month == today.month:
+            end = today
+        start_date = start.isoformat()
+        end_date = end.isoformat()
 
         url = f"{self.base_url_weather}/archive"
         payload = self._get_json(

@@ -1,5 +1,5 @@
 import base64
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 from openai import OpenAI
 from common.model_constants import LLM_MODEL
 from llm.clients.tool_response_parser import parse_tool_args
@@ -20,7 +20,7 @@ class LlmClient:
         messages: list[dict],
         tools: Sequence[dict],
         model: Optional[str] = None,
-        temperature: float = 0.0,
+        temperature: float | None = None,
     ) -> ToolCallResult:
         resp = self.client.chat.completions.create(
             model=model or self.default_model,
@@ -29,7 +29,7 @@ class LlmClient:
                 *messages,
             ],
             tools=list(tools),
-            temperature=temperature,
+            **({"temperature": temperature} if temperature is not None else {}),
         )
 
         msg = resp.choices[0].message
@@ -74,7 +74,10 @@ class LlmClient:
                     ],
                 }
             ],
-            max_tokens=CAPTION_MAX_TOKENS,
+            max_completion_tokens=CAPTION_MAX_TOKENS,
         )
 
         return response.choices[0].message.content
+
+
+

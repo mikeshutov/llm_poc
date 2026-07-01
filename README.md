@@ -39,7 +39,7 @@ flowchart TD
 
 ## How is Context Assembled
 Roundtrips all have this flow:
-1. We create a pending roundtrip with the users prompt.
+1. We create a pending roundtrip with the users prompt and the model being used.
 2. We execute the agentic logic.
 3. We update the pending roundtrip with our response data.
 

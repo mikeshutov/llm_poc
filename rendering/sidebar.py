@@ -2,10 +2,13 @@ from uuid import UUID
 
 import streamlit as st
 
+from rendering.feedback import clear_feedback_state
+
 
 def _delete_conversation(conversation_repository, conversation_id: str) -> None:
     conversation_repository.delete_conversation(UUID(conversation_id), user_id="anonymous")
     latest = conversation_repository.get_latest_conversation("anonymous")
+    clear_feedback_state()
     if latest:
         st.session_state.conversation_id = str(latest.id)
     else:
@@ -23,7 +26,8 @@ def _delete_conversation(conversation_repository, conversation_id: str) -> None:
 def render_sidebar(conversation_repository) -> None:
     st.title("LLM Agentic Chat")
 
-    if st.button("➕ New chat"):
+    if st.button(":material/add: New chat"):
+        clear_feedback_state()
         conv = conversation_repository.create_conversation(user_id="anonymous", metadata={"source": "streamlit"})
         st.session_state.conversation_id = str(conv.id)
         st.query_params["cid"] = st.session_state.conversation_id
@@ -60,10 +64,11 @@ def render_sidebar(conversation_repository) -> None:
                 )
             else:
                 if st.button(title, key=f"conv_{cid}", use_container_width=True):
+                    clear_feedback_state()
                     st.session_state.conversation_id = cid
                     st.query_params["cid"] = cid
                     st.session_state.loaded_cid = None
                     st.rerun()
         with col_delete:
-            if st.button("🗑️", key=f"del_{cid}", help="Delete conversation"):
+            if st.button(":material/delete:", key=f"del_{cid}", help="Delete conversation"):
                 _delete_conversation(conversation_repository, cid)

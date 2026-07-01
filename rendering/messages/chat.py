@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -7,11 +9,11 @@ from conversation.conversation import generate_conversation_summary, generate_co
 from conversation.models.conversation_models import ConversationRoundtrip
 from agent.models.agent_result import AgentResult
 from conversation.repository.repo_factory import get_conversation_repo
+from rendering.feedback import render_feedback_controls
 from rendering.rendering import render_assistant_content, format_timestamp
 from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_KEY, ROLE_USER
 from tool.repository.tool_call_repository import ToolCallRepository
 
-SUMMARY_BATCH_SIZE = 5
 
 def ensure_messages_loaded(conversation_repository, conversation_id: str, limit: int = 10) -> None:
     if "messages" not in st.session_state or st.session_state.get("loaded_cid") != conversation_id:
@@ -30,6 +32,9 @@ def ensure_messages_loaded(conversation_repository, conversation_id: str, limit:
                     CONTENT_KEY: rt.generated_response,
                     "payload": payload,
                     "timestamp": ts,
+                    "roundtrip_id": str(rt.id),
+                    "model": rt.model,
+                    "feedback_id": str(rt.feedback_id) if rt.feedback_id is not None else None,
                 }
             )
         st.session_state.loaded_cid = conversation_id
@@ -39,6 +44,33 @@ def render_messages(conversation_repository, conversation_id: str, render_messag
     ensure_messages_loaded(conversation_repository, conversation_id, limit=limit)
     for msg in st.session_state.messages:
         render_message(msg)
+
+
+def _update_conversation_summary(conversation_id: str, roundtrip: ConversationRoundtrip) -> None:
+    if roundtrip.message_index < 1:
+        return
+
+    conversation_repository = get_conversation_repo()
+    all_roundtrips = conversation_repository.list_roundtrips(
+        UUID(conversation_id),
+        limit=roundtrip.message_index + 1,
+    )
+    if not all_roundtrips:
+        return
+
+    roundtrip_ids = [rt.id for rt in all_roundtrips]
+    tool_calls_by_roundtrip = ToolCallRepository().get_tool_calls_by_roundtrips(roundtrip_ids)
+    summary = generate_conversation_summary(
+        all_roundtrips,
+        tool_call_map=tool_calls_by_roundtrip,
+    )
+    conversation_repository.create_summary(
+        UUID(conversation_id),
+        summary.conversation_summary,
+        message_index_cutoff=all_roundtrips[-1].message_index,
+        tool_summary=summary.tool_summary,
+    )
+
 
 def append_assistant_response(
     conversation_id: str,
@@ -57,38 +89,27 @@ def append_assistant_response(
     }
 
     now = datetime.now(timezone.utc)
-    st.session_state.messages.append(
-        {
-            ROLE_KEY: ROLE_ASSISTANT,
-            CONTENT_KEY: answer.raw_response,
-            "payload": payload,
-            "timestamp": now,
-        }
-    )
+    assistant_message = {
+        ROLE_KEY: ROLE_ASSISTANT,
+        CONTENT_KEY: answer.raw_response,
+        "payload": payload,
+        "timestamp": now,
+        "roundtrip_id": str(roundtrip.id),
+        "model": roundtrip.model,
+        "feedback_id": None,
+    }
+    st.session_state.messages.append(assistant_message)
     with st.chat_message(ROLE_ASSISTANT):
-        render_assistant_content(answer.raw_response, payload, format_timestamp(now))
+        render_assistant_content(answer.raw_response, payload)
+        render_feedback_controls(
+            roundtrip_id=roundtrip.id,
+            model=roundtrip.model,
+            feedback_id=None,
+            timestamp=format_timestamp(now),
+        )
 
-    if summary_every > 0 and (roundtrip.message_index + 1) % summary_every == 0:
-        latest_summary = conversation_repository.get_latest_summary(UUID(conversation_id))
-        last_cutoff = latest_summary.message_index_cutoff if latest_summary else -1
-        new_roundtrips = conversation_repository.list_roundtrips(
-            UUID(conversation_id),
-            limit=SUMMARY_BATCH_SIZE,
-            after_message_index=last_cutoff,
-        )
-        roundtrip_ids = [rt.id for rt in new_roundtrips]
-        tool_calls_by_roundtrip = ToolCallRepository().get_tool_calls_by_roundtrips(roundtrip_ids)
-        summary = generate_conversation_summary(
-            latest_summary.summary if latest_summary else None,
-            new_roundtrips,
-            tool_call_map=tool_calls_by_roundtrip,
-        )
-        conversation_repository.create_summary(
-            UUID(conversation_id),
-            summary.conversation_summary,
-            message_index_cutoff=new_roundtrips[-1].message_index,
-            tool_summary=summary.tool_summary,
-        )
+    _update_conversation_summary(conversation_id, roundtrip)
+
     if roundtrip.message_index == 0:
         conversation_repository.set_conversation_title(
             conversation_id,

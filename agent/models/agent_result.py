@@ -16,6 +16,8 @@ class AgentResult:
     answer: list[str]
     follow_up: str = ""
     clarifying_question: str = ""
+    roundtrip_summary: str = ""
+    tool_summary: dict[str, Any] = field(default_factory=dict)
     cards: list[dict[str, Any]] = field(default_factory=list)
 
     @property
@@ -28,6 +30,8 @@ class AgentResult:
             "cards": self.cards,
             "follow_up": self.follow_up,
             "clarifying_question": self.clarifying_question,
+            "roundtrip_summary": self.roundtrip_summary,
+            "tool_summary": self.tool_summary,
         }
 
     @classmethod
@@ -37,6 +41,8 @@ class AgentResult:
         answer: list[str],
         follow_up: str | None = "",
         clarifying_question: str | None = "",
+        roundtrip_summary: str | None = "",
+        tool_summary: dict[str, Any] | None = None,
         state: AgentState,
     ) -> "AgentResult":
         cards: list[dict[str, Any]] = []
@@ -63,5 +69,7 @@ class AgentResult:
             answer=answer,
             follow_up=follow_up or "",
             clarifying_question=clarifying_question or "",
+            roundtrip_summary=roundtrip_summary or "",
+            tool_summary=tool_summary or {},
             cards=cards,
         )

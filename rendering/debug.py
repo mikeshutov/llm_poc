@@ -45,12 +45,17 @@ def emit_status_message(content: str) -> None:
         pass
 
 
-def build_classify_status_message(categories: list[str], can_answer_confidence: float = 0.0) -> str:
-    if can_answer_confidence >= 0.8:
-        return f"**Classification:** can answer directly (can answer without tool calls confidence: {can_answer_confidence:.0%})"
+def build_request_analysis_status_message(
+    categories: list[str],
+    context_answer_confidence: float = 0.0,
+    goal: str = "",
+) -> str:
+    goal_suffix = f" | goal: {goal}" if goal else ""
+    if context_answer_confidence >= 0.8:
+        return f"**Request analysis:** can answer directly (context answer confidence: {context_answer_confidence:.0%}{goal_suffix})"
     if categories:
-        return f"**Classified as:** {', '.join(categories)} (can answer without tool calls confidence: {can_answer_confidence:.0%})"
-    return "**Classification:** no matching categories, using all tools"
+        return f"**Request analyzed as:** {', '.join(categories)} (context answer confidence: {context_answer_confidence:.0%}{goal_suffix})"
+    return f"**Request analysis:** no matching categories, using all tools{goal_suffix}"
 
 
 def build_plan_status_message(step_plans: list[str], final_answer: str | None = None) -> str:
