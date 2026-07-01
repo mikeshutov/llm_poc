@@ -60,15 +60,13 @@ flowchart TD
     subgraph B[Conversation Context]
         direction TB
         M1["conversation.summary"]
-        M2["Latest rolling conversation_summary
-summary + tool summary + cutoff"]
+        M2["Latest rolling conversation_summary summary + tool summary + cutoff"]
         M3["Recent unsummarized roundtrip summaries"]
         M4["Recent unsummarized tool summaries"]
         M1 --> M2 --> M3 --> M4
     end
 
-    A --> D[Latest User Prompt
-passed separately]
+    A --> D[Latest User Prompt passed separately]
 
     subgraph C[Roundtrip Element]
         direction TB
