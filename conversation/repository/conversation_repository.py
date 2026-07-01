@@ -4,18 +4,19 @@ from typing import Any, Optional, Sequence
 from uuid import UUID
 
 import psycopg
+from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
-from pgvector.psycopg import register_vector
 
-from db.connection import get_connection
 from conversation.models.conversation_models import (
     Conversation,
+    ConversationMemory,
     ConversationRoundtrip,
     ConversationSummary,
     RoundtripFeedback,
     RoundtripPrompt,
 )
+from db.connection import get_connection
 
 
 class ConversationRepository:
@@ -209,16 +210,22 @@ class ConversationRepository:
             assert row is not None
             return ConversationSummary(**row)
 
-    def update_conversation_summary(self, conversation_id: UUID, summary: str) -> None:
+    def update_conversation_summary(
+        self,
+        conversation_id: UUID,
+        summary: str,
+        summary_embedding: Optional[list[float]] = None,
+    ) -> None:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 UPDATE conversation
                 SET summary = %s,
+                    summary_embedding = (%s)::vector,
                     updated_at = now()
                 WHERE id = %s
                 """,
-                (summary, conversation_id),
+                (summary, summary_embedding, conversation_id),
             )
 
     def get_summary(
@@ -241,7 +248,7 @@ class ConversationRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT id, user_id, title, created_at, metadata, tone_state, summary
+                SELECT id, user_id, title, created_at, metadata, tone_state, summary, summary_embedding
                 FROM conversation
                 WHERE id = %s
                 """,
@@ -330,7 +337,7 @@ class ConversationRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT id, user_id, created_at, metadata, title, tone_state, summary
+                SELECT id, user_id, created_at, metadata, title, tone_state, summary, summary_embedding
                 FROM conversation
                 WHERE user_id = %s
                 ORDER BY updated_at DESC
@@ -340,6 +347,38 @@ class ConversationRepository:
             )
             rows = cur.fetchall()
             return [Conversation(**r) for r in rows]
+
+    def search_conversation_memories(
+        self,
+        query_embedding: Sequence[float],
+        limit: int = 5,
+    ) -> list[ConversationMemory]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT
+                    id AS conversation_id,
+                    summary,
+                    updated_at AS last_used_date,
+                    (summary_embedding <-> (%s)::vector) AS relevance_score
+                FROM conversation
+                WHERE summary_embedding IS NOT NULL
+                  AND BTRIM(summary) <> ''
+                ORDER BY summary_embedding <-> (%s)::vector ASC
+                LIMIT %s
+                """,
+                (list(query_embedding), list(query_embedding), limit),
+            )
+            rows = cur.fetchall()
+            return [
+                ConversationMemory(
+                    conversation_id=row['conversation_id'],
+                    summary=row['summary'],
+                    last_used_date=str(row['last_used_date']),
+                    relevance_score=float(row['relevance_score']),
+                )
+                for row in rows
+            ]
 
     def delete_conversation(self, conversation_id: str, user_id: str) -> bool:
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -358,7 +397,7 @@ class ConversationRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT id, user_id, title, created_at, metadata, tone_state, summary
+                SELECT id, user_id, title, created_at, metadata, tone_state, summary, summary_embedding
                 FROM conversation
                 WHERE user_id = %s
                 order by updated_at DESC

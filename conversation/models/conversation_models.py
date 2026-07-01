@@ -51,6 +51,7 @@ class Conversation:
     metadata: dict[str, Any]
     tone_state: dict[str, Any]
     summary: str = ""
+    summary_embedding: Optional[list[float]] = None
 
 
 @dataclass(frozen=False)
@@ -99,3 +100,11 @@ class ConversationSummary:
     tool_summary: str
     message_index_cutoff: int
     created_at: str
+
+
+@dataclass(frozen=False)
+class ConversationMemory:
+    conversation_id: UUID
+    summary: str
+    last_used_date: str
+    relevance_score: float
