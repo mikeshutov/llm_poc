@@ -1,5 +1,7 @@
 import json
 
+from conversation.models.conversation_models import ConversationContext
+
 
 def flatten_conversation_entries(entries: list[dict]) -> str:
     return "\n".join(
@@ -7,9 +9,6 @@ def flatten_conversation_entries(entries: list[dict]) -> str:
         for m in entries
         if m.get("content")
     )
-
-
-from conversation.models.conversation_models import ConversationContext
 
 
 def build_conversation_context_json(context: ConversationContext) -> str:

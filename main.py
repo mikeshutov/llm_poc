@@ -3,9 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
-
-load_dotenv()
-
 import streamlit as st
 
 from agent.service import run_agent_for_query
@@ -16,6 +13,8 @@ from rendering.file_upload import render_file_upload
 from rendering.messages.chat import append_assistant_response, render_messages
 from rendering.rendering import render_message
 from rendering.sidebar import render_sidebar
+
+load_dotenv()
 
 st.set_page_config(page_title="LLM Agentic Chat", page_icon=":robot_face:")
 
