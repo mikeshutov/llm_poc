@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from agent.agentstate.model import GeoMetadata
+from agent.agentstate.model import UserProfile
 from conversation.models.conversation_models import ConversationContext
 from conversation.utils import build_conversation_context_json
 
@@ -38,7 +38,7 @@ class AgentPrompt:
     prompt_kind: str
     instruction: str
     conversation_context: ConversationContext | None = None
-    geometadata: GeoMetadata | None = None
+    user_profile: UserProfile | None = None
     task: str = ""
     rules: str = ""
     schema: str = ""
@@ -51,8 +51,8 @@ class AgentPrompt:
         data = asdict(self)
         if self.conversation_context is not None:
             data["conversation_context"] = self.conversation_context.model_dump()
-        if self.geometadata is not None:
-            data["geometadata"] = self.geometadata.model_dump()
+        if self.user_profile is not None:
+            data["user_profile"] = self.user_profile.model_dump()
         if self.previous_iterations is not None:
             data["previous_iterations"] = [
                 iteration.model_dump() for iteration in self.previous_iterations
@@ -66,10 +66,10 @@ class AgentPrompt:
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), indent=2, ensure_ascii=True, default=str)
 
-    def _serialize_geometadata(self) -> str:
-        if self.geometadata is None:
+    def _serialize_user_profile(self) -> str:
+        if self.user_profile is None:
             return ""
-        return json.dumps(self.geometadata.model_dump(), indent=2, ensure_ascii=True)
+        return json.dumps(self.user_profile.model_dump(), indent=2, ensure_ascii=True)
 
     def _serialize_previous_iterations(self) -> str:
         if not self.previous_iterations:
@@ -100,6 +100,11 @@ class AgentPrompt:
     def to_string(self) -> str:
         if self.prompt_kind == "request_analysis":
             parts = [self.instruction.rstrip()]
+            if self.user_profile:
+                parts.extend([
+                    "User Profile (JSON):",
+                    self._serialize_user_profile(),
+                ])
             if self.conversation_context:
                 parts.extend([
                     "Conversation context (JSON):",
@@ -117,11 +122,6 @@ class AgentPrompt:
 
         if self.prompt_kind == "planner":
             parts = [self.instruction.rstrip()]
-            if self.geometadata:
-                parts.extend([
-                    "GeoMetadata (JSON):",
-                    self._serialize_geometadata(),
-                ])
             if self.conversation_context:
                 parts.extend([
                     "Conversation Context (JSON):",
@@ -145,6 +145,11 @@ class AgentPrompt:
 
         if self.prompt_kind == "synthesis":
             parts = [self.instruction.rstrip()]
+            if self.user_profile:
+                parts.extend([
+                    "User Profile (JSON):",
+                    self._serialize_user_profile(),
+                ])
             if self.rules:
                 parts.extend([
                     "Rules:",

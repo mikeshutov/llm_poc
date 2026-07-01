@@ -1,4 +1,4 @@
-from agent.agentstate.model import AgentState
+from agent.agentstate.model import AgentState, UserProfile
 from agent.request_analysis.prompts.request_analysis_schema_prompt import REQUEST_ANALYSIS_SCHEMA
 from agent.prompts.agent_prompt import AgentPrompt
 from tool.tools import TOOL_CATEGORIES
@@ -19,6 +19,7 @@ def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
             "Use the older string tool_summary only as fallback context when the structured roundtrip tool summaries are absent or incomplete."
         ),
         conversation_context=agent_state.conversation_context,
+        user_profile=UserProfile(geometadata=agent_state.geometadata),
         available_tool_categories=category_lines,
         schema=REQUEST_ANALYSIS_SCHEMA,
         task=agent_state.task,

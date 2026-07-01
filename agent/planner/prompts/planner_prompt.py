@@ -79,7 +79,6 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         prompt_kind="planner",
         instruction="You are a planning agent. Utilize data from 'Previous Iterations:' when it is provided.",
         conversation_context=_build_planner_context(state),
-        geometadata=state.geometadata,
         task=_build_planner_task(state),
         available_tools=context.compiled_tools,
         rules=build_planner_rules(context.rules),

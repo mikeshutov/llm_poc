@@ -19,20 +19,45 @@ class RequestAnalysis(BaseModel):
     context_answer_confidence: float = 0.0
 
 
+class GeoLocation(BaseModel):
+    city: str | None = None
+    region: str | None = None
+    country: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    timezone: str | None = None
+
+
 class GeoMetadata(BaseModel):
     current_datetime: str
     current_date: str
     current_weekday: str
     timezone: str
+    location: GeoLocation | None = None
 
 
-def build_geometadata(*, timezone: str = "America/Toronto") -> GeoMetadata:
-    now = datetime.now(ZoneInfo(timezone))
+class UserProfile(BaseModel):
+    geometadata: GeoMetadata | None = None
+
+
+def build_geometadata(
+    *,
+    timezone: str | None = "America/Toronto",
+    location: GeoLocation | None = None,
+) -> GeoMetadata:
+    resolved_timezone = (timezone or "").strip()
+    if not resolved_timezone and location is not None:
+        resolved_timezone = (location.timezone or "").strip()
+    if not resolved_timezone:
+        resolved_timezone = "America/Toronto"
+
+    now = datetime.now(ZoneInfo(resolved_timezone))
     return GeoMetadata(
         current_datetime=now.isoformat(),
         current_date=now.date().isoformat(),
         current_weekday=now.strftime("%A"),
-        timezone=timezone,
+        timezone=resolved_timezone,
+        location=location,
     )
 
 

@@ -2,6 +2,7 @@ import threading
 from uuid import UUID
 
 from agent.agent import run_agent
+from agent.agentstate.model import GeoMetadata
 from agent.models.agent_result import AgentResult
 from common.model_constants import LLM_MODEL
 from llm.clients.embeddings import embed_text
@@ -15,6 +16,7 @@ def run_agent_for_query(
     conversation_id: str,
     user_query: str,
     context_limit: int = 5,
+    geometadata: GeoMetadata | None = None,
 ) -> tuple[AgentResult, ConversationRoundtrip]:
     repo = get_conversation_repo()
     roundtrip = repo.create_pending_roundtrip(UUID(conversation_id), user_query, model=LLM_MODEL)
@@ -29,6 +31,7 @@ def run_agent_for_query(
         user_query=user_query,
         conversation_id=conversation_id,
         roundtrip_id=str(roundtrip.id),
+        geometadata=geometadata,
     )
 
     roundtrip_summary_embedding = embed_text(result.roundtrip_summary) if result.roundtrip_summary else None
