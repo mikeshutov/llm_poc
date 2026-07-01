@@ -13,8 +13,6 @@ SQL_FILES = [
     "db/setup/file_schema.sql",
     "db/setup/file_chunk_schema.sql",
     "db/setup/conversation_roundtrip_schema.sql",
-    "db/setup/roundtrip_prompts_schema.sql",
-    "db/setup/roundtrip_feedback_schema.sql",
     "db/setup/conversation_summary_schema.sql",
     "db/setup/plans_schema.sql",
     "db/setup/tool_calls_schema.sql",
