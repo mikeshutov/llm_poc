@@ -30,7 +30,7 @@ def analyze_request(agent_state: AgentState) -> AgentState:
     )
     if (
         not agent_state.request_analysis.requires_tools
-        and agent_state.request_analysis.context_answer_confidence >= 0.8
+        and agent_state.request_analysis.context_answer_confidence >= 0.9
     ):
         agent_state.goal_reached = True
 

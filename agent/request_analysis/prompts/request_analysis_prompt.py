@@ -16,8 +16,9 @@ def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
         instruction=(
             "You are a request analyzer. "
             "Infer the user's goal, decide whether tools are required, and return the relevant category names. "
-            "When conversation context includes recent_roundtrip_tool_summaries, treat them as the highest-priority tool-use context. "
-            "Use the older string tool_summary only as fallback context when the structured roundtrip tool summaries are absent or incomplete."
+            "Use recent_roundtrip_tool_summaries as helpful context about prior tool usage, entities, produced fields, and freshness. "
+            "Use the older string tool_summary only as fallback context when the structured roundtrip tool summaries are absent or incomplete. "
+            "If there is meaningful doubt that the available context alone is sufficient, set requires_tools to true."
         ),
         conversation_context=agent_state.conversation_context,
         user_profile=UserProfile(geometadata=agent_state.geometadata),

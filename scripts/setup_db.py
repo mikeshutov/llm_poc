@@ -1,11 +1,10 @@
-import os
 import time
 from pathlib import Path
 
 import psycopg
 
-
-DB_URL = os.getenv("DATABASE_URL", "postgresql://app:app@localhost:5432/products")
+from db.constants import DB_URL
+from migrate_db import run_migrations
 SQL_FILES = [
     "db/extensions.sql",
     "db/product_schema.sql",
@@ -47,6 +46,7 @@ def main() -> None:
                 conn.commit()
         print(f"Applied {rel_path}")
 
+    run_migrations()
     print("Database setup complete.")
 
 

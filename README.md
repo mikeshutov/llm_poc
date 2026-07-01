@@ -131,14 +131,19 @@ BRAVE_SEARCH_API_KEY=...
 docker compose up -d
 ```
 
-2. Run DB setup (extensions + schemas)
+2. Run DB setup (extensions + schemas + migrations)
 ```
 python scripts/setup_db.py
 ```
 
+If you already have a local database from an older clone and just need to move it forward, run:
+```
+python scripts/migrate_db.py
+```
+
 3. (Optional) Seed products + embeddings
 ```
-python db/seed_products.py
+python scripts/seed_products.py
 ```
 
 4. Start the app
@@ -150,13 +155,13 @@ streamlit run main.py
 If you already seeded the DB and want to backfill images:
 ```
 setx ALLOW_IMAGE_BACKFILL 1
-python db/seed_products.py
+python scripts/seed_products.py
 ```
 
 To force refresh existing images:
 ```
 setx FORCE_IMAGE_REFRESH 1
-python db/seed_products.py
+python scripts/seed_products.py
 ```
 
 Product images are stored in `db/images/` for now. 
