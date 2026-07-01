@@ -100,7 +100,7 @@ flowchart TD
 ## Interesting Notes/Decisions
 ### Why Request Analysis
 With the number of tools growing I wanted to solve for the scaling problem of passing a large tool list to the planner. The idea here is:
-1. Request analysis determines the user's goal and the category or categories that are applicable to the request.
+1. Request analysis determines the user's goal and the category or categories that are applicable to the request. Moreover this allows us to no longer need to send the whold conversation context when we use our planner so our planner can be focused on a refined goal.
 2. The planner prompt then injects only the tools and rules which fall under those categories plus any rules that are always present.
 This results in sending only the tools that are relevant, at least that is the idea. If we had thousands of tools we could reduce them to a much smaller number, although I am certain that if the number of tools grows this problem will need another refactor.
 
