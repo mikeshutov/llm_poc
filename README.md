@@ -7,17 +7,18 @@ This is not meant to be a production piece of code. More just a way to explore t
 Rough breakdown of the current agent loop flow.
 1. Prompt comes in and we assemble conversation context.
 2. We pass that context plus the latest user prompt into agent state.
-3. `request_analysis` infers the user's goal, decides whether tools are required, and selects the relevant tool categories.
+3. We also prepare a small `User Profile` prompt section. Right now it mainly contains geo/location-aware metadata and is injected into `request_analysis` and `synthesis`, but not `planner`.
+4. `request_analysis` infers the user's goal, decides whether tools are required, and selects the relevant tool categories.
    - If the existing context is strong enough, we can skip planning and go straight to synthesis.
    - If tools are needed, the selected categories determine which tool groups and rules are loaded.
-4. We call the planner and give it the goal, prior tool-use context, available tools, and previous planner iterations.
+5. We call the planner and give it the goal, prior tool-use context, available tools, and previous planner iterations.
    - The idea here is we could likely have thousands of tools and it seems like a good idea to only pass what is needed.
    - There are also tool-specific rules which get added depending on the active categories.
-5. The executor executes the tool calls in the plan and stores the results in state.
-6. The planner replans if needed.
+6. The executor executes the tool calls in the plan and stores the results in state.
+7. The planner replans if needed.
    - If the goal is reached or we hit the iteration limit, we move to synthesis.
    - Otherwise we loop with the newly gathered evidence.
-7. Synthesis generates the final response, roundtrip summary, and tool summary.
+8. Synthesis generates the final response, roundtrip summary, and tool summary.
 
 We also store conversations, roundtrips, prompt rows, summaries, and tool calls for future prompts.
 The diagrams provided are just to illustrate the high-level shape of the flow.
@@ -50,6 +51,8 @@ For subsequent prompts, the context builder pulls together a few layers of histo
 
 The latest user prompt is not embedded inside the stored conversation context anymore. It is passed separately into the prompt as the final section so the live request stays distinct from historical context.
 
+We also prepare a separate `User Profile` section for prompt construction. Right now that primarily carries geo/location-aware metadata, and it is included in `request_analysis` and `synthesis` but intentionally omitted from `planner`. The idea is this is needed to get the goal as well as to generate the final response but the planner does not need to worry about it.
+
 The idea is to give the request analysis and synthesis steps reusable historical context while still keeping the freshest user request explicit and easy to reason about.
 
 Simple diagram to illustrate what this looks like.
@@ -67,6 +70,7 @@ flowchart TD
     end
 
     A --> D[Latest User Prompt passed separately]
+    A --> E[User Profile passed separately to request_analysis and synthesis]
 
     subgraph C[Roundtrip Element]
         direction TB
