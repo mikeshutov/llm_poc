@@ -14,12 +14,4 @@ Response JSON shape:
   "requires_tools": true,
   "context_answer_confidence": 0
 }
-
-Example memory-oriented shape:
-{
-  "goal": "Find what we previously discussed about Toronto patios",
-  "applicable_tool_categories": ["memories"],
-  "requires_tools": true,
-  "context_answer_confidence": 0
-}
 """
