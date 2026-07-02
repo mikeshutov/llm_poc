@@ -108,3 +108,16 @@ class ConversationMemory:
     summary: str
     last_used_date: str
     relevance_score: float
+
+
+
+@dataclass(frozen=False)
+class RoundtripMemory:
+    conversation_id: UUID
+    roundtrip_id: UUID
+    message_index: int
+    user_prompt: str
+    generated_response: str
+    roundtrip_summary: str
+    created_at: str
+    relevance_score: float
