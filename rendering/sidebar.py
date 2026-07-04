@@ -3,12 +3,14 @@ from uuid import UUID
 import streamlit as st
 
 from rendering.feedback import clear_feedback_state
+from rendering.replay import clear_replay_state
 
 
 def _delete_conversation(conversation_repository, conversation_id: str) -> None:
     conversation_repository.delete_conversation(UUID(conversation_id), user_id="anonymous")
     latest = conversation_repository.get_latest_conversation("anonymous")
     clear_feedback_state()
+    clear_replay_state()
     if latest:
         st.session_state.conversation_id = str(latest.id)
     else:
@@ -28,6 +30,7 @@ def render_sidebar(conversation_repository) -> None:
 
     if st.button(":material/add: New chat"):
         clear_feedback_state()
+        clear_replay_state()
         conv = conversation_repository.create_conversation(user_id="anonymous", metadata={"source": "streamlit"})
         st.session_state.conversation_id = str(conv.id)
         st.query_params["cid"] = st.session_state.conversation_id
@@ -65,6 +68,7 @@ def render_sidebar(conversation_repository) -> None:
             else:
                 if st.button(title, key=f"conv_{cid}", use_container_width=True):
                     clear_feedback_state()
+                    clear_replay_state()
                     st.session_state.conversation_id = cid
                     st.query_params["cid"] = cid
                     st.session_state.loaded_cid = None

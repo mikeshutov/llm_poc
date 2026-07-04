@@ -7,6 +7,7 @@ import streamlit as st
 
 from conversation.models.conversation_models import RoundtripFeedback
 from conversation.repository.conversation_repository import ConversationRepository
+from rendering.replay import request_replay
 
 FEEDBACK_TARGET_KEY = "feedback_target"
 FEEDBACK_DIALOG_INIT_KEY = "feedback_dialog_initialized_for"
@@ -68,13 +69,21 @@ def render_feedback_controls(
         return
 
     rid = str(roundtrip_id)
-    col_caption, col_status, col_up, col_down = st.columns([8, 3, 1, 1], vertical_alignment="center")
+    col_caption, col_status, col_replay, col_up, col_down = st.columns([7, 3, 1, 1, 1], vertical_alignment="center")
     with col_caption:
         if timestamp:
             st.caption(timestamp)
     with col_status:
         if feedback_id is not None:
             st.caption("Feedback saved")
+    with col_replay:
+        st.button(
+            ":material/replay:",
+            key=f"replay_{rid}",
+            help="Replay from this response",
+            on_click=request_replay,
+            args=(rid,),
+        )
     with col_up:
         st.button(
             ":material/thumb_up:",

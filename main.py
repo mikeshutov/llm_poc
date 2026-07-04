@@ -8,7 +8,9 @@ import streamlit as st
 from agent.service import run_agent_for_query
 from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from conversation.repository.repo_factory import get_conversation_repo
+from conversation.replay import replay_roundtrip_as_new_conversation
 from rendering.feedback import FEEDBACK_TARGET_KEY, clear_feedback_state, render_feedback_dialog
+from rendering.replay import clear_replay_state, pop_replay_target
 from rendering.file_upload import render_file_upload
 from rendering.messages.chat import append_assistant_response, render_messages
 from rendering.rendering import render_message
@@ -50,9 +52,11 @@ def setup_conversation(cid):
     if cid:
         if current != cid:
             clear_feedback_state()
+            clear_replay_state()
         st.session_state.conversation_id = cid
     else:
         clear_feedback_state()
+        clear_replay_state()
         conv = conversation_repository.create_conversation(user_id="anonymous", metadata={"source": "streamlit"})
         st.session_state.conversation_id = str(conv.id)
         st.query_params["cid"] = st.session_state.conversation_id
@@ -66,6 +70,20 @@ with st.sidebar:
 render_messages(conversation_repository, st.session_state.conversation_id, render_message, limit=10)
 if st.session_state.get(FEEDBACK_TARGET_KEY):
     render_feedback_dialog(conversation_repository)
+
+replay_target = pop_replay_target()
+if replay_target:
+    with st.spinner("Replaying conversation..."):
+        new_conversation_id = replay_roundtrip_as_new_conversation(replay_target["roundtrip_id"])
+    clear_feedback_state()
+    clear_replay_state()
+    st.session_state.conversation_id = new_conversation_id
+    st.query_params["cid"] = new_conversation_id
+    st.session_state.loaded_cid = None
+    st.session_state.messages = []
+    st.session_state.debug_turns = []
+    st.rerun()
+
 render_file_upload()
 
 userQuery = st.chat_input("What are you looking for or trying to learn about?")
