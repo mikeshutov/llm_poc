@@ -72,6 +72,50 @@ class ToolCallRepository:
             row = cur.fetchone()
             return ToolCall(**row) if row else None
 
+    def copy_tool_calls(self, roundtrip_id_map: dict[UUID, UUID]) -> None:
+        if not roundtrip_id_map:
+            return
+
+        tool_calls_by_roundtrip = self.get_tool_calls_by_roundtrips(list(roundtrip_id_map.keys()))
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            for source_roundtrip_id, copied_roundtrip_id in roundtrip_id_map.items():
+                for tool_call in tool_calls_by_roundtrip.get(source_roundtrip_id, []):
+                    cur.execute(
+                        """
+                        INSERT INTO tool_calls (
+                            roundtrip_id,
+                            plan_id,
+                            plan_step_id,
+                            step_index,
+                            tool_name,
+                            status,
+                            input_payload,
+                            output_payload,
+                            error_message,
+                            duration_ms,
+                            goal,
+                            summary,
+                            created_at
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            copied_roundtrip_id,
+                            None,
+                            None,
+                            tool_call.step_index,
+                            tool_call.tool_name,
+                            tool_call.status,
+                            Jsonb(tool_call.input_payload or {}),
+                            Jsonb(tool_call.output_payload) if tool_call.output_payload is not None else None,
+                            tool_call.error_message,
+                            tool_call.duration_ms,
+                            tool_call.goal,
+                            tool_call.summary,
+                            tool_call.created_at,
+                        ),
+                    )
+
     #TODO{: figure out how we handle cases where the data is stale. But for now its probably fine.}
     def get_tool_calls_by_roundtrips(self, roundtrip_ids: list[UUID]) -> dict[UUID, list[ToolCall]]:
         with self._conn.cursor(row_factory=dict_row) as cur:

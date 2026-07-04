@@ -245,6 +245,33 @@ class ConversationRepository:
             row = cur.fetchone()
             return ConversationSummary(**row) if row else None
 
+    def get_roundtrip(self, roundtrip_id: UUID) -> Optional[ConversationRoundtrip]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT
+                    rt.id,
+                    rt.conversation_id,
+                    rt.message_index,
+                    rt.user_prompt,
+                    rt.generated_response,
+                    rt.roundtrip_summary,
+                    rt.roundtrip_summary_embedding,
+                    rt.response_payload,
+                    rt.parsed_query,
+                    rt.created_at,
+                    rt.metadata,
+                    rt.model,
+                    fb.id AS feedback_id
+                FROM conversation_roundtrip rt
+                LEFT JOIN roundtrip_feedback fb ON fb.roundtrip_id = rt.id
+                WHERE rt.id = %s
+                """,
+                (roundtrip_id,),
+            )
+            row = cur.fetchone()
+            return ConversationRoundtrip(**row) if row else None
+
     def get_conversation(self, conversation_id: UUID) -> Optional[Conversation]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -319,6 +346,39 @@ class ConversationRepository:
             rows = cur.fetchall()
             return [ConversationRoundtrip(**r) for r in rows]
 
+    def list_roundtrips_through_message_index(
+        self,
+        conversation_id: UUID,
+        message_index: int,
+    ) -> list[ConversationRoundtrip]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT
+                    rt.id,
+                    rt.conversation_id,
+                    rt.message_index,
+                    rt.user_prompt,
+                    rt.generated_response,
+                    rt.roundtrip_summary,
+                    rt.roundtrip_summary_embedding,
+                    rt.response_payload,
+                    rt.parsed_query,
+                    rt.created_at,
+                    rt.metadata,
+                    rt.model,
+                    fb.id AS feedback_id
+                FROM conversation_roundtrip rt
+                LEFT JOIN roundtrip_feedback fb ON fb.roundtrip_id = rt.id
+                WHERE rt.conversation_id = %s
+                  AND rt.message_index <= %s
+                ORDER BY rt.message_index ASC
+                """,
+                (conversation_id, message_index),
+            )
+            rows = cur.fetchall()
+            return [ConversationRoundtrip(**r) for r in rows]
+
     def get_latest_summary(self, conversation_id: UUID) -> Optional[ConversationSummary]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -348,6 +408,50 @@ class ConversationRepository:
             )
             rows = cur.fetchall()
             return [Conversation(**r) for r in rows]
+
+    def copy_roundtrip_to_conversation(
+        self,
+        conversation_id: UUID,
+        source_roundtrip: ConversationRoundtrip,
+    ) -> ConversationRoundtrip:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO conversation_roundtrip (
+                    conversation_id,
+                    message_index,
+                    user_prompt,
+                    generated_response,
+                    roundtrip_summary,
+                    roundtrip_summary_embedding,
+                    response_payload,
+                    parsed_query,
+                    created_at,
+                    updated_at,
+                    model,
+                    metadata
+                )
+                VALUES (%s, %s, %s, %s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s)
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model
+                """,
+                (
+                    conversation_id,
+                    source_roundtrip.message_index,
+                    source_roundtrip.user_prompt,
+                    source_roundtrip.generated_response,
+                    source_roundtrip.roundtrip_summary,
+                    source_roundtrip.roundtrip_summary_embedding,
+                    Jsonb(source_roundtrip.response_payload or {}),
+                    Jsonb(source_roundtrip.parsed_query or {}),
+                    source_roundtrip.created_at,
+                    source_roundtrip.created_at,
+                    source_roundtrip.model,
+                    Jsonb(source_roundtrip.metadata or {}),
+                ),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            return ConversationRoundtrip(**row)
 
     def search_conversation_memories(
         self,

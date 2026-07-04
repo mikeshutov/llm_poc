@@ -6,6 +6,7 @@ import streamlit as st
 from rendering.debug import debug_render_message
 from rendering.cards import render_cards
 from rendering.feedback import render_feedback_controls
+from rendering.replay import render_replay_control
 from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
 from common.file_constants import FILES_DIR, IMAGE_MIME_PREFIX
 
@@ -95,5 +96,7 @@ def render_message(msg: dict) -> None:
                 attached_file = msg.get("attached_file")
                 if attached_file:
                     _render_file_preview(attached_file)
-                if timestamp:
-                    st.caption(timestamp)
+                render_replay_control(
+                    roundtrip_id=msg.get("roundtrip_id"),
+                    timestamp=timestamp,
+                )
