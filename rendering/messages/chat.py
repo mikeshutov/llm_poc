@@ -32,7 +32,7 @@ def ensure_messages_loaded(conversation_repository, conversation_id: str, limit:
         st.session_state.messages = []
         for rt in roundtrips:
             ts = rt.created_at if hasattr(rt, "created_at") else None
-            st.session_state.messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: rt.user_prompt, "timestamp": ts})
+            st.session_state.messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: rt.user_prompt, "timestamp": ts, "roundtrip_id": str(rt.id)})
             payload = rt.response_payload if isinstance(rt.response_payload, dict) else None
             st.session_state.messages.append(
                 {
