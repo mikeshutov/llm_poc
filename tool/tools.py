@@ -23,7 +23,7 @@ from agent.tool_adapter.memories.search_memories import search_memories
 from agent.tool_adapter.memories.search_roundtrip_memories import search_roundtrip_memories
 from agent.tool_adapter.news.hn_search import hn_search
 from agent.tool_adapter.user_memories.create_user_memory import create_user_memory
-from agent.tool_adapter.user_memories.list_user_memories import list_user_memories
+from agent.tool_adapter.user_memories.get_user_memories import get_user_memories
 from agent.tool_adapter.user_memories.search_user_memories import search_user_memories
 from agent.tool_adapter.user_memories.update_user_memory import update_user_memory
 from agent.tool_adapter.products.find_products import find_products
@@ -62,7 +62,7 @@ FOOD_TOOLS = [search_meals, search_cocktails]
 FUN_TOOLS = [get_advice, get_quote, get_astronomy_picture]
 MATH_TOOLS = [calculate]
 MEMORY_TOOLS = [search_memories, search_roundtrip_memories]
-USER_MEMORY_TOOLS = [create_user_memory, update_user_memory, list_user_memories, search_user_memories]
+USER_MEMORY_TOOLS = [create_user_memory, update_user_memory, get_user_memories, search_user_memories]
 FILE_TOOLS = [search_files, search_file_for_details, get_file_by_id]
 
 # if this were to grow much larger I would probably create sub categories or a tree structure of tools
@@ -144,7 +144,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
         description="Create, update, list, and search persistent user memories such as preferences, facts, constraints, and long-lived instructions.",
         rules=[
             "Use user_memories when the task is about stable user-specific facts, preferences, remembered constraints, or something the assistant should explicitly retain beyond the current conversation.",
-            "Use create_user_memory to store a new user memory, update_user_memory to revise or deactivate one, list_user_memories to inspect existing memories, and search_user_memories to find the most relevant stored user memories.",
+            "Use create_user_memory to store a new user memory, update_user_memory to revise or deactivate one, get_user_memories to inspect existing memories, and search_user_memories to find the most relevant stored user memories.",
             "Prefer conversation memories for prior discussion recall, and prefer user_memories for durable user facts or preferences.",
         ],
     ),

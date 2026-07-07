@@ -9,6 +9,7 @@ from psycopg.rows import dict_row
 
 from db.connection import get_connection
 from memories.models.memory_models import Memory, MemorySearchResult
+from memories.models.memory_types import MEMORY_TYPE_VALUES
 
 MEMORY_ORDER_FIELDS = {
     "created_at": "created_at",
@@ -17,6 +18,7 @@ MEMORY_ORDER_FIELDS = {
     "importance": "importance",
 }
 MEMORY_DUPLICATE_DISTANCE_THRESHOLD = 0.12
+MEMORY_TYPES = set(MEMORY_TYPE_VALUES)
 
 
 class MemoryRepository:
@@ -24,13 +26,21 @@ class MemoryRepository:
         self._conn = conn or get_connection()
         register_vector(self._conn)
 
+    def _validate_memory_type(self, memory_type: Optional[str]) -> None:
+        if memory_type is None:
+            return
+        if memory_type not in MEMORY_TYPES:
+            raise ValueError(f"Unsupported memory_type: {memory_type}")
+
     def _find_exact_memory(
         self,
         memory_text: str,
         *,
         user_id: Optional[str] = None,
+        memory_type: Optional[str] = None,
         exclude_memory_id: Optional[UUID] = None,
     ) -> Optional[Memory]:
+        self._validate_memory_type(memory_type)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -39,6 +49,7 @@ class MemoryRepository:
                     user_id,
                     memory_text,
                     memory_embedding,
+                    memory_type,
                     source,
                     source_conversation_id,
                     source_roundtrip_id,
@@ -49,12 +60,13 @@ class MemoryRepository:
                     importance
                 FROM memories
                 WHERE LOWER(BTRIM(memory_text)) = LOWER(BTRIM(%s))
-                  AND (%s IS NULL OR user_id = %s)
-                  AND (%s IS NULL OR id <> %s)
+                  AND (CAST(%s AS text) IS NULL OR user_id = %s)
+                  AND (CAST(%s AS text) IS NULL OR memory_type = %s)
+                  AND (CAST(%s AS uuid) IS NULL OR id <> %s)
                 ORDER BY updated_at DESC
                 LIMIT 1
                 """,
-                (memory_text, user_id, user_id, exclude_memory_id, exclude_memory_id),
+                (memory_text, user_id, user_id, memory_type, memory_type, exclude_memory_id, exclude_memory_id),
             )
             row = cur.fetchone()
             return Memory(**row) if row else None
@@ -64,9 +76,11 @@ class MemoryRepository:
         query_embedding: Sequence[float],
         *,
         user_id: Optional[str] = None,
+        memory_type: Optional[str] = None,
         exclude_memory_id: Optional[UUID] = None,
         distance_threshold: float = MEMORY_DUPLICATE_DISTANCE_THRESHOLD,
     ) -> Optional[MemorySearchResult]:
+        self._validate_memory_type(memory_type)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -74,6 +88,7 @@ class MemoryRepository:
                     id,
                     user_id,
                     memory_text,
+                    memory_type,
                     source,
                     source_conversation_id,
                     source_roundtrip_id,
@@ -86,8 +101,9 @@ class MemoryRepository:
                 FROM memories
                 WHERE memory_embedding IS NOT NULL
                   AND BTRIM(memory_text) <> ''
-                  AND (%s IS NULL OR user_id = %s)
-                  AND (%s IS NULL OR id <> %s)
+                  AND (CAST(%s AS text) IS NULL OR user_id = %s)
+                  AND (CAST(%s AS text) IS NULL OR memory_type = %s)
+                  AND (CAST(%s AS uuid) IS NULL OR id <> %s)
                 ORDER BY memory_embedding <-> (%s)::vector ASC
                 LIMIT 1
                 """,
@@ -95,6 +111,8 @@ class MemoryRepository:
                     list(query_embedding),
                     user_id,
                     user_id,
+                    memory_type,
+                    memory_type,
                     exclude_memory_id,
                     exclude_memory_id,
                     list(query_embedding),
@@ -112,6 +130,7 @@ class MemoryRepository:
         *,
         memory_text: Optional[str] = None,
         memory_embedding: Optional[list[float]] = None,
+        memory_type: Optional[str] = None,
         source: Optional[str] = None,
         source_conversation_id: Optional[UUID] = None,
         source_roundtrip_id: Optional[UUID] = None,
@@ -119,12 +138,14 @@ class MemoryRepository:
         confidence: Optional[float] = None,
         importance: Optional[float] = None,
     ) -> Optional[Memory]:
+        self._validate_memory_type(memory_type)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 UPDATE memories
                 SET memory_text = COALESCE(%s, memory_text),
                     memory_embedding = COALESCE((%s)::vector, memory_embedding),
+                    memory_type = COALESCE(%s, memory_type),
                     source = COALESCE(%s, source),
                     source_conversation_id = COALESCE(%s, source_conversation_id),
                     source_roundtrip_id = COALESCE(%s, source_roundtrip_id),
@@ -138,6 +159,7 @@ class MemoryRepository:
                     user_id,
                     memory_text,
                     memory_embedding,
+                    memory_type,
                     source,
                     source_conversation_id,
                     source_roundtrip_id,
@@ -150,6 +172,7 @@ class MemoryRepository:
                 (
                     memory_text,
                     memory_embedding,
+                    memory_type,
                     source,
                     source_conversation_id,
                     source_roundtrip_id,
@@ -179,6 +202,7 @@ class MemoryRepository:
         memory_text: str,
         user_id: Optional[str] = None,
         memory_embedding: Optional[list[float]] = None,
+        memory_type: Optional[str] = None,
         source: Optional[str] = None,
         source_conversation_id: Optional[UUID] = None,
         source_roundtrip_id: Optional[UUID] = None,
@@ -186,12 +210,14 @@ class MemoryRepository:
         confidence: Optional[float] = None,
         importance: Optional[float] = None,
     ) -> Memory:
-        exact_match = self._find_exact_memory(memory_text, user_id=user_id)
+        self._validate_memory_type(memory_type)
+        exact_match = self._find_exact_memory(memory_text, user_id=user_id, memory_type=memory_type)
         if exact_match is not None:
             updated_memory = self._update_memory_record(
                 exact_match.id,
                 memory_text=memory_text,
                 memory_embedding=memory_embedding,
+                memory_type=memory_type,
                 source=source,
                 source_conversation_id=source_conversation_id,
                 source_roundtrip_id=source_roundtrip_id,
@@ -206,12 +232,14 @@ class MemoryRepository:
             similar_match = self._find_similar_memory(
                 memory_embedding,
                 user_id=user_id,
+                memory_type=memory_type,
             )
             if similar_match is not None:
                 updated_memory = self._update_memory_record(
                     similar_match.id,
                     memory_text=memory_text,
                     memory_embedding=memory_embedding,
+                    memory_type=memory_type,
                     source=source,
                     source_conversation_id=source_conversation_id,
                     source_roundtrip_id=source_roundtrip_id,
@@ -229,6 +257,7 @@ class MemoryRepository:
                     user_id,
                     memory_text,
                     memory_embedding,
+                    memory_type,
                     source,
                     source_conversation_id,
                     source_roundtrip_id,
@@ -236,12 +265,13 @@ class MemoryRepository:
                     confidence,
                     importance
                 )
-                VALUES (%s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING
                     id,
                     user_id,
                     memory_text,
                     memory_embedding,
+                    memory_type,
                     source,
                     source_conversation_id,
                     source_roundtrip_id,
@@ -255,6 +285,7 @@ class MemoryRepository:
                     user_id,
                     memory_text,
                     memory_embedding,
+                    memory_type,
                     source,
                     source_conversation_id,
                     source_roundtrip_id,
@@ -272,6 +303,7 @@ class MemoryRepository:
         memory_id: UUID,
         memory_text: Optional[str] = None,
         memory_embedding: Optional[list[float]] = None,
+        memory_type: Optional[str] = None,
         source: Optional[str] = None,
         source_conversation_id: Optional[UUID] = None,
         source_roundtrip_id: Optional[UUID] = None,
@@ -279,9 +311,11 @@ class MemoryRepository:
         confidence: Optional[float] = None,
         importance: Optional[float] = None,
     ) -> Optional[Memory]:
+        self._validate_memory_type(memory_type)
         if memory_text is not None:
             exact_match = self._find_exact_memory(
                 memory_text,
+                memory_type=memory_type,
                 exclude_memory_id=memory_id,
             )
             if exact_match is not None:
@@ -289,6 +323,7 @@ class MemoryRepository:
                     exact_match.id,
                     memory_text=memory_text,
                     memory_embedding=memory_embedding,
+                    memory_type=memory_type,
                     source=source,
                     source_conversation_id=source_conversation_id,
                     source_roundtrip_id=source_roundtrip_id,
@@ -302,6 +337,7 @@ class MemoryRepository:
             if memory_embedding is not None:
                 similar_match = self._find_similar_memory(
                     memory_embedding,
+                    memory_type=memory_type,
                     exclude_memory_id=memory_id,
                 )
                 if similar_match is not None:
@@ -309,6 +345,7 @@ class MemoryRepository:
                         similar_match.id,
                         memory_text=memory_text,
                         memory_embedding=memory_embedding,
+                        memory_type=memory_type,
                         source=source,
                         source_conversation_id=source_conversation_id,
                         source_roundtrip_id=source_roundtrip_id,
@@ -323,6 +360,7 @@ class MemoryRepository:
             memory_id,
             memory_text=memory_text,
             memory_embedding=memory_embedding,
+            memory_type=memory_type,
             source=source,
             source_conversation_id=source_conversation_id,
             source_roundtrip_id=source_roundtrip_id,
@@ -340,6 +378,7 @@ class MemoryRepository:
                     user_id,
                     memory_text,
                     memory_embedding,
+                    memory_type,
                     source,
                     source_conversation_id,
                     source_roundtrip_id,
@@ -364,10 +403,12 @@ class MemoryRepository:
         descending: bool = True,
         user_id: Optional[str] = None,
         is_active: Optional[bool] = None,
+        memory_type: Optional[str] = None,
         source: Optional[str] = None,
         source_conversation_id: Optional[UUID] = None,
         source_roundtrip_id: Optional[UUID] = None,
     ) -> list[Memory]:
+        self._validate_memory_type(memory_type)
         order_field = MEMORY_ORDER_FIELDS.get(order_by)
         if order_field is None:
             raise ValueError(f"Unsupported memory order field: {order_by}")
@@ -379,6 +420,7 @@ class MemoryRepository:
                 user_id,
                 memory_text,
                 memory_embedding,
+                memory_type,
                 source,
                 source_conversation_id,
                 source_roundtrip_id,
@@ -388,11 +430,12 @@ class MemoryRepository:
                 confidence,
                 importance
             FROM memories
-            WHERE (%s IS NULL OR user_id = %s)
-              AND (%s IS NULL OR is_active = %s)
-              AND (%s IS NULL OR source = %s)
-              AND (%s IS NULL OR source_conversation_id = %s)
-              AND (%s IS NULL OR source_roundtrip_id = %s)
+            WHERE (CAST(%s AS text) IS NULL OR user_id = %s)
+              AND (CAST(%s AS boolean) IS NULL OR is_active = %s)
+              AND (CAST(%s AS text) IS NULL OR memory_type = %s)
+              AND (CAST(%s AS text) IS NULL OR source = %s)
+              AND (CAST(%s AS uuid) IS NULL OR source_conversation_id = %s)
+              AND (CAST(%s AS uuid) IS NULL OR source_roundtrip_id = %s)
             ORDER BY {order_field} {order_direction}
             LIMIT %s
         """
@@ -405,6 +448,8 @@ class MemoryRepository:
                     user_id,
                     is_active,
                     is_active,
+                    memory_type,
+                    memory_type,
                     source,
                     source,
                     source_conversation_id,
@@ -424,10 +469,12 @@ class MemoryRepository:
         limit: int = 5,
         user_id: Optional[str] = None,
         is_active: Optional[bool] = True,
+        memory_type: Optional[str] = None,
         source: Optional[str] = None,
         source_conversation_id: Optional[UUID] = None,
         source_roundtrip_id: Optional[UUID] = None,
     ) -> list[MemorySearchResult]:
+        self._validate_memory_type(memory_type)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -435,6 +482,7 @@ class MemoryRepository:
                     id,
                     user_id,
                     memory_text,
+                    memory_type,
                     source,
                     source_conversation_id,
                     source_roundtrip_id,
@@ -447,11 +495,12 @@ class MemoryRepository:
                 FROM memories
                 WHERE memory_embedding IS NOT NULL
                   AND BTRIM(memory_text) <> ''
-                  AND (%s IS NULL OR user_id = %s)
-                  AND (%s IS NULL OR is_active = %s)
-                  AND (%s IS NULL OR source = %s)
-                  AND (%s IS NULL OR source_conversation_id = %s)
-                  AND (%s IS NULL OR source_roundtrip_id = %s)
+                  AND (CAST(%s AS text) IS NULL OR user_id = %s)
+                  AND (CAST(%s AS boolean) IS NULL OR is_active = %s)
+                  AND (CAST(%s AS text) IS NULL OR memory_type = %s)
+                  AND (CAST(%s AS text) IS NULL OR source = %s)
+                  AND (CAST(%s AS uuid) IS NULL OR source_conversation_id = %s)
+                  AND (CAST(%s AS uuid) IS NULL OR source_roundtrip_id = %s)
                 ORDER BY memory_embedding <-> (%s)::vector ASC
                 LIMIT %s
                 """,
@@ -461,6 +510,8 @@ class MemoryRepository:
                     user_id,
                     is_active,
                     is_active,
+                    memory_type,
+                    memory_type,
                     source,
                     source,
                     source_conversation_id,

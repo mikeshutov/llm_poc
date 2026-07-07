@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS memories (
     user_id text NULL,
     memory_text text NOT NULL,
     memory_embedding vector(1536),
+    memory_type text NULL,
     source text NULL,
     source_conversation_id uuid NULL REFERENCES conversation(id),
     source_roundtrip_id uuid NULL REFERENCES conversation_roundtrip(id),

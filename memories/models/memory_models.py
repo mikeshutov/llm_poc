@@ -9,6 +9,7 @@ class Memory:
     user_id: Optional[str]
     memory_text: str
     memory_embedding: Optional[list[float]]
+    memory_type: Optional[str]
     source: Optional[str]
     source_conversation_id: Optional[UUID]
     source_roundtrip_id: Optional[UUID]
@@ -24,6 +25,7 @@ class MemorySearchResult:
     id: UUID
     user_id: Optional[str]
     memory_text: str
+    memory_type: Optional[str]
     source: Optional[str]
     source_conversation_id: Optional[UUID]
     source_roundtrip_id: Optional[UUID]
