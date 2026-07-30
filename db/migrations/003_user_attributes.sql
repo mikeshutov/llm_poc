@@ -1,9 +1,9 @@
-CREATE TABLE IF NOT EXISTS memories (
+CREATE TABLE IF NOT EXISTS user_attributes (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id text NULL,
-    memory_text text NOT NULL,
-    memory_embedding vector(1536),
-    memory_type text NULL,
+    attribute_text text NOT NULL,
+    attribute_embedding vector(1536),
+    attribute_type text NULL,
     source text NULL,
     source_conversation_id uuid NULL REFERENCES conversation(id),
     source_roundtrip_id uuid NULL REFERENCES conversation_roundtrip(id),
@@ -14,5 +14,5 @@ CREATE TABLE IF NOT EXISTS memories (
     importance double precision NULL
 );
 
-CREATE INDEX IF NOT EXISTS memories_memory_embedding_idx
-    ON memories USING ivfflat (memory_embedding vector_l2_ops) WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS user_attributes_attribute_embedding_idx
+    ON user_attributes USING ivfflat (attribute_embedding vector_l2_ops) WITH (lists = 100);

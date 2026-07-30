@@ -44,6 +44,8 @@ def run_executor(agent_state: AgentState) -> AgentState:
             out = call_tool(name=step.tool, tool_input=args)
         except ValidationError as e:
             out = {"error": f"Invalid arguments for tool '{step.tool}': {e.errors(include_url=False)}"}
+        except Exception as e:
+            out = {"error": f"Tool '{step.tool}' failed: {e}", "tool": step.tool}
         iteration.results[step.id] = out
 
         if tool_repo and agent_state.roundtrip_id:

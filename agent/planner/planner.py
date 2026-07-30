@@ -17,18 +17,40 @@ tool_list = "\n".join(
     for tool in tools
 )
 
+
+def _invoke_planner(agent_state: AgentState, prompt_text: str) -> Plan:
+    raw = strip_code_fences(agent_state.llm.invoke(prompt_text).content)
+    return Plan.model_validate_json(raw)
+
+
 @traceable(name="Planner Node")
 def run_planner(agent_state: AgentState) -> AgentState:
     it_state = IterationState.new()
 
     prompt = build_planner_prompt(state=agent_state)
-    raw = strip_code_fences(agent_state.llm.invoke(prompt.to_string()).content)
+    prompt_text = prompt.to_string()
+    had_prior_tool_results = any(bool(iteration.results) for iteration in agent_state.iteration_trace)
+
     try:
-        plan = Plan.model_validate_json(raw)
+        plan = _invoke_planner(agent_state, prompt_text)
+        if (
+            agent_state.request_analysis.requires_tools
+            and not had_prior_tool_results
+            and (len(plan.steps) == 0 or plan.final_answer)
+        ):
+            retry_prompt = (
+                f"{prompt_text}\n\n"
+                "Additional requirement:\n"
+                "- Request analysis already determined that tool use is required.\n"
+                "- No tool results have been gathered yet.\n"
+                "- Return at least one tool step.\n"
+                "- Set final_answer to null on this pass.\n"
+            )
+            plan = _invoke_planner(agent_state, retry_prompt)
     except Exception as e:
         agent_state.goal_reached = True
         agent_state.result = AgentResult(
-            answer=f"Planner produced invalid JSON plan: {e}\nRaw:\n{raw}"
+            answer=f"Planner produced invalid JSON plan: {e}"
         )
         return agent_state
 
@@ -38,8 +60,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
     it_state.plan = plan
     agent_state.add_iteration(it_state)
 
-    # Naive approach. We are just going to check for no steps produced but this could be anything.
-    if ((len(plan.steps) == 0) or plan.final_answer) :
+    if len(plan.steps) == 0 or plan.final_answer:
         agent_state.goal_reached = True
 
     emit_status_message(
@@ -54,7 +75,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
             agent_state.roundtrip_id,
             agent=MAIN_AGENT_NAME,
             prompt_step=PLANNER_PROMPT_STEP,
-            prompt=prompt.to_string(),
+            prompt=prompt_text,
         )
 
     return agent_state

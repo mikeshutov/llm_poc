@@ -43,6 +43,7 @@ def _build_planner_task(state: AgentState) -> str:
 def build_planner_prompt(state: AgentState) -> AgentPrompt:
     context = _compile_tools_rules_from_state(state)
     previous_iterations: list[PreviousIteration] = []
+    has_prior_tool_results = any(bool(iteration.results) for iteration in state.iteration_trace)
 
     if state.iteration_trace:
         for i, it in enumerate(state.iteration_trace, start=1):
@@ -82,7 +83,11 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         conversation_context=_build_planner_context(state),
         task=_build_planner_task(state),
         available_tools=context.compiled_tools,
-        rules=build_planner_rules(context.rules),
+        rules=build_planner_rules(
+            context.rules,
+            requires_tools=state.request_analysis.requires_tools,
+            has_prior_tool_results=has_prior_tool_results,
+        ),
         previous_iterations=previous_iterations,
         schema=PLANNER_SCHEMA,
     )
