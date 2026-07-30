@@ -19,6 +19,7 @@ def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
             "Use recent_roundtrip_tool_summaries as helpful context about prior tool usage, entities, produced fields, and freshness. "
             "Use the older string tool_summary only as fallback context when the structured roundtrip tool summaries are absent or incomplete. "
             "If the user is asking about something previously discussed, suggested, decided, or mentioned, include the memories category. "
+            "If the user is asking about durable user-specific facts, preferences, likes, dislikes, characteristics, or profile attributes, include the user_attributes category. "
             "If there is meaningful doubt that the available context alone is sufficient, set requires_tools to true."
         ),
         conversation_context=agent_state.conversation_context,

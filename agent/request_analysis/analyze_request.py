@@ -28,12 +28,6 @@ def analyze_request(agent_state: AgentState) -> AgentState:
             agent_state.request_analysis.goal,
         )
     )
-    if (
-        not agent_state.request_analysis.requires_tools
-        and agent_state.request_analysis.context_answer_confidence >= 0.9
-    ):
-        agent_state.goal_reached = True
-
     if parsed_successfully and agent_state.roundtrip_id:
         get_conversation_repo().create_roundtrip_prompt(
             agent_state.roundtrip_id,
