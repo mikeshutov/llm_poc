@@ -10,7 +10,7 @@ from user_attributes.repository.repo_factory import get_user_attribute_repo
 
 
 class CreateUserAttributeArgs(BaseModel):
-    attribute_text: str = Field(..., description="The user attribute text to store.")
+    value: list[str] = Field(..., description="The user attribute values to store as an array/list of strings. Pass a JSON array, not a single string.")
     attribute_type: UserAttributeType = Field(..., description=f"Attribute type: {ATTRIBUTE_TYPE_DESCRIPTION}.")
     source: str = Field(default="explicit", description="Attribute source such as explicit, derived, or computed.")
     confidence: float | None = Field(default=None, ge=0, le=1, description="Optional confidence score between 0 and 1.")
@@ -21,7 +21,7 @@ CREATE_USER_ATTRIBUTE_DESCRIPTION = f"""
 Create a persistent user attribute for future profile assembly and recall.
 
 Required fields:
-- attribute_text (string): The stable characteristic, preference, fact, or instruction to store.
+- value (array/list of strings): The stable characteristic, preference, fact, or instruction values to store. Pass a JSON array, not a single string.
 - attribute_type (string): {ATTRIBUTE_TYPE_DESCRIPTION}.
 
 Optional fields:
@@ -31,21 +31,28 @@ Optional fields:
 """
 
 
+def _value_text(value: list[str]) -> str:
+    normalized = [value.strip() for value in value if value and value.strip()]
+    if not normalized:
+        raise ValueError("value must contain at least one non-empty string.")
+    return "; ".join(normalized)
+
+
 @tool(
     "create_user_attribute",
     args_schema=CreateUserAttributeArgs,
     description=CREATE_USER_ATTRIBUTE_DESCRIPTION,
 )
 def create_user_attribute(
-    attribute_text: str,
+    value: list[str],
     attribute_type: UserAttributeType,
     source: str = "explicit",
     confidence: float | None = None,
     importance: float | None = None,
 ) -> UserAttribute:
     return get_user_attribute_repo().create_attribute(
-        attribute_text=attribute_text,
-        attribute_embedding=embed_text(attribute_text),
+        value=value,
+        attribute_embedding=embed_text(_value_text(value)),
         attribute_type=attribute_type,
         source=source,
         confidence=confidence,

@@ -21,6 +21,13 @@ ATTRIBUTE_DUPLICATE_DISTANCE_THRESHOLD = 0.12
 ATTRIBUTE_TYPES = set(ATTRIBUTE_TYPE_VALUES)
 
 
+def _normalize_value(value: Sequence[str]) -> list[str]:
+    normalized = [str(value).strip() for value in value if str(value).strip()]
+    if not normalized:
+        raise ValueError("value must contain at least one non-empty string.")
+    return normalized
+
+
 class UserAttributeRepository:
     def __init__(self, conn: psycopg.Connection | None = None):
         self._conn = conn or get_connection()
@@ -34,20 +41,21 @@ class UserAttributeRepository:
 
     def _find_exact_attribute(
         self,
-        attribute_text: str,
+        value: Sequence[str],
         *,
         user_id: Optional[str] = None,
-        attribute_type: Optional[str] = None,
+        attribute_type: str,
         exclude_attribute_id: Optional[UUID] = None,
     ) -> Optional[UserAttribute]:
         self._validate_attribute_type(attribute_type)
+        normalized_value = _normalize_value(value)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 SELECT
                     id,
                     user_id,
-                    attribute_text,
+                    value,
                     attribute_embedding,
                     attribute_type,
                     source,
@@ -59,14 +67,14 @@ class UserAttributeRepository:
                     confidence,
                     importance
                 FROM user_attributes
-                WHERE LOWER(BTRIM(attribute_text)) = LOWER(BTRIM(%s))
+                WHERE value = %s
                   AND (CAST(%s AS text) IS NULL OR user_id = %s)
                   AND (CAST(%s AS text) IS NULL OR attribute_type = %s)
                   AND (CAST(%s AS uuid) IS NULL OR id <> %s)
                 ORDER BY updated_at DESC
                 LIMIT 1
                 """,
-                (attribute_text, user_id, user_id, attribute_type, attribute_type, exclude_attribute_id, exclude_attribute_id),
+                (normalized_value, user_id, user_id, attribute_type, attribute_type, exclude_attribute_id, exclude_attribute_id),
             )
             row = cur.fetchone()
             return UserAttribute(**row) if row else None
@@ -87,7 +95,7 @@ class UserAttributeRepository:
                 SELECT
                     id,
                     user_id,
-                    attribute_text,
+                    value,
                     attribute_type,
                     source,
                     source_conversation_id,
@@ -100,7 +108,12 @@ class UserAttributeRepository:
                     (attribute_embedding <-> (%s)::vector) AS relevance_score
                 FROM user_attributes
                 WHERE attribute_embedding IS NOT NULL
-                  AND BTRIM(attribute_text) <> ''
+                  AND COALESCE(cardinality(value), 0) > 0
+                  AND EXISTS (
+                      SELECT 1
+                      FROM unnest(value) AS value
+                      WHERE BTRIM(value) <> ''
+                  )
                   AND (CAST(%s AS text) IS NULL OR user_id = %s)
                   AND (CAST(%s AS text) IS NULL OR attribute_type = %s)
                   AND (CAST(%s AS uuid) IS NULL OR id <> %s)
@@ -128,9 +141,9 @@ class UserAttributeRepository:
         self,
         attribute_id: UUID,
         *,
-        attribute_text: Optional[str] = None,
+        value: Optional[Sequence[str]] = None,
         attribute_embedding: Optional[list[float]] = None,
-        attribute_type: Optional[str] = None,
+        attribute_type: str,
         source: Optional[str] = None,
         source_conversation_id: Optional[UUID] = None,
         source_roundtrip_id: Optional[UUID] = None,
@@ -139,11 +152,12 @@ class UserAttributeRepository:
         importance: Optional[float] = None,
     ) -> Optional[UserAttribute]:
         self._validate_attribute_type(attribute_type)
+        normalized_value = _normalize_value(value) if value is not None else None
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 UPDATE user_attributes
-                SET attribute_text = COALESCE(%s, attribute_text),
+                SET value = COALESCE(%s, value),
                     attribute_embedding = COALESCE((%s)::vector, attribute_embedding),
                     attribute_type = COALESCE(%s, attribute_type),
                     source = COALESCE(%s, source),
@@ -157,7 +171,7 @@ class UserAttributeRepository:
                 RETURNING
                     id,
                     user_id,
-                    attribute_text,
+                    value,
                     attribute_embedding,
                     attribute_type,
                     source,
@@ -170,7 +184,7 @@ class UserAttributeRepository:
                     importance
                 """,
                 (
-                    attribute_text,
+                    normalized_value,
                     attribute_embedding,
                     attribute_type,
                     source,
@@ -199,10 +213,10 @@ class UserAttributeRepository:
 
     def create_attribute(
         self,
-        attribute_text: str,
+        value: Sequence[str],
+        attribute_type: str,
         user_id: Optional[str] = None,
         attribute_embedding: Optional[list[float]] = None,
-        attribute_type: Optional[str] = None,
         source: Optional[str] = None,
         source_conversation_id: Optional[UUID] = None,
         source_roundtrip_id: Optional[UUID] = None,
@@ -211,11 +225,12 @@ class UserAttributeRepository:
         importance: Optional[float] = None,
     ) -> UserAttribute:
         self._validate_attribute_type(attribute_type)
-        exact_match = self._find_exact_attribute(attribute_text, user_id=user_id, attribute_type=attribute_type)
+        normalized_value = _normalize_value(value)
+        exact_match = self._find_exact_attribute(normalized_value, user_id=user_id, attribute_type=attribute_type)
         if exact_match is not None:
             updated_attribute = self._update_attribute_record(
                 exact_match.id,
-                attribute_text=attribute_text,
+                value=normalized_value,
                 attribute_embedding=attribute_embedding,
                 attribute_type=attribute_type,
                 source=source,
@@ -237,7 +252,7 @@ class UserAttributeRepository:
             if similar_match is not None:
                 updated_attribute = self._update_attribute_record(
                     similar_match.id,
-                    attribute_text=attribute_text,
+                    value=normalized_value,
                     attribute_embedding=attribute_embedding,
                     attribute_type=attribute_type,
                     source=source,
@@ -255,7 +270,7 @@ class UserAttributeRepository:
                 """
                 INSERT INTO user_attributes (
                     user_id,
-                    attribute_text,
+                    value,
                     attribute_embedding,
                     attribute_type,
                     source,
@@ -269,7 +284,7 @@ class UserAttributeRepository:
                 RETURNING
                     id,
                     user_id,
-                    attribute_text,
+                    value,
                     attribute_embedding,
                     attribute_type,
                     source,
@@ -283,7 +298,7 @@ class UserAttributeRepository:
                 """,
                 (
                     user_id,
-                    attribute_text,
+                    normalized_value,
                     attribute_embedding,
                     attribute_type,
                     source,
@@ -301,9 +316,9 @@ class UserAttributeRepository:
     def update_attribute(
         self,
         attribute_id: UUID,
-        attribute_text: Optional[str] = None,
+        attribute_type: str,
+        value: Optional[Sequence[str]] = None,
         attribute_embedding: Optional[list[float]] = None,
-        attribute_type: Optional[str] = None,
         source: Optional[str] = None,
         source_conversation_id: Optional[UUID] = None,
         source_roundtrip_id: Optional[UUID] = None,
@@ -312,16 +327,17 @@ class UserAttributeRepository:
         importance: Optional[float] = None,
     ) -> Optional[UserAttribute]:
         self._validate_attribute_type(attribute_type)
-        if attribute_text is not None:
+        normalized_value = _normalize_value(value) if value is not None else None
+        if normalized_value is not None:
             exact_match = self._find_exact_attribute(
-                attribute_text,
+                normalized_value,
                 attribute_type=attribute_type,
                 exclude_attribute_id=attribute_id,
             )
             if exact_match is not None:
                 updated_attribute = self._update_attribute_record(
                     exact_match.id,
-                    attribute_text=attribute_text,
+                    value=normalized_value,
                     attribute_embedding=attribute_embedding,
                     attribute_type=attribute_type,
                     source=source,
@@ -343,7 +359,7 @@ class UserAttributeRepository:
                 if similar_match is not None:
                     updated_attribute = self._update_attribute_record(
                         similar_match.id,
-                        attribute_text=attribute_text,
+                        value=normalized_value,
                         attribute_embedding=attribute_embedding,
                         attribute_type=attribute_type,
                         source=source,
@@ -358,7 +374,7 @@ class UserAttributeRepository:
 
         return self._update_attribute_record(
             attribute_id,
-            attribute_text=attribute_text,
+            value=normalized_value,
             attribute_embedding=attribute_embedding,
             attribute_type=attribute_type,
             source=source,
@@ -376,7 +392,7 @@ class UserAttributeRepository:
                 SELECT
                     id,
                     user_id,
-                    attribute_text,
+                    value,
                     attribute_embedding,
                     attribute_type,
                     source,
@@ -418,7 +434,7 @@ class UserAttributeRepository:
             SELECT
                 id,
                 user_id,
-                attribute_text,
+                value,
                 attribute_embedding,
                 attribute_type,
                 source,
@@ -481,7 +497,7 @@ class UserAttributeRepository:
                 SELECT
                     id,
                     user_id,
-                    attribute_text,
+                    value,
                     attribute_type,
                     source,
                     source_conversation_id,
@@ -494,7 +510,12 @@ class UserAttributeRepository:
                     (attribute_embedding <-> (%s)::vector) AS relevance_score
                 FROM user_attributes
                 WHERE attribute_embedding IS NOT NULL
-                  AND BTRIM(attribute_text) <> ''
+                  AND COALESCE(cardinality(value), 0) > 0
+                  AND EXISTS (
+                      SELECT 1
+                      FROM unnest(value) AS value
+                      WHERE BTRIM(value) <> ''
+                  )
                   AND (CAST(%s AS text) IS NULL OR user_id = %s)
                   AND (CAST(%s AS boolean) IS NULL OR is_active = %s)
                   AND (CAST(%s AS text) IS NULL OR attribute_type = %s)
@@ -524,6 +545,3 @@ class UserAttributeRepository:
             )
             rows = cur.fetchall()
             return [UserAttributeSearchResult(**row) for row in rows]
-
-
-

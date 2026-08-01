@@ -7,9 +7,9 @@ from uuid import UUID
 class UserAttribute:
     id: UUID
     user_id: Optional[str]
-    attribute_text: str
+    value: list[str]
     attribute_embedding: Optional[list[float]]
-    attribute_type: Optional[str]
+    attribute_type: str
     source: Optional[str]
     source_conversation_id: Optional[UUID]
     source_roundtrip_id: Optional[UUID]
@@ -24,8 +24,8 @@ class UserAttribute:
 class UserAttributeSearchResult:
     id: UUID
     user_id: Optional[str]
-    attribute_text: str
-    attribute_type: Optional[str]
+    value: list[str]
+    attribute_type: str
     source: Optional[str]
     source_conversation_id: Optional[UUID]
     source_roundtrip_id: Optional[UUID]
