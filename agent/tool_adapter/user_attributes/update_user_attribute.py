@@ -5,6 +5,7 @@ from uuid import UUID
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
+from common.parsing import normalize_string_list
 from llm.clients.embeddings import embed_text
 from user_attributes.models.user_attribute_models import UserAttribute
 from user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_DESCRIPTION, UserAttributeType
@@ -38,10 +39,7 @@ Optional fields:
 
 
 def _value_text(value: list[str]) -> str:
-    normalized = [value.strip() for value in value if value and value.strip()]
-    if not normalized:
-        raise ValueError("value must contain at least one non-empty string.")
-    return "; ".join(normalized)
+    return "; ".join(normalize_string_list(value))
 
 
 @tool(

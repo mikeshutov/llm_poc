@@ -7,6 +7,7 @@ import psycopg
 from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 
+from common.parsing import normalize_string_list
 from db.connection import get_connection
 from user_attributes.models.user_attribute_models import UserAttribute, UserAttributeSearchResult
 from user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
@@ -20,12 +21,6 @@ ATTRIBUTE_ORDER_FIELDS = {
 ATTRIBUTE_DUPLICATE_DISTANCE_THRESHOLD = 0.12
 ATTRIBUTE_TYPES = set(ATTRIBUTE_TYPE_VALUES)
 
-
-def _normalize_value(value: Sequence[str]) -> list[str]:
-    normalized = [str(value).strip() for value in value if str(value).strip()]
-    if not normalized:
-        raise ValueError("value must contain at least one non-empty string.")
-    return normalized
 
 
 class UserAttributeRepository:
@@ -48,7 +43,7 @@ class UserAttributeRepository:
         exclude_attribute_id: Optional[UUID] = None,
     ) -> Optional[UserAttribute]:
         self._validate_attribute_type(attribute_type)
-        normalized_value = _normalize_value(value)
+        normalized_value = normalize_string_list(value)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -146,7 +141,7 @@ class UserAttributeRepository:
         importance: Optional[float] = None,
     ) -> Optional[UserAttribute]:
         self._validate_attribute_type(attribute_type)
-        normalized_value = _normalize_value(value) if value is not None else None
+        normalized_value = normalize_string_list(value) if value is not None else None
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -219,7 +214,7 @@ class UserAttributeRepository:
         importance: Optional[float] = None,
     ) -> UserAttribute:
         self._validate_attribute_type(attribute_type)
-        normalized_value = _normalize_value(value)
+        normalized_value = normalize_string_list(value)
         exact_match = self._find_exact_attribute(normalized_value, user_id=user_id, attribute_type=attribute_type)
         if exact_match is not None:
             updated_attribute = self._update_attribute_record(
@@ -321,7 +316,7 @@ class UserAttributeRepository:
         importance: Optional[float] = None,
     ) -> Optional[UserAttribute]:
         self._validate_attribute_type(attribute_type)
-        normalized_value = _normalize_value(value) if value is not None else None
+        normalized_value = normalize_string_list(value) if value is not None else None
         if normalized_value is not None:
             exact_match = self._find_exact_attribute(
                 normalized_value,
