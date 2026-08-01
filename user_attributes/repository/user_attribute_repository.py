@@ -108,12 +108,6 @@ class UserAttributeRepository:
                     (attribute_embedding <-> (%s)::vector) AS relevance_score
                 FROM user_attributes
                 WHERE attribute_embedding IS NOT NULL
-                  AND COALESCE(cardinality(value), 0) > 0
-                  AND EXISTS (
-                      SELECT 1
-                      FROM unnest(value) AS value
-                      WHERE BTRIM(value) <> ''
-                  )
                   AND (CAST(%s AS text) IS NULL OR user_id = %s)
                   AND (CAST(%s AS text) IS NULL OR attribute_type = %s)
                   AND (CAST(%s AS uuid) IS NULL OR id <> %s)
@@ -510,12 +504,6 @@ class UserAttributeRepository:
                     (attribute_embedding <-> (%s)::vector) AS relevance_score
                 FROM user_attributes
                 WHERE attribute_embedding IS NOT NULL
-                  AND COALESCE(cardinality(value), 0) > 0
-                  AND EXISTS (
-                      SELECT 1
-                      FROM unnest(value) AS value
-                      WHERE BTRIM(value) <> ''
-                  )
                   AND (CAST(%s AS text) IS NULL OR user_id = %s)
                   AND (CAST(%s AS boolean) IS NULL OR is_active = %s)
                   AND (CAST(%s AS text) IS NULL OR attribute_type = %s)
