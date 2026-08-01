@@ -18,7 +18,7 @@ class GetUserAttributesArgs(BaseModel):
 
 
 GET_USER_ATTRIBUTES_DESCRIPTION = f"""
-List stored user attributes with ordering and optional filters.
+List stored user attributes with ordering and optional filters. Returned attributes use the value field as an array/list of strings.
 
 Optional fields:
 - limit (integer): Maximum number of attributes to return.
@@ -26,6 +26,9 @@ Optional fields:
 - descending (boolean): Sort descending when true.
 - is_active (boolean): Optional active-attribute filter.
 - attribute_type (string): {ATTRIBUTE_TYPE_DESCRIPTION}.
+
+Returned attribute shape:
+- value (array/list of strings): Each attribute stores its values as a JSON array/list of strings, not a single string.
 - source (string): Optional source filter.
 """
 

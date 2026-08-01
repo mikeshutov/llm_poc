@@ -18,7 +18,7 @@ class SearchUserAttributesArgs(BaseModel):
 
 
 SEARCH_USER_ATTRIBUTES_DESCRIPTION = f"""
-Search persistent user attributes by semantic similarity.
+Search persistent user attributes by semantic similarity. Returned attributes use the value field as an array/list of strings.
 
 Required fields:
 - query (string): Natural-language description of the attribute to find.
@@ -27,6 +27,9 @@ Optional fields:
 - limit (integer): Maximum number of matches to return. Defaults to 5.
 - is_active (boolean): Optional active-attribute filter.
 - attribute_type (string): {ATTRIBUTE_TYPE_DESCRIPTION}.
+
+Returned attribute shape:
+- value (array/list of strings): Each attribute stores its values as a JSON array/list of strings, not a single string.
 - source (string): Optional source filter.
 """
 
