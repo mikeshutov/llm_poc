@@ -29,7 +29,7 @@ Required fields:
 - attribute_type (string): {ATTRIBUTE_TYPE_DESCRIPTION}.
 
 Optional fields:
-- value (array/list of strings): Updated attribute values. Pass a JSON array, not a single string.
+- value (array/list of strings): Updated attribute values. Pass a JSON array, not a single string. Store only concrete user-specific values such as ["pizza", "eggs"] or ["Python", "React"], not labels, summaries, placeholders, or brace-wrapped text like `{"dietary staples mentioned by the user"}`.
 - source (string): Updated source value.
 - is_active (boolean): Set false to deactivate an attribute.
 - confidence (number): Optional 0..1 confidence score.

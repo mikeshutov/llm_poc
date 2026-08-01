@@ -146,7 +146,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "Use user_attributes when the task is about stable user-specific facts, preferences, interests, likes, dislikes, favorites, skills, or something the assistant should explicitly retain beyond the current conversation.",
             "Use create_user_attribute to store a new user attribute, update_user_attribute to revise or deactivate one, get_user_attributes to inspect existing attributes, and search_user_attributes to find the most relevant stored user attributes.",
             "Prefer conversation memories for prior discussion recall, and prefer user_attributes for durable user profile characteristics.",
-            "A user interest, preference, like, dislike, favorite, skill, or recurring characteristic should generally be modeled as a user attribute. When creating or updating one, the value field should be a JSON array/list of strings."
+            "A user interest, preference, like, dislike, favorite, skill, or recurring characteristic should generally be modeled as a user attribute. When creating or updating one, the value field should be a JSON array/list of strings. Store concrete user-specific entries only, not category labels, summaries, placeholders, or brace-wrapped descriptions like `{'dietary staples mentioned by the user'}`."
         ],
     ),
     "files": ToolCategory(

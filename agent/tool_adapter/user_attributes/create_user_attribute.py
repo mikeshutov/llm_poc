@@ -21,7 +21,7 @@ CREATE_USER_ATTRIBUTE_DESCRIPTION = f"""
 Create a persistent user attribute for future profile assembly and recall.
 
 Required fields:
-- value (array/list of strings): The stable characteristic, preference, fact, or instruction values to store. Pass a JSON array, not a single string.
+- value (array/list of strings): The stable characteristic, preference, fact, or instruction values to store. Pass a JSON array, not a single string. Store only concrete user-specific values such as ["pizza", "eggs"] or ["Python", "React"], not labels, summaries, placeholders, or brace-wrapped text like `{"dietary staples mentioned by the user"}`.
 - attribute_type (string): {ATTRIBUTE_TYPE_DESCRIPTION}.
 
 Optional fields:
