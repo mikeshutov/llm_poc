@@ -1,4 +1,4 @@
-from agent.agentstate.model import AgentState, UserProfile
+from agent.agentstate.model import AgentState
 from agent.prompt_constants import SYNTHESIS_PROMPT_KIND
 from agent.prompts.agent_prompt import AgentPrompt, PlanEvidenceStep
 from agent.synthesis.prompts.solver_rules import build_solver_rules
@@ -14,7 +14,7 @@ def build_solver_prompt(*, plan_with_evidence: list[PlanEvidenceStep], state: Ag
             "Use them with caution since long evidence might contain irrelevant information."
         ),
         conversation_context=state.conversation_context,
-        user_profile=UserProfile(geometadata=state.geometadata),
+        user_profile=state.user_profile,
         rules=build_solver_rules(state.request_analysis),
         plan_with_evidence=plan_with_evidence,
         schema=SYNTHESIS_SCHEMA,

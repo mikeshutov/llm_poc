@@ -8,6 +8,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from agent.models import AgentResult, Plan
+from personalization.profile.models import GeoLocation, GeoMetadata, UserProfile
 from conversation.models.conversation_models import ConversationContext
 from common.model_constants import LLM_MODEL
 
@@ -17,27 +18,6 @@ class RequestAnalysis(BaseModel):
     applicable_tool_categories: list[str] = []
     requires_tools: bool = False
     context_answer_confidence: float = 0.0
-
-
-class GeoLocation(BaseModel):
-    city: str | None = None
-    region: str | None = None
-    country: str | None = None
-    latitude: float | None = None
-    longitude: float | None = None
-    timezone: str | None = None
-
-
-class GeoMetadata(BaseModel):
-    current_datetime: str
-    current_date: str
-    current_weekday: str
-    timezone: str
-    location: GeoLocation | None = None
-
-
-class UserProfile(BaseModel):
-    geometadata: GeoMetadata | None = None
 
 
 def build_geometadata(
@@ -86,6 +66,7 @@ class AgentState:
     max_turns: int
     conversation_context: ConversationContext = field(default_factory=ConversationContext)
     geometadata: GeoMetadata = field(default_factory=build_geometadata)
+    user_profile: UserProfile = field(default_factory=UserProfile)
     conversation_id: str | None = None
     roundtrip_id: UUID | None = None
     request_analysis: RequestAnalysis = field(default_factory=RequestAnalysis)
@@ -103,6 +84,7 @@ class AgentState:
         max_turns: int,
         conversation_context: ConversationContext | None = None,
         geometadata: GeoMetadata | None = None,
+        user_profile: UserProfile | None = None,
         conversation_id: str | None = None,
         roundtrip_id: UUID | None = None,
     ) -> "AgentState":
@@ -111,6 +93,7 @@ class AgentState:
             max_turns=max_turns,
             conversation_context=ConversationContext() if conversation_context is None else conversation_context,
             geometadata=build_geometadata() if geometadata is None else geometadata,
+            user_profile=UserProfile() if user_profile is None else user_profile,
             conversation_id=conversation_id,
             roundtrip_id=roundtrip_id,
         )

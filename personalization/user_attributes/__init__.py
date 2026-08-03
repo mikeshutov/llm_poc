@@ -1,9 +1,11 @@
-from user_attributes.models.user_attribute_models import UserAttribute, UserAttributeSearchResult
-from user_attributes.models.user_attribute_types import (
+from personalization.user_attributes.models import (
     ATTRIBUTE_TYPE_DESCRIPTION,
     ATTRIBUTE_TYPE_VALUES,
+    UserAttribute,
+    UserAttributeSearchResult,
     UserAttributeType,
 )
+from personalization.user_attributes.repository import UserAttributeRepository
 
 __all__ = [
     "UserAttribute",
@@ -11,4 +13,5 @@ __all__ = [
     "UserAttributeType",
     "ATTRIBUTE_TYPE_VALUES",
     "ATTRIBUTE_TYPE_DESCRIPTION",
+    "UserAttributeRepository",
 ]

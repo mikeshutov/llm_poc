@@ -4,9 +4,9 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from llm.clients.embeddings import embed_text
-from user_attributes.models.user_attribute_models import UserAttributeSearchResult
-from user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_DESCRIPTION, UserAttributeType
-from user_attributes.repository.repo_factory import get_user_attribute_repo
+from personalization.user_attributes.models.user_attribute_models import UserAttributeSearchResult
+from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_DESCRIPTION, UserAttributeType
+from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 
 
 class SearchUserAttributesArgs(BaseModel):

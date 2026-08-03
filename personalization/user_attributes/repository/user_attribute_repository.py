@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 from uuid import UUID
 
 import psycopg
@@ -9,8 +9,8 @@ from psycopg.rows import dict_row
 
 from common.parsing import normalize_string_list
 from db.connection import get_connection
-from user_attributes.models.user_attribute_models import UserAttribute, UserAttributeSearchResult
-from user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
+from personalization.user_attributes.models.user_attribute_models import UserAttribute, UserAttributeSearchResult
+from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
 
 ATTRIBUTE_ORDER_FIELDS = {
     "created_at": "created_at",
@@ -27,6 +27,20 @@ class UserAttributeRepository:
     def __init__(self, conn: psycopg.Connection | None = None):
         self._conn = conn or get_connection()
         register_vector(self._conn)
+
+    def _normalize_attribute_row(self, row: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(row)
+
+        attribute_embedding = normalized.get("attribute_embedding")
+        if attribute_embedding is not None and hasattr(attribute_embedding, "tolist"):
+            normalized["attribute_embedding"] = attribute_embedding.tolist()
+
+        for field_name in ("created_at", "updated_at"):
+            field_value = normalized.get(field_name)
+            if field_value is not None and hasattr(field_value, "isoformat"):
+                normalized[field_name] = field_value.isoformat()
+
+        return normalized
 
     def _validate_attribute_type(self, attribute_type: Optional[str]) -> None:
         if attribute_type is None:
@@ -72,7 +86,7 @@ class UserAttributeRepository:
                 (normalized_value, user_id, user_id, attribute_type, attribute_type, exclude_attribute_id, exclude_attribute_id),
             )
             row = cur.fetchone()
-            return UserAttribute(**row) if row else None
+            return UserAttribute(**self._normalize_attribute_row(row)) if row else None
 
     def _find_similar_attribute(
         self,
@@ -123,7 +137,7 @@ class UserAttributeRepository:
             row = cur.fetchone()
             if not row:
                 return None
-            result = UserAttributeSearchResult(**row)
+            result = UserAttributeSearchResult(**self._normalize_attribute_row(row))
             return result if result.relevance_score <= distance_threshold else None
 
     def _update_attribute_record(
@@ -186,7 +200,7 @@ class UserAttributeRepository:
                 ),
             )
             row = cur.fetchone()
-            return UserAttribute(**row) if row else None
+            return UserAttribute(**self._normalize_attribute_row(row)) if row else None
 
     def _deactivate_attribute(self, attribute_id: UUID) -> None:
         with self._conn.cursor() as cur:
@@ -300,7 +314,7 @@ class UserAttributeRepository:
             )
             row = cur.fetchone()
             assert row is not None
-            return UserAttribute(**row)
+            return UserAttribute(**self._normalize_attribute_row(row))
 
     def update_attribute(
         self,
@@ -398,7 +412,7 @@ class UserAttributeRepository:
                 (attribute_id,),
             )
             row = cur.fetchone()
-            return UserAttribute(**row) if row else None
+            return UserAttribute(**self._normalize_attribute_row(row)) if row else None
 
     def list_attributes(
         self,
@@ -465,7 +479,7 @@ class UserAttributeRepository:
                 ),
             )
             rows = cur.fetchall()
-            return [UserAttribute(**row) for row in rows]
+            return [UserAttribute(**self._normalize_attribute_row(row)) for row in rows]
 
     def search_attributes(
         self,
@@ -527,4 +541,4 @@ class UserAttributeRepository:
                 ),
             )
             rows = cur.fetchall()
-            return [UserAttributeSearchResult(**row) for row in rows]
+            return [UserAttributeSearchResult(**self._normalize_attribute_row(row)) for row in rows]

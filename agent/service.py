@@ -2,12 +2,13 @@ import threading
 from uuid import UUID
 
 from agent.agent import run_agent
-from agent.agentstate.model import GeoMetadata
+from agent.agentstate.model import GeoMetadata, build_geometadata
 from agent.models.agent_result import AgentResult
 from common.model_constants import LLM_MODEL
 from llm.clients.embeddings import embed_text
 from tool.summarize_tool_call import summarize_tool_calls
 from conversation.context_builder import build_roundtrip_context
+from personalization.profile.service import build_user_profile
 from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo
 
@@ -26,16 +27,20 @@ def run_agent_for_query(
         limit=context_limit,
     )
 
+    resolved_geometadata = build_geometadata() if geometadata is None else geometadata
+    user_profile = build_user_profile(geometadata=resolved_geometadata)
+
     result = run_agent(
         conversation_context=conversation_context,
         user_query=user_query,
         conversation_id=conversation_id,
         roundtrip_id=str(roundtrip.id),
-        geometadata=geometadata,
+        geometadata=resolved_geometadata,
+        user_profile=user_profile,
     )
 
     roundtrip_summary_embedding = embed_text(result.roundtrip_summary) if result.roundtrip_summary else None
-    repo.update_roundtrip(
+    roundtrip = repo.update_roundtrip(
         roundtrip.id,
         result.raw_response,
         result.to_payload_for_update_roundtrip(),
@@ -44,7 +49,4 @@ def run_agent_for_query(
     )
     #TODO: enable this once we improve summarization.
     #threading.Thread(target=summarize_tool_calls, args=(roundtrip.id,), daemon=True).start()
-    roundtrip.generated_response = result.raw_response
-    roundtrip.roundtrip_summary = result.roundtrip_summary or None
-    roundtrip.roundtrip_summary_embedding = roundtrip_summary_embedding
     return result, roundtrip

@@ -7,7 +7,7 @@ This is not meant to be a production piece of code. More just a way to explore t
 Rough breakdown of the current agent loop flow.
 1. Prompt comes in and we assemble conversation context.
 2. We pass that context plus the latest user prompt into agent state.
-3. We also prepare a small `User Profile` prompt section. Right now it mainly contains geo/location-aware metadata and is injected into `request_analysis` and `synthesis`, but not `planner`.
+3. We also prepare a small `User Profile` prompt section. It currently contains geo/location-aware metadata(not perfect) plus stored user attributes, and it is injected into `request_analysis`, `planner`, and `synthesis`.
 4. `request_analysis` infers the user's goal, decides whether tools are required, and selects the relevant tool categories.
    - If the existing context is strong enough, we can skip planning and go straight to synthesis.
    - If tools are needed, the selected categories determine which tool groups and rules are loaded.
@@ -47,13 +47,14 @@ Roundtrips have this flow:
 For subsequent prompts, the context builder pulls together a few layers of history:
 1. `conversation.summary`, which is the continually refreshed top-level summary of the overall conversation.
 2. The latest rolling `conversation_summary` row, which summarizes an older batch window and carries its tool summary.
-3. Recent unsummarized roundtrip summaries and tool summaries after the latest batch cutoff.
+3. Recent unsummarized roundtrips after the latest batch cutoff, where each entry includes the original `user_prompt` plus the `roundtrip_summary`.
+4. Recent unsummarized structured tool summaries after the latest batch cutoff.
 
 The latest user prompt is not embedded inside the stored conversation context anymore. It is passed separately into the prompt as the final section so the live request stays distinct from historical context.
 
-We also prepare a separate `User Profile` section for prompt construction. Right now that primarily carries geo/location-aware metadata, and it is included in `request_analysis` and `synthesis` but intentionally omitted from `planner`. The idea is this is needed to get the goal as well as to generate the final response but the planner does not need to worry about it.
+We also prepare a separate `User Profile` section for prompt construction. That profile currently contains geo/location-aware metadata plus active stored user attributes such as preferences, skills, and goals, and it is included in `request_analysis`, `planner`, and `synthesis`. Because stored user attributes are already present there, the agent should not need to call the user-attribute read tools unless it needs broader filtering, targeted retrieval, or to create/update/deactivate data.
 
-The idea is to give the request analysis and synthesis steps reusable historical context while still keeping the freshest user request explicit and easy to reason about.
+The idea is to give the agent reusable historical context, recent turn-level context, and durable profile context while still keeping the freshest user request explicit and easy to reason about. Although this is still not finalized as we need cleaner profile management but it is a step in that direction.
 
 Simple diagram to illustrate what this looks like.
 
@@ -64,25 +65,32 @@ flowchart TD
         direction TB
         M1["conversation.summary"]
         M2["Latest rolling conversation_summary summary + tool summary + cutoff"]
-        M3["Recent unsummarized roundtrip summaries"]
+        M3["Recent unsummarized roundtrips
+user_prompt + roundtrip_summary"]
         M4["Recent unsummarized tool summaries"]
         M1 --> M2 --> M3 --> M4
     end
 
     A --> D[Latest User Prompt passed separately]
-    A --> E[User Profile passed separately to request_analysis and synthesis]
+    A --> E[User Profile passed separately to request_analysis planner and synthesis]
 
-    subgraph C[Roundtrip Element]
+    subgraph C[Recent Roundtrip Element]
         direction TB
         N1["User Prompt"]
-        N2["Assistant Response"]
-        N3["Roundtrip Summary"]
-        N4["Tool Summary"]
-        N1 --> N2 --> N3 --> N4
+        N2["Roundtrip Summary"]
+        N1 --> N2
+    end
+
+    subgraph F[User Profile]
+        direction TB
+        P1["Geo Metadata"]
+        P2["Stored User Attributes"]
+        P1 --> P2
     end
 
     M3 --> C
     M4 --> C
+    E --> F
 ```
 
 ## How File Searching with Uploads and Large files Works here

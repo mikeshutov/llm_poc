@@ -3,6 +3,7 @@ from __future__ import annotations
 from langsmith import traceable
 
 from agent.agentstate.model import AgentState, GeoMetadata
+from personalization.profile.models import UserProfile
 from conversation.models.conversation_models import ConversationContext
 from agent.request_analysis.analyze_request import analyze_request
 from agent.executor.executor import run_executor
@@ -24,12 +25,14 @@ def run_agent(
     roundtrip_id: str | None = None,
     max_turns: int = 10,
     geometadata: GeoMetadata | None = None,
+    user_profile: UserProfile | None = None,
 ) -> AgentResult:
     agentState = AgentState.new(
         task=user_query,
         max_turns=max_turns,
         conversation_context=conversation_context,
         geometadata=geometadata,
+        user_profile=user_profile,
         roundtrip_id=UUID(roundtrip_id) if roundtrip_id else None,
     )
     builder = StateGraph(AgentState)
