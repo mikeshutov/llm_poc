@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from agent.agentstate.model import UserProfile
+from personalization.profile.models import UserProfile
 from agent.prompt_constants import (
     PLANNER_PROMPT_KIND,
     REQUEST_ANALYSIS_PROMPT_KIND,
@@ -127,6 +127,11 @@ class AgentPrompt:
 
         if self.prompt_kind == PLANNER_PROMPT_KIND:
             parts = [self.instruction.rstrip()]
+            if self.user_profile:
+                parts.extend([
+                    "User Profile (JSON):",
+                    self._serialize_user_profile(),
+                ])
             if self.conversation_context:
                 parts.extend([
                     "Conversation Context (JSON):",

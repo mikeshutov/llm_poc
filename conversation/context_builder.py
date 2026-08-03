@@ -2,7 +2,7 @@ from uuid import UUID
 
 from conversation.models.conversation_models import (
     ConversationContext,
-    RecentRoundtripSummary,
+    RecentRoundtrip,
     RecentRoundtripToolSummary,
     ToolSummaryContext,
 )
@@ -20,13 +20,14 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
         after_message_index=after_index,
     )
 
-    recent_roundtrip_summaries = [
-        RecentRoundtripSummary(
+    recent_roundtrips = [
+        RecentRoundtrip(
             message_index=rt.message_index,
-            roundtrip_summary=rt.roundtrip_summary,
+            user_prompt=rt.user_prompt or "",
+            roundtrip_summary=rt.roundtrip_summary or "",
         )
         for rt in conversation_roundtrips
-        if rt.roundtrip_summary
+        if rt.user_prompt or rt.roundtrip_summary
     ]
 
     recent_roundtrip_tool_summaries = []
@@ -46,6 +47,6 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
         conversation_summary=conversation.summary if conversation else "",
         latest_conversation_summary=latest_summary.summary if latest_summary else "",
         tool_summary=latest_summary.tool_summary if latest_summary else "",
-        recent_roundtrip_summaries=recent_roundtrip_summaries,
+        recent_roundtrips=recent_roundtrips,
         recent_roundtrip_tool_summaries=recent_roundtrip_tool_summaries,
     )

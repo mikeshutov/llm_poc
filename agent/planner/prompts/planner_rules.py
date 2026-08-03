@@ -15,6 +15,7 @@ def build_planner_rules(
         "Do not repeat tool calls that have already been executed.",
         "Carry forward prior plans, evidence, and constraints that remain relevant.",
         "Use recent_roundtrip_tool_summaries as helpful context about prior tool usage, entities, produced fields, and freshness.",
+        "Use recent_roundtrips when the user refers to a recent prior message, wording from earlier in the conversation, or a recent turn summary.",
         "Use the older string tool_summary only as fallback context when recent_roundtrip_tool_summaries are absent or incomplete.",
         "If previous iterations have already gathered sufficient data to answer the task, set final_answer and return an empty steps list.",
         "If there is meaningful doubt that prior context or previous tool results are sufficient, plan tool calls to verify or fill the gap.",

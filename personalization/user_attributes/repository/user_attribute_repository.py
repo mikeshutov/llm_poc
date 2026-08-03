@@ -9,8 +9,8 @@ from psycopg.rows import dict_row
 
 from common.parsing import normalize_string_list
 from db.connection import get_connection
-from user_attributes.models.user_attribute_models import UserAttribute, UserAttributeSearchResult
-from user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
+from personalization.user_attributes.models.user_attribute_models import UserAttribute, UserAttributeSearchResult
+from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
 
 ATTRIBUTE_ORDER_FIELDS = {
     "created_at": "created_at",

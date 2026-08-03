@@ -31,6 +31,7 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
 def _build_planner_context(state: AgentState) -> ConversationContext:
     return ConversationContext(
         tool_summary=state.conversation_context.tool_summary,
+        recent_roundtrips=state.conversation_context.recent_roundtrips,
         recent_roundtrip_tool_summaries=state.conversation_context.recent_roundtrip_tool_summaries,
     )
 
@@ -80,6 +81,7 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
     return AgentPrompt(
         prompt_kind=PLANNER_PROMPT_KIND,
         instruction="You are a planning agent. Utilize data from 'Previous Iterations:' when it is provided.",
+        user_profile=state.user_profile,
         conversation_context=_build_planner_context(state),
         task=_build_planner_task(state),
         available_tools=context.compiled_tools,

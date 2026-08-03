@@ -70,16 +70,24 @@ class ConversationRepository:
         payload: dict[str, Any],
         roundtrip_summary: Optional[str] = None,
         roundtrip_summary_embedding: Optional[list[float]] = None,
-    ) -> None:
+    ) -> ConversationRoundtrip:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 UPDATE conversation_roundtrip
-                SET generated_response = %s, roundtrip_summary = COALESCE(%s, roundtrip_summary), roundtrip_summary_embedding = COALESCE((%s)::vector, roundtrip_summary_embedding), response_payload = %s, updated_at = now()
+                SET generated_response = %s,
+                    roundtrip_summary = COALESCE(%s, roundtrip_summary),
+                    roundtrip_summary_embedding = COALESCE((%s)::vector, roundtrip_summary_embedding),
+                    response_payload = %s,
+                    updated_at = now()
                 WHERE id = %s
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model
                 """,
                 (response, roundtrip_summary, roundtrip_summary_embedding, Jsonb(payload), roundtrip_id),
             )
+            row = cur.fetchone()
+            assert row is not None
+            return ConversationRoundtrip(**row)
 
     def append_roundtrip(
         self,

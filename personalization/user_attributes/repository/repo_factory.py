@@ -1,6 +1,6 @@
 import streamlit as st
 
-from user_attributes.repository.user_attribute_repository import UserAttributeRepository
+from personalization.user_attributes.repository.user_attribute_repository import UserAttributeRepository
 
 
 @st.cache_resource

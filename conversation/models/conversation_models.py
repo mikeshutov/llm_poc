@@ -24,9 +24,10 @@ class ToolSummaryContext(BaseModel):
     freshness: str = ""
 
 
-class RecentRoundtripSummary(BaseModel):
+class RecentRoundtrip(BaseModel):
     message_index: int
-    roundtrip_summary: str
+    user_prompt: str = ""
+    roundtrip_summary: str = ""
 
 
 class RecentRoundtripToolSummary(BaseModel):
@@ -38,7 +39,7 @@ class ConversationContext(BaseModel):
     conversation_summary: str = ""
     latest_conversation_summary: str = ""
     tool_summary: str = ""
-    recent_roundtrip_summaries: list[RecentRoundtripSummary] = Field(default_factory=list)
+    recent_roundtrips: list[RecentRoundtrip] = Field(default_factory=list)
     recent_roundtrip_tool_summaries: list[RecentRoundtripToolSummary] = Field(default_factory=list)
 
 
