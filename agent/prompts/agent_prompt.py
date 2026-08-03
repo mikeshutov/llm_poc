@@ -71,114 +71,129 @@ class AgentPrompt:
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), indent=2, ensure_ascii=True, default=str)
 
+    def _serialize_json(self, value: Any, *, default: Any = str) -> str:
+        return json.dumps(value, indent=2, ensure_ascii=True, default=default)
+
     def _serialize_user_profile(self) -> str:
         if self.user_profile is None:
             return ""
-        return json.dumps(self.user_profile.model_dump(), indent=2, ensure_ascii=True)
+        return self._serialize_json(self.user_profile.model_dump())
 
     def _serialize_previous_iterations(self) -> str:
         if not self.previous_iterations:
             return ""
-        return json.dumps(
+        return self._serialize_json(
             [iteration.model_dump() for iteration in self.previous_iterations],
-            indent=2,
-            ensure_ascii=True,
-            default=str,
         )
 
     def _serialize_plan_with_evidence(self) -> str:
         if not self.plan_with_evidence:
             return ""
-        return json.dumps(
+        return self._serialize_json(
             [step.model_dump() for step in self.plan_with_evidence],
-            indent=2,
-            ensure_ascii=True,
-            default=str,
         )
 
+    def _append_section(self, parts: list[str], heading: str, content: str) -> None:
+        if content:
+            parts.extend([heading, content])
+
+    def _append_user_profile(self, parts: list[str]) -> None:
+        self._append_section(parts, "User Profile (JSON):", self._serialize_user_profile())
+
+    def _append_conversation_context(self, parts: list[str], heading: str = "Conversation Context (JSON):") -> None:
+        if self.conversation_context is None:
+            return
+        self._append_section(parts, heading, build_conversation_context_json(self.conversation_context))
+
     def _append_latest_user_prompt(self, parts: list[str]) -> None:
-        parts.extend([
-            "Latest User Prompt:",
-            self.task,
-        ])
+        self._append_section(parts, "Latest User Prompt:", self.task)
+
+    def _join_parts(self, parts: list[str]) -> str:
+        return "\n\n".join(part for part in parts if part)
+
+    def _build_parts(
+        self,
+        *,
+        include_user_profile: bool = False,
+        include_conversation_context: bool = False,
+        conversation_context_heading: str = "Conversation Context (JSON):",
+        include_available_tool_categories: bool = False,
+        include_available_tools: bool = False,
+        include_rules_section: bool = False,
+        include_rules_raw: bool = False,
+        include_previous_iterations: bool = False,
+        include_plan_with_evidence: bool = False,
+        include_latest_user_prompt: bool = False,
+        schema_as_response_label: bool = False,
+        include_schema_raw: bool = False,
+        trailing_note: str = "",
+    ) -> list[str]:
+        parts = [self.instruction.rstrip()]
+
+        if include_user_profile:
+            self._append_user_profile(parts)
+        if include_conversation_context:
+            self._append_conversation_context(parts, heading=conversation_context_heading)
+        if include_available_tool_categories:
+            self._append_section(parts, "Available categories:", self.available_tool_categories)
+        if include_available_tools:
+            self._append_section(parts, "Allowed Tools:", self.available_tools)
+        if include_rules_section:
+            self._append_section(parts, "Rules:", self.rules)
+        if include_rules_raw and self.rules:
+            parts.append(self.rules)
+        if include_previous_iterations:
+            self._append_section(parts, "Previous Iterations (JSON):", self._serialize_previous_iterations())
+        if include_plan_with_evidence:
+            self._append_section(parts, "Plan with Evidence (JSON):", self._serialize_plan_with_evidence())
+        if trailing_note:
+            parts.append(trailing_note)
+        if schema_as_response_label and self.schema:
+            parts.append(f"Response Schema: {self.schema}")
+        if include_schema_raw and self.schema:
+            parts.append(self.schema)
+        if include_latest_user_prompt:
+            self._append_latest_user_prompt(parts)
+
+        return parts
 
     def to_string(self) -> str:
         if self.prompt_kind == REQUEST_ANALYSIS_PROMPT_KIND:
-            parts = [self.instruction.rstrip()]
-            if self.user_profile:
-                parts.extend([
-                    "User Profile (JSON):",
-                    self._serialize_user_profile(),
-                ])
-            if self.conversation_context:
-                parts.extend([
-                    "Conversation context (JSON):",
-                    build_conversation_context_json(self.conversation_context),
-                ])
-            if self.available_tool_categories:
-                parts.extend([
-                    "Available categories:",
-                    self.available_tool_categories,
-                ])
-            if self.schema:
-                parts.append(f"Response Schema: {self.schema}")
-            self._append_latest_user_prompt(parts)
-            return "\n\n".join(part for part in parts if part)
+            return self._join_parts(
+                self._build_parts(
+                    include_user_profile=True,
+                    include_conversation_context=True,
+                    conversation_context_heading="Conversation context (JSON):",
+                    include_available_tool_categories=True,
+                    include_latest_user_prompt=True,
+                    schema_as_response_label=True,
+                )
+            )
 
         if self.prompt_kind == PLANNER_PROMPT_KIND:
-            parts = [self.instruction.rstrip()]
-            if self.user_profile:
-                parts.extend([
-                    "User Profile (JSON):",
-                    self._serialize_user_profile(),
-                ])
-            if self.conversation_context:
-                parts.extend([
-                    "Conversation Context (JSON):",
-                    build_conversation_context_json(self.conversation_context),
-                ])
-            parts.extend([
-                "Allowed Tools:",
-                self.available_tools,
-            ])
-            if self.rules:
-                parts.append(self.rules)
-            if self.previous_iterations:
-                parts.extend([
-                    "Previous Iterations (JSON):",
-                    self._serialize_previous_iterations(),
-                ])
-            if self.schema:
-                parts.append(self.schema)
-            self._append_latest_user_prompt(parts)
-            return "\n\n".join(part for part in parts if part)
+            return self._join_parts(
+                self._build_parts(
+                    include_user_profile=True,
+                    include_conversation_context=True,
+                    include_available_tools=True,
+                    include_rules_raw=True,
+                    include_previous_iterations=True,
+                    include_latest_user_prompt=True,
+                    include_schema_raw=True,
+                )
+            )
 
         if self.prompt_kind == SYNTHESIS_PROMPT_KIND:
-            parts = [self.instruction.rstrip()]
-            if self.user_profile:
-                parts.extend([
-                    "User Profile (JSON):",
-                    self._serialize_user_profile(),
-                ])
-            if self.rules:
-                parts.extend([
-                    "Rules:",
-                    self.rules,
-                ])
-            if self.conversation_context:
-                parts.extend([
-                    "Conversation Context (JSON):",
-                    build_conversation_context_json(self.conversation_context),
-                ])
-            if self.plan_with_evidence:
-                parts.extend([
-                    "Plan with Evidence (JSON):",
-                    self._serialize_plan_with_evidence(),
-                ])
-            parts.append("Now solve the question or task according to provided evidence above.")
-            if self.schema:
-                parts.append(self.schema)
-            self._append_latest_user_prompt(parts)
-            return "\n\n".join(part for part in parts if part)
+            return self._join_parts(
+                self._build_parts(
+                    include_user_profile=True,
+                    include_rules_section=True,
+                    include_conversation_context=True,
+                    include_plan_with_evidence=True,
+                    trailing_note="Now solve the question or task according to provided evidence above.",
+                    include_latest_user_prompt=True,
+                    include_schema_raw=True,
+                )
+            )
 
         raise ValueError(f"Unsupported prompt_kind: {self.prompt_kind}")
