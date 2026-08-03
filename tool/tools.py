@@ -141,13 +141,13 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     ),
     "user_attributes": ToolCategory(
         tools=USER_ATTRIBUTE_TOOLS,
-        description="Create, update, list, and search persistent user attributes using typed categories like career.likes or food.dislikes. Attribute values are stored as arrays/lists of strings.",
+        description="Create, update, list, and search persistent user attributes using typed categories like career.likes, projects.goals, or food.dislikes. Attribute values are stored as arrays/lists of strings.",
         rules=[
-            "Use user_attributes when the task is about stable user-specific facts, preferences, interests, likes, dislikes, favorites, skills, or something the assistant should explicitly retain beyond the current conversation.",
+            "Use user_attributes when the task is about stable user-specific facts, preferences, interests, likes, dislikes, favorites, skills, goals, or something the assistant should explicitly retain beyond the current conversation.",
             "Stored user attributes are already present in the user_profile.user_attributes section of the prompt. Do not call get_user_attributes or search_user_attributes just to re-fetch data that is already visible there.",
             "Use create_user_attribute to store a new user attribute, update_user_attribute to revise or deactivate one, get_user_attributes only when you need a broader or differently filtered view than what is already in user_profile.user_attributes, and search_user_attributes when you need targeted retrieval beyond the attributes already shown in the profile.",
             "Prefer conversation memories for prior discussion recall, and prefer user_attributes for durable user profile characteristics. Prefer the already-provided user profile before planning extra user_attributes reads.",
-            "A user interest, preference, like, dislike, favorite, skill, or recurring characteristic should generally be modeled as a user attribute. When creating or updating one, the value field should be a JSON array/list of strings. Store concrete user-specific entries only, not category labels, summaries, placeholders, or brace-wrapped descriptions like `{'dietary staples mentioned by the user'}`."
+            "A user interest, preference, like, dislike, favorite, skill, goal, or recurring characteristic should generally be modeled as a user attribute. Use the *.goals qualifier for durable aims such as career objectives, project objectives, or fitness targets. When creating or updating one, the value field should be a JSON array/list of strings. Store concrete user-specific entries only, not category labels, summaries, placeholders, or brace-wrapped descriptions like `{'dietary staples mentioned by the user'}`."
         ],
     ),
     "files": ToolCategory(

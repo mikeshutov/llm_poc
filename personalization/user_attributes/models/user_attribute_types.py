@@ -17,6 +17,7 @@ ATTRIBUTE_QUALIFIERS = (
     "favorites",
     "interests",
     "skills",
+    "goals",
 )
 
 ATTRIBUTE_TYPE_VALUES = tuple(

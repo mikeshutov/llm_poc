@@ -52,7 +52,7 @@ For subsequent prompts, the context builder pulls together a few layers of histo
 
 The latest user prompt is not embedded inside the stored conversation context anymore. It is passed separately into the prompt as the final section so the live request stays distinct from historical context.
 
-We also prepare a separate `User Profile` section for prompt construction. That profile currently contains geo/location-aware metadata plus active stored user attributes, and it is included in `request_analysis`, `planner`, and `synthesis`. Because stored user attributes are already present there, the agent should not need to call the user-attribute read tools unless it needs broader filtering, targeted retrieval, or to create/update/deactivate data.
+We also prepare a separate `User Profile` section for prompt construction. That profile currently contains geo/location-aware metadata plus active stored user attributes such as preferences, skills, and goals, and it is included in `request_analysis`, `planner`, and `synthesis`. Because stored user attributes are already present there, the agent should not need to call the user-attribute read tools unless it needs broader filtering, targeted retrieval, or to create/update/deactivate data.
 
 The idea is to give the agent reusable historical context, recent turn-level context, and durable profile context while still keeping the freshest user request explicit and easy to reason about. Although this is still not finalized as we need cleaner profile management but it is a step in that direction.
 

@@ -20,7 +20,7 @@ def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
             "Use recent_roundtrips when the user refers to something said in a recent prior message or to a recent turn summary. "
             "Use the older string tool_summary only as fallback context when the structured roundtrip tool summaries are absent or incomplete. "
             "If the user is asking about something previously discussed, suggested, decided, or mentioned, include the memories category. "
-            "The prompt already includes user_profile, including stored user attributes. If that profile context appears sufficient, tools may be unnecessary; include the user_attributes category when the task requires creating, updating, deactivating, or more precisely retrieving durable user-specific profile data. "
+            "The prompt already includes user_profile, including stored user attributes. If that profile context appears sufficient, tools may be unnecessary; include the user_attributes category when the task requires creating, updating, deactivating, or more precisely retrieving durable user-specific profile data such as preferences, skills, or goals. "
             "If there is meaningful doubt that the available context alone is sufficient, set requires_tools to true."
         ),
         conversation_context=agent_state.conversation_context,
