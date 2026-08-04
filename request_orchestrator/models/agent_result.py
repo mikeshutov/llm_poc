@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from integrations.brave.models import NewsSearchResponse
 from products.models.product_search_results import ProductSearchResults
 from rendering.cards_mapper import news_response_to_cards, product_results_to_cards
-
-if TYPE_CHECKING:
-    from request_orchestrator.models.agent_state import AgentState
 
 
 @dataclass(frozen=True)
@@ -73,5 +70,3 @@ class AgentResult:
             tool_summary=tool_summary or {},
             cards=cards,
         )
-
-
