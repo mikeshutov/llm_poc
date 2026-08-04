@@ -84,6 +84,7 @@ class AgentState:
         user_profile: UserProfile | None = None,
         conversation_id: str | None = None,
         roundtrip_id: UUID | None = None,
+        llm: Any | None = None,
     ) -> "AgentState":
         return cls(
             task=task,
@@ -92,6 +93,7 @@ class AgentState:
             user_profile=UserProfile() if user_profile is None else user_profile,
             conversation_id=conversation_id,
             roundtrip_id=roundtrip_id,
+            llm=ChatOpenAI(model=LLM_MODEL) if llm is None else llm,
         )
 
     def add_iteration(self, iteration: IterationState) -> IterationState:

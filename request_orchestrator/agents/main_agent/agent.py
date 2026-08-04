@@ -14,6 +14,7 @@ from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.executor.executor import run_executor
 from request_orchestrator.shared.planner.planner import run_planner
 from request_orchestrator.shared.synthesis.synthesis import run_synthesis
+from typing import Any
 from uuid import UUID
 
 
@@ -25,6 +26,7 @@ def run_agent(
     roundtrip_id: str | None = None,
     max_turns: int = 10,
     user_profile: UserProfile | None = None,
+    llm: Any | None = None,
 ) -> AgentResult:
     agentState = AgentState.new(
         task=user_query,
@@ -32,6 +34,7 @@ def run_agent(
         conversation_context=conversation_context,
         user_profile=user_profile,
         roundtrip_id=UUID(roundtrip_id) if roundtrip_id else None,
+        llm=llm,
     )
     builder = StateGraph(AgentState)
     builder.add_node(REQUEST_ANALYSIS_EDGE, analyze_request)
