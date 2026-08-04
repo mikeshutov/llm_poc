@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 import streamlit as st
 
-from agent.service import run_agent_for_query
+from request_orchestrator.service import run_request_orchestrator_for_query
 from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from conversation.repository.repo_factory import get_conversation_repo
 from conversation.replay import populate_replay_conversation, prepare_replay_conversation
@@ -82,7 +82,7 @@ def run_live_turn(user_query: str, attached_file: dict | None = None) -> None:
         )
 
     with st.spinner("Thinking..."):
-        agent_result, roundtrip = run_agent_for_query(
+        agent_result, roundtrip = run_request_orchestrator_for_query(
             conversation_id=st.session_state.conversation_id,
             user_query=final_user_query,
         )
