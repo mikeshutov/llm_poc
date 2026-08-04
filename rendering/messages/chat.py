@@ -7,7 +7,7 @@ import streamlit as st
 
 from conversation.conversation import generate_conversation_title
 from conversation.models.conversation_models import ConversationRoundtrip
-from agent.models.agent_result import AgentResult
+from request_orchestrator.models.agent_result import AgentResult
 from conversation.repository.repo_factory import get_conversation_repo
 from conversation.summary_service import rebuild_conversation_summaries
 from rendering.feedback import render_feedback_controls

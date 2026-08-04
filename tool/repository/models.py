@@ -16,7 +16,7 @@ class ToolCall(BaseModel):
     tool_name: str
     status: str
     input_payload: dict[str, Any] = {}
-    output_payload: Optional[dict[str, Any]] = None
+    output_payload: Any | None = None
     error_message: Optional[str] = None
     duration_ms: Optional[int] = None
     goal: Optional[str] = None

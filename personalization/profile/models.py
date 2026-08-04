@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from dataclasses import asdict
+from typing import Any
+
+from pydantic import BaseModel, Field, model_serializer
 
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 
@@ -25,7 +28,33 @@ class GeoMetadata(BaseModel):
 class UserAttributesSection(BaseModel):
     attributes: list[UserAttribute] = Field(default_factory=list)
 
+    def to_prompt_dict(self) -> dict[str, Any]:
+        return {
+            "attributes": [
+                {
+                    key: value
+                    for key, value in asdict(attribute).items()
+                    if key != "attribute_embedding"
+                }
+                for attribute in self.attributes
+            ]
+        }
+
+    @model_serializer(mode="plain")
+    def serialize_model(self) -> dict[str, Any]:
+        return self.to_prompt_dict()
+
 
 class UserProfile(BaseModel):
     geometadata: GeoMetadata | None = None
     user_attributes: UserAttributesSection = Field(default_factory=UserAttributesSection)
+
+    def to_prompt_dict(self) -> dict[str, Any]:
+        return {
+            "geometadata": None if self.geometadata is None else self.geometadata.model_dump(),
+            "user_attributes": self.user_attributes.to_prompt_dict(),
+        }
+
+    @model_serializer(mode="plain")
+    def serialize_model(self) -> dict[str, Any]:
+        return self.to_prompt_dict()
