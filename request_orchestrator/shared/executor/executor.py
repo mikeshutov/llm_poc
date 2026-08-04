@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from pydantic import ValidationError
 from langsmith import traceable
-from request_orchestrator.models.agent_state import AgentState, IterationState
-from tool.repository.tool_call_repository import ToolCallRepository
+from pydantic import ValidationError
 from rendering.debug import build_step_status_message, emit_status_message
+from request_orchestrator.models.agent_state import AgentState, IterationState
 from tool.registry import call_tool
+from tool.repository.tool_call_repository import ToolCallRepository
 
 def _next_step(iteration: IterationState):
     if iteration.plan is None:
@@ -30,10 +30,9 @@ def _substitute_refs(obj, results: dict):
 
 @traceable(name="Executor Node")
 def run_executor(agent_state: AgentState) -> AgentState:
-    # we probably want to set up some sort of
-    # "policy" or gating layer here or after planning
     iteration = agent_state.iteration_trace[-1] 
     tool_repo = ToolCallRepository() if agent_state.roundtrip_id else None
+    allowed_tool_names = agent_state.agent_profile.allowed_tool_names()
 
     while (step := _next_step(iteration)) is not None:
         args = _substitute_refs(step.args, iteration.results)
@@ -41,7 +40,7 @@ def run_executor(agent_state: AgentState) -> AgentState:
         emit_status_message(build_step_status_message(step.plan, step.tool, args))
 
         try:
-            out = call_tool(name=step.tool, tool_input=args)
+            out = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)
         except ValidationError as e:
             out = {"error": f"Invalid arguments for tool '{step.tool}': {e.errors(include_url=False)}"}
         except Exception as e:
@@ -52,4 +51,3 @@ def run_executor(agent_state: AgentState) -> AgentState:
             tool_repo.append_tool_call(agent_state.roundtrip_id, iteration, step)
 
     return agent_state
-

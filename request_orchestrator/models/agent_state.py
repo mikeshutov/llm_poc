@@ -10,6 +10,8 @@ from pydantic import BaseModel
 from common.model_constants import LLM_MODEL
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import GeoLocation, GeoMetadata, UserProfile
+from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
+from request_orchestrator.agents.models.agent_profile import AgentProfile
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.plan import Plan
 
@@ -45,7 +47,6 @@ def build_geometadata(
 @dataclass
 class IterationState:
     plan: Plan | None = None
-    # map evidence id -> tool output (or normalized string)
     results: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -67,6 +68,7 @@ class AgentState:
     max_turns: int
     conversation_context: ConversationContext = field(default_factory=ConversationContext)
     user_profile: UserProfile = field(default_factory=UserProfile)
+    agent_profile: AgentProfile = field(default_factory=lambda: MAIN_AGENT_PROFILE)
     conversation_id: str | None = None
     roundtrip_id: UUID | None = None
     request_analysis: RequestAnalysis = field(default_factory=RequestAnalysis)
@@ -82,6 +84,7 @@ class AgentState:
         max_turns: int,
         conversation_context: ConversationContext | None = None,
         user_profile: UserProfile | None = None,
+        agent_profile: AgentProfile | None = None,
         conversation_id: str | None = None,
         roundtrip_id: UUID | None = None,
         llm: Any | None = None,
@@ -91,6 +94,7 @@ class AgentState:
             max_turns=max_turns,
             conversation_context=ConversationContext() if conversation_context is None else conversation_context,
             user_profile=UserProfile() if user_profile is None else user_profile,
+            agent_profile=MAIN_AGENT_PROFILE if agent_profile is None else agent_profile,
             conversation_id=conversation_id,
             roundtrip_id=roundtrip_id,
             llm=ChatOpenAI(model=LLM_MODEL) if llm is None else llm,

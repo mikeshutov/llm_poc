@@ -1,31 +1,40 @@
 import json
 
+from conversation.models.conversation_models import ConversationContext
+from request_orchestrator.constants import PLANNER_PROMPT_KIND
+from request_orchestrator.models.agent_prompt import AgentPrompt, PreviousIteration, PreviousIterationStep
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.planner.models.compiled_planner_context import CompiledPlannerContext
-from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from request_orchestrator.shared.planner.prompts.planner_rules import build_planner_rules
 from request_orchestrator.shared.planner.prompts.planner_schema_prompt import PLANNER_SCHEMA
-from request_orchestrator.models.agent_prompt import AgentPrompt, PreviousIteration, PreviousIterationStep
-from conversation.models.conversation_models import ConversationContext
-from tool.tools import TOOL_CATEGORIES, tools as all_tools
 
 
 # we build the tools and rules dynamically here based on the state before we pass this on to the planner
 def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext:
-    applicable = state.request_analysis.applicable_tool_categories
-    if applicable:
-        tools = []
-        rules = {}
-        for cat in applicable:
-            if cat in TOOL_CATEGORIES:
-                tools.extend(TOOL_CATEGORIES[cat].tools)
-                if TOOL_CATEGORIES[cat].rules:
-                    rules[cat] = TOOL_CATEGORIES[cat].rules
+    allowed_categories = state.agent_profile.allowed_tool_categories()
+    tools = []
+    rules = {}
+
+    if state.request_analysis.applicable_tool_categories:
+        for category_name in state.request_analysis.applicable_tool_categories:
+            category = allowed_categories.get(category_name)
+            if category is None:
+                continue
+            tools.extend(category.tools)
+            if category.rules:
+                rules[category_name] = category.rules
     else:
-        tools = all_tools
-        rules = {}
-    compiled_tools = "\n".join(f"- {t.name}: {t.description}".strip() for t in tools)
-    return CompiledPlannerContext(tools=tools, compiled_tools=compiled_tools, rules=rules)
+        for category in allowed_categories.values():
+            tools.extend(category.tools)
+
+    tools.extend(state.agent_profile.extra_tools)
+
+    deduped_tools: dict[str, object] = {}
+    for tool in tools:
+        deduped_tools[getattr(tool, 'name')] = tool
+
+    compiled_tools = "\n".join(f"- {t.name}: {t.description}".strip() for t in deduped_tools.values())
+    return CompiledPlannerContext(tools=list(deduped_tools.values()), compiled_tools=compiled_tools, rules=rules)
 
 
 def _build_planner_context(state: AgentState) -> ConversationContext:
@@ -93,5 +102,3 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         previous_iterations=previous_iterations,
         schema=PLANNER_SCHEMA,
     )
-
-

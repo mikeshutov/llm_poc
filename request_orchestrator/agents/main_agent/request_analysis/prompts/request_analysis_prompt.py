@@ -2,13 +2,12 @@ from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.constants import REQUEST_ANALYSIS_PROMPT_KIND
 from request_orchestrator.agents.main_agent.request_analysis.prompts.request_analysis_schema_prompt import REQUEST_ANALYSIS_SCHEMA
 from request_orchestrator.models.agent_prompt import AgentPrompt
-from tool.tools import TOOL_CATEGORIES
 
 
 def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
     category_lines = "\n".join(
-        f"- Category: {name} | Category Description: {cat.description}"
-        for name, cat in TOOL_CATEGORIES.items()
+        f"- Category: {name} | Category Description: {category.description}"
+        for name, category in agent_state.agent_profile.allowed_tool_categories().items()
     )
 
     return AgentPrompt(
@@ -29,6 +28,3 @@ def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
         schema=REQUEST_ANALYSIS_SCHEMA,
         task=agent_state.task,
     )
-
-
-
