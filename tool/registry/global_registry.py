@@ -14,6 +14,10 @@ class UnknownToolError(ToolRegistryError):
     pass
 
 
+class DisallowedToolError(ToolRegistryError):
+    pass
+
+
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, Any] = {}
@@ -33,7 +37,9 @@ class ToolRegistry:
             raise UnknownToolError(f"Unknown tool '{name}'.")
         return tool
 
-    def call_tool(self, name: str, tool_input: Any = None) -> Any:
+    def call_tool(self, name: str, tool_input: Any = None, *, allowed_tool_names: set[str] | None = None) -> Any:
+        if allowed_tool_names is not None and name not in allowed_tool_names:
+            raise DisallowedToolError(f"Tool '{name}' is not allowed for this agent.")
         tool = self.get(name)
         try:
             return tool.invoke(tool_input or {})
@@ -58,12 +64,13 @@ def register_default_tools() -> None:
     _REGISTERED_DEFAULTS = True
 
 
-def call_tool(name: str, tool_input: Any = None) -> Any:
+def call_tool(name: str, tool_input: Any = None, *, allowed_tool_names: set[str] | None = None) -> Any:
     register_default_tools()
-    return GLOBAL_TOOL_REGISTRY.call_tool(name=name, tool_input=tool_input)
+    return GLOBAL_TOOL_REGISTRY.call_tool(name=name, tool_input=tool_input, allowed_tool_names=allowed_tool_names)
 
 
 __all__ = [
+    "DisallowedToolError",
     "GLOBAL_TOOL_REGISTRY",
     "ToolRegistryError",
     "UnknownToolError",

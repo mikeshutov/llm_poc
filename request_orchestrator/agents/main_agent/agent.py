@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from langsmith import traceable
+from typing import Any
+from uuid import UUID
 
 from conversation.models.conversation_models import ConversationContext
 from langgraph.graph import END, StateGraph
+from langsmith import traceable
 from personalization.profile.models import UserProfile
+from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.main_agent.request_analysis.analyze_request import analyze_request
 from request_orchestrator.agents.main_agent.router.router import router
 from request_orchestrator.agents.main_agent.validator.validator import validator
@@ -14,11 +17,9 @@ from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.executor.executor import run_executor
 from request_orchestrator.shared.planner.planner import run_planner
 from request_orchestrator.shared.synthesis.synthesis import run_synthesis
-from typing import Any
-from uuid import UUID
 
 
-@traceable(name="Main Agent")
+@traceable(name=MAIN_AGENT_PROFILE.name)
 def run_agent(
     conversation_context: ConversationContext,
     user_query: str,
@@ -33,6 +34,7 @@ def run_agent(
         max_turns=max_turns,
         conversation_context=conversation_context,
         user_profile=user_profile,
+        agent_profile=MAIN_AGENT_PROFILE,
         roundtrip_id=UUID(roundtrip_id) if roundtrip_id else None,
         llm=llm,
     )
@@ -83,3 +85,4 @@ def run_agent(
         raise ValueError("Agent finished without setting state.result")
 
     return final.result
+
