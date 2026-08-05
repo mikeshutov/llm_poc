@@ -7,7 +7,7 @@ from request_orchestrator.constants import MAIN_AGENT_NAME, REQUEST_ANALYSIS_PRO
 from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 from request_orchestrator.agents.main_agent.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
 from conversation.repository.repo_factory import get_conversation_repo
-from rendering.debug import build_request_analysis_status_message, emit_status_message
+from rendering.debug import build_request_analysis_status_message, emit_status_message, prefix_agent_status
 
 
 @traceable(name="Request Analysis Node")
@@ -24,10 +24,13 @@ def analyze_request(agent_state: AgentState) -> AgentState:
         parsed_successfully = False
 
     emit_status_message(
-        build_request_analysis_status_message(
-            agent_state.request_analysis.applicable_tool_categories,
-            agent_state.request_analysis.context_answer_confidence,
-            agent_state.request_analysis.goal,
+        prefix_agent_status(
+            agent_state.agent_profile.name,
+            build_request_analysis_status_message(
+                agent_state.request_analysis.applicable_tool_categories,
+                agent_state.request_analysis.context_answer_confidence,
+                agent_state.request_analysis.goal,
+            ),
         )
     )
     if parsed_successfully and agent_state.roundtrip_id:

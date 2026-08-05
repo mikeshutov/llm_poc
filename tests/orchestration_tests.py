@@ -1,17 +1,27 @@
 from __future__ import annotations
 
+import sys
 import unittest
 from contextlib import ExitStack
+from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 from conversation.models.conversation_models import ConversationContext
 from integrations.world_time.models import WorldTime
 from personalization.profile.models import UserProfile
+
+if 'yfinance' not in sys.modules:
+    sys.modules['yfinance'] = ModuleType('yfinance')
+
+if 'pycountry' not in sys.modules:
+    pycountry_module = ModuleType('pycountry')
+    pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
+    sys.modules['pycountry'] = pycountry_module
+
 from request_orchestrator.agents.main_agent.agent import run_agent
 from test_utilities import FakeUserAttributeRepository, MockLLM
 
-# Simple orchestration tests to test that when the LLM responds correctly the right tools get called
-# Really just making sure that things are hooked up correctly.
+
 class MainAgentOrchestrationTest(unittest.TestCase):
     def _run_case(
         self,
@@ -48,7 +58,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         }
         """
 
-        planner_response = """
+        profile_management_planner_response = """
         {
           "steps": [
             {
@@ -67,15 +77,33 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         }
         """
 
+        main_planner_response = """
+        {
+          "steps": [
+            {
+              "id": "E1",
+              "plan": "Check the current stored user attributes before responding.",
+              "tool": "get_user_attributes",
+              "args": {
+                "limit": 10,
+                "is_active": true
+              }
+            }
+          ],
+          "final_answer": null,
+          "needs_replan": false
+        }
+        """
+
         synthesis_response = """
         {
           "result": ["Stored your food likes as a user attribute."],
           "follow_up": "",
           "clarifying_question": "",
-          "roundtrip_summary": "Stored the user's stated food likes as a persistent user attribute using the user attributes tool.",
+          "roundtrip_summary": "Stored the user's stated food likes as a persistent user attribute and confirmed the profile state.",
           "tool_summary": {
-            "used_tools": ["create_user_attribute"],
-            "produced": ["user attribute record"],
+            "used_tools": ["get_user_attributes"],
+            "produced": ["current user attribute list"],
             "entities": ["pizza", "eggs"],
             "freshness": ""
           }
@@ -86,12 +114,17 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             user_query='Please remember that I like pizza and eggs.',
             llm_responses=[
                 request_analysis_response,
-                planner_response,
+                profile_management_planner_response,
+                main_planner_response,
                 synthesis_response,
             ],
             patchers=[
                 patch(
                     'request_orchestrator.shared.tool_adapter.user_attributes.create_user_attribute.get_user_attribute_repo',
+                    return_value=fake_repo,
+                ),
+                patch(
+                    'request_orchestrator.shared.tool_adapter.user_attributes.get_user_attributes.get_user_attribute_repo',
                     return_value=fake_repo,
                 ),
                 patch(
@@ -109,10 +142,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertEqual(created_attribute.attribute_type, 'food.likes')
         self.assertEqual(created_attribute.source, 'explicit')
 
-        self.assertEqual(len(llm.invocations), 3)
+        self.assertEqual(len(llm.invocations), 4)
         self.assertIn('Latest User Prompt:', llm.prompts[0] or '')
 
     def test_calculate_tool_orchestration(self) -> None:
+        fake_repo = FakeUserAttributeRepository()
+
         request_analysis_response = """
         {
           "goal": "Calculate the result of the math expression.",
@@ -122,7 +157,25 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         }
         """
 
-        planner_response = """
+        profile_management_planner_response = """
+        {
+          "steps": [
+            {
+              "id": "E1",
+              "plan": "Inspect the current durable user attributes before doing anything else.",
+              "tool": "get_user_attributes",
+              "args": {
+                "limit": 10,
+                "is_active": true
+              }
+            }
+          ],
+          "final_answer": null,
+          "needs_replan": false
+        }
+        """
+
+        main_planner_response = """
         {
           "steps": [
             {
@@ -158,17 +211,25 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             user_query='What is (15 * 8) / 3 + 7?',
             llm_responses=[
                 request_analysis_response,
-                planner_response,
+                profile_management_planner_response,
+                main_planner_response,
                 synthesis_response,
             ],
-            patchers=[],
+            patchers=[
+                patch(
+                    'request_orchestrator.shared.tool_adapter.user_attributes.get_user_attributes.get_user_attribute_repo',
+                    return_value=fake_repo,
+                )
+            ],
         )
 
         self.assertEqual(result.answer, ['The result is 47.0.'])
         self.assertEqual(result.tool_summary.get('used_tools'), ['calculate'])
-        self.assertEqual(len(llm.invocations), 3)
+        self.assertEqual(len(llm.invocations), 4)
 
     def test_world_time_tool_orchestration(self) -> None:
+        fake_repo = FakeUserAttributeRepository()
+
         request_analysis_response = """
         {
           "goal": "Find the current time in Tokyo.",
@@ -178,7 +239,25 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         }
         """
 
-        planner_response = """
+        profile_management_planner_response = """
+        {
+          "steps": [
+            {
+              "id": "E1",
+              "plan": "Inspect the current durable user attributes before doing anything else.",
+              "tool": "get_user_attributes",
+              "args": {
+                "limit": 10,
+                "is_active": true
+              }
+            }
+          ],
+          "final_answer": null,
+          "needs_replan": false
+        }
+        """
+
+        main_planner_response = """
         {
           "steps": [
             {
@@ -214,10 +293,15 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             user_query='What time is it in Tokyo right now?',
             llm_responses=[
                 request_analysis_response,
-                planner_response,
+                profile_management_planner_response,
+                main_planner_response,
                 synthesis_response,
             ],
             patchers=[
+                patch(
+                    'request_orchestrator.shared.tool_adapter.user_attributes.get_user_attributes.get_user_attribute_repo',
+                    return_value=fake_repo,
+                ),
                 patch(
                     'request_orchestrator.shared.tool_adapter.calendar.world_time._client.get_time',
                     return_value=WorldTime(
@@ -233,7 +317,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(result.answer, ['The current time in Tokyo is 2026-08-04T21:30:00+09:00.'])
         self.assertEqual(result.tool_summary.get('used_tools'), ['get_world_time'])
-        self.assertEqual(len(llm.invocations), 3)
+        self.assertEqual(len(llm.invocations), 4)
 
 
 if __name__ == '__main__':

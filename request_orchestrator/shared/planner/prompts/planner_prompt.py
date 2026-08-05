@@ -2,6 +2,7 @@ import json
 
 from conversation.models.conversation_models import ConversationContext
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
+from request_orchestrator.agents.models.agent_profile import DEFAULT_PLANNER_PROMPT_INSTRUCTION
 from request_orchestrator.models.agent_prompt import AgentPrompt, PreviousIteration, PreviousIterationStep
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.planner.models.compiled_planner_context import CompiledPlannerContext
@@ -87,18 +88,23 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
                 )
             )
 
+    compiled_rules = build_planner_rules(
+        context.rules,
+        requires_tools=state.request_analysis.requires_tools,
+        has_prior_tool_results=has_prior_tool_results,
+    )
+    if state.agent_profile.planner_rules:
+        compiled_rules = f"{compiled_rules}\n\nAgent Rules:\n{state.agent_profile.planner_rules}"
+
     return AgentPrompt(
         prompt_kind=PLANNER_PROMPT_KIND,
-        instruction="You are a planning agent. Utilize data from 'Previous Iterations:' when it is provided.",
+        instruction=DEFAULT_PLANNER_PROMPT_INSTRUCTION,
         user_profile=state.user_profile,
         conversation_context=_build_planner_context(state),
         task=_build_planner_task(state),
         available_tools=context.compiled_tools,
-        rules=build_planner_rules(
-            context.rules,
-            requires_tools=state.request_analysis.requires_tools,
-            has_prior_tool_results=has_prior_tool_results,
-        ),
+        rules=compiled_rules,
         previous_iterations=previous_iterations,
         schema=PLANNER_SCHEMA,
     )
+

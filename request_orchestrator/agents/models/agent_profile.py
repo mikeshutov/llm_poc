@@ -6,11 +6,23 @@ from typing import Any
 from tool.tools import TOOL_CATEGORIES
 
 
+DEFAULT_PLANNER_PROMPT_INSTRUCTION = "You are a planning agent."
+DEFAULT_PLANNER_RULES = ""
+DEFAULT_SYNTHESIS_INSTRUCTION = (
+    "Solve the following task or problem. To solve the problem, we have made "
+    "step-by-step Plan and retrieved corresponding Evidence to each Plan. "
+    "Use them with caution since long evidence might contain irrelevant information."
+)
+
+
 @dataclass(frozen=True)
 class AgentProfile:
     name: str
     allowed_categories: set[str] = field(default_factory=set)
     extra_tools: list[Any] = field(default_factory=list)
+    planner_rules: str = DEFAULT_PLANNER_RULES
+    synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION
+    persist_tool_calls: bool = True
 
     def allowed_category_names(self) -> set[str]:
         if self.allowed_categories:

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from langsmith import traceable
 
-from rendering.debug import build_plan_status_message, emit_status_message
+from rendering.debug import build_plan_status_message, emit_status_message, prefix_agent_status
 from request_orchestrator.models.agent_state import AgentState, IterationState
 from request_orchestrator.models import AgentResult, Plan
 from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
-from request_orchestrator.constants import MAIN_AGENT_NAME, PLANNER_PROMPT_STEP
+from request_orchestrator.constants import PLANNER_PROMPT_STEP
 from common.parsing import strip_code_fences
 from conversation.repository.repo_factory import get_conversation_repo
 from tool.repository.plan_repository import PlanRepository
@@ -65,21 +65,25 @@ def run_planner(agent_state: AgentState) -> AgentState:
         agent_state.goal_reached = True
 
     emit_status_message(
-        build_plan_status_message(
-            [step.plan for step in plan.steps],
-            final_answer=plan.final_answer,
+        prefix_agent_status(
+            agent_state.agent_profile.name,
+            build_plan_status_message(
+                [step.plan for step in plan.steps],
+                final_answer=plan.final_answer,
+            ),
         )
     )
 
     if agent_state.roundtrip_id:
         get_conversation_repo().create_roundtrip_prompt(
             agent_state.roundtrip_id,
-            agent=MAIN_AGENT_NAME,
+            agent=agent_state.agent_profile.name,
             prompt_step=PLANNER_PROMPT_STEP,
             prompt=prompt_text,
         )
 
     return agent_state
+
 
 
 

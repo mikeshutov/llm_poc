@@ -7,6 +7,13 @@ from pydantic import BaseModel, Field, model_serializer
 
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 
+ATTRIBUTE_PROMPT_EXCLUDED_FIELDS = {
+    "attribute_embedding",
+    "user_id",
+    "source_conversation_id",
+    "source_roundtrip_id",
+}
+
 
 class GeoLocation(BaseModel):
     city: str | None = None
@@ -34,7 +41,7 @@ class UserAttributesSection(BaseModel):
                 {
                     key: value
                     for key, value in asdict(attribute).items()
-                    if key != "attribute_embedding"
+                    if key not in ATTRIBUTE_PROMPT_EXCLUDED_FIELDS
                 }
                 for attribute in self.attributes
             ]
