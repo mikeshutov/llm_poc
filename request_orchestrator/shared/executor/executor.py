@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from langsmith import traceable
 from pydantic import ValidationError
-from rendering.debug import build_step_status_message, emit_status_message
+from rendering.debug import build_step_status_message, emit_status_message, prefix_agent_status
 from request_orchestrator.models.agent_state import AgentState, IterationState
 from tool.registry import call_tool
 from tool.repository.tool_call_repository import ToolCallRepository
@@ -31,13 +31,13 @@ def _substitute_refs(obj, results: dict):
 @traceable(name="Executor Node")
 def run_executor(agent_state: AgentState) -> AgentState:
     iteration = agent_state.iteration_trace[-1] 
-    tool_repo = ToolCallRepository() if agent_state.roundtrip_id else None
+    tool_repo = ToolCallRepository() if agent_state.roundtrip_id and agent_state.agent_profile.persist_tool_calls else None
     allowed_tool_names = agent_state.agent_profile.allowed_tool_names()
 
     while (step := _next_step(iteration)) is not None:
         args = _substitute_refs(step.args, iteration.results)
 
-        emit_status_message(build_step_status_message(step.plan, step.tool, args))
+        emit_status_message(prefix_agent_status(agent_state.agent_profile.name, build_step_status_message(step.plan, step.tool, args)))
 
         try:
             out = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)

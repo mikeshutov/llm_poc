@@ -11,12 +11,15 @@ from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.main_agent.request_analysis.analyze_request import analyze_request
 from request_orchestrator.agents.main_agent.router.router import router
 from request_orchestrator.agents.main_agent.validator.validator import validator
-from request_orchestrator.constants import REQUEST_ANALYSIS_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
+from request_orchestrator.agents.profile_management import run_agent as run_profile_management_agent
+from request_orchestrator.constants import EXECUTE_TOOLS_EDGE, PLAN_EDGE, REQUEST_ANALYSIS_EDGE, SYNTHESIZE_EDGE
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.executor.executor import run_executor
 from request_orchestrator.shared.planner.planner import run_planner
 from request_orchestrator.shared.synthesis.synthesis import run_synthesis
+
+PROFILE_MANAGEMENT_EDGE = "profile_management"
 
 
 @traceable(name=MAIN_AGENT_PROFILE.name)
@@ -29,28 +32,33 @@ def run_agent(
     user_profile: UserProfile | None = None,
     llm: Any | None = None,
 ) -> AgentResult:
-    agentState = AgentState.new(
+    agent_state = AgentState.new(
         task=user_query,
         max_turns=max_turns,
         conversation_context=conversation_context,
         user_profile=user_profile,
         agent_profile=MAIN_AGENT_PROFILE,
+        conversation_id=conversation_id,
         roundtrip_id=UUID(roundtrip_id) if roundtrip_id else None,
         llm=llm,
     )
+
     builder = StateGraph(AgentState)
     builder.add_node(REQUEST_ANALYSIS_EDGE, analyze_request)
+    builder.add_node(PROFILE_MANAGEMENT_EDGE, run_profile_management_agent)
     builder.add_node(PLAN_EDGE, run_planner)
     builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
     builder.add_node(SYNTHESIZE_EDGE, run_synthesis)
     builder.set_entry_point(REQUEST_ANALYSIS_EDGE)
 
+    builder.add_edge(REQUEST_ANALYSIS_EDGE, PROFILE_MANAGEMENT_EDGE)
+
     builder.add_conditional_edges(
-        REQUEST_ANALYSIS_EDGE,
+        PROFILE_MANAGEMENT_EDGE,
         router,
         {
-            SYNTHESIZE_EDGE: SYNTHESIZE_EDGE,
             PLAN_EDGE: PLAN_EDGE,
+            SYNTHESIZE_EDGE: SYNTHESIZE_EDGE,
         },
     )
 
@@ -76,7 +84,7 @@ def run_agent(
     agent_graph = builder.compile()
 
     final_state = agent_graph.invoke(
-        agentState,
+        agent_state,
         config={"configurable": {"thread_id": conversation_id}},
     )
 
@@ -85,4 +93,3 @@ def run_agent(
         raise ValueError("Agent finished without setting state.result")
 
     return final.result
-

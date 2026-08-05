@@ -7,8 +7,7 @@ from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_DEBUG, RO
 
 def debug_render_message(content, content_title: str) -> None:
     with st.chat_message("assistant", avatar=":material/edit:"):
-        st.markdown(content_title)
-        with st.expander("Debug"):
+        with st.expander(content_title):
             if isinstance(content, (dict, list)):
                 st.json(content)
             else:
@@ -46,6 +45,10 @@ def emit_status_message(content: str) -> None:
             st.markdown(content)
     except Exception:
         pass
+
+
+def prefix_agent_status(agent_name: str, content: str) -> str:
+    return f"`{agent_name}` {content}"
 
 
 def build_request_analysis_status_message(

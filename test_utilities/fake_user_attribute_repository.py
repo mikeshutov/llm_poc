@@ -37,3 +37,37 @@ class FakeUserAttributeRepository:
         )
         self.created_attributes.append(attribute)
         return attribute
+
+    def list_attributes(
+        self,
+        *,
+        limit: int = 50,
+        order_by: str = 'updated_at',
+        descending: bool = True,
+        user_id: str | None = None,
+        is_active: bool | None = None,
+        attribute_type: str | None = None,
+        source: str | None = None,
+        source_conversation_id=None,
+        source_roundtrip_id=None,
+    ) -> list[UserAttribute]:
+        attributes = list(self.created_attributes)
+
+        if is_active is not None:
+            attributes = [attribute for attribute in attributes if attribute.is_active == is_active]
+        if attribute_type is not None:
+            attributes = [attribute for attribute in attributes if attribute.attribute_type == attribute_type]
+        if source is not None:
+            attributes = [attribute for attribute in attributes if attribute.source == source]
+
+        reverse = descending
+        if order_by == 'created_at':
+            attributes.sort(key=lambda attribute: attribute.created_at, reverse=reverse)
+        elif order_by == 'updated_at':
+            attributes.sort(key=lambda attribute: attribute.updated_at, reverse=reverse)
+        elif order_by == 'confidence':
+            attributes.sort(key=lambda attribute: attribute.confidence or 0.0, reverse=reverse)
+        elif order_by == 'importance':
+            attributes.sort(key=lambda attribute: attribute.importance or 0.0, reverse=reverse)
+
+        return attributes[:limit]

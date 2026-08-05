@@ -4,7 +4,7 @@ from langsmith import traceable
 
 from common.parsing import strip_code_fences
 from conversation.repository.repo_factory import get_conversation_repo
-from request_orchestrator.constants import MAIN_AGENT_NAME, SYNTHESIS_PROMPT_STEP
+from request_orchestrator.constants import SYNTHESIS_PROMPT_STEP
 from request_orchestrator.models.agent_prompt import PlanEvidenceStep
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.agent_state import AgentState
@@ -66,9 +66,10 @@ def run_synthesis(state: AgentState) -> AgentState:
     if state.roundtrip_id:
         get_conversation_repo().create_roundtrip_prompt(
             state.roundtrip_id,
-            agent=MAIN_AGENT_NAME,
+            agent=state.agent_profile.name,
             prompt_step=SYNTHESIS_PROMPT_STEP,
             prompt=prompt_text,
         )
 
     return state
+

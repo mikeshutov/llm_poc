@@ -10,7 +10,13 @@ from personalization.user_attributes.repository.repo_factory import get_user_att
 
 
 class SearchUserAttributesArgs(BaseModel):
-    query: str = Field(..., description="Natural-language description of the user attribute to find.")
+    query: str = Field(
+        ...,
+        description=(
+            "Short search phrase for the attribute to find. Use a compact literal query built from the key user fact "
+            "or preference, not a long paraphrase, explanation, or multi-clause summary."
+        ),
+    )
     limit: int = Field(default=5, ge=1, le=10, description="Maximum number of matching attributes to return.")
     is_active: bool | None = Field(default=True, description="Optional active-attribute filter.")
     attribute_type: UserAttributeType | None = Field(default=None, description=f"Optional attribute type filter: {ATTRIBUTE_TYPE_DESCRIPTION}.")
@@ -21,7 +27,10 @@ SEARCH_USER_ATTRIBUTES_DESCRIPTION = f"""
 Search persistent user attributes by semantic similarity. Returned attributes use the value field as an array/list of strings.
 
 Required fields:
-- query (string): Natural-language description of the attribute to find.
+- query (string): Short literal search phrase for the attribute to find.
+  Keep it narrow and concrete.
+  Prefer compact phrases like `React preferences`, `food dislikes`, or `career goals`.
+  Do not pass a long sentence, layered interpretation, or a full rewritten summary of the user's stance.
 
 Optional fields:
 - limit (integer): Maximum number of matches to return. Defaults to 5.

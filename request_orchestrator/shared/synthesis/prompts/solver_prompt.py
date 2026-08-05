@@ -8,11 +8,7 @@ from request_orchestrator.shared.synthesis.prompts.synthesis_schema_prompt impor
 def build_solver_prompt(*, plan_with_evidence: list[PlanEvidenceStep], state: AgentState) -> AgentPrompt:
     return AgentPrompt(
         prompt_kind=SYNTHESIS_PROMPT_KIND,
-        instruction=(
-            "Solve the following task or problem. To solve the problem, we have made "
-            "step-by-step Plan and retrieved corresponding Evidence to each Plan. "
-            "Use them with caution since long evidence might contain irrelevant information."
-        ),
+        instruction=state.agent_profile.synthesis_instruction,
         conversation_context=state.conversation_context,
         user_profile=state.user_profile,
         rules=build_solver_rules(state.request_analysis),
@@ -20,6 +16,3 @@ def build_solver_prompt(*, plan_with_evidence: list[PlanEvidenceStep], state: Ag
         schema=SYNTHESIS_SCHEMA,
         task=state.task,
     )
-
-
-
