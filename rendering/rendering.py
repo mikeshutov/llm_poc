@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime
 
 import streamlit as st
 
@@ -23,23 +23,28 @@ def format_timestamp(ts) -> str | None:
         local = ts.astimezone()
         hour = local.strftime("%I").lstrip("0") or "12"
         day = local.strftime("%d").lstrip("0") or "1"
-        return f"{hour}:{local.strftime('%M %p')} · {local.strftime('%b')} {day}, {local.strftime('%Y')}"
+        return f"{hour}:{local.strftime('%M %p')} | {local.strftime('%b')} {day}, {local.strftime('%Y')}"
     return None
 
 
 def render_assistant_content(content: str, payload: dict | None) -> None:
     cards = None
-    follow_up = None
+    next_question = None
     if isinstance(payload, dict):
         cards = payload.get("cards")
         if cards is None:
             cards = payload.get("products")
         follow_up = payload.get("follow_up")
+        clarifying_question = payload.get("clarifying_question")
+        if isinstance(clarifying_question, str) and clarifying_question:
+            next_question = clarifying_question
+        elif isinstance(follow_up, str) and follow_up:
+            next_question = follow_up
     has_cards = isinstance(cards, list) and bool(cards)
-    has_follow_up = isinstance(follow_up, str) and bool(follow_up)
+    has_next_question = isinstance(next_question, str) and bool(next_question)
 
-    if has_follow_up and not has_cards:
-        st.markdown(f"{content}\n\n{follow_up}")
+    if has_next_question and not has_cards:
+        st.markdown(f"{content}\n\n{next_question}")
     else:
         st.markdown(content)
 
@@ -52,9 +57,8 @@ def render_assistant_content(content: str, payload: dict | None) -> None:
             link_key="url",
         )
 
-    if has_follow_up and has_cards:
-        st.markdown(follow_up)
-
+    if has_next_question and has_cards:
+        st.markdown(next_question)
 
 
 def _render_file_preview(attached_file: dict) -> None:
@@ -64,7 +68,7 @@ def _render_file_preview(attached_file: dict) -> None:
     if mime.startswith(IMAGE_MIME_PREFIX) and os.path.exists(path):
         st.image(path, width=200)
     else:
-        icon = "📄" if "pdf" in mime else "📝"
+        icon = "[PDF]" if "pdf" in mime else "[FILE]"
         st.markdown(
             f"<span style='background:#f0f2f6;border-radius:6px;padding:3px 10px;font-size:0.85em'>{icon} {name}</span>",
             unsafe_allow_html=True,

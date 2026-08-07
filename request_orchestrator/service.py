@@ -49,6 +49,3 @@ def run_request_orchestrator_for_query(
     #TODO: enable this once we improve summarization.
     #threading.Thread(target=summarize_tool_calls, args=(roundtrip.id,), daemon=True).start()
     return result, roundtrip
-
-
-

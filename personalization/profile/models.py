@@ -1,17 +1,31 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, is_dataclass
 from typing import Any
 
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel, Field, field_validator, model_serializer
 
+from common.serialization import prune_empty_prompt_values
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 
 ATTRIBUTE_PROMPT_EXCLUDED_FIELDS = {
     "attribute_embedding",
     "user_id",
-    "source_conversation_id",
-    "source_roundtrip_id",
+    "confidence",
+    "importance",
+    "id",
+    "group_key",
+    "source",
+    "is_active",
+    "created_at",
+    "updated_at",
+}
+
+ATTRIBUTE_PROMPT_MANAGEMENT_EXCLUDED_FIELDS = {
+    "attribute_embedding",
+    "user_id",
+    "confidence",
+    "importance",
 }
 
 
@@ -35,17 +49,41 @@ class GeoMetadata(BaseModel):
 class UserAttributesSection(BaseModel):
     attributes: list[UserAttribute] = Field(default_factory=list)
 
-    def to_prompt_dict(self) -> dict[str, Any]:
-        return {
-            "attributes": [
-                {
-                    key: value
-                    for key, value in asdict(attribute).items()
-                    if key not in ATTRIBUTE_PROMPT_EXCLUDED_FIELDS
-                }
-                for attribute in self.attributes
-            ]
-        }
+    @field_validator("attributes", mode="before")
+    @classmethod
+    def _coerce_attributes(cls, value: Any) -> Any:
+        if not isinstance(value, list):
+            return value
+
+        coerced: list[Any] = []
+        for item in value:
+            if isinstance(item, UserAttribute):
+                coerced.append(item)
+                continue
+            if is_dataclass(item):
+                coerced.append(asdict(item))
+                continue
+            coerced.append(item)
+        return coerced
+
+    def to_prompt_dict(self, *, include_management_fields: bool = False) -> dict[str, Any]:
+        excluded_fields = (
+            ATTRIBUTE_PROMPT_MANAGEMENT_EXCLUDED_FIELDS
+            if include_management_fields
+            else ATTRIBUTE_PROMPT_EXCLUDED_FIELDS
+        )
+        return prune_empty_prompt_values(
+            {
+                "attributes": [
+                    {
+                        key: value
+                        for key, value in asdict(attribute).items()
+                        if key not in excluded_fields
+                    }
+                    for attribute in self.attributes
+                ]
+            }
+        )
 
     @model_serializer(mode="plain")
     def serialize_model(self) -> dict[str, Any]:
@@ -56,11 +94,15 @@ class UserProfile(BaseModel):
     geometadata: GeoMetadata | None = None
     user_attributes: UserAttributesSection = Field(default_factory=UserAttributesSection)
 
-    def to_prompt_dict(self) -> dict[str, Any]:
-        return {
-            "geometadata": None if self.geometadata is None else self.geometadata.model_dump(),
-            "user_attributes": self.user_attributes.to_prompt_dict(),
-        }
+    def to_prompt_dict(self, *, include_management_fields: bool = False) -> dict[str, Any]:
+        return prune_empty_prompt_values(
+            {
+                "geometadata": None if self.geometadata is None else self.geometadata.model_dump(),
+                "user_attributes": self.user_attributes.to_prompt_dict(
+                    include_management_fields=include_management_fields,
+                ),
+            }
+        )
 
     @model_serializer(mode="plain")
     def serialize_model(self) -> dict[str, Any]:

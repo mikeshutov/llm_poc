@@ -13,7 +13,7 @@ def router(state: AgentState) -> str:
     last_iteration = state.iteration_trace[-1]
     plan = last_iteration.plan
 
-    if state.goal_reached or len(state.iteration_trace) >= state.max_turns:
+    if len(state.iteration_trace) >= state.max_turns:
         return END
 
     if plan is None or plan.final_answer or len(plan.steps) == 0:
@@ -23,7 +23,4 @@ def router(state: AgentState) -> str:
     if has_pending_steps:
         return EXECUTE_TOOLS_EDGE
 
-    if plan.needs_replan:
-        return PLAN_EDGE
-
-    return END
+    return PLAN_EDGE

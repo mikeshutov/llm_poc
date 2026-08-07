@@ -16,6 +16,7 @@ class FakeUserAttributeRepository:
         value: list[str],
         attribute_embedding: list[float] | None,
         attribute_type: str,
+        group_key: str | None = None,
         source: str,
         confidence: float | None = None,
         importance: float | None = None,
@@ -26,9 +27,8 @@ class FakeUserAttributeRepository:
             value=value,
             attribute_embedding=attribute_embedding,
             attribute_type=attribute_type,
+            group_key=group_key,
             source=source,
-            source_conversation_id=None,
-            source_roundtrip_id=None,
             is_active=True,
             created_at='2026-08-04T00:00:00Z',
             updated_at='2026-08-04T00:00:00Z',
@@ -47,9 +47,8 @@ class FakeUserAttributeRepository:
         user_id: str | None = None,
         is_active: bool | None = None,
         attribute_type: str | None = None,
+        group_key: str | None = None,
         source: str | None = None,
-        source_conversation_id=None,
-        source_roundtrip_id=None,
     ) -> list[UserAttribute]:
         attributes = list(self.created_attributes)
 
@@ -57,6 +56,8 @@ class FakeUserAttributeRepository:
             attributes = [attribute for attribute in attributes if attribute.is_active == is_active]
         if attribute_type is not None:
             attributes = [attribute for attribute in attributes if attribute.attribute_type == attribute_type]
+        if group_key is not None:
+            attributes = [attribute for attribute in attributes if attribute.group_key == group_key]
         if source is not None:
             attributes = [attribute for attribute in attributes if attribute.source == source]
 

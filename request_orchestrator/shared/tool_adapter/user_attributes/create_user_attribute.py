@@ -13,6 +13,7 @@ from personalization.user_attributes.repository.repo_factory import get_user_att
 class CreateUserAttributeArgs(BaseModel):
     value: list[str] = Field(..., description="The user attribute values to store as an array/list of strings. Pass a JSON array, not a single string.")
     attribute_type: UserAttributeType = Field(..., description=f"Attribute type: {ATTRIBUTE_TYPE_DESCRIPTION}.")
+    group_key: str | None = Field(default=None, description="Optional short grouping label used to curate larger sets under the same attribute type, such as frontend, backend, desserts, or career_goals.")
     source: str = Field(default="explicit", description="Attribute source such as explicit, derived, or computed.")
     confidence: float | None = Field(default=None, ge=0, le=1, description="Optional confidence score between 0 and 1.")
     importance: float | None = Field(default=None, ge=0, le=1, description="Optional importance score between 0 and 1.")
@@ -26,6 +27,7 @@ Required fields:
 - attribute_type (string): {ATTRIBUTE_TYPE_DESCRIPTION}.
 
 Optional fields:
+- group_key (string): Optional short semantic grouping label for curation when multiple attributes of the same type need to coexist cleanly. Use concrete labels like `frontend`, `backend`, `desserts`, or `career_goals`, not filler labels like `misc`, `other`, or `group2`.
 - source (string): explicit, derived, or computed. Defaults to explicit.
 - confidence (number): Optional 0..1 confidence score.
 - importance (number): Optional 0..1 importance score.
@@ -44,6 +46,7 @@ def _value_text(value: list[str]) -> str:
 def create_user_attribute(
     value: list[str],
     attribute_type: UserAttributeType,
+    group_key: str | None = None,
     source: str = "explicit",
     confidence: float | None = None,
     importance: float | None = None,
@@ -52,6 +55,7 @@ def create_user_attribute(
         value=value,
         attribute_embedding=embed_text(_value_text(value)),
         attribute_type=attribute_type,
+        group_key=group_key,
         source=source,
         confidence=confidence,
         importance=importance,

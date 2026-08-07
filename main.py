@@ -116,7 +116,7 @@ if replay_target:
 with st.sidebar:
     render_sidebar(conversation_repository)
 
-render_messages(conversation_repository, st.session_state.conversation_id, render_message, limit=10)
+render_messages(conversation_repository, st.session_state.conversation_id, render_message)
 if st.session_state.get(FEEDBACK_TARGET_KEY):
     render_feedback_dialog(conversation_repository)
 
@@ -130,7 +130,7 @@ if pending_replay and pending_replay.get("conversation_id") == st.session_state.
         st.session_state.pop(PENDING_REPLAY_KEY, None)
         st.session_state.loaded_cid = None
         st.session_state.messages = []
-        render_messages(conversation_repository, st.session_state.conversation_id, render_message, limit=10)
+        render_messages(conversation_repository, st.session_state.conversation_id, render_message)
         run_live_turn(replay_context["user_prompt"])
 
 render_file_upload()

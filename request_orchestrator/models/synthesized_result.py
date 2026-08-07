@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SynthesisToolSummary(BaseModel):
@@ -12,7 +12,7 @@ class SynthesisToolSummary(BaseModel):
 
 class SynthesisResult(BaseModel):
     result: list[str]
-    follow_up: str
+    follow_up: str = ""
     clarifying_question: str = ""
     roundtrip_summary: str = ""
     tool_summary: SynthesisToolSummary = Field(default_factory=SynthesisToolSummary)
@@ -23,3 +23,12 @@ class SynthesisResult(BaseModel):
         if isinstance(v, str):
             return [v]
         return v
+
+    @model_validator(mode="after")
+    def normalize_questions(self) -> "SynthesisResult":
+        self.follow_up = self.follow_up.strip()
+        self.clarifying_question = self.clarifying_question.strip()
+
+        if self.clarifying_question:
+            self.follow_up = ""
+        return self

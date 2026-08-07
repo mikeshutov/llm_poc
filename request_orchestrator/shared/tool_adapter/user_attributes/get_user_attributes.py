@@ -14,6 +14,7 @@ class GetUserAttributesArgs(BaseModel):
     descending: bool = Field(default=True, description="Whether to sort in descending order.")
     is_active: bool | None = Field(default=True, description="Optional active-attribute filter.")
     attribute_type: UserAttributeType | None = Field(default=None, description=f"Optional attribute type filter: {ATTRIBUTE_TYPE_DESCRIPTION}.")
+    group_key: str | None = Field(default=None, description="Optional grouping-label filter.")
     source: str | None = Field(default=None, description="Optional source filter.")
 
 
@@ -26,9 +27,11 @@ Optional fields:
 - descending (boolean): Sort descending when true.
 - is_active (boolean): Optional active-attribute filter.
 - attribute_type (string): {ATTRIBUTE_TYPE_DESCRIPTION}.
+- group_key (string): Optional grouping-label filter.
 
 Returned attribute shape:
 - value (array/list of strings): Each attribute stores its values as a JSON array/list of strings, not a single string.
+- group_key (string|null): Optional short semantic grouping label used to curate multiple attributes of the same type.
 - source (string): Optional source filter.
 """
 
@@ -44,6 +47,7 @@ def get_user_attributes(
     descending: bool = True,
     is_active: bool | None = True,
     attribute_type: UserAttributeType | None = None,
+    group_key: str | None = None,
     source: str | None = None,
 ) -> list[UserAttribute]:
     return get_user_attribute_repo().list_attributes(
@@ -52,5 +56,6 @@ def get_user_attributes(
         descending=descending,
         is_active=is_active,
         attribute_type=attribute_type,
+        group_key=group_key,
         source=source,
     )

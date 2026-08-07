@@ -10,8 +10,6 @@ from tool.tools import TOOL_CATEGORIES
 READ_ONLY_PROFILE_AND_MEMORY_TOOLS = [
     search_memories,
     search_roundtrip_memories,
-    get_user_attributes,
-    search_user_attributes,
 ]
 
 MAIN_AGENT_PROFILE = AgentProfile(

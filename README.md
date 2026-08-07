@@ -7,18 +7,19 @@ This is not meant to be a production piece of code. More just a way to explore t
 Rough breakdown of the current agent loop flow.
 1. Prompt comes in and we assemble conversation context.
 2. We pass that context plus the latest user prompt into agent state.
-3. We also prepare a small `User Profile` prompt section. It currently contains geo/location-aware metadata(not perfect) plus stored user attributes, and it is injected into `request_analysis`, `planner`, and `synthesis`.
-4. `request_analysis` infers the user's goal, decides whether tools are required, and selects the relevant tool categories.
+3. We prepare a small `User Profile` section that starts with geo/location-aware metadata plus an initially empty user-attributes section.
+4. `request_analysis` infers the user's goal, decides whether tools are required, selects the relevant tool categories, and requests any specific user attribute types that would be helpful for the request.
    - If the existing context is strong enough, we can skip planning and go straight to synthesis.
    - If tools are needed, the selected categories determine which tool groups and rules are loaded.
-5. We call the planner and give it the goal, prior tool-use context, available tools, and previous planner iterations.
+   - If durable profile context would help, request analysis asks for specific attribute types such as `food.likes` or `projects.goals` rather than receiving the full stored attribute set up front.
+5. We load only the requested user attribute types into the profile, condense overlapping records for prompt efficiency, and then call the planner with the refined goal, available tools, profile slice, and previous planner iterations.
    - The idea here is we could likely have thousands of tools and it seems like a good idea to only pass what is needed.
    - There are also tool-specific rules which get added depending on the active categories.
 6. The executor executes the tool calls in the plan and stores the results in state.
 7. The planner replans if needed.
    - If the goal is reached or we hit the iteration limit, we move to synthesis.
    - Otherwise we loop with the newly gathered evidence.
-8. Synthesis generates the final response, roundtrip summary, and tool summary.
+8. Synthesis generates the final response, roundtrip summary, and tool summary. It receives explicit plan evidence plus a small recent-context window rather than the planner context or tool-summary history payloads.
 
 We also store conversations, roundtrips, prompt rows, summaries, and tool calls for future prompts.
 The diagrams provided are just to illustrate the high-level shape of the flow.
@@ -52,9 +53,16 @@ For subsequent prompts, the context builder pulls together a few layers of histo
 
 The latest user prompt is not embedded inside the stored conversation context anymore. It is passed separately into the prompt as the final section so the live request stays distinct from historical context.
 
-We also prepare a separate `User Profile` section for prompt construction. That profile currently contains geo/location-aware metadata plus active stored user attributes such as preferences, skills, and goals, and it is included in `request_analysis`, `planner`, and `synthesis`. Because stored user attributes are already present there, the agent should not need to call the user-attribute read tools unless it needs broader filtering, targeted retrieval, or to create/update/deactivate data.
+We also prepare a separate `User Profile` section for prompt construction. That profile always includes geo/location-aware metadata, but stored user attributes are now loaded in a staged way:
+1. `request_analysis` sees the lightweight profile and decides whether stored user attributes would help.
+2. It requests specific attribute types such as `food.likes`, `technology.skills`, or `projects.goals`.
+3. We load only those active attribute types, condense overlapping records by attribute type and `group_key`, and pass that smaller profile slice into later steps.
 
-The idea is to give the agent reusable historical context, recent turn-level context, and durable profile context while still keeping the freshest user request explicit and easy to reason about. Although this is still not finalized as we need cleaner profile management but it is a step in that direction.
+That means `request_analysis` does not receive the full stored attribute set up front, the planner does not receive full conversation context, and synthesis receives only a narrow recent-context window plus explicit plan evidence.
+
+The idea is to give the agent reusable historical context, recent turn-level context, and durable profile context while still keeping the freshest user request explicit and easy to reason about.
+
+Overall, the idea is that each step in the flow has access to a large `AgentState` object containing the contextual information it may need. When a step needs to make a planning, analysis, or synthesis request, we can then choose the most appropriate subset of that state for the prompt. This keeps requests smaller while still giving the LLM enough context to do the job well.
 
 Simple diagram to illustrate what this looks like.
 
@@ -72,7 +80,7 @@ user_prompt + roundtrip_summary"]
     end
 
     A --> D[Latest User Prompt passed separately]
-    A --> E[User Profile passed separately to request_analysis planner and synthesis]
+    A --> E[Lightweight User Profile passed separately then hydrated by requested attribute type]
 
     subgraph C[Recent Roundtrip Element]
         direction TB
@@ -84,7 +92,7 @@ user_prompt + roundtrip_summary"]
     subgraph F[User Profile]
         direction TB
         P1["Geo Metadata"]
-        P2["Stored User Attributes"]
+        P2["Requested Stored User Attributes"]
         P1 --> P2
     end
 
@@ -117,14 +125,14 @@ As more topics are explored one interesting topic is the idea of allowing the ag
 2. We have conversation roundtrip summaries with embeddings as well. This summary simply summarizes this particular back and forth. So a particular prompt being responded to.
 
 This comes together with the addition of two tools: search_memories, search_roundtrip_memories
-1. search_memories - Is used to search through past conversations using the conversation summary.
-2. search_roundtrip_memories - Is used to search through detailed roundtrips once we have found a relevant conversation.
+1. search_memories - Is used to search through past conversations using the conversation summary and returns up to 3 relevant conversation memories by default.
+2. search_roundtrip_memories - Is used to search through detailed roundtrips once we have found a relevant conversation and returns up to 3 matching roundtrips by default.
 
 The idea here is to essentially allow the agent to on demand find data that is present in other conversations and to do that we use a similar approach to files where summaries are converted to embeddings and the data can be found using an embedding search. We order the data by relevance of course and provide a relevance score as well to help identify the correct data.
 
 ### Why Request Analysis
 With the number of tools growing I wanted to solve for the scaling problem of passing a large tool list to the planner. The idea here is:
-1. Request analysis determines the user's goal and the category or categories that are applicable to the request. Moreover this allows us to no longer need to send the whold conversation context when we use our planner so our planner can be focused on a refined goal.
+1. Request analysis determines the user's goal, the category or categories that are applicable to the request, and any specific user attribute types worth loading. This lets the planner focus on a refined goal instead of carrying full conversation context.
 2. The planner prompt then injects only the tools and rules which fall under those categories plus any rules that are always present.
 This results in sending only the tools that are relevant, at least that is the idea. If we had thousands of tools we could reduce them to a much smaller number, although I am certain that if the number of tools grows this problem will need another refactor.
 
