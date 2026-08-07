@@ -298,11 +298,13 @@ class ConversationRepository:
         conversation_id: UUID,
         limit: int = 50,
         after_message_index: Optional[int] = None,
+        newest_first: bool = False,
     ) -> list[ConversationRoundtrip]:
         with self._conn.cursor(row_factory=dict_row) as cur:
+            order_direction = "DESC" if newest_first else "ASC"
             if after_message_index is None:
                 cur.execute(
-                    """
+                    f"""
                     SELECT
                         rt.id,
                         rt.conversation_id,
@@ -320,14 +322,14 @@ class ConversationRepository:
                     FROM conversation_roundtrip rt
                     LEFT JOIN roundtrip_feedback fb ON fb.roundtrip_id = rt.id
                     WHERE rt.conversation_id = %s
-                    ORDER BY rt.message_index ASC
+                    ORDER BY rt.message_index {order_direction}
                     LIMIT %s
                     """,
                     (conversation_id, limit),
                 )
             else:
                 cur.execute(
-                    """
+                    f"""
                     SELECT
                         rt.id,
                         rt.conversation_id,
@@ -346,13 +348,16 @@ class ConversationRepository:
                     LEFT JOIN roundtrip_feedback fb ON fb.roundtrip_id = rt.id
                     WHERE rt.conversation_id = %s
                       AND rt.message_index > %s
-                    ORDER BY rt.message_index ASC
+                    ORDER BY rt.message_index {order_direction}
                     LIMIT %s
                     """,
                     (conversation_id, after_message_index, limit),
                 )
             rows = cur.fetchall()
-            return [ConversationRoundtrip(**r) for r in rows]
+            roundtrips = [ConversationRoundtrip(**r) for r in rows]
+            if newest_first:
+                roundtrips.reverse()
+            return roundtrips
 
     def list_roundtrips_through_message_index(
         self,

@@ -1,5 +1,6 @@
 import json
 
+from common.serialization import prune_empty_prompt_values
 from conversation.models.conversation_models import ConversationContext
 
 
@@ -12,4 +13,8 @@ def flatten_conversation_entries(entries: list[dict]) -> str:
 
 
 def build_conversation_context_json(context: ConversationContext) -> str:
-    return json.dumps(context.model_dump(), indent=2, ensure_ascii=True)
+    return json.dumps(
+        prune_empty_prompt_values(context.model_dump()),
+        indent=2,
+        ensure_ascii=True,
+    )

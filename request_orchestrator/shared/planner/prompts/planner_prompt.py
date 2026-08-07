@@ -1,6 +1,5 @@
 import json
 
-from conversation.models.conversation_models import ConversationContext
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from request_orchestrator.agents.models.agent_profile import DEFAULT_PLANNER_PROMPT_INSTRUCTION
 from request_orchestrator.models.agent_prompt import AgentPrompt, PreviousIteration, PreviousIterationStep
@@ -36,14 +35,6 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
 
     compiled_tools = "\n".join(f"- {t.name}: {t.description}".strip() for t in deduped_tools.values())
     return CompiledPlannerContext(tools=list(deduped_tools.values()), compiled_tools=compiled_tools, rules=rules)
-
-
-def _build_planner_context(state: AgentState) -> ConversationContext:
-    return ConversationContext(
-        tool_summary=state.conversation_context.tool_summary,
-        recent_roundtrips=state.conversation_context.recent_roundtrips,
-        recent_roundtrip_tool_summaries=state.conversation_context.recent_roundtrip_tool_summaries,
-    )
 
 
 def _build_planner_task(state: AgentState) -> str:
@@ -100,11 +91,11 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         prompt_kind=PLANNER_PROMPT_KIND,
         instruction=DEFAULT_PLANNER_PROMPT_INSTRUCTION,
         user_profile=state.user_profile,
-        conversation_context=_build_planner_context(state),
         task=_build_planner_task(state),
         available_tools=context.compiled_tools,
         rules=compiled_rules,
         previous_iterations=previous_iterations,
         schema=PLANNER_SCHEMA,
+        include_user_attribute_management_fields=state.agent_profile.name == "profile_management",
     )
 

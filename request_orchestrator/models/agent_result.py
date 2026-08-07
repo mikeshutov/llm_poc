@@ -21,6 +21,10 @@ class AgentResult:
     def raw_response(self) -> str:
         return "\n\n".join(p for p in self.answer if p)
 
+    @property
+    def next_question(self) -> str:
+        return self.clarifying_question or self.follow_up
+
     def to_payload_for_update_roundtrip(self) -> dict[str, Any]:
         return {
             "response": self.raw_response,
@@ -62,10 +66,15 @@ class AgentResult:
                         seen_ids.add(card_id)
                     cards.append(card)
 
+        resolved_follow_up = (follow_up or "").strip()
+        resolved_clarifying_question = (clarifying_question or "").strip()
+        if resolved_clarifying_question:
+            resolved_follow_up = ""
+
         return cls(
             answer=answer,
-            follow_up=follow_up or "",
-            clarifying_question=clarifying_question or "",
+            follow_up=resolved_follow_up,
+            clarifying_question=resolved_clarifying_question,
             roundtrip_summary=roundtrip_summary or "",
             tool_summary=tool_summary or {},
             cards=cards,

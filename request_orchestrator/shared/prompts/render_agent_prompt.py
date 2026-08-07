@@ -19,7 +19,11 @@ def _serialize_json(value: Any, *, default: Any = str) -> str:
 def _serialize_user_profile(prompt: AgentPrompt) -> str:
     if prompt.user_profile is None:
         return ""
-    return _serialize_json(prompt.user_profile.to_prompt_dict())
+    return _serialize_json(
+        prompt.user_profile.to_prompt_dict(
+            include_management_fields=prompt.include_user_attribute_management_fields,
+        )
+    )
 
 
 def _serialize_previous_iterations(prompt: AgentPrompt) -> str:

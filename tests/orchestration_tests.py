@@ -5,10 +5,12 @@ import unittest
 from contextlib import ExitStack
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
+from uuid import uuid4
 
 from conversation.models.conversation_models import ConversationContext
 from integrations.world_time.models import WorldTime
 from personalization.profile.models import UserProfile
+from personalization.user_attributes.models.user_attribute_models import UserAttribute
 
 if 'yfinance' not in sys.modules:
     sys.modules['yfinance'] = ModuleType('yfinance')
@@ -53,6 +55,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "goal": "Store the user's food preferences.",
           "applicable_tool_categories": ["user_attributes"],
+          "requested_user_attribute_types": [],
           "requires_tools": true,
           "context_answer_confidence": 0
         }
@@ -72,6 +75,14 @@ class MainAgentOrchestrationTest(unittest.TestCase):
               }
             }
           ],
+          "final_answer": null,
+          "needs_replan": false
+        }
+        """
+
+        profile_management_completion_response = """
+        {
+          "steps": [],
           "final_answer": null,
           "needs_replan": false
         }
@@ -115,10 +126,15 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             llm_responses=[
                 request_analysis_response,
                 profile_management_planner_response,
+                profile_management_completion_response,
                 main_planner_response,
                 synthesis_response,
             ],
             patchers=[
+                patch(
+                    'personalization.profile.service.get_user_attribute_repo',
+                    return_value=fake_repo,
+                ),
                 patch(
                     'request_orchestrator.shared.tool_adapter.user_attributes.create_user_attribute.get_user_attribute_repo',
                     return_value=fake_repo,
@@ -142,8 +158,125 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertEqual(created_attribute.attribute_type, 'food.likes')
         self.assertEqual(created_attribute.source, 'explicit')
 
-        self.assertEqual(len(llm.invocations), 4)
+        self.assertEqual(len(llm.invocations), 5)
         self.assertIn('Latest User Prompt:', llm.prompts[0] or '')
+        self.assertIn('User Profile (JSON):\n\n{}', llm.prompts[0] or '')
+        self.assertNotIn('Conversation Context (JSON):', llm.prompts[3] or '')
+        self.assertNotIn('recent_roundtrip_tool_summaries', llm.prompts[4] or '')
+        self.assertNotIn('conversation_summary', llm.prompts[4] or '')
+        self.assertLessEqual((llm.prompts[4] or '').count('message_index'), 3)
+
+    def test_requested_user_attributes_are_loaded_after_request_analysis(self) -> None:
+        fake_repo = FakeUserAttributeRepository(
+            created_attributes=[
+                UserAttribute(
+                    id=uuid4(),
+                    user_id=None,
+                    value=['pizza'],
+                    attribute_embedding=None,
+                    attribute_type='food.likes',
+                    group_key=None,
+                    source='explicit',
+                    is_active=True,
+                    created_at='2026-08-05T00:00:00Z',
+                    updated_at='2026-08-05T00:00:00Z',
+                    confidence=0.9,
+                    importance=0.8,
+                ),
+                UserAttribute(
+                    id=uuid4(),
+                    user_id=None,
+                    value=['eggs'],
+                    attribute_embedding=None,
+                    attribute_type='food.likes',
+                    group_key=None,
+                    source='explicit',
+                    is_active=True,
+                    created_at='2026-08-04T00:00:00Z',
+                    updated_at='2026-08-04T00:00:00Z',
+                    confidence=0.85,
+                    importance=0.75,
+                )
+            ]
+        )
+
+        request_analysis_response = """
+        {
+          "goal": "Use the user's food preferences to help with the request.",
+          "applicable_tool_categories": ["food"],
+          "requested_user_attribute_types": ["food.likes"],
+          "requires_tools": true,
+          "context_answer_confidence": 0
+        }
+        """
+
+        profile_management_planner_response = """
+        {
+          "steps": [],
+          "final_answer": null,
+          "needs_replan": false
+        }
+        """
+
+        main_planner_response = """
+        {
+          "steps": [
+            {
+              "id": "E1",
+              "plan": "Look up a pizza-related meal idea.",
+              "tool": "search_meals",
+              "args": {
+                "query": "pizza"
+              }
+            }
+          ],
+          "final_answer": null,
+          "needs_replan": false
+        }
+        """
+
+        synthesis_response = """
+        {
+          "result": ["I used your stored food preferences while looking up a meal idea."],
+          "follow_up": "",
+          "clarifying_question": "",
+          "roundtrip_summary": "Loaded the user's stored food likes and used them while planning a meal-related response.",
+          "tool_summary": {
+            "used_tools": ["search_meals"],
+            "produced": ["meal ideas"],
+            "entities": ["pizza"],
+            "freshness": ""
+          }
+        }
+        """
+
+        result, llm = self._run_case(
+            user_query='Use what you know about my food preferences to suggest something.',
+            llm_responses=[
+                request_analysis_response,
+                profile_management_planner_response,
+                main_planner_response,
+                synthesis_response,
+            ],
+            patchers=[
+                patch(
+                    'personalization.profile.service.get_user_attribute_repo',
+                    return_value=fake_repo,
+                ),
+                patch(
+                    'request_orchestrator.shared.tool_adapter.food.search_meals._meal_db_client.search',
+                    return_value=[{'strMeal': 'Pizza Margherita'}],
+                ),
+            ],
+        )
+
+        self.assertEqual(result.answer, ['I used your stored food preferences while looking up a meal idea.'])
+        self.assertEqual(len(llm.invocations), 4)
+        self.assertIn('User Profile (JSON):\n\n{}', llm.prompts[0] or '')
+        self.assertNotIn('pizza', llm.prompts[0] or '')
+        self.assertIn('pizza', llm.prompts[1] or '')
+        self.assertIn('eggs', llm.prompts[1] or '')
+        self.assertIn('food.likes', llm.prompts[1] or '')
 
     def test_calculate_tool_orchestration(self) -> None:
         fake_repo = FakeUserAttributeRepository()
@@ -152,6 +285,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "goal": "Calculate the result of the math expression.",
           "applicable_tool_categories": ["math"],
+          "requested_user_attribute_types": [],
           "requires_tools": true,
           "context_answer_confidence": 0
         }
@@ -170,6 +304,14 @@ class MainAgentOrchestrationTest(unittest.TestCase):
               }
             }
           ],
+          "final_answer": null,
+          "needs_replan": false
+        }
+        """
+
+        profile_management_completion_response = """
+        {
+          "steps": [],
           "final_answer": null,
           "needs_replan": false
         }
@@ -212,10 +354,15 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             llm_responses=[
                 request_analysis_response,
                 profile_management_planner_response,
+                profile_management_completion_response,
                 main_planner_response,
                 synthesis_response,
             ],
             patchers=[
+                patch(
+                    'personalization.profile.service.get_user_attribute_repo',
+                    return_value=fake_repo,
+                ),
                 patch(
                     'request_orchestrator.shared.tool_adapter.user_attributes.get_user_attributes.get_user_attribute_repo',
                     return_value=fake_repo,
@@ -225,7 +372,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(result.answer, ['The result is 47.0.'])
         self.assertEqual(result.tool_summary.get('used_tools'), ['calculate'])
-        self.assertEqual(len(llm.invocations), 4)
+        self.assertEqual(len(llm.invocations), 5)
 
     def test_world_time_tool_orchestration(self) -> None:
         fake_repo = FakeUserAttributeRepository()
@@ -234,6 +381,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "goal": "Find the current time in Tokyo.",
           "applicable_tool_categories": ["calendar"],
+          "requested_user_attribute_types": [],
           "requires_tools": true,
           "context_answer_confidence": 0
         }
@@ -252,6 +400,14 @@ class MainAgentOrchestrationTest(unittest.TestCase):
               }
             }
           ],
+          "final_answer": null,
+          "needs_replan": false
+        }
+        """
+
+        profile_management_completion_response = """
+        {
+          "steps": [],
           "final_answer": null,
           "needs_replan": false
         }
@@ -294,10 +450,15 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             llm_responses=[
                 request_analysis_response,
                 profile_management_planner_response,
+                profile_management_completion_response,
                 main_planner_response,
                 synthesis_response,
             ],
             patchers=[
+                patch(
+                    'personalization.profile.service.get_user_attribute_repo',
+                    return_value=fake_repo,
+                ),
                 patch(
                     'request_orchestrator.shared.tool_adapter.user_attributes.get_user_attributes.get_user_attribute_repo',
                     return_value=fake_repo,
@@ -317,7 +478,71 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(result.answer, ['The current time in Tokyo is 2026-08-04T21:30:00+09:00.'])
         self.assertEqual(result.tool_summary.get('used_tools'), ['get_world_time'])
-        self.assertEqual(len(llm.invocations), 4)
+        self.assertEqual(len(llm.invocations), 5)
+
+    def test_clarifying_question_wins_over_follow_up(self) -> None:
+        fake_repo = FakeUserAttributeRepository()
+
+        request_analysis_response = """
+        {
+          "goal": "Clarify an underspecified request.",
+          "applicable_tool_categories": [],
+          "requested_user_attribute_types": [],
+          "requires_tools": false,
+          "context_answer_confidence": 1
+        }
+        """
+
+        profile_management_planner_response = """
+        {
+          "steps": [],
+          "final_answer": null,
+          "needs_replan": false
+        }
+        """
+
+        main_planner_response = """
+        {
+          "steps": [],
+          "final_answer": null,
+          "needs_replan": false
+        }
+        """
+
+        synthesis_response = """
+        {
+          "result": ["I can help with that."],
+          "follow_up": "Do you want a short or detailed answer?",
+          "clarifying_question": "Which product category do you want to focus on?",
+          "roundtrip_summary": "The request was underspecified, so the response preserved only the clarifying question and dropped the follow-up variant.",
+          "tool_summary": {
+            "used_tools": [],
+            "produced": [],
+            "entities": [],
+            "freshness": ""
+          }
+        }
+        """
+
+        result, _ = self._run_case(
+            user_query='Help me pick something.',
+            llm_responses=[
+                request_analysis_response,
+                profile_management_planner_response,
+                main_planner_response,
+                synthesis_response,
+            ],
+            patchers=[
+                patch(
+                    'personalization.profile.service.get_user_attribute_repo',
+                    return_value=fake_repo,
+                ),
+            ],
+        )
+
+        self.assertEqual(result.follow_up, '')
+        self.assertEqual(result.clarifying_question, 'Which product category do you want to focus on?')
+        self.assertEqual(result.next_question, 'Which product category do you want to focus on?')
 
 
 if __name__ == '__main__':

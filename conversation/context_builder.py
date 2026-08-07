@@ -18,6 +18,7 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
         UUID(conversation_id),
         limit=limit,
         after_message_index=after_index,
+        newest_first=True,
     )
 
     recent_roundtrips = [

@@ -22,7 +22,6 @@ ATTRIBUTE_DUPLICATE_DISTANCE_THRESHOLD = 0.12
 ATTRIBUTE_TYPES = set(ATTRIBUTE_TYPE_VALUES)
 
 
-
 class UserAttributeRepository:
     def __init__(self, conn: psycopg.Connection | None = None):
         self._conn = conn or get_connection()
@@ -54,6 +53,7 @@ class UserAttributeRepository:
         *,
         user_id: Optional[str] = None,
         attribute_type: str,
+        group_key: Optional[str] = None,
         exclude_attribute_id: Optional[UUID] = None,
     ) -> Optional[UserAttribute]:
         self._validate_attribute_type(attribute_type)
@@ -67,9 +67,8 @@ class UserAttributeRepository:
                     value,
                     attribute_embedding,
                     attribute_type,
+                    group_key,
                     source,
-                    source_conversation_id,
-                    source_roundtrip_id,
                     is_active,
                     created_at,
                     updated_at,
@@ -79,11 +78,21 @@ class UserAttributeRepository:
                 WHERE value = %s
                   AND (CAST(%s AS text) IS NULL OR user_id = %s)
                   AND (CAST(%s AS text) IS NULL OR attribute_type = %s)
+                  AND group_key IS NOT DISTINCT FROM CAST(%s AS text)
                   AND (CAST(%s AS uuid) IS NULL OR id <> %s)
                 ORDER BY updated_at DESC
                 LIMIT 1
                 """,
-                (normalized_value, user_id, user_id, attribute_type, attribute_type, exclude_attribute_id, exclude_attribute_id),
+                (
+                    normalized_value,
+                    user_id,
+                    user_id,
+                    attribute_type,
+                    attribute_type,
+                    group_key,
+                    exclude_attribute_id,
+                    exclude_attribute_id,
+                ),
             )
             row = cur.fetchone()
             return UserAttribute(**self._normalize_attribute_row(row)) if row else None
@@ -94,6 +103,7 @@ class UserAttributeRepository:
         *,
         user_id: Optional[str] = None,
         attribute_type: Optional[str] = None,
+        group_key: Optional[str] = None,
         exclude_attribute_id: Optional[UUID] = None,
         distance_threshold: float = ATTRIBUTE_DUPLICATE_DISTANCE_THRESHOLD,
     ) -> Optional[UserAttributeSearchResult]:
@@ -106,9 +116,8 @@ class UserAttributeRepository:
                     user_id,
                     value,
                     attribute_type,
+                    group_key,
                     source,
-                    source_conversation_id,
-                    source_roundtrip_id,
                     is_active,
                     created_at,
                     updated_at,
@@ -119,6 +128,7 @@ class UserAttributeRepository:
                 WHERE attribute_embedding IS NOT NULL
                   AND (CAST(%s AS text) IS NULL OR user_id = %s)
                   AND (CAST(%s AS text) IS NULL OR attribute_type = %s)
+                  AND group_key IS NOT DISTINCT FROM CAST(%s AS text)
                   AND (CAST(%s AS uuid) IS NULL OR id <> %s)
                 ORDER BY attribute_embedding <-> (%s)::vector ASC
                 LIMIT 1
@@ -129,6 +139,7 @@ class UserAttributeRepository:
                     user_id,
                     attribute_type,
                     attribute_type,
+                    group_key,
                     exclude_attribute_id,
                     exclude_attribute_id,
                     list(query_embedding),
@@ -147,9 +158,8 @@ class UserAttributeRepository:
         value: Optional[Sequence[str]] = None,
         attribute_embedding: Optional[list[float]] = None,
         attribute_type: str,
+        group_key: Optional[str] = None,
         source: Optional[str] = None,
-        source_conversation_id: Optional[UUID] = None,
-        source_roundtrip_id: Optional[UUID] = None,
         is_active: Optional[bool] = None,
         confidence: Optional[float] = None,
         importance: Optional[float] = None,
@@ -163,9 +173,8 @@ class UserAttributeRepository:
                 SET value = COALESCE(%s, value),
                     attribute_embedding = COALESCE((%s)::vector, attribute_embedding),
                     attribute_type = COALESCE(%s, attribute_type),
+                    group_key = COALESCE(%s, group_key),
                     source = COALESCE(%s, source),
-                    source_conversation_id = COALESCE(%s, source_conversation_id),
-                    source_roundtrip_id = COALESCE(%s, source_roundtrip_id),
                     is_active = COALESCE(%s, is_active),
                     confidence = COALESCE(%s, confidence),
                     importance = COALESCE(%s, importance),
@@ -177,9 +186,8 @@ class UserAttributeRepository:
                     value,
                     attribute_embedding,
                     attribute_type,
+                    group_key,
                     source,
-                    source_conversation_id,
-                    source_roundtrip_id,
                     is_active,
                     created_at,
                     updated_at,
@@ -190,9 +198,8 @@ class UserAttributeRepository:
                     normalized_value,
                     attribute_embedding,
                     attribute_type,
+                    group_key,
                     source,
-                    source_conversation_id,
-                    source_roundtrip_id,
                     is_active,
                     confidence,
                     importance,
@@ -220,25 +227,28 @@ class UserAttributeRepository:
         attribute_type: str,
         user_id: Optional[str] = None,
         attribute_embedding: Optional[list[float]] = None,
+        group_key: Optional[str] = None,
         source: Optional[str] = None,
-        source_conversation_id: Optional[UUID] = None,
-        source_roundtrip_id: Optional[UUID] = None,
         is_active: bool = True,
         confidence: Optional[float] = None,
         importance: Optional[float] = None,
     ) -> UserAttribute:
         self._validate_attribute_type(attribute_type)
         normalized_value = normalize_string_list(value)
-        exact_match = self._find_exact_attribute(normalized_value, user_id=user_id, attribute_type=attribute_type)
+        exact_match = self._find_exact_attribute(
+            normalized_value,
+            user_id=user_id,
+            attribute_type=attribute_type,
+            group_key=group_key,
+        )
         if exact_match is not None:
             updated_attribute = self._update_attribute_record(
                 exact_match.id,
                 value=normalized_value,
                 attribute_embedding=attribute_embedding,
                 attribute_type=attribute_type,
+                group_key=group_key,
                 source=source,
-                source_conversation_id=source_conversation_id,
-                source_roundtrip_id=source_roundtrip_id,
                 is_active=is_active,
                 confidence=confidence,
                 importance=importance,
@@ -251,6 +261,7 @@ class UserAttributeRepository:
                 attribute_embedding,
                 user_id=user_id,
                 attribute_type=attribute_type,
+                group_key=group_key,
             )
             if similar_match is not None:
                 updated_attribute = self._update_attribute_record(
@@ -258,9 +269,8 @@ class UserAttributeRepository:
                     value=normalized_value,
                     attribute_embedding=attribute_embedding,
                     attribute_type=attribute_type,
+                    group_key=group_key,
                     source=source,
-                    source_conversation_id=source_conversation_id,
-                    source_roundtrip_id=source_roundtrip_id,
                     is_active=is_active,
                     confidence=confidence,
                     importance=importance,
@@ -276,23 +286,21 @@ class UserAttributeRepository:
                     value,
                     attribute_embedding,
                     attribute_type,
+                    group_key,
                     source,
-                    source_conversation_id,
-                    source_roundtrip_id,
                     is_active,
                     confidence,
                     importance
                 )
-                VALUES (%s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s)
                 RETURNING
                     id,
                     user_id,
                     value,
                     attribute_embedding,
                     attribute_type,
+                    group_key,
                     source,
-                    source_conversation_id,
-                    source_roundtrip_id,
                     is_active,
                     created_at,
                     updated_at,
@@ -304,9 +312,8 @@ class UserAttributeRepository:
                     normalized_value,
                     attribute_embedding,
                     attribute_type,
+                    group_key,
                     source,
-                    source_conversation_id,
-                    source_roundtrip_id,
                     is_active,
                     confidence,
                     importance,
@@ -322,9 +329,8 @@ class UserAttributeRepository:
         attribute_type: str,
         value: Optional[Sequence[str]] = None,
         attribute_embedding: Optional[list[float]] = None,
+        group_key: Optional[str] = None,
         source: Optional[str] = None,
-        source_conversation_id: Optional[UUID] = None,
-        source_roundtrip_id: Optional[UUID] = None,
         is_active: Optional[bool] = None,
         confidence: Optional[float] = None,
         importance: Optional[float] = None,
@@ -335,6 +341,7 @@ class UserAttributeRepository:
             exact_match = self._find_exact_attribute(
                 normalized_value,
                 attribute_type=attribute_type,
+                group_key=group_key,
                 exclude_attribute_id=attribute_id,
             )
             if exact_match is not None:
@@ -343,9 +350,8 @@ class UserAttributeRepository:
                     value=normalized_value,
                     attribute_embedding=attribute_embedding,
                     attribute_type=attribute_type,
+                    group_key=group_key,
                     source=source,
-                    source_conversation_id=source_conversation_id,
-                    source_roundtrip_id=source_roundtrip_id,
                     is_active=is_active if is_active is not None else True,
                     confidence=confidence,
                     importance=importance,
@@ -357,6 +363,7 @@ class UserAttributeRepository:
                 similar_match = self._find_similar_attribute(
                     attribute_embedding,
                     attribute_type=attribute_type,
+                    group_key=group_key,
                     exclude_attribute_id=attribute_id,
                 )
                 if similar_match is not None:
@@ -365,9 +372,8 @@ class UserAttributeRepository:
                         value=normalized_value,
                         attribute_embedding=attribute_embedding,
                         attribute_type=attribute_type,
+                        group_key=group_key,
                         source=source,
-                        source_conversation_id=source_conversation_id,
-                        source_roundtrip_id=source_roundtrip_id,
                         is_active=is_active if is_active is not None else True,
                         confidence=confidence,
                         importance=importance,
@@ -380,9 +386,8 @@ class UserAttributeRepository:
             value=normalized_value,
             attribute_embedding=attribute_embedding,
             attribute_type=attribute_type,
+            group_key=group_key,
             source=source,
-            source_conversation_id=source_conversation_id,
-            source_roundtrip_id=source_roundtrip_id,
             is_active=is_active,
             confidence=confidence,
             importance=importance,
@@ -398,9 +403,8 @@ class UserAttributeRepository:
                     value,
                     attribute_embedding,
                     attribute_type,
+                    group_key,
                     source,
-                    source_conversation_id,
-                    source_roundtrip_id,
                     is_active,
                     created_at,
                     updated_at,
@@ -423,9 +427,8 @@ class UserAttributeRepository:
         user_id: Optional[str] = None,
         is_active: Optional[bool] = None,
         attribute_type: Optional[str] = None,
+        group_key: Optional[str] = None,
         source: Optional[str] = None,
-        source_conversation_id: Optional[UUID] = None,
-        source_roundtrip_id: Optional[UUID] = None,
     ) -> list[UserAttribute]:
         self._validate_attribute_type(attribute_type)
         order_field = ATTRIBUTE_ORDER_FIELDS.get(order_by)
@@ -440,9 +443,8 @@ class UserAttributeRepository:
                 value,
                 attribute_embedding,
                 attribute_type,
+                group_key,
                 source,
-                source_conversation_id,
-                source_roundtrip_id,
                 is_active,
                 created_at,
                 updated_at,
@@ -452,9 +454,8 @@ class UserAttributeRepository:
             WHERE (CAST(%s AS text) IS NULL OR user_id = %s)
               AND (CAST(%s AS boolean) IS NULL OR is_active = %s)
               AND (CAST(%s AS text) IS NULL OR attribute_type = %s)
+              AND (CAST(%s AS text) IS NULL OR group_key = %s)
               AND (CAST(%s AS text) IS NULL OR source = %s)
-              AND (CAST(%s AS uuid) IS NULL OR source_conversation_id = %s)
-              AND (CAST(%s AS uuid) IS NULL OR source_roundtrip_id = %s)
             ORDER BY {order_field} {order_direction}
             LIMIT %s
         """
@@ -469,12 +470,10 @@ class UserAttributeRepository:
                     is_active,
                     attribute_type,
                     attribute_type,
+                    group_key,
+                    group_key,
                     source,
                     source,
-                    source_conversation_id,
-                    source_conversation_id,
-                    source_roundtrip_id,
-                    source_roundtrip_id,
                     limit,
                 ),
             )
@@ -489,9 +488,8 @@ class UserAttributeRepository:
         user_id: Optional[str] = None,
         is_active: Optional[bool] = True,
         attribute_type: Optional[str] = None,
+        group_key: Optional[str] = None,
         source: Optional[str] = None,
-        source_conversation_id: Optional[UUID] = None,
-        source_roundtrip_id: Optional[UUID] = None,
     ) -> list[UserAttributeSearchResult]:
         self._validate_attribute_type(attribute_type)
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -502,9 +500,8 @@ class UserAttributeRepository:
                     user_id,
                     value,
                     attribute_type,
+                    group_key,
                     source,
-                    source_conversation_id,
-                    source_roundtrip_id,
                     is_active,
                     created_at,
                     updated_at,
@@ -516,9 +513,8 @@ class UserAttributeRepository:
                   AND (CAST(%s AS text) IS NULL OR user_id = %s)
                   AND (CAST(%s AS boolean) IS NULL OR is_active = %s)
                   AND (CAST(%s AS text) IS NULL OR attribute_type = %s)
+                  AND (CAST(%s AS text) IS NULL OR group_key = %s)
                   AND (CAST(%s AS text) IS NULL OR source = %s)
-                  AND (CAST(%s AS uuid) IS NULL OR source_conversation_id = %s)
-                  AND (CAST(%s AS uuid) IS NULL OR source_roundtrip_id = %s)
                 ORDER BY attribute_embedding <-> (%s)::vector ASC
                 LIMIT %s
                 """,
@@ -530,12 +526,10 @@ class UserAttributeRepository:
                     is_active,
                     attribute_type,
                     attribute_type,
+                    group_key,
+                    group_key,
                     source,
                     source,
-                    source_conversation_id,
-                    source_conversation_id,
-                    source_roundtrip_id,
-                    source_roundtrip_id,
                     list(query_embedding),
                     limit,
                 ),

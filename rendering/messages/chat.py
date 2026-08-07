@@ -23,11 +23,15 @@ from common.message_constants import (
 from tool.repository.tool_call_repository import ToolCallRepository
 
 
-def ensure_messages_loaded(conversation_repository, conversation_id: str, limit: int = 10) -> None:
+MESSAGE_HISTORY_LIMIT = 10
+
+
+def ensure_messages_loaded(conversation_repository, conversation_id: str, limit: int = MESSAGE_HISTORY_LIMIT) -> None:
     if "messages" not in st.session_state or st.session_state.get("loaded_cid") != conversation_id:
         roundtrips = conversation_repository.list_roundtrips(
             UUID(conversation_id),
             limit=limit,
+            newest_first=True,
         )
         st.session_state.messages = []
         for rt in roundtrips:
@@ -48,7 +52,7 @@ def ensure_messages_loaded(conversation_repository, conversation_id: str, limit:
         st.session_state.loaded_cid = conversation_id
 
 
-def render_messages(conversation_repository, conversation_id: str, render_message, limit: int = 10) -> None:
+def render_messages(conversation_repository, conversation_id: str, render_message, limit: int = MESSAGE_HISTORY_LIMIT) -> None:
     ensure_messages_loaded(conversation_repository, conversation_id, limit=limit)
     for msg in st.session_state.messages:
         render_message(msg)

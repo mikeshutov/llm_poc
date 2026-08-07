@@ -8,18 +8,19 @@ from pydantic import BaseModel, Field
 from conversation.models.conversation_models import RoundtripMemory
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.clients.embeddings import embed_text
+from request_orchestrator.shared.tool_adapter.memories.constants import DEFAULT_MEMORY_RESULT_LIMIT
 
 
 class SearchRoundtripMemoriesArgs(BaseModel):
     query: str = Field(..., description="Natural-language query describing the topic or specific mention to find in prior roundtrips.")
     conversation_ids: list[str] = Field(..., description="Conversation IDs returned from search_memories that should scope the roundtrip search.")
-    limit: int = Field(default=5, ge=1, le=10, description="Maximum number of matching roundtrips to return.")
+    limit: int = Field(default=DEFAULT_MEMORY_RESULT_LIMIT, ge=1, le=10, description=f"Maximum number of matching roundtrips to return. Defaults to {DEFAULT_MEMORY_RESULT_LIMIT}.")
 
 
 @tool(
     "search_roundtrip_memories",
     args_schema=SearchRoundtripMemoriesArgs,
-    description="""
+    description=f"""
 Search prior roundtrip summaries by semantic similarity within specific conversations.
 
 Use search_memories first to identify relevant conversation_ids, then use this tool to find the specific historical exchanges most related to the topic.
@@ -27,10 +28,10 @@ Use search_memories first to identify relevant conversation_ids, then use this t
 Required fields:
 - query (string): Natural-language description of the specific topic, mention, or exchange to find.
 - conversation_ids (array of strings): One or more conversation IDs returned from search_memories.
-- limit (integer, optional): Maximum number of matching roundtrips to return. Defaults to 5.
+- limit (integer, optional): Maximum number of matching roundtrips to return. Defaults to {DEFAULT_MEMORY_RESULT_LIMIT}.
 """,
 )
-def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: int = 5) -> list[RoundtripMemory]:
+def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: int = DEFAULT_MEMORY_RESULT_LIMIT) -> list[RoundtripMemory]:
     parsed_ids: list[UUID] = []
     for conversation_id in conversation_ids:
         try:

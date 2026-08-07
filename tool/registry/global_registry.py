@@ -43,10 +43,15 @@ class ToolRegistry:
         tool = self.get(name)
         try:
             return tool.invoke(tool_input or {})
-        except Exception:
+        except Exception as exc:
             emit_debug_message(
-                content="Exception raised during tool call",
-                content_title="Exception Occured",
+                content={
+                    "tool": name,
+                    "tool_input": tool_input,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                },
+                content_title="Exception Occurred",
             )
             raise
 

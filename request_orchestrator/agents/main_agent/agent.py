@@ -7,6 +7,7 @@ from conversation.models.conversation_models import ConversationContext
 from langgraph.graph import END, StateGraph
 from langsmith import traceable
 from personalization.profile.models import UserProfile
+from request_orchestrator.shared.profile import load_user_profile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.main_agent.request_analysis.analyze_request import analyze_request
 from request_orchestrator.agents.main_agent.router.router import router
@@ -19,6 +20,7 @@ from request_orchestrator.shared.executor.executor import run_executor
 from request_orchestrator.shared.planner.planner import run_planner
 from request_orchestrator.shared.synthesis.synthesis import run_synthesis
 
+PROFILE_LOADING_EDGE = "load_user_profile"
 PROFILE_MANAGEMENT_EDGE = "profile_management"
 
 
@@ -45,13 +47,15 @@ def run_agent(
 
     builder = StateGraph(AgentState)
     builder.add_node(REQUEST_ANALYSIS_EDGE, analyze_request)
+    builder.add_node(PROFILE_LOADING_EDGE, load_user_profile)
     builder.add_node(PROFILE_MANAGEMENT_EDGE, run_profile_management_agent)
     builder.add_node(PLAN_EDGE, run_planner)
     builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
     builder.add_node(SYNTHESIZE_EDGE, run_synthesis)
     builder.set_entry_point(REQUEST_ANALYSIS_EDGE)
 
-    builder.add_edge(REQUEST_ANALYSIS_EDGE, PROFILE_MANAGEMENT_EDGE)
+    builder.add_edge(REQUEST_ANALYSIS_EDGE, PROFILE_LOADING_EDGE)
+    builder.add_edge(PROFILE_LOADING_EDGE, PROFILE_MANAGEMENT_EDGE)
 
     builder.add_conditional_edges(
         PROFILE_MANAGEMENT_EDGE,

@@ -16,6 +16,7 @@ class UpdateUserAttributeArgs(BaseModel):
     attribute_id: str = Field(..., description="The id of the attribute to update.")
     value: list[str] | None = Field(default=None, description="Updated attribute values as an array/list of strings. Pass a JSON array, not a single string.")
     attribute_type: UserAttributeType = Field(..., description=f"Updated attribute type: {ATTRIBUTE_TYPE_DESCRIPTION}.")
+    group_key: str | None = Field(default=None, description="Optional updated grouping label for curation when multiple attributes of the same type need to coexist cleanly.")
     source: str | None = Field(default=None, description="Updated source value such as explicit, derived, or computed.")
     is_active: bool | None = Field(default=None, description="Whether the attribute should remain active.")
     confidence: float | None = Field(default=None, ge=0, le=1, description="Optional confidence score between 0 and 1.")
@@ -30,7 +31,8 @@ Required fields:
 - attribute_type (string): {ATTRIBUTE_TYPE_DESCRIPTION}.
 
 Optional fields:
-- value (array/list of strings): Updated attribute values. Pass a JSON array, not a single string. Store only concrete user-specific values such as ["pizza", "eggs"] or ["Python", "React"], not labels, summaries, placeholders, or brace-wrapped text like `{"dietary staples mentioned by the user"}`.
+- value (array/list of strings): Updated attribute values. Pass a JSON array, not a single string. Store only concrete user-specific values such as ["pizza", "eggs"] or ["Python", "React"], not labels, summaries, placeholders, or brace-wrapped text like `{"dietary staples mentioned by the user"}
+- group_key (string): Optional short semantic grouping label when multiple attributes of the same type need to coexist cleanly. Use concrete labels like `frontend`, `backend`, `desserts`, or `career_goals`, not filler labels like `misc`, `other`, or `group2`.
 - source (string): Updated source value.
 - is_active (boolean): Set false to deactivate an attribute.
 - confidence (number): Optional 0..1 confidence score.
@@ -51,6 +53,7 @@ def update_user_attribute(
     attribute_id: str,
     attribute_type: UserAttributeType,
     value: list[str] | None = None,
+    group_key: str | None = None,
     source: str | None = None,
     is_active: bool | None = None,
     confidence: float | None = None,
@@ -67,6 +70,7 @@ def update_user_attribute(
         value=value,
         attribute_embedding=attribute_embedding,
         attribute_type=attribute_type,
+        group_key=group_key,
         source=source,
         is_active=is_active,
         confidence=confidence,
