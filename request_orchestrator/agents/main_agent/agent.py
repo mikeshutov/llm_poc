@@ -7,7 +7,6 @@ from conversation.models.conversation_models import ConversationContext
 from langgraph.graph import END, StateGraph
 from langsmith import traceable
 from personalization.profile.models import UserProfile
-from request_orchestrator.shared.profile import load_user_profile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.main_agent.request_analysis.analyze_request import analyze_request
 from request_orchestrator.agents.main_agent.router.router import router
@@ -18,10 +17,44 @@ from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.executor.executor import run_executor
 from request_orchestrator.shared.planner.planner import run_planner
+from request_orchestrator.shared.profile import load_user_profile
 from request_orchestrator.shared.synthesis.synthesis import run_synthesis
 
+COLLECT_EDGE = "collect"
+FANOUT_EDGE = "fanout"
+INITIAL_PLAN_EDGE = "initial_plan"
 PROFILE_LOADING_EDGE = "load_user_profile"
 PROFILE_MANAGEMENT_EDGE = "profile_management"
+
+
+def _fanout_node(state: AgentState) -> AgentState:
+    return state
+
+
+def _collect_node(state: AgentState) -> AgentState:
+    return state
+
+
+def _run_planner_update(state: AgentState) -> dict[str, object]:
+    planner_state = state.clone_for_parallel()
+    updated_state = run_planner(planner_state)
+    return {
+        "iteration_trace": updated_state.iteration_trace,
+        "goal_reached": updated_state.goal_reached,
+        "result": updated_state.result,
+        "agent_log": updated_state.agent_log.clone(),
+    }
+
+
+def _run_profile_management_update(state: AgentState) -> dict[str, object]:
+    profile_state = state.clone_for_parallel()
+    updated_state = run_profile_management_agent(profile_state)
+    return {
+        "subagent_states": {
+            name: subagent_state.clone()
+            for name, subagent_state in updated_state.subagent_states.items()
+        },
+    }
 
 
 @traceable(name=MAIN_AGENT_PROFILE.name)
@@ -48,26 +81,24 @@ def run_agent(
     builder = StateGraph(AgentState)
     builder.add_node(REQUEST_ANALYSIS_EDGE, analyze_request)
     builder.add_node(PROFILE_LOADING_EDGE, load_user_profile)
-    builder.add_node(PROFILE_MANAGEMENT_EDGE, run_profile_management_agent)
-    builder.add_node(PLAN_EDGE, run_planner)
+    builder.add_node(FANOUT_EDGE, _fanout_node)
+    builder.add_node(PROFILE_MANAGEMENT_EDGE, _run_profile_management_update)
+    builder.add_node(INITIAL_PLAN_EDGE, _run_planner_update)
+    builder.add_node(COLLECT_EDGE, _collect_node)
+    builder.add_node(PLAN_EDGE, _run_planner_update)
     builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
     builder.add_node(SYNTHESIZE_EDGE, run_synthesis)
     builder.set_entry_point(REQUEST_ANALYSIS_EDGE)
 
     builder.add_edge(REQUEST_ANALYSIS_EDGE, PROFILE_LOADING_EDGE)
-    builder.add_edge(PROFILE_LOADING_EDGE, PROFILE_MANAGEMENT_EDGE)
+    builder.add_edge(PROFILE_LOADING_EDGE, FANOUT_EDGE)
+    builder.add_edge(FANOUT_EDGE, PROFILE_MANAGEMENT_EDGE)
+    builder.add_edge(FANOUT_EDGE, INITIAL_PLAN_EDGE)
+    builder.add_edge(PROFILE_MANAGEMENT_EDGE, COLLECT_EDGE)
+    builder.add_edge(INITIAL_PLAN_EDGE, COLLECT_EDGE)
 
     builder.add_conditional_edges(
-        PROFILE_MANAGEMENT_EDGE,
-        router,
-        {
-            PLAN_EDGE: PLAN_EDGE,
-            SYNTHESIZE_EDGE: SYNTHESIZE_EDGE,
-        },
-    )
-
-    builder.add_conditional_edges(
-        PLAN_EDGE,
+        COLLECT_EDGE,
         validator,
         {
             EXECUTE_TOOLS_EDGE: EXECUTE_TOOLS_EDGE,
@@ -75,12 +106,14 @@ def run_agent(
         },
     )
 
+    builder.add_edge(PLAN_EDGE, COLLECT_EDGE)
+
     builder.add_conditional_edges(
         EXECUTE_TOOLS_EDGE,
         router,
         {
             PLAN_EDGE: PLAN_EDGE,
-            SYNTHESIZE_EDGE: SYNTHESIZE_EDGE,
+            SYNTHESIZE_EDGE: COLLECT_EDGE,
         },
     )
 

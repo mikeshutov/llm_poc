@@ -10,12 +10,13 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from common.model_constants import LLM_MODEL
+from common.serialization import sanitize_for_json_storage
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import GeoLocation, GeoMetadata, UserProfile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.models.agent_profile import AgentProfile
-from request_orchestrator.models.agent_result import AgentResult
-from request_orchestrator.models.plan import Plan
+from .agent_result import AgentResult
+from .plan import Plan
 
 
 class RequestAnalysis(BaseModel):
@@ -24,6 +25,7 @@ class RequestAnalysis(BaseModel):
     requested_user_attribute_types: list[str] = []
     requires_tools: bool = False
     context_answer_confidence: float = 0.0
+
 
 
 def build_geometadata(
@@ -45,6 +47,126 @@ def build_geometadata(
         timezone=resolved_timezone,
         location=location,
     )
+
+
+@dataclass
+class AgentStateLogElement:
+    agent_name: str
+    kind: str = "event"
+    title: str = ""
+    summary: str = ""
+    details: str = ""
+    status: str = ""
+    tool_name: str = ""
+    step_id: str = ""
+    iteration: int | None = None
+    request: Any | None = None
+    response: Any | None = None
+    error: str = ""
+    data: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "agent_name": self.agent_name,
+            "kind": self.kind,
+        }
+        if self.title:
+            payload["title"] = self.title
+        if self.summary:
+            payload["summary"] = self.summary
+        if self.details:
+            payload["details"] = self.details
+        if self.status:
+            payload["status"] = self.status
+        if self.tool_name:
+            payload["tool_name"] = self.tool_name
+        if self.step_id:
+            payload["step_id"] = self.step_id
+        if self.iteration is not None:
+            payload["iteration"] = self.iteration
+        if self.request is not None:
+            payload["request"] = sanitize_for_json_storage(self.request)
+        if self.response is not None:
+            payload["response"] = sanitize_for_json_storage(self.response)
+        if self.error:
+            payload["error"] = self.error
+        if self.data:
+            payload["data"] = sanitize_for_json_storage(self.data)
+        if self.metadata:
+            payload["metadata"] = sanitize_for_json_storage(self.metadata)
+        return payload
+
+
+@dataclass
+class AgentStateLog:
+    entries: list[AgentStateLogElement] = field(default_factory=list)
+
+    def add(
+        self,
+        *,
+        agent_name: str,
+        kind: str = "event",
+        title: str = "",
+        summary: str = "",
+        details: str = "",
+        status: str = "",
+        tool_name: str = "",
+        step_id: str = "",
+        iteration: int | None = None,
+        request: Any | None = None,
+        response: Any | None = None,
+        error: str = "",
+        data: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        self.entries.append(
+            AgentStateLogElement(
+                agent_name=agent_name,
+                kind=kind,
+                title=title,
+                summary=summary,
+                details=details,
+                status=status,
+                tool_name=tool_name,
+                step_id=step_id,
+                iteration=iteration,
+                request=request,
+                response=response,
+                error=error,
+                data={} if data is None else dict(data),
+                metadata={} if metadata is None else dict(metadata),
+            )
+        )
+
+    def clone(self) -> AgentStateLog:
+        return AgentStateLog(
+            entries=[
+                AgentStateLogElement(
+                    agent_name=entry.agent_name,
+                    kind=entry.kind,
+                    title=entry.title,
+                    summary=entry.summary,
+                    details=entry.details,
+                    status=entry.status,
+                    tool_name=entry.tool_name,
+                    step_id=entry.step_id,
+                    iteration=entry.iteration,
+                    request=entry.request,
+                    response=entry.response,
+                    error=entry.error,
+                    data=dict(entry.data),
+                    metadata=dict(entry.metadata),
+                )
+                for entry in self.entries
+            ]
+        )
+
+    def to_grouped_dict(self) -> dict[str, list[dict[str, Any]]]:
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for entry in self.entries:
+            grouped.setdefault(entry.agent_name, []).append(entry.to_payload())
+        return grouped
 
 
 @dataclass
@@ -78,6 +200,7 @@ class SubagentState:
     agent_profile: AgentProfile
     request_analysis: RequestAnalysis = field(default_factory=RequestAnalysis)
     iteration_trace: list[IterationState] = field(default_factory=list)
+    agent_log: AgentStateLog = field(default_factory=AgentStateLog)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
     goal_reached: bool = False
 
@@ -92,6 +215,7 @@ class SubagentState:
             roundtrip_id=parent_state.roundtrip_id,
             request_analysis=self.request_analysis.model_copy(deep=True),
             iteration_trace=[iteration.clone() for iteration in self.iteration_trace],
+            agent_log=self.agent_log.clone(),
             result=self.result,
             goal_reached=self.goal_reached,
             llm=parent_state.llm,
@@ -103,6 +227,7 @@ class SubagentState:
         self.agent_profile = runtime_state.agent_profile
         self.request_analysis = runtime_state.request_analysis.model_copy(deep=True)
         self.iteration_trace = [iteration.clone() for iteration in runtime_state.iteration_trace]
+        self.agent_log = runtime_state.agent_log.clone()
         self.result = runtime_state.result
         self.goal_reached = runtime_state.goal_reached
         return self
@@ -114,6 +239,7 @@ class SubagentState:
             agent_profile=self.agent_profile,
             request_analysis=self.request_analysis.model_copy(deep=True),
             iteration_trace=[iteration.clone() for iteration in self.iteration_trace],
+            agent_log=self.agent_log.clone(),
             result=self.result,
             goal_reached=self.goal_reached,
         )
@@ -131,6 +257,7 @@ class AgentState:
     request_analysis: RequestAnalysis = field(default_factory=RequestAnalysis)
     iteration_trace: list[IterationState] = field(default_factory=list)
     subagent_states: dict[str, SubagentState] = field(default_factory=dict)
+    agent_log: AgentStateLog = field(default_factory=AgentStateLog)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
     goal_reached: bool = False
     llm: Any = field(default_factory=lambda: ChatOpenAI(model=LLM_MODEL), repr=False)
@@ -198,7 +325,50 @@ class AgentState:
             request_analysis=self.request_analysis.model_copy(deep=True),
             iteration_trace=[iteration.clone() for iteration in self.iteration_trace],
             subagent_states={name: subagent_state.clone() for name, subagent_state in self.subagent_states.items()},
+            agent_log=self.agent_log.clone(),
             result=self.result,
             goal_reached=self.goal_reached,
             llm=self.llm,
         )
+
+    def log_status(
+        self,
+        *,
+        agent_name: str,
+        kind: str = "event",
+        title: str = "",
+        summary: str = "",
+        details: str = "",
+        status: str = "",
+        tool_name: str = "",
+        step_id: str = "",
+        iteration: int | None = None,
+        request: Any | None = None,
+        response: Any | None = None,
+        error: str = "",
+        data: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        self.agent_log.add(
+            agent_name=agent_name,
+            kind=kind,
+            title=title,
+            summary=summary,
+            details=details,
+            status=status,
+            tool_name=tool_name,
+            step_id=step_id,
+            iteration=iteration,
+            request=request,
+            response=response,
+            error=error,
+            data=data,
+            metadata=metadata,
+        )
+
+    def build_agent_logs(self) -> dict[str, list[dict[str, Any]]]:
+        logs = self.agent_log.to_grouped_dict()
+        for subagent_state in self.subagent_states.values():
+            for agent_name, entries in subagent_state.agent_log.to_grouped_dict().items():
+                logs.setdefault(agent_name, []).extend(entries)
+        return logs

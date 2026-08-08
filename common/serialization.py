@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import asdict, is_dataclass
 from typing import Any
+from uuid import UUID
+
+from pydantic import BaseModel
 
 
 def prune_empty_prompt_values(value: Any) -> Any:
@@ -20,3 +24,23 @@ def prune_empty_prompt_values(value: Any) -> Any:
         return [item for item in pruned if item not in (None, "", [], {})]
 
     return value
+
+
+def sanitize_for_json_storage(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return sanitize_for_json_storage(value.model_dump())
+    if is_dataclass(value):
+        return sanitize_for_json_storage(asdict(value))
+    if isinstance(value, dict):
+        return {
+            str(key): sanitize_for_json_storage(item)
+            for key, item in value.items()
+            if not str(key).endswith("_embedding")
+        }
+    if isinstance(value, (list, tuple, set)):
+        return [sanitize_for_json_storage(item) for item in value]
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)

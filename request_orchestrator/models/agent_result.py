@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
+from common.serialization import sanitize_for_json_storage
 from integrations.brave.models import NewsSearchResponse
 from products.models.product_search_results import ProductSearchResults
 from rendering.cards_mapper import news_response_to_cards, product_results_to_cards
+
+if TYPE_CHECKING:
+    from .agent_state import AgentState
 
 
 @dataclass(frozen=True)
@@ -16,6 +20,7 @@ class AgentResult:
     roundtrip_summary: str = ""
     tool_summary: dict[str, Any] = field(default_factory=dict)
     cards: list[dict[str, Any]] = field(default_factory=list)
+    agent_logs: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
     @property
     def raw_response(self) -> str:
@@ -26,14 +31,17 @@ class AgentResult:
         return self.clarifying_question or self.follow_up
 
     def to_payload_for_update_roundtrip(self) -> dict[str, Any]:
-        return {
-            "response": self.raw_response,
-            "cards": self.cards,
-            "follow_up": self.follow_up,
-            "clarifying_question": self.clarifying_question,
-            "roundtrip_summary": self.roundtrip_summary,
-            "tool_summary": self.tool_summary,
-        }
+        return sanitize_for_json_storage(
+            {
+                "response": self.raw_response,
+                "cards": self.cards,
+                "follow_up": self.follow_up,
+                "clarifying_question": self.clarifying_question,
+                "roundtrip_summary": self.roundtrip_summary,
+                "tool_summary": self.tool_summary,
+                "agent_logs": self.agent_logs,
+            }
+        )
 
     @classmethod
     def from_state(
@@ -77,5 +85,6 @@ class AgentResult:
             clarifying_question=resolved_clarifying_question,
             roundtrip_summary=roundtrip_summary or "",
             tool_summary=tool_summary or {},
-            cards=cards,
+            cards=sanitize_for_json_storage(cards),
+            agent_logs=state.build_agent_logs(),
         )

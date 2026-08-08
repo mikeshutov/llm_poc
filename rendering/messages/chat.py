@@ -84,6 +84,7 @@ def append_assistant_response(
         "cards": answer.cards,
         "follow_up": answer.follow_up,
         "clarifying_question": answer.clarifying_question,
+        "agent_logs": answer.agent_logs,
     }
 
     now = datetime.now(timezone.utc)

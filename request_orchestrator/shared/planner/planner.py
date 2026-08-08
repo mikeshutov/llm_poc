@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from langsmith import traceable
 
-from rendering.debug import build_plan_status_message, emit_status_message, prefix_agent_status
 from request_orchestrator.models.agent_state import AgentState, IterationState
 from request_orchestrator.models import AgentResult, Plan
 from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
@@ -12,6 +11,7 @@ from common.parsing import strip_code_fences
 from conversation.repository.repo_factory import get_conversation_repo
 from tool.repository.plan_repository import PlanRepository
 from tool.tools import tools
+from rendering.debug import PLAN_KIND
 
 tool_list = "\n".join(
     f'- {tool.name}: {getattr(tool, "description", "")}'.strip()
@@ -64,14 +64,13 @@ def run_planner(agent_state: AgentState) -> AgentState:
     if len(plan.steps) == 0 or plan.final_answer:
         agent_state.goal_reached = True
 
-    emit_status_message(
-        prefix_agent_status(
-            agent_state.agent_profile.name,
-            build_plan_status_message(
-                [step.plan for step in plan.steps],
-                final_answer=plan.final_answer,
-            ),
-        )
+    agent_state.log_status(
+        agent_name=agent_state.agent_profile.name,
+        kind=PLAN_KIND,
+        data={
+            "step_plans": [step.plan for step in plan.steps],
+            "final_answer": plan.final_answer,
+        },
     )
 
     if agent_state.roundtrip_id:
@@ -83,8 +82,3 @@ def run_planner(agent_state: AgentState) -> AgentState:
         )
 
     return agent_state
-
-
-
-
-
