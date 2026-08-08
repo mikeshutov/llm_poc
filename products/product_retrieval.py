@@ -84,8 +84,14 @@ def find_products(
         product_filters=product_filters,
         limit=DEFAULT_PRODUCT_SEARCH_CANDIDATE_LIMIT,
     )
+    retrieved_count = len(internal_results)
     internal_results = rerank_product_results(internal_results, goal=query_text)
-    return ProductSearchResults(internal_results=internal_results, external_results=[])
+    return ProductSearchResults(
+        internal_results=internal_results,
+        external_results=[],
+        retrieved_count=retrieved_count,
+        reranked=True,
+    )
 
 
 def find_products_web(
@@ -99,5 +105,11 @@ def find_products_web(
         external_results = _web_results_to_products(web_payload, DEFAULT_PRODUCT_SEARCH_CANDIDATE_LIMIT)
     except (ValueError, BraveSearchError):
         pass
+    retrieved_count = len(external_results)
     external_results = rerank_product_results(external_results, goal=query_text)
-    return ProductSearchResults(internal_results=[], external_results=external_results)
+    return ProductSearchResults(
+        internal_results=[],
+        external_results=external_results,
+        retrieved_count=retrieved_count,
+        reranked=True,
+    )

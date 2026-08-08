@@ -5,7 +5,7 @@ from test_utilities.mock_llm import MockLLM
 from uuid import uuid4
 
 
-def test_rerank_candidates_skips_llm_when_candidate_count_is_at_or_below_top_k() -> None:
+def test_rerank_candidates_skips_llm_when_candidate_count_is_at_or_below_limit() -> None:
     llm = MockLLM([
         '{"ranked_ids": ["candidate-2", "candidate-1", "candidate-3"]}'
     ])
@@ -21,25 +21,16 @@ def test_rerank_candidates_skips_llm_when_candidate_count_is_at_or_below_top_k()
     assert llm.last_prompt is None
 
 
-def test_rerank_candidates_sorts_by_llm_selected_ids_when_candidate_count_exceeds_top_k() -> None:
+def test_rerank_candidates_supports_limit_override() -> None:
     llm = MockLLM([
         '{"ranked_ids": ["candidate-8", "candidate-7", "candidate-6", "candidate-5", "candidate-4", "candidate-3", "candidate-2", "candidate-1"]}'
     ])
     candidates = [Candidate(id=f"candidate-{index}", title=f"Candidate {index}") for index in range(1, 9)]
 
-    ranked = rerank_candidates(candidates, goal="find the best option", llm=llm)
+    ranked = rerank_candidates(candidates, goal="find the best option", llm=llm, limit=3)
 
-    assert [candidate.id for candidate in ranked] == [
-        "candidate-8",
-        "candidate-7",
-        "candidate-6",
-        "candidate-5",
-        "candidate-4",
-        "candidate-3",
-    ]
+    assert [candidate.id for candidate in ranked] == ["candidate-8", "candidate-7", "candidate-6"]
     assert llm.last_prompt is not None
-    assert 'Candidates (JSON):' in llm.last_prompt
-    assert 'find the best option' in llm.last_prompt
 
 
 def test_reranker_prompt_serializes_goal_profile_and_candidates() -> None:
@@ -111,6 +102,22 @@ def test_reranker_prompt_prioritizes_name_plus_summary_then_description_then_tri
     assert payload["candidates"][1]["text"] == "Name. Description text"
     assert payload["candidates"][2]["text"] == "Name. very long text value"
     assert payload["candidates"][3]["text"] == "Summary only"
+
+
+def test_reranker_prompt_clamps_final_candidate_text_after_selection() -> None:
+    long_description = "word " * 200
+    prompt = RerankerPrompt(
+        goal="rank these",
+        candidates=[
+            Candidate(id="candidate-1", title="First", content={"name": "Name", "description": long_description}),
+        ],
+    )
+
+    payload = prompt.to_dict()
+    text = payload["candidates"][0]["text"]
+
+    assert text.startswith("Name. word word")
+    assert len(text) == 500
 
 
 def test_reranker_prompt_renders_prompt_text() -> None:

@@ -22,9 +22,12 @@ class CandidateReranker:
         goal: str | None = None,
         query: str | None = None,
         user_profile: UserProfile | None = None,
+        limit: int | None = None,
     ) -> list[Candidate]:
-        if len(candidates) <= DEFAULT_TOP_K:
-            return list(candidates)[:DEFAULT_TOP_K]
+        resolved_limit = DEFAULT_TOP_K if limit is None else max(1, limit)
+
+        if len(candidates) <= resolved_limit:
+            return list(candidates)[:resolved_limit]
 
         resolved_goal = goal if goal is not None else query
 
@@ -39,11 +42,11 @@ class CandidateReranker:
         try:
             rerank_result = RerankerResult.model_validate_json(raw)
         except Exception:
-            return list(candidates)[:DEFAULT_TOP_K]
+            return list(candidates)[:resolved_limit]
 
         candidate_by_id = {candidate.id: candidate for candidate in candidates}
         ranked_candidates = self._sort_candidates(candidate_by_id, candidates, rerank_result.ranked_ids)
-        return ranked_candidates[:DEFAULT_TOP_K]
+        return ranked_candidates[:resolved_limit]
 
     def _sort_candidates(
         self,
@@ -78,5 +81,12 @@ def rerank_candidates(
     query: str | None = None,
     user_profile: UserProfile | None = None,
     llm: Any | None = None,
+    limit: int | None = None,
 ) -> list[Candidate]:
-    return CandidateReranker(llm=llm).rerank(candidates, goal=goal, query=query, user_profile=user_profile)
+    return CandidateReranker(llm=llm).rerank(
+        candidates,
+        goal=goal,
+        query=query,
+        user_profile=user_profile,
+        limit=limit,
+    )
