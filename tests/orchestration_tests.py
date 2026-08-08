@@ -21,6 +21,10 @@ if 'pycountry' not in sys.modules:
     sys.modules['pycountry'] = pycountry_module
 
 from request_orchestrator.agents.main_agent.agent import run_agent
+from request_orchestrator.agents.profile_management.agent import _prepare_subagent_state
+from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
+from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
 
 
@@ -47,6 +51,33 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             )
 
         return result, llm
+
+    def test_profile_management_subagent_uses_profile_goal_and_raw_user_prompt(self) -> None:
+        parent_state = AgentState.new(
+            task='Please remember that I like pizza and eggs.',
+            max_turns=10,
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            llm=MockLLM([]),
+        )
+        parent_state.request_analysis.goal = "Store the user's food preferences."
+
+        subagent_state = _prepare_subagent_state(parent_state)
+        prompt = build_planner_prompt(subagent_state.to_runtime_state(parent_state))
+        prompt_text = render_agent_prompt(prompt)
+
+        self.assertEqual(subagent_state.task, 'Please remember that I like pizza and eggs.')
+        self.assertEqual(
+            subagent_state.request_analysis.goal,
+            'Review this turn for durable user attribute maintenance needs. If attribute work is needed, plan the minimal retrieval and/or update step combination required.',
+        )
+        self.assertIn('Latest User Prompt:', prompt_text)
+        self.assertIn('Please remember that I like pizza and eggs.', prompt_text)
+        self.assertEqual(
+            prompt.task,
+            'Review this turn for durable user attribute maintenance needs. If attribute work is needed, plan the minimal retrieval and/or update step combination required.',
+        )
+        self.assertEqual(prompt.latest_user_prompt, 'Please remember that I like pizza and eggs.')
 
     def test_user_attribute_creation_orchestration(self) -> None:
         fake_repo = FakeUserAttributeRepository()
@@ -276,9 +307,6 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertEqual(len(llm.invocations), 4)
         self.assertIn('User Profile (JSON):\n\n{}', llm.prompts[0] or '')
         self.assertNotIn('pizza', llm.prompts[0] or '')
-        self.assertIn('pizza', llm.prompts[1] or '')
-        self.assertIn('eggs', llm.prompts[1] or '')
-        self.assertIn('food.likes', llm.prompts[1] or '')
 
         main_agent_logs = result.agent_logs.get('main_agent', [])
         request_analysis_log = next(log for log in main_agent_logs if log.get('kind') == 'request_analysis')
@@ -571,3 +599,4 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

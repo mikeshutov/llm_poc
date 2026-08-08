@@ -26,14 +26,15 @@ def _build_profile_management_task() -> str:
 
 
 def _prepare_subagent_state(parent_state: AgentState) -> SubagentState:
-    subagent_task = _build_profile_management_task()
+    subagent_task = parent_state.task
+    subagent_goal = _build_profile_management_task()
     subagent_state = parent_state.get_subagent_state(
         PROFILE_MANAGEMENT_PROFILE,
         task=subagent_task,
         max_turns=MAX_PROFILE_MANAGEMENT_TURNS,
     )
     subagent_state.request_analysis = RequestAnalysis(
-        goal=subagent_task,
+        goal=subagent_goal,
         applicable_tool_categories=sorted(PROFILE_MANAGEMENT_PROFILE.allowed_categories),
         requires_tools=False,
         context_answer_confidence=0.0,

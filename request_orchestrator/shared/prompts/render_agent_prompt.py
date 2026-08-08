@@ -58,7 +58,7 @@ def _append_conversation_context(
 
 
 def _append_latest_user_prompt(parts: list[str], prompt: AgentPrompt) -> None:
-    _append_section(parts, "Latest User Prompt:", prompt.task)
+    _append_section(parts, "Latest User Prompt:", prompt.latest_user_prompt or prompt.task)
 
 
 def _join_parts(parts: list[str]) -> str:

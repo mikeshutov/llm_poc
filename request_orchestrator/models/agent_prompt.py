@@ -40,6 +40,7 @@ class AgentPrompt:
     conversation_context: ConversationContext | None = None
     user_profile: UserProfile | None = None
     task: str = ""
+    latest_user_prompt: str = ""
     rules: str = ""
     schema: str = ""
     available_tool_categories: str = ""
