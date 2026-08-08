@@ -32,16 +32,20 @@ flowchart TD
     A[User Prompt] --> B[Context Assembly]
     B --> C[Request Analysis]
     C --> D[Load Requested Profile Attributes]
-    D --> E[Fanout to Agents]
+    D --> E[Fanout]
+
     E --> P[Profile Management Agent]
     E --> G[Initial Planner]
-    P --> K[Collect]
-    G --> K
-    K --> F{Execute More Tools?}
-    F -->|No| J[Synthesis]
-    F -->|Yes| H[Executor]
+
+    G --> V{Need Tool Execution?}
+    V -->|Yes| H[Executor]
     H --> I[Replan]
-    I --> K
+    I --> V
+
+    V -->|No| K[Collect]
+    P --> K
+
+    K --> J[Synthesis]
     J --> L[Response]
 ```
 
@@ -121,10 +125,10 @@ flowchart TD
 
     B --> C
     C --> D[Request Analysis selects needed state fields]
-    C --> E[Profile Loader hydrates requested attributes]
-    C --> F[Planner selects refined goal, tools, profile slice, prior evidence]
-    C --> G[Executor uses current plan plus results]
-    C --> H[Synthesis selects recent context plus final evidence]
+    D --> E[Profile Loader enriches state with requested attributes]
+    E --> F[Planner builds prompt from refined goal, tools, profile slice, prior evidence]
+    F --> G[Executor uses current plan plus results]
+    G --> H[Synthesis builds prompt from recent context plus final evidence]
 ```
 
 ## How File Searching with Uploads and Large files Works here
