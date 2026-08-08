@@ -10,6 +10,7 @@ class ProductResultModel(BaseModel):
 
     id: str
     name: str
+    description: Optional[str] = None
     category: Optional[str] = None
     color: Optional[str] = None
     style: Optional[str] = None

@@ -8,6 +8,7 @@ from products.models.product_source import ProductSource
 class ProductResult:
     id: str
     name: str
+    description: Optional[str]
     category: Optional[str]
     color: Optional[str]
     style: Optional[str]
