@@ -21,7 +21,7 @@ if 'pycountry' not in sys.modules:
     sys.modules['pycountry'] = pycountry_module
 
 from request_orchestrator.agents.main_agent.agent import run_agent
-from test_utilities import FakeUserAttributeRepository, MockLLM
+from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
 
 
 class MainAgentOrchestrationTest(unittest.TestCase):
@@ -123,13 +123,15 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         result, llm = self._run_case(
             user_query='Please remember that I like pizza and eggs.',
-            llm_responses=[
-                request_analysis_response,
-                profile_management_planner_response,
-                profile_management_completion_response,
-                main_planner_response,
-                synthesis_response,
-            ],
+            llm_responses=MockLLMScenario(
+                request_analysis=request_analysis_response,
+                profile_planner=[
+                    profile_management_planner_response,
+                    profile_management_completion_response,
+                ],
+                main_planner=[main_planner_response],
+                synthesis=[synthesis_response],
+            ),
             patchers=[
                 patch(
                     'personalization.profile.service.get_user_attribute_repo',
@@ -252,12 +254,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         result, llm = self._run_case(
             user_query='Use what you know about my food preferences to suggest something.',
-            llm_responses=[
-                request_analysis_response,
-                profile_management_planner_response,
-                main_planner_response,
-                synthesis_response,
-            ],
+            llm_responses=MockLLMScenario(
+                request_analysis=request_analysis_response,
+                profile_planner=[profile_management_planner_response],
+                main_planner=[main_planner_response],
+                synthesis=[synthesis_response],
+            ),
             patchers=[
                 patch(
                     'personalization.profile.service.get_user_attribute_repo',
@@ -277,6 +279,24 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertIn('pizza', llm.prompts[1] or '')
         self.assertIn('eggs', llm.prompts[1] or '')
         self.assertIn('food.likes', llm.prompts[1] or '')
+
+        main_agent_logs = result.agent_logs.get('main_agent', [])
+        request_analysis_log = next(log for log in main_agent_logs if log.get('kind') == 'request_analysis')
+        profile_load_log = next(log for log in main_agent_logs if log.get('kind') == 'profile_load')
+
+        self.assertEqual(request_analysis_log.get('data', {}).get('requested_user_attribute_types'), ['food.likes'])
+        self.assertEqual(profile_load_log.get('data', {}).get('loaded_attribute_count'), 1)
+        self.assertEqual(profile_load_log.get('data', {}).get('loaded_attribute_types'), ['food.likes'])
+        self.assertEqual(
+            profile_load_log.get('data', {}).get('loaded_attributes'),
+            [
+                {
+                    'attribute_type': 'food.likes',
+                    'group_key': None,
+                    'value': ['pizza', 'eggs'],
+                }
+            ],
+        )
 
     def test_calculate_tool_orchestration(self) -> None:
         fake_repo = FakeUserAttributeRepository()
@@ -351,13 +371,15 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         result, llm = self._run_case(
             user_query='What is (15 * 8) / 3 + 7?',
-            llm_responses=[
-                request_analysis_response,
-                profile_management_planner_response,
-                profile_management_completion_response,
-                main_planner_response,
-                synthesis_response,
-            ],
+            llm_responses=MockLLMScenario(
+                request_analysis=request_analysis_response,
+                profile_planner=[
+                    profile_management_planner_response,
+                    profile_management_completion_response,
+                ],
+                main_planner=[main_planner_response],
+                synthesis=[synthesis_response],
+            ),
             patchers=[
                 patch(
                     'personalization.profile.service.get_user_attribute_repo',
@@ -447,13 +469,15 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         result, llm = self._run_case(
             user_query='What time is it in Tokyo right now?',
-            llm_responses=[
-                request_analysis_response,
-                profile_management_planner_response,
-                profile_management_completion_response,
-                main_planner_response,
-                synthesis_response,
-            ],
+            llm_responses=MockLLMScenario(
+                request_analysis=request_analysis_response,
+                profile_planner=[
+                    profile_management_planner_response,
+                    profile_management_completion_response,
+                ],
+                main_planner=[main_planner_response],
+                synthesis=[synthesis_response],
+            ),
             patchers=[
                 patch(
                     'personalization.profile.service.get_user_attribute_repo',
@@ -526,12 +550,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         result, _ = self._run_case(
             user_query='Help me pick something.',
-            llm_responses=[
-                request_analysis_response,
-                profile_management_planner_response,
-                main_planner_response,
-                synthesis_response,
-            ],
+            llm_responses=MockLLMScenario(
+                request_analysis=request_analysis_response,
+                profile_planner=[profile_management_planner_response],
+                main_planner=[main_planner_response],
+                synthesis=[synthesis_response],
+            ),
             patchers=[
                 patch(
                     'personalization.profile.service.get_user_attribute_repo',

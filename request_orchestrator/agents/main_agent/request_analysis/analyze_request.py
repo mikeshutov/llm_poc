@@ -7,7 +7,7 @@ from request_orchestrator.constants import MAIN_AGENT_NAME, REQUEST_ANALYSIS_PRO
 from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 from request_orchestrator.agents.main_agent.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
 from conversation.repository.repo_factory import get_conversation_repo
-from rendering.debug import build_request_analysis_status_message, emit_status_message, prefix_agent_status
+from rendering.debug import REQUEST_ANALYSIS_KIND
 
 
 @traceable(name="Request Analysis Node")
@@ -23,15 +23,15 @@ def analyze_request(agent_state: AgentState) -> AgentState:
         agent_state.request_analysis = RequestAnalysis()
         parsed_successfully = False
 
-    emit_status_message(
-        prefix_agent_status(
-            agent_state.agent_profile.name,
-            build_request_analysis_status_message(
-                agent_state.request_analysis.applicable_tool_categories,
-                agent_state.request_analysis.context_answer_confidence,
-                agent_state.request_analysis.goal,
-            ),
-        )
+    agent_state.log_status(
+        agent_name=agent_state.agent_profile.name,
+        kind=REQUEST_ANALYSIS_KIND,
+        data={
+            "applicable_tool_categories": agent_state.request_analysis.applicable_tool_categories,
+            "requested_user_attribute_types": agent_state.request_analysis.requested_user_attribute_types,
+            "context_answer_confidence": agent_state.request_analysis.context_answer_confidence,
+            "goal": agent_state.request_analysis.goal,
+        },
     )
     if parsed_successfully and agent_state.roundtrip_id:
         get_conversation_repo().create_roundtrip_prompt(
@@ -42,8 +42,3 @@ def analyze_request(agent_state: AgentState) -> AgentState:
         )
 
     return agent_state
-
-
-
-
-

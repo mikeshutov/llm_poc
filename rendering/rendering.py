@@ -3,7 +3,7 @@ from datetime import datetime
 
 import streamlit as st
 
-from rendering.debug import debug_render_message
+from rendering.debug import debug_render_message, render_agent_logs
 from rendering.cards import render_cards
 from rendering.feedback import render_feedback_controls
 from rendering.replay import render_replay_control
@@ -30,12 +30,14 @@ def format_timestamp(ts) -> str | None:
 def render_assistant_content(content: str, payload: dict | None) -> None:
     cards = None
     next_question = None
+    agent_logs = None
     if isinstance(payload, dict):
         cards = payload.get("cards")
         if cards is None:
             cards = payload.get("products")
         follow_up = payload.get("follow_up")
         clarifying_question = payload.get("clarifying_question")
+        agent_logs = payload.get("agent_logs")
         if isinstance(clarifying_question, str) and clarifying_question:
             next_question = clarifying_question
         elif isinstance(follow_up, str) and follow_up:
@@ -59,6 +61,8 @@ def render_assistant_content(content: str, payload: dict | None) -> None:
 
     if has_next_question and has_cards:
         st.markdown(next_question)
+
+    render_agent_logs(agent_logs)
 
 
 def _render_file_preview(attached_file: dict) -> None:

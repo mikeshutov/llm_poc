@@ -12,14 +12,16 @@ Rough breakdown of the current agent loop flow.
    - If the existing context is strong enough, we can skip planning and go straight to synthesis.
    - If tools are needed, the selected categories determine which tool groups and rules are loaded.
    - If durable profile context would help, request analysis asks for specific attribute types such as `food.likes` or `projects.goals` rather than receiving the full stored attribute set up front.
-5. We load only the requested user attribute types into the profile, condense overlapping records for prompt efficiency, and then call the planner with the refined goal, available tools, profile slice, and previous planner iterations.
-   - The idea here is we could likely have thousands of tools and it seems like a good idea to only pass what is needed.
-   - There are also tool-specific rules which get added depending on the active categories.
-6. The executor executes the tool calls in the plan and stores the results in state.
-7. The planner replans if needed.
+5. We load only the requested user attribute types into the profile and condense overlapping records for prompt efficiency.
+   - This keeps the profile lightweight during request analysis and only hydrates the slice that is actually useful.
+6. After profile loading, the main flow fans out into separate agent paths.
+   - The main agent path handles planning, execution, replanning, and synthesis.
+   - The profile-management agent path can work on durable attribute maintenance separately(for now its just attributes but this could grow).
+7. The executor executes the tool calls in the plan and stores the results in state.
+8. The planner replans if needed.
    - If the goal is reached or we hit the iteration limit, we move to synthesis.
    - Otherwise we loop with the newly gathered evidence.
-8. Synthesis generates the final response, roundtrip summary, and tool summary. It receives explicit plan evidence plus a small recent-context window rather than the planner context or tool-summary history payloads.
+9. Synthesis generates the final response, roundtrip summary, and tool summary. It receives explicit plan evidence plus a small recent-context window rather than the planner context or tool-summary history payloads.
 
 We also store conversations, roundtrips, prompt rows, summaries, and tool calls for future prompts.
 The diagrams provided are just to illustrate the high-level shape of the flow.
@@ -28,14 +30,20 @@ The diagrams provided are just to illustrate the high-level shape of the flow.
 flowchart TD
     A[User Prompt] --> B[Context Assembly]
     B --> C[Request Analysis]
-    C --> D{Needs Tools?}
-    D -->|No| F[Synthesis]
-    D -->|Yes| E[Planner]
-    E --> H[Executor]
-    H --> G{Goal Reached or Limit Reached?}
-    G -->|No| E
-    G -->|Yes| F
-    F --> I[Response]
+    C --> D[Load Requested Profile Attributes]
+    D --> E[Fanout to Agents]
+    E --> P[Profile Management Agent]
+    E --> F{Needs Tools?}
+    F -->|No| J[Synthesis]
+    F -->|Yes| G[Planner]
+    G --> H[Executor]
+    H --> I{Goal Reached or Limit Reached?}
+    I -->|No| G
+    I -->|Yes| J
+    P --> K[Collect]
+    J --> L[Response]
+    E --> K
+    K --> F
 ```
 
 
@@ -56,7 +64,8 @@ The latest user prompt is not embedded inside the stored conversation context an
 We also prepare a separate `User Profile` section for prompt construction. That profile always includes geo/location-aware metadata, but stored user attributes are now loaded in a staged way:
 1. `request_analysis` sees the lightweight profile and decides whether stored user attributes would help.
 2. It requests specific attribute types such as `food.likes`, `technology.skills`, or `projects.goals`.
-3. We load only those active attribute types, condense overlapping records by attribute type and `group_key`, and pass that smaller profile slice into later steps.
+3. We load only those active attribute types, condense overlapping records by attribute type and `group_key`, and then hand that hydrated profile slice to the later agent paths.
+4. After that hydration step, the main agent and profile-management agent can each operate with the smaller relevant profile context rather than the full stored attribute set.
 
 That means `request_analysis` does not receive the full stored attribute set up front, the planner does not receive full conversation context, and synthesis receives only a narrow recent-context window plus explicit plan evidence.
 
@@ -80,7 +89,10 @@ user_prompt + roundtrip_summary"]
     end
 
     A --> D[Latest User Prompt passed separately]
-    A --> E[Lightweight User Profile passed separately then hydrated by requested attribute type]
+    A --> E[Lightweight User Profile passed separately]
+    E --> F[Request Analysis requests useful attribute types]
+    F --> G[Requested profile attributes are loaded and condensed]
+    G --> H[Hydrated profile slice passed to later agents]
 
     subgraph C[Recent Roundtrip Element]
         direction TB
@@ -89,16 +101,8 @@ user_prompt + roundtrip_summary"]
         N1 --> N2
     end
 
-    subgraph F[User Profile]
-        direction TB
-        P1["Geo Metadata"]
-        P2["Requested Stored User Attributes"]
-        P1 --> P2
-    end
-
     M3 --> C
     M4 --> C
-    E --> F
 ```
 
 ## How File Searching with Uploads and Large files Works here
@@ -133,7 +137,8 @@ The idea here is to essentially allow the agent to on demand find data that is p
 ### Why Request Analysis
 With the number of tools growing I wanted to solve for the scaling problem of passing a large tool list to the planner. The idea here is:
 1. Request analysis determines the user's goal, the category or categories that are applicable to the request, and any specific user attribute types worth loading. This lets the planner focus on a refined goal instead of carrying full conversation context.
-2. The planner prompt then injects only the tools and rules which fall under those categories plus any rules that are always present.
+2. We then load only the requested profile attributes before the later agent paths run, so both the main agent and the profile-management path can work from a smaller relevant profile slice.
+3. The planner prompt then injects only the tools and rules which fall under those categories plus any rules that are always present.
 This results in sending only the tools that are relevant, at least that is the idea. If we had thousands of tools we could reduce them to a much smaller number, although I am certain that if the number of tools grows this problem will need another refactor.
 
 ### What's with the Product Catalog
