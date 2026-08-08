@@ -92,10 +92,10 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         instruction=DEFAULT_PLANNER_PROMPT_INSTRUCTION,
         user_profile=state.user_profile,
         task=_build_planner_task(state),
+        latest_user_prompt=state.task,
         available_tools=context.compiled_tools,
         rules=compiled_rules,
         previous_iterations=previous_iterations,
         schema=PLANNER_SCHEMA,
         include_user_attribute_management_fields=state.agent_profile.name == "profile_management",
     )
-
