@@ -8,7 +8,7 @@ from products.models.product_result import ProductResult
 from products.models.product_search_results import ProductSearchResults
 from products.models.product_source import ProductSource
 from products.repository.product_repository import ProductRepository
-from reranker.constants import DEFAULT_TOP_K
+from reranker.constants import DEFAULT_RERANK_CANDIDATE_LIMIT
 from integrations.brave.client import BraveSearchClient, BraveSearchError
 from integrations.brave.models import ShoppingSearchResult
 
@@ -82,7 +82,7 @@ def find_products(
     internal_results = repo.search_products(
         query_embedding=query_embedding,
         product_filters=product_filters,
-        limit=DEFAULT_TOP_K,
+        limit=DEFAULT_RERANK_CANDIDATE_LIMIT,
     )
     internal_results = rerank_product_results(internal_results, goal=query_text)
     return ProductSearchResults(internal_results=internal_results, external_results=[])
@@ -95,8 +95,8 @@ def find_products_web(
     external_results: list[ProductResult] = []
     try:
         brave_client = BraveSearchClient()
-        web_payload = brave_client.shopping_search(web_query, count=20)
-        external_results = _web_results_to_products(web_payload, DEFAULT_TOP_K)
+        web_payload = brave_client.shopping_search(web_query, count=DEFAULT_RERANK_CANDIDATE_LIMIT)
+        external_results = _web_results_to_products(web_payload, DEFAULT_RERANK_CANDIDATE_LIMIT)
     except (ValueError, BraveSearchError):
         pass
     external_results = rerank_product_results(external_results, goal=query_text)
