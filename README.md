@@ -171,6 +171,24 @@ This results in sending only the tools that are relevant, at least that is the i
 Initially the goal was just to build a way to search through a catalog by using an LLM. So the first thing that I added was a catalog. As part of that I added embeddings and the ability to search through the catalog utilizing user input that was just a prompt. The goal was to understand embeddings and how those would work. This has since become just another tool on the agent/chat which checks for products in the internal catalog or looks for products on the search index (Brave used here).
 
 
+### Reranking
+We now also have a lightweight reranker layer for candidates. The current usage is focused on product results, but the contract is intentionally generic so other candidate sources can plug into it later.
+
+Current shape:
+1. Retrieval produces `Candidate` objects plus the original domain models such as `ProductResult`.
+2. We only send a reduced candidate payload to the reranker prompt rather than the full object.
+3. The reranker prompt asks for a structured JSON result in the form `{ "ranked_ids": ["...", "..."] }`.
+4. The reranker service builds an internal `id -> candidate` map and reconstructs the ranked candidates from the ordered ids returned by the model.
+5. If the number of candidates is already at or below the top-k limit, we skip the reranker call entirely.
+
+Important current details:
+1. The top-k limit is standardized in `reranker/constants.py` and is currently `6`.
+2. The reranker uses its own model constant, `RERANKER_MODEL`, which currently defaults to `gpt-5.4-mini`.
+3. The reranker prompt uses a `RerankerPrompt` model so prompt construction and payload shaping live outside the reranker service.
+4. Candidate text sent to the reranker is intentionally condensed. Today it prefers `name + summary`, then `name + description`, then `name + trimmed raw text`.
+5. Product web results currently use their URL as the id when no better external identifier is available yet.
+
+This keeps retrieval, reranking, and final reconstruction separate. Retrieval can stay domain-specific, the reranker can stay generic, and downstream code can still work with the original result objects after ranking.
 # Setup Information
 ## Prereqs
 - Docker + Docker Compose
@@ -225,3 +243,5 @@ python scripts/seed_products.py
 
 Product images are stored in `db/images/` for now. 
 Uploaded files (PDFs, DOCX, images, etc.) are stored in `static/files/`.
+
+

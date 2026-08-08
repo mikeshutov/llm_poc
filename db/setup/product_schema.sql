@@ -3,6 +3,7 @@ DROP TABLE IF EXISTS products;
 CREATE TABLE products (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  description TEXT,
   category TEXT,
   color TEXT,
   style TEXT,

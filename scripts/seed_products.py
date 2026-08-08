@@ -14,7 +14,6 @@ load_dotenv()
 DB_URL = os.getenv("DATABASE_URL", "postgresql://app:app@localhost:5432/products")
 IMAGE_DIR = Path(os.getenv("PRODUCT_IMAGE_DIR", "db/images"))
 
-# arbitrary price range since the products do not have a price
 CATEGORY_PRICE_RANGES = {
     "Tshirts": (10, 40),
     "Shirts": (15, 70),
@@ -40,13 +39,33 @@ def gen_price(cat: str | None) -> float:
     return round(random.uniform(low, high), 2)
 
 
+def build_product_description(row: dict[str, Any]) -> str:
+    parts: list[str] = []
+
+    name = str(row.get("productDisplayName") or "").strip()
+    if name:
+        parts.append(name)
+
+    descriptors = [
+        str(row.get("gender") or "").strip(),
+        str(row.get("baseColour") or "").strip(),
+        str(pick_category(row) or "").strip(),
+        str(row.get("usage") or "").strip(),
+        str(row.get("season") or "").strip(),
+    ]
+    descriptor_text = " ".join(part for part in descriptors if part)
+    if descriptor_text:
+        parts.append(descriptor_text)
+
+    year = row.get("year")
+    if year:
+        parts.append(f"Year: {year}")
+
+    return ". ".join(part for part in parts if part)
+
+
 def build_embedding_text(row: dict[str, Any]) -> str:
-    # We can start with simple name and usage embeddings
-    # we may want other embeddings depending on the thing
-    # we are searching for more contextual searches
-    name = row.get("productDisplayName") or ""
-    style = row.get("usage") or ""
-    return f"Name: {name}\nStyle: {style}"
+    return build_product_description(row)
 
 
 def extract_image_url(value: Any) -> str | None:
@@ -160,6 +179,7 @@ def main() -> None:
             for i, r in enumerate(rows):
                 pid = row_id(i, r)
                 name = str(r.get("productDisplayName") or "")
+                description = build_product_description(r)
                 category = pick_category(r)
                 color = r.get("baseColour")
                 style = r.get("usage")
@@ -177,7 +197,7 @@ def main() -> None:
                         or extract_image_url(r.get("img"))
                         or extract_image_url(r.get("image_url"))
                     )
-                meta_batch.append((pid, name, category, color, style, gender, season, year, price, image_url))
+                meta_batch.append((pid, name, description, category, color, style, gender, season, year, price, image_url))
 
                 if len(embed_batch) >= batch_size:
                     emb = client.embeddings.create(
@@ -189,10 +209,11 @@ def main() -> None:
                     cur.executemany(
                         """
                         INSERT INTO products
-                        (id, name, category, color, style, gender, season, year, price, image_url, embedding)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        (id, name, description, category, color, style, gender, season, year, price, image_url, embedding)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                         ON CONFLICT (id) DO UPDATE
-                        SET image_url = EXCLUDED.image_url
+                        SET description = EXCLUDED.description,
+                            image_url = EXCLUDED.image_url
                         WHERE %s OR products.image_url IS NULL OR products.image_url = '';
                         """,
                         [(*meta_batch[j], vectors[j], force_image_refresh) for j in range(len(meta_batch))],
@@ -212,10 +233,11 @@ def main() -> None:
                 cur.executemany(
                     """
                     INSERT INTO products
-                    (id, name, category, color, style, gender, season, year, price, image_url, embedding)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    (id, name, description, category, color, style, gender, season, year, price, image_url, embedding)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (id) DO UPDATE
-                    SET image_url = EXCLUDED.image_url
+                    SET description = EXCLUDED.description,
+                        image_url = EXCLUDED.image_url
                     WHERE %s OR products.image_url IS NULL OR products.image_url = '';
                     """,
                     [(*meta_batch[j], vectors[j], force_image_refresh) for j in range(len(meta_batch))],

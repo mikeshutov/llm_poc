@@ -2,6 +2,8 @@ import re
 from typing import Optional
 
 from llm.clients.embeddings import embed_text
+from products.candidate_mapper import rerank_product_results
+from products.constants import DEFAULT_PRODUCT_SEARCH_CANDIDATE_LIMIT
 from products.models.product_query import ProductQuery
 from products.models.product_result import ProductResult
 from products.models.product_search_results import ProductSearchResults
@@ -36,7 +38,8 @@ def _web_results_to_products(
         results.append(
             ProductResult(
                 id=item.url or f"web-{idx}",
-                name=item.title or item.description or "Unknown product",
+                name=item.title or "Unknown product",
+                description=item.description,
                 category=None,
                 color=None,
                 style=None,
@@ -79,21 +82,22 @@ def find_products(
     internal_results = repo.search_products(
         query_embedding=query_embedding,
         product_filters=product_filters,
-        limit=10,
+        limit=DEFAULT_PRODUCT_SEARCH_CANDIDATE_LIMIT,
     )
+    internal_results = rerank_product_results(internal_results, goal=query_text)
     return ProductSearchResults(internal_results=internal_results, external_results=[])
 
 
 def find_products_web(
     query_text: str,
-    count: int = 5,
 ) -> ProductSearchResults:
     web_query = (query_text or "").strip() or "products"
     external_results: list[ProductResult] = []
     try:
         brave_client = BraveSearchClient()
-        web_payload = brave_client.shopping_search(web_query, count=20)
-        external_results = _web_results_to_products(web_payload, max(1, count))
+        web_payload = brave_client.shopping_search(web_query, count=DEFAULT_PRODUCT_SEARCH_CANDIDATE_LIMIT)
+        external_results = _web_results_to_products(web_payload, DEFAULT_PRODUCT_SEARCH_CANDIDATE_LIMIT)
     except (ValueError, BraveSearchError):
         pass
+    external_results = rerank_product_results(external_results, goal=query_text)
     return ProductSearchResults(internal_results=[], external_results=external_results)

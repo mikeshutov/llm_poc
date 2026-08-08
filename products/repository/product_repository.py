@@ -1,9 +1,6 @@
 import os
-from dataclasses import dataclass
-from enum import Enum
 from typing import Any, Optional, Sequence
 
-import psycopg
 from psycopg.rows import dict_row
 
 from db.connection import get_connection
@@ -15,11 +12,13 @@ from pgvector.psycopg import register_vector
 
 MAX_VECTOR_DISTANCE = float(os.getenv("MAX_VECTOR_DISTANCE", "1.05"))
 
+
 class ProductRepository:
     def __init__(self):
         conn = get_connection()
         register_vector(conn)
         self._conn = conn
+        self._has_description_column = self._detect_description_column()
 
     def search_products(
             self,
@@ -33,12 +32,12 @@ class ProductRepository:
             cur.execute(sql, params)
             rows = cur.fetchall()
 
-        # Map DB rows -> ProductResult
         results: list[ProductResult] = []
         for r in rows:
             data = {
                 "id": str(r["id"]),
                 "name": r["name"],
+                "description": r.get("description"),
                 "category": r.get("category"),
                 "color": r.get("color"),
                 "style": r.get("style"),
@@ -70,6 +69,19 @@ class ProductRepository:
             rows = cur.fetchall()
         return [str(r["category"]) for r in rows if r.get("category")]
 
+    def _detect_description_column(self) -> bool:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'products'
+                  AND column_name = 'description'
+                LIMIT 1
+                """
+            )
+            return cur.fetchone() is not None
+
     def _build_search_sql(
         self,
         query_embedding: Sequence[float],
@@ -96,20 +108,17 @@ class ProductRepository:
                 where.append("LOWER(gender) = LOWER(%s)")
                 params.append(product_filters.gender)
 
-            # if product_filters.category:
-            #     where.append("LOWER(category) = ANY(%s)")
-            #     params.append([c.lower() for c in product_filters.category])
-
             if product_filters.style:
                 where.append("LOWER(style) LIKE LOWER(%s)")
                 params.append(f"%{product_filters.style}%")
 
         where.append("(embedding <-> (%s)::vector) <= %s")
         where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+        description_select = "description," if self._has_description_column else "NULL AS description,"
 
         sql = f"""
             SELECT
-              id, name, category, color, style, gender, season, year, price, image_url,
+              id, name, {description_select} category, color, style, gender, season, year, price, image_url,
               (embedding <-> (%s)::vector) AS distance
             FROM products
             {where_sql}
