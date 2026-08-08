@@ -5,45 +5,23 @@ from pydantic import BaseModel, Field
 
 from llm.clients.embeddings import embed_text
 from personalization.user_attributes.models.user_attribute_models import UserAttributeSearchResult
-from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_DESCRIPTION, UserAttributeType
+from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 
 
 class SearchUserAttributesArgs(BaseModel):
     query: str = Field(
         ...,
-        description=(
-            "Short search phrase for the attribute to find. Use a compact literal query built from the key user fact "
-            "or preference, not a long paraphrase, explanation, or multi-clause summary."
-        ),
+        description="Short literal search phrase for the attribute to find.",
     )
     limit: int = Field(default=5, ge=1, le=10, description="Maximum number of matching attributes to return.")
     is_active: bool | None = Field(default=True, description="Optional active-attribute filter.")
-    attribute_type: UserAttributeType | None = Field(default=None, description=f"Optional attribute type filter: {ATTRIBUTE_TYPE_DESCRIPTION}. Leave unset by default so semantic search can recall relevant attributes across categories; only use it when you intentionally need to narrow results.")
-    group_key: str | None = Field(default=None, description="Optional grouping-label filter.")
+    attribute_type: UserAttributeType | None = Field(default=None, description=f"Optional attribute-type filter. {ATTRIBUTE_TYPE_COMPACT_DESCRIPTION}")
+    group_key: str | None = Field(default=None, description="Optional grouping-key filter.")
     source: str | None = Field(default=None, description="Optional source filter.")
 
 
-SEARCH_USER_ATTRIBUTES_DESCRIPTION = f"""
-Search persistent user attributes by semantic similarity. Returned attributes use the value field as an array/list of strings.
-
-Required fields:
-- query (string): Short literal search phrase for the attribute to find.
-  Keep it narrow and concrete.
-  Prefer compact phrases like `React preferences`, `food dislikes`, or `career goals`.
-  Do not pass a long sentence, layered interpretation, or a full rewritten summary of the user's stance.
-
-Optional fields:
-- limit (integer): Maximum number of matches to return. Defaults to 5.
-- is_active (boolean): Optional active-attribute filter.
-- attribute_type (string): {ATTRIBUTE_TYPE_DESCRIPTION}. Leave this unset by default so semantic search can work across categories; only set it when you intentionally need narrower results.
-- group_key (string): Optional grouping-label filter.
-
-Returned attribute shape:
-- value (array/list of strings): Each attribute stores its values as a JSON array/list of strings, not a single string.
-- group_key (string|null): Optional short semantic grouping label used to curate multiple attributes of the same type.
-- source (string): Optional source filter.
-"""
+SEARCH_USER_ATTRIBUTES_DESCRIPTION = "Search persistent user attributes by semantic similarity."
 
 
 @tool(

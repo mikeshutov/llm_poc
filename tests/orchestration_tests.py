@@ -78,6 +78,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             'Review this turn for durable user attribute maintenance needs. If attribute work is needed, plan the minimal retrieval and/or update step combination required.',
         )
         self.assertEqual(prompt.latest_user_prompt, 'Please remember that I like pizza and eggs.')
+        self.assertIn('attribute_type (required): Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.', prompt_text)
+        self.assertNotIn('career.likes, career.dislikes', prompt_text)
 
     def test_user_attribute_creation_orchestration(self) -> None:
         fake_repo = FakeUserAttributeRepository()
@@ -599,4 +601,5 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
 

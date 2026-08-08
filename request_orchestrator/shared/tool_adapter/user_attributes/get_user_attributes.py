@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
-from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_DESCRIPTION, UserAttributeType
+from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 
 
@@ -13,27 +13,12 @@ class GetUserAttributesArgs(BaseModel):
     order_by: str = Field(default="updated_at", description="Sort field: created_at, updated_at, confidence, or importance.")
     descending: bool = Field(default=True, description="Whether to sort in descending order.")
     is_active: bool | None = Field(default=True, description="Optional active-attribute filter.")
-    attribute_type: UserAttributeType | None = Field(default=None, description=f"Optional attribute type filter: {ATTRIBUTE_TYPE_DESCRIPTION}.")
-    group_key: str | None = Field(default=None, description="Optional grouping-label filter.")
+    attribute_type: UserAttributeType | None = Field(default=None, description=f"Optional attribute-type filter. {ATTRIBUTE_TYPE_COMPACT_DESCRIPTION}")
+    group_key: str | None = Field(default=None, description="Optional grouping-key filter.")
     source: str | None = Field(default=None, description="Optional source filter.")
 
 
-GET_USER_ATTRIBUTES_DESCRIPTION = f"""
-List stored user attributes with ordering and optional filters. Returned attributes use the value field as an array/list of strings.
-
-Optional fields:
-- limit (integer): Maximum number of attributes to return.
-- order_by (string): created_at, updated_at, confidence, or importance.
-- descending (boolean): Sort descending when true.
-- is_active (boolean): Optional active-attribute filter.
-- attribute_type (string): {ATTRIBUTE_TYPE_DESCRIPTION}.
-- group_key (string): Optional grouping-label filter.
-
-Returned attribute shape:
-- value (array/list of strings): Each attribute stores its values as a JSON array/list of strings, not a single string.
-- group_key (string|null): Optional short semantic grouping label used to curate multiple attributes of the same type.
-- source (string): Optional source filter.
-"""
+GET_USER_ATTRIBUTES_DESCRIPTION = "List stored user attributes."
 
 
 @tool(

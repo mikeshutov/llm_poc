@@ -49,6 +49,8 @@ class MockLLM:
         return (
             'Review this turn for durable user attribute maintenance needs.' in prompt
             or 'Your scope is limited maintaining the user attributes and profile.' in prompt
+            or 'Maintain durable user profile attributes.' in prompt
+            or 'Profile policy:' in prompt
         )
 
     def _pop_from_scenario(self, prompt: str) -> str:
