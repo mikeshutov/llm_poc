@@ -16,12 +16,13 @@ Rough breakdown of the current agent loop flow.
    - This keeps the profile lightweight during request analysis and only hydrates the slice that is actually useful.
 6. After profile loading, the main flow fans out into separate agent paths.
    - The main agent path handles planning, execution, replanning, and synthesis.
-   - The profile-management agent path can work on durable attribute maintenance separately(for now its just attributes but this could grow).
+   - The profile-management agent path can work on durable attribute maintenance separately.
 7. The executor executes the tool calls in the plan and stores the results in state.
 8. The planner replans if needed.
    - If the goal is reached or we hit the iteration limit, we move to synthesis.
    - Otherwise we loop with the newly gathered evidence.
-9. Synthesis generates the final response, roundtrip summary, and tool summary. It receives explicit plan evidence plus a small recent-context window rather than the planner context or tool-summary history payloads.
+9. A collect/barrier step brings the active paths back together before the validator decides whether we should execute again or synthesize.
+10. Synthesis generates the final response, roundtrip summary, and tool summary. It receives explicit plan evidence plus a small recent-context window rather than the planner context or tool-summary history payloads.
 
 We also store conversations, roundtrips, prompt rows, summaries, and tool calls for future prompts.
 The diagrams provided are just to illustrate the high-level shape of the flow.
@@ -33,76 +34,97 @@ flowchart TD
     C --> D[Load Requested Profile Attributes]
     D --> E[Fanout to Agents]
     E --> P[Profile Management Agent]
-    E --> F{Needs Tools?}
-    F -->|No| J[Synthesis]
-    F -->|Yes| G[Planner]
-    G --> H[Executor]
-    H --> I{Goal Reached or Limit Reached?}
-    I -->|No| G
-    I -->|Yes| J
+    E --> G[Initial Planner]
     P --> K[Collect]
+    G --> K
+    K --> F{Execute More Tools?}
+    F -->|No| J[Synthesis]
+    F -->|Yes| H[Executor]
+    H --> I[Replan]
+    I --> K
     J --> L[Response]
-    E --> K
-    K --> F
 ```
 
 
 ## How is Context Assembled
-Roundtrips have this flow:
+The more accurate mental model now is not just “we build one context blob and pass it everywhere.” What we actually do is build a fairly rich shared `AgentState`, and then each edge or node chooses the specific parts of that state that it needs when constructing its own prompt.
+
+### AgentState First
+At the start of a turn we assemble a reusable `AgentState` that can hold:
+1. The latest user prompt as the active task.
+2. Conversation context, including high-level summaries and recent roundtrips.
+3. A lightweight user profile with geo/location-aware metadata.
+4. Request-analysis output such as the refined goal, requested attribute types, and applicable tool categories.
+5. Iteration state, including plans and tool results gathered so far.
+6. Subagent state for any secondary agent paths such as profile management.
+7. Final result fields, logs, and any other runtime data needed across the graph.
+
+This means the system can keep one shared runtime picture of the turn without forcing every prompt to receive every field.
+
+### Context Per Edge
+After that shared state exists, each edge builds its own prompt context from the smallest useful slice of the state.
+
+For example:
+1. `request_analysis` gets the latest user prompt, lightweight profile metadata, and selected conversation context so it can infer goal, tool categories, and useful stored attribute types.
+2. `load_user_profile` does not create an LLM prompt, but it uses the request-analysis output in state to hydrate only the requested attribute types.
+3. The planner gets the refined goal, the narrowed tool set, the requested slice of the user profile, and previous iteration evidence rather than the full conversation context.
+4. The executor does not build a planning prompt. It uses the current plan plus accumulated results in state to execute tool calls.
+5. The profile-management agent can use the same shared state model, but with its own narrower prompt and rules focused on durable attribute maintenance.
+6. Synthesis gets the latest result state, explicit plan evidence, the hydrated profile slice, and only a small recent-context window rather than the full planner context.
+
+So in practice the flow is:
+1. Build `AgentState`.
+2. Move through the graph.
+3. At each edge or node, choose the relevant state elements.
+4. Build the local prompt or execution context for that step.
+
+### Conversation Context Layer
+Roundtrips have this storage flow:
 1. We create a pending roundtrip with the user's prompt and the model being used.
 2. We execute the agent logic.
 3. We update the pending roundtrip with the response data, roundtrip summary, tool summary, and any related metadata.
 
-For subsequent prompts, the context builder pulls together a few layers of history:
+For subsequent prompts, the conversation-context portion of state is built from a few layers of history:
 1. `conversation.summary`, which is the continually refreshed top-level summary of the overall conversation.
 2. The latest rolling `conversation_summary` row, which summarizes an older batch window and carries its tool summary.
 3. Recent unsummarized roundtrips after the latest batch cutoff, where each entry includes the original `user_prompt` plus the `roundtrip_summary`.
 4. Recent unsummarized structured tool summaries after the latest batch cutoff.
 
-The latest user prompt is not embedded inside the stored conversation context anymore. It is passed separately into the prompt as the final section so the live request stays distinct from historical context.
+The latest user prompt is not embedded inside the stored conversation context anymore. It is passed separately as the live task so the current request stays distinct from historical context.
 
-We also prepare a separate `User Profile` section for prompt construction. That profile always includes geo/location-aware metadata, but stored user attributes are now loaded in a staged way:
+### Profile Hydration Layer
+We also prepare a separate `User Profile` section inside state. That profile always starts with geo/location-aware metadata, but stored user attributes are loaded in a staged way:
 1. `request_analysis` sees the lightweight profile and decides whether stored user attributes would help.
 2. It requests specific attribute types such as `food.likes`, `technology.skills`, or `projects.goals`.
-3. We load only those active attribute types, condense overlapping records by attribute type and `group_key`, and then hand that hydrated profile slice to the later agent paths.
-4. After that hydration step, the main agent and profile-management agent can each operate with the smaller relevant profile context rather than the full stored attribute set.
+3. We load only those active attribute types, condense overlapping records by attribute type and `group_key`, and then place that hydrated profile slice back into state.
+4. After that hydration step, the later agent paths work from the smaller relevant profile slice rather than the full stored attribute set.
 
 That means `request_analysis` does not receive the full stored attribute set up front, the planner does not receive full conversation context, and synthesis receives only a narrow recent-context window plus explicit plan evidence.
 
-The idea is to give the agent reusable historical context, recent turn-level context, and durable profile context while still keeping the freshest user request explicit and easy to reason about.
-
-Overall, the idea is that each step in the flow has access to a large `AgentState` object containing the contextual information it may need. When a step needs to make a planning, analysis, or synthesis request, we can then choose the most appropriate subset of that state for the prompt. This keeps requests smaller while still giving the LLM enough context to do the job well.
+Overall, the idea is that each step in the flow has access to a large `AgentState` object containing the contextual information it may need. When a step needs to make a planning, analysis, or synthesis request, we then choose the most appropriate subset of that state for the prompt. This keeps requests smaller while still giving the LLM enough context to do the job well.
 
 Simple diagram to illustrate what this looks like.
 
 ```mermaid
 flowchart TD
-    A[Context Builder] --> B
-    subgraph B[Conversation Context]
+    A[Context Builder] --> B[Build Shared AgentState]
+
+    subgraph C[AgentState]
         direction TB
-        M1["conversation.summary"]
-        M2["Latest rolling conversation_summary summary + tool summary + cutoff"]
-        M3["Recent unsummarized roundtrips
-user_prompt + roundtrip_summary"]
-        M4["Recent unsummarized tool summaries"]
-        M1 --> M2 --> M3 --> M4
+        S1[Latest User Prompt / Task]
+        S2[Conversation Context]
+        S3[Lightweight User Profile]
+        S4[Request Analysis Output]
+        S5[Iteration Trace / Tool Results]
+        S6[Subagent States]
     end
 
-    A --> D[Latest User Prompt passed separately]
-    A --> E[Lightweight User Profile passed separately]
-    E --> F[Request Analysis requests useful attribute types]
-    F --> G[Requested profile attributes are loaded and condensed]
-    G --> H[Hydrated profile slice passed to later agents]
-
-    subgraph C[Recent Roundtrip Element]
-        direction TB
-        N1["User Prompt"]
-        N2["Roundtrip Summary"]
-        N1 --> N2
-    end
-
-    M3 --> C
-    M4 --> C
+    B --> C
+    C --> D[Request Analysis selects needed state fields]
+    C --> E[Profile Loader hydrates requested attributes]
+    C --> F[Planner selects refined goal, tools, profile slice, prior evidence]
+    C --> G[Executor uses current plan plus results]
+    C --> H[Synthesis selects recent context plus final evidence]
 ```
 
 ## How File Searching with Uploads and Large files Works here
