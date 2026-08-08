@@ -20,6 +20,7 @@ class AgentProfile:
     name: str
     allowed_categories: set[str] = field(default_factory=set)
     extra_tools: list[Any] = field(default_factory=list)
+    planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
     planner_rules: str = DEFAULT_PLANNER_RULES
     synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION
     persist_tool_calls: bool = True

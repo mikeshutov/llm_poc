@@ -8,36 +8,22 @@ from pydantic import BaseModel, Field
 from common.parsing import normalize_string_list
 from llm.clients.embeddings import embed_text
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
-from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_DESCRIPTION, UserAttributeType
+from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 
 
 class UpdateUserAttributeArgs(BaseModel):
     attribute_id: str = Field(..., description="The id of the attribute to update.")
-    value: list[str] | None = Field(default=None, description="Updated attribute values as an array/list of strings. Pass a JSON array, not a single string.")
-    attribute_type: UserAttributeType = Field(..., description=f"Updated attribute type: {ATTRIBUTE_TYPE_DESCRIPTION}.")
-    group_key: str | None = Field(default=None, description="Optional updated grouping label for curation when multiple attributes of the same type need to coexist cleanly.")
+    value: list[str] | None = Field(default=None, description="Updated concrete attribute values as a JSON array of strings.")
+    attribute_type: UserAttributeType = Field(..., description=ATTRIBUTE_TYPE_COMPACT_DESCRIPTION)
+    group_key: str | None = Field(default=None, description="Optional semantic grouping key for meaningful splits.")
     source: str | None = Field(default=None, description="Updated source value such as explicit, derived, or computed.")
     is_active: bool | None = Field(default=None, description="Whether the attribute should remain active.")
     confidence: float | None = Field(default=None, ge=0, le=1, description="Optional confidence score between 0 and 1.")
     importance: float | None = Field(default=None, ge=0, le=1, description="Optional importance score between 0 and 1.")
 
 
-UPDATE_USER_ATTRIBUTE_DESCRIPTION = f"""
-Update an existing persistent user attribute.
-
-Required fields:
-- attribute_id (string): The attribute id to update.
-- attribute_type (string): {ATTRIBUTE_TYPE_DESCRIPTION}.
-
-Optional fields:
-- value (array/list of strings): Updated attribute values. Pass a JSON array, not a single string. Store only concrete user-specific values such as ["pizza", "eggs"] or ["Python", "React"], not labels, summaries, placeholders, or brace-wrapped text like `{"dietary staples mentioned by the user"}
-- group_key (string): Optional short semantic grouping label when multiple attributes of the same type need to coexist cleanly. Use concrete labels like `frontend`, `backend`, `desserts`, or `career_goals`, not filler labels like `misc`, `other`, or `group2`.
-- source (string): Updated source value.
-- is_active (boolean): Set false to deactivate an attribute.
-- confidence (number): Optional 0..1 confidence score.
-- importance (number): Optional 0..1 importance score.
-"""
+UPDATE_USER_ATTRIBUTE_DESCRIPTION = "Update an existing persistent user attribute."
 
 
 def _value_text(value: list[str]) -> str:
