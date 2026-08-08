@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from common.serialization import prune_empty_prompt_values
+from common.text import normalize_text
 from personalization.profile.models import UserProfile
 from reranker.constants import DEFAULT_TOP_K, RERANKER_RESPONSE_SCHEMA
 from reranker.models.candidate import Candidate
@@ -19,29 +20,29 @@ class RerankerPrompt:
     def _build_candidate_text(self, candidate: Candidate) -> str | None:
         content = candidate.content or {}
 
-        name = content.get("name")
-        summary = content.get("summary")
-        description = content.get("description")
-        text = content.get("text")
+        name_text = normalize_text(content.get("name"))
+        summary_text = normalize_text(content.get("summary"))
+        description_text = normalize_text(content.get("description"))
+        raw_text = normalize_text(content.get("text"))
 
-        name_text = name.strip() if isinstance(name, str) and name.strip() else None
-        summary_text = summary.strip() if isinstance(summary, str) and summary.strip() else None
-        description_text = description.strip() if isinstance(description, str) and description.strip() else None
-        raw_text = " ".join(text.split())[:500] if isinstance(text, str) and text.strip() else None
+        candidate_text: str | None = None
 
         if name_text and summary_text:
-            return f"{name_text}. {summary_text}"
-        if name_text and description_text:
-            return f"{name_text}. {description_text}"
-        if name_text and raw_text:
-            return f"{name_text}. {raw_text}"
-        if name_text:
-            return name_text
-        if summary_text:
-            return summary_text
-        if description_text:
-            return description_text
-        return raw_text
+            candidate_text = f"{name_text}. {summary_text}"
+        elif name_text and description_text:
+            candidate_text = f"{name_text}. {description_text}"
+        elif name_text and raw_text:
+            candidate_text = f"{name_text}. {raw_text}"
+        elif name_text:
+            candidate_text = name_text
+        elif summary_text:
+            candidate_text = summary_text
+        elif description_text:
+            candidate_text = description_text
+        else:
+            candidate_text = raw_text
+
+        return candidate_text[:500] if candidate_text else None
 
     def _serialize_candidate(self, candidate: Candidate) -> dict[str, Any]:
         metadata = candidate.metadata or {}

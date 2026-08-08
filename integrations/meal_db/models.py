@@ -42,3 +42,5 @@ class Meal(BaseModel):
 
 class MealSearchResult(BaseModel):
     meals: list[Meal] = []
+    retrieved_count: int = 0
+    reranked: bool = False

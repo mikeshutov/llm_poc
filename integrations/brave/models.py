@@ -47,6 +47,8 @@ class WebSearchResult(BaseModel):
 class WebSearchResponse(BaseModel):
     query: str
     results: list[WebSearchResult] = []
+    retrieved_count: int = 0
+    reranked: bool = False
 
     @model_validator(mode="before")
     @classmethod

@@ -4,6 +4,7 @@ from products.candidate_mapper import (
     rerank_product_results,
 )
 from products.models.product_result import ProductResult
+from products.models.product_search_results import ProductSearchResults
 from products.models.product_source import ProductSource
 from products.repository.product_repository import ProductRepository
 from reranker.constants import DEFAULT_TOP_K
@@ -76,6 +77,32 @@ def test_prepare_product_candidates_maps_multiple_products() -> None:
     assert [candidate.id for candidate in candidates] == ["sku-1", "sku-2"]
     assert candidates[0].content["description"] == "First product description"
     assert all(candidate.candidate_type == "product" for candidate in candidates)
+
+
+def test_product_search_results_exposes_retrieval_metadata() -> None:
+    product = ProductResult(
+        id="sku-1",
+        name="Product One",
+        description="First product description",
+        category=None,
+        color=None,
+        style=None,
+        gender=None,
+        season=None,
+        year=None,
+        price=None,
+        source=ProductSource.DB,
+    )
+
+    results = ProductSearchResults(
+        internal_results=[product],
+        external_results=[],
+        retrieved_count=8,
+        reranked=True,
+    )
+
+    assert results.retrieved_count == 8
+    assert results.reranked is True
 
 
 def test_product_repository_uses_null_description_when_column_missing() -> None:

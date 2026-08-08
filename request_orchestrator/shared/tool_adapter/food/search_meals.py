@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
 from integrations.meal_db import MealDbClient, MealSearchResult
+from request_orchestrator.shared.tool_adapter.food.candidate_mapper import rerank_meal_search_result
+from request_orchestrator.shared.tool_adapter.food.constants import DEFAULT_MEAL_RERANK_LIMIT
 
 _meal_db_client = MealDbClient()
 
@@ -35,6 +37,7 @@ Example valid call:
 )
 def search_meals(query: str) -> MealSearchResult | str:
     try:
-        return _meal_db_client.search(query)
+        response = _meal_db_client.search(query)
+        return rerank_meal_search_result(response, goal=query, limit=DEFAULT_MEAL_RERANK_LIMIT)
     except RequestException as e:
         return f"MealDB service unavailable: {e}"

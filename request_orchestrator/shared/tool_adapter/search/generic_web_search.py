@@ -9,6 +9,9 @@ from integrations.brave import BraveSearchClient
 from integrations.brave.models import NewsSearchResponse, SuggestResponse, WebSearchResponse
 from integrations.brave.search_type import SearchType
 from integrations.brave.web_search_params import WebSearchParams
+from request_orchestrator.shared.tool_adapter.search.candidate_mapper import rerank_web_search_response
+from request_orchestrator.shared.tool_adapter.search.constants import DEFAULT_WEB_SEARCH_CANDIDATE_LIMIT
+from reranker import DEFAULT_TOP_K
 
 
 class GenericWebSearchArgs(BaseModel):
@@ -23,11 +26,6 @@ class GenericWebSearchArgs(BaseModel):
     country: str = Field(
         default="CA",
         description="Two-letter country code used for search localization.",
-    )
-    count: int = Field(
-        default=5,
-        description="Maximum number of results to request.",
-        ge=1,
     )
     params: dict[str, Any] | None = Field(
         default=None,
@@ -55,7 +53,6 @@ Required fields:
 Optional fields:
 - search_type ({" | ".join(t.value for t in SearchType)})
 - country (string)
-- count (integer)
 - params (object)
 
 Example valid call:
@@ -69,7 +66,6 @@ def generic_web_search(
     query_text: str,
     search_type: str = "web_search",
     country: str = "CA",
-    count: int = 5,
     params: dict[str, Any] | None = None,
 ) -> Union[WebSearchResponse, NewsSearchResponse, SuggestResponse]:
     brave_client = BraveSearchClient()
@@ -79,6 +75,12 @@ def generic_web_search(
         #case SearchType.SUGGESTION_SEARCH:
         #    return brave_client.suggest(query_text)
         case _:
-            return brave_client.web_search(
-                WebSearchParams(q=query_text, country=country, count=count, extra_params=params or {})
+            response = brave_client.web_search(
+                WebSearchParams(
+                    q=query_text,
+                    country=country,
+                    count=DEFAULT_WEB_SEARCH_CANDIDATE_LIMIT,
+                    extra_params=params or {},
+                )
             )
+            return rerank_web_search_response(response, goal=query_text, limit=DEFAULT_TOP_K)
