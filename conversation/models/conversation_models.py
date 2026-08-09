@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
@@ -111,7 +112,6 @@ class ConversationMemory:
     relevance_score: float
 
 
-
 @dataclass(frozen=False)
 class RoundtripMemory:
     conversation_id: UUID
@@ -122,3 +122,34 @@ class RoundtripMemory:
     roundtrip_summary: str
     created_at: str
     relevance_score: float
+
+
+@dataclass(frozen=False)
+class LlmUsage:
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    cached_input_tokens: int = 0
+
+
+@dataclass(frozen=False)
+class LlmCallRecord:
+    id: UUID
+    conversation_id: Optional[UUID]
+    roundtrip_id: Optional[UUID]
+    agent: Optional[str]
+    stage: Optional[str]
+    callsite: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    cached_input_tokens: int
+    input_price_per_million_tokens: Decimal
+    output_price_per_million_tokens: Decimal
+    computed_input_cost: Decimal
+    computed_output_cost: Decimal
+    computed_total_cost: Decimal
+    metadata: dict[str, Any]
+    created_at: str
+    updated_at: str

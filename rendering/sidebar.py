@@ -1,3 +1,4 @@
+from decimal import Decimal
 from uuid import UUID
 
 import streamlit as st
@@ -52,6 +53,15 @@ def _delete_conversation(conversation_repository, conversation_id: str) -> None:
     st.rerun()
 
 
+def _format_price(price: Decimal) -> str:
+    normalized = format(price.normalize(), 'f')
+    return f"${normalized} per 1M"
+
+
+def _format_model_option_label(model_name: str, input_price: str, output_price: str) -> str:
+    return f"{model_name} ({input_price} / {output_price})"
+
+
 def build_model_config_rows(
     resolved_config: ConversationModelConfig,
     overrides: list,
@@ -62,13 +72,25 @@ def build_model_config_rows(
     }
     rows: list[dict[str, str | None]] = []
     for spec in CONVERSATION_MODEL_CONFIG_SPECS:
+        pricing = resolved_config.resolve_pricing(spec.agent, spec.stage)
+        effective_model = resolved_config.resolve(spec.agent, spec.stage)
+        input_price = _format_price(pricing.input_price_per_million_tokens)
+        output_price = _format_price(pricing.output_price_per_million_tokens)
+        option_to_model = {
+            _format_model_option_label(model_name, _format_price(model_pricing.input_price_per_million_tokens), _format_price(model_pricing.output_price_per_million_tokens)): model_name
+            for model_name, model_pricing in ConversationModelConfig.MODEL_PRICING_REGISTRY.items()
+        }
         rows.append(
             {
                 "agent": spec.agent,
                 "stage": spec.stage,
                 "label": spec.label,
-                "effective_model": resolved_config.resolve(spec.agent, spec.stage),
+                "effective_model": effective_model,
                 "override_model": override_map.get((spec.agent, spec.stage)),
+                "input_price": input_price,
+                "output_price": output_price,
+                "effective_model_option": _format_model_option_label(effective_model, input_price, output_price),
+                "option_to_model": option_to_model,
             }
         )
     return rows
@@ -77,23 +99,27 @@ def build_model_config_rows(
 def _apply_model_config_form(conversation_repository, conversation_id: str, rows: list[dict[str, str | None]]) -> None:
     for row in rows:
         select_key = f"conversation_model_config::{conversation_id}::{row['agent']}::{row['stage']}"
-        selected_value = st.session_state.get(select_key, f"Default ({row['effective_model']})")
-        if selected_value.startswith("Default ("):
+        default_option_label = f"Default ({row['effective_model_option']})"
+        selected_value = st.session_state.get(select_key, default_option_label)
+        if selected_value == default_option_label:
             conversation_repository.clear_conversation_model_config(
                 UUID(conversation_id),
                 row["agent"],
                 row["stage"],
             )
         else:
+            selected_model = row["option_to_model"].get(selected_value)
+            if selected_model is None:
+                raise KeyError(f"Unsupported model option label: {selected_value}")
             conversation_repository.upsert_conversation_model_config(
                 UUID(conversation_id),
                 row["agent"],
                 row["stage"],
-                selected_value,
+                selected_model,
             )
 
 
-@st.dialog("Conversation Model Config")
+@st.dialog("Conversation Model Config", width="large")
 def render_conversation_model_config_dialog(
     conversation_repository,
     conversation_id: str,
@@ -128,12 +154,13 @@ def render_conversation_model_config_dialog(
 
     for row in rows:
         select_key = f"conversation_model_config::{conversation_id}::{row['agent']}::{row['stage']}"
-        default_option_label = f"Default ({row['effective_model']})"
-        options = [default_option_label, *AVAILABLE_CHAT_MODELS]
-        selected_value = row["override_model"] or default_option_label
+        default_option_label = f"Default ({row['effective_model_option']})"
+        model_options = [row["option_to_model"][model_option] for model_option in row["option_to_model"]]
+        options = [default_option_label, *row["option_to_model"].keys()]
+        selected_value = row["effective_model_option"] if row["override_model"] else default_option_label
         selected_index = options.index(selected_value) if selected_value in options else 0
 
-        col_select, col_info, col_reset = st.columns([3, 2, 1])
+        col_select, col_info, col_reset = st.columns([3.8, 1.6, 1])
         with col_select:
             st.selectbox(
                 row["label"],

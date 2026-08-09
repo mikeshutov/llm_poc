@@ -9,6 +9,7 @@ REQUEST_ANALYSIS_KIND = "request_analysis"
 PROFILE_LOAD_KIND = "profile_load"
 PLAN_KIND = "plan"
 TOOL_CALL_KIND = "tool_call"
+SYNTHESIS_KIND = "synthesis"
 
 
 def debug_render_message(content, content_title: str) -> None:
@@ -44,6 +45,14 @@ def _serialize_value(value) -> str:
     return json.dumps(value, indent=2, sort_keys=True, default=str)
 
 
+def _render_llm_usage_section(entry: dict) -> str | None:
+    data = entry.get("data") or {}
+    llm_usage = data.get("llm_usage")
+    if not llm_usage:
+        return None
+    return f"LLM Usage:\n```json\n{_serialize_value(llm_usage)}\n```"
+
+
 def _render_request_analysis_entry(entry: dict) -> list[str]:
     data = entry.get("data") or {}
     categories = data.get("applicable_tool_categories") or []
@@ -70,6 +79,9 @@ def _render_request_analysis_entry(entry: dict) -> list[str]:
         parts.append(f"Useful stored attributes: {', '.join(requested_types)}")
     else:
         parts.append("Useful stored attributes: none requested")
+    llm_usage = _render_llm_usage_section(entry)
+    if llm_usage:
+        parts.append(llm_usage)
     return parts
 
 
@@ -118,6 +130,28 @@ def _render_plan_entry(entry: dict) -> list[str]:
         parts.append("Answer directly without tool calls.")
     else:
         parts.append("No steps were generated.")
+    llm_usage = _render_llm_usage_section(entry)
+    if llm_usage:
+        parts.append(llm_usage)
+    return parts
+
+
+def _render_synthesis_entry(entry: dict) -> list[str]:
+    data = entry.get("data") or {}
+    answer_preview = data.get("answer_preview") or []
+    follow_up = data.get("follow_up") or ""
+    clarifying_question = data.get("clarifying_question") or ""
+
+    parts = ["**Synthesis**"]
+    if answer_preview:
+        parts.append("Answer preview:\n" + "\n".join(f"- {item}" for item in answer_preview))
+    if follow_up:
+        parts.append(f"Follow up: {follow_up}")
+    if clarifying_question:
+        parts.append(f"Clarifying question: {clarifying_question}")
+    llm_usage = _render_llm_usage_section(entry)
+    if llm_usage:
+        parts.append(llm_usage)
     return parts
 
 
@@ -162,6 +196,8 @@ def _assemble_log_message(entry: dict) -> str:
         parts = _render_profile_load_entry(entry)
     elif kind == PLAN_KIND:
         parts = _render_plan_entry(entry)
+    elif kind == SYNTHESIS_KIND:
+        parts = _render_synthesis_entry(entry)
     elif kind == TOOL_CALL_KIND:
         parts = _render_tool_call_entry(entry)
     else:

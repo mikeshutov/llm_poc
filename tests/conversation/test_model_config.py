@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from decimal import Decimal
 from types import ModuleType, SimpleNamespace
 from uuid import uuid4
 from unittest.mock import patch
@@ -13,11 +14,13 @@ if 'pycountry' not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules['pycountry'] = pycountry_module
 
+from common.model_constants import AVAILABLE_CHAT_MODELS
 from conversation.model_config_resolver import resolve_conversation_model_config
 from conversation.models.conversation_model_config import (
     ConversationModelConfig,
     ConversationModelConfigEntry,
     MAIN_AGENT_MODEL_SCOPE,
+    ModelPricing,
     PLANNER_STAGE,
     PROFILE_AGENT_MODEL_SCOPE,
     REQUEST_ANALYSIS_STAGE,
@@ -66,6 +69,7 @@ class FakeConversationRepository:
         self.config = config
         self.pending_calls: list[dict] = []
         self.update_calls: list[dict] = []
+        self.list_llm_calls_requests: list[object] = []
         self.conversation_id = uuid4()
         self.roundtrip_id = uuid4()
 
@@ -96,6 +100,11 @@ class FakeConversationRepository:
             metadata=metadata or {},
             model=model,
         )
+
+    def list_llm_calls_for_roundtrip(self, roundtrip_id):
+        self.list_llm_calls_requests.append(roundtrip_id)
+        return []
+
 
     def update_roundtrip(self, roundtrip_id, response, payload, roundtrip_summary=None, roundtrip_summary_embedding=None):
         self.update_calls.append(
@@ -156,6 +165,63 @@ def test_conversation_model_config_build_default_returns_defaults() -> None:
     assert config.main_agent.synthesis == 'gpt-5.4'
     assert config.profile_agent.planner == 'gpt-5.4-mini'
     assert config.shared.reranker == 'gpt-5.4-mini'
+
+
+def test_conversation_model_config_build_default_resolves_pricing_for_every_stage() -> None:
+    config = ConversationModelConfig.build_default()
+
+    assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, REQUEST_ANALYSIS_STAGE) == ModelPricing(
+        input_price_per_million_tokens=Decimal('0.75'),
+        output_price_per_million_tokens=Decimal('4.50'),
+    )
+    assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
+        input_price_per_million_tokens=Decimal('2.50'),
+        output_price_per_million_tokens=Decimal('15.00'),
+    )
+    assert config.resolve_pricing(PROFILE_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
+        input_price_per_million_tokens=Decimal('0.75'),
+        output_price_per_million_tokens=Decimal('4.50'),
+    )
+    assert config.resolve_pricing(SHARED_MODEL_SCOPE, RERANKER_STAGE) == ModelPricing(
+        input_price_per_million_tokens=Decimal('0.75'),
+        output_price_per_million_tokens=Decimal('4.50'),
+    )
+
+
+def test_conversation_model_config_override_changes_resolved_pricing_for_stage() -> None:
+    conversation_id = uuid4()
+    config = resolve_conversation_model_config(
+        [
+            ConversationModelConfigEntry(
+                conversation_id=conversation_id,
+                agent=PROFILE_AGENT_MODEL_SCOPE,
+                stage=PLANNER_STAGE,
+                model='gpt-4o-mini',
+            ),
+        ]
+    )
+
+    assert config.resolve_pricing(PROFILE_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
+        input_price_per_million_tokens=Decimal('0.15'),
+        output_price_per_million_tokens=Decimal('0.60'),
+    )
+    assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
+        input_price_per_million_tokens=Decimal('2.50'),
+        output_price_per_million_tokens=Decimal('15.00'),
+    )
+
+
+def test_conversation_model_config_resolve_model_pricing_returns_expected_values() -> None:
+    pricing = ConversationModelConfig.resolve_model_pricing('o3')
+
+    assert pricing == ModelPricing(
+        input_price_per_million_tokens=Decimal('2.00'),
+        output_price_per_million_tokens=Decimal('8.00'),
+    )
+
+
+def test_available_chat_models_all_have_pricing_entries() -> None:
+    assert sorted(ConversationModelConfig.MODEL_PRICING_REGISTRY) == sorted(AVAILABLE_CHAT_MODELS)
 
 
 def test_agent_state_build_llm_for_stage_uses_conversation_model_config() -> None:
@@ -247,9 +313,23 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
     assert fake_repo.pending_calls[0]['metadata'] == {
         'resolved_model_config': config.to_metadata_payload(),
     }
+    assert fake_repo.list_llm_calls_requests == [fake_repo.roundtrip_id]
+    assert fake_repo.update_calls[0]['payload']['llm_usage'] == {
+        'retrieved_call_count': 0,
+        'summary': {
+            'input_tokens': 0,
+            'cached_input_tokens': 0,
+            'output_tokens': 0,
+            'total_tokens': 0,
+            'computed_input_cost': '0',
+            'computed_output_cost': '0',
+            'computed_total_cost': '0',
+        },
+        'calls': [],
+    }
 
 
-def test_build_model_config_rows_exposes_effective_and_override_values() -> None:
+def test_build_model_config_rows_exposes_effective_models_overrides_and_pricing() -> None:
     conversation_id = uuid4()
     override = ConversationModelConfigEntry(
         conversation_id=conversation_id,
@@ -264,3 +344,17 @@ def test_build_model_config_rows_exposes_effective_and_override_values() -> None
 
     assert reranker_row['effective_model'] == 'gpt-5.4'
     assert reranker_row['override_model'] == 'gpt-5.4'
+    assert reranker_row['input_price'] == '$2.5 per 1M'
+    assert reranker_row['output_price'] == '$15 per 1M'
+
+
+def test_build_model_config_rows_reset_to_default_restores_model_and_pricing() -> None:
+    resolved = ConversationModelConfig.build_default()
+
+    rows = build_model_config_rows(resolved, [])
+    request_analysis_row = next(row for row in rows if row['agent'] == MAIN_AGENT_MODEL_SCOPE and row['stage'] == REQUEST_ANALYSIS_STAGE)
+
+    assert request_analysis_row['effective_model'] == 'gpt-5.4-mini'
+    assert request_analysis_row['override_model'] is None
+    assert request_analysis_row['input_price'] == '$0.75 per 1M'
+    assert request_analysis_row['output_price'] == '$4.5 per 1M'

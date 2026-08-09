@@ -10,6 +10,7 @@ from request_orchestrator.constants import PLANNER_PROMPT_STEP
 from common.parsing import strip_code_fences
 from conversation.models.conversation_model_config import PLANNER_STAGE
 from conversation.repository.repo_factory import get_conversation_repo
+from llm.usage import record_llm_call, serialize_llm_call_record
 from tool.repository.plan_repository import PlanRepository
 from tool.tools import tools
 from rendering.debug import PLAN_KIND
@@ -20,9 +21,27 @@ tool_list = "\n".join(
 )
 
 
-def _invoke_planner(agent_state: AgentState, prompt_text: str) -> Plan:
-    raw = strip_code_fences(agent_state.build_llm_for_stage(stage=PLANNER_STAGE).invoke(prompt_text).content)
-    return Plan.model_validate_json(raw)
+def _serialize_llm_call_for_log(llm_call) -> dict | None:
+    if llm_call is None:
+        return None
+    return serialize_llm_call_record(llm_call)
+
+
+def _invoke_planner(agent_state: AgentState, prompt_text: str) -> tuple[Plan, object | None]:
+    llm = agent_state.build_llm_for_stage(stage=PLANNER_STAGE)
+    response = llm.invoke(prompt_text)
+    agent_scope = agent_state.resolve_agent_scope()
+    llm_call = record_llm_call(
+        raw_response=response,
+        model_name=agent_state.resolve_model_for_stage(agent=agent_scope, stage=PLANNER_STAGE),
+        conversation_id=agent_state.conversation_id,
+        roundtrip_id=agent_state.roundtrip_id,
+        agent=agent_scope,
+        stage=PLANNER_STAGE,
+        callsite="shared_planner.run_planner",
+    )
+    raw = strip_code_fences(response.content)
+    return Plan.model_validate_json(raw), llm_call
 
 
 @traceable(name="Planner Node")
@@ -32,9 +51,13 @@ def run_planner(agent_state: AgentState) -> AgentState:
     prompt = build_planner_prompt(state=agent_state)
     prompt_text = render_agent_prompt(prompt)
     had_prior_tool_results = any(bool(iteration.results) for iteration in agent_state.iteration_trace)
+    llm_calls: list[dict[str, object]] = []
 
     try:
-        plan = _invoke_planner(agent_state, prompt_text)
+        plan, llm_call = _invoke_planner(agent_state, prompt_text)
+        serialized = _serialize_llm_call_for_log(llm_call)
+        if serialized is not None:
+            llm_calls.append(serialized)
         if (
             agent_state.request_analysis.requires_tools
             and not had_prior_tool_results
@@ -48,7 +71,10 @@ def run_planner(agent_state: AgentState) -> AgentState:
                 "- Return at least one tool step.\n"
                 "- Set final_answer to null on this pass.\n"
             )
-            plan = _invoke_planner(agent_state, retry_prompt)
+            plan, llm_call = _invoke_planner(agent_state, retry_prompt)
+            serialized = _serialize_llm_call_for_log(llm_call)
+            if serialized is not None:
+                llm_calls.append(serialized)
     except Exception as e:
         agent_state.goal_reached = True
         agent_state.result = AgentResult(
@@ -71,6 +97,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         data={
             "step_plans": [step.plan for step in plan.steps],
             "final_answer": plan.final_answer,
+            "llm_usage": llm_calls,
         },
     )
 

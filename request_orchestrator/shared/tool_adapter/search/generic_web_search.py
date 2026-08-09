@@ -6,7 +6,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.brave import BraveSearchClient
-from integrations.brave.models import NewsSearchResponse, SuggestResponse, WebSearchResponse
+from integrations.brave.models import NewsSearchResponse, WebSearchResponse
 from integrations.brave.search_type import SearchType
 from integrations.brave.web_search_params import WebSearchParams
 from request_orchestrator.shared.tool_adapter.search.candidate_mapper import rerank_web_search_response
@@ -17,7 +17,8 @@ from reranker import DEFAULT_TOP_K
 class GenericWebSearchArgs(BaseModel):
     query_text: str = Field(
         ...,
-        description="Search query text. Use a single string.",
+        min_length=1,
+        description="Search query text. Use a single string and do not leave it blank.",
     )
     search_type: Literal["web_search", "news_search", "suggestion_search"] = Field(
         default="web_search",
@@ -45,7 +46,7 @@ def _coerce_search_type(search_type: str) -> SearchType:
     "generic_web_search",
     args_schema=GenericWebSearchArgs,
     description=f"""
-Run a general web, news, or suggestion search.
+Run a general web or news search. `suggestion_search` is treated the same as `web_search`.
 
 Required fields:
 - query_text (string)
@@ -67,20 +68,24 @@ def generic_web_search(
     search_type: str = "web_search",
     country: str = "CA",
     params: dict[str, Any] | None = None,
-) -> Union[WebSearchResponse, NewsSearchResponse, SuggestResponse]:
+) -> Union[WebSearchResponse, NewsSearchResponse]:
+    normalized_query = query_text.strip()
+    if not normalized_query:
+        raise ValueError("query_text is required and cannot be blank.")
+
     brave_client = BraveSearchClient()
     match _coerce_search_type(search_type):
         case SearchType.NEWS_SEARCH:
-            return brave_client.news_search(query_text)
+            return brave_client.news_search(normalized_query)
         #case SearchType.SUGGESTION_SEARCH:
         #    return brave_client.suggest(query_text)
         case _:
             response = brave_client.web_search(
                 WebSearchParams(
-                    q=query_text,
+                    q=normalized_query,
                     country=country,
                     count=DEFAULT_WEB_SEARCH_CANDIDATE_LIMIT,
                     extra_params=params or {},
                 )
             )
-            return rerank_web_search_response(response, goal=query_text, limit=DEFAULT_TOP_K)
+            return rerank_web_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K)

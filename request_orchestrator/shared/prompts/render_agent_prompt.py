@@ -61,6 +61,10 @@ def _append_latest_user_prompt(parts: list[str], prompt: AgentPrompt) -> None:
     _append_section(parts, "Latest User Prompt:", prompt.latest_user_prompt or prompt.task)
 
 
+def _append_task(parts: list[str], prompt: AgentPrompt, heading: str = "Task:") -> None:
+    _append_section(parts, heading, prompt.task)
+
+
 def _join_parts(parts: list[str]) -> str:
     return "\n\n".join(part for part in parts if part)
 
@@ -127,18 +131,19 @@ def render_agent_prompt(prompt: AgentPrompt) -> str:
         )
 
     if prompt.prompt_kind == PLANNER_PROMPT_KIND:
-        return _join_parts(
-            _build_parts(
-                prompt,
-                include_user_profile=True,
-                include_conversation_context=True,
-                include_available_tools=True,
-                include_rules_raw=True,
-                include_previous_iterations=True,
-                include_latest_user_prompt=True,
-                include_schema_raw=True,
-            )
+        parts = _build_parts(
+            prompt,
+            include_user_profile=True,
+            include_conversation_context=True,
+            include_available_tools=True,
+            include_rules_raw=True,
+            include_previous_iterations=True,
+            include_latest_user_prompt=True,
+            include_schema_raw=True,
         )
+        task_heading = "Task:" if prompt.include_user_attribute_management_fields else "Goal:"
+        _append_task(parts, prompt, heading=task_heading)
+        return _join_parts(parts)
 
     if prompt.prompt_kind == SYNTHESIS_PROMPT_KIND:
         return _join_parts(

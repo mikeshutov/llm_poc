@@ -6,8 +6,9 @@ from langchain_openai import ChatOpenAI
 
 from common.parsing import strip_code_fences
 from conversation.models.conversation_model_config import ConversationModelConfig, RERANKER_STAGE, SHARED_MODEL_SCOPE
+from llm.usage import record_llm_call
 from personalization.profile.models import UserProfile
-from request_orchestrator.shared.runtime_context import get_current_conversation_model_config
+from request_orchestrator.shared.runtime_context import get_current_conversation_model_config, get_current_conversation_id, get_current_roundtrip_id
 from reranker.constants import DEFAULT_TOP_K
 from reranker.models import Candidate, RerankerPrompt, RerankerResult
 
@@ -20,6 +21,7 @@ class CandidateReranker:
     ):
         resolved_config = conversation_model_config or get_current_conversation_model_config() or ConversationModelConfig.build_default()
         resolved_model = resolved_config.resolve(SHARED_MODEL_SCOPE, RERANKER_STAGE)
+        self.model_name = resolved_model
         self.llm = ChatOpenAI(model=resolved_model) if llm is None else llm
 
     def rerank(
@@ -43,8 +45,18 @@ class CandidateReranker:
             user_profile=user_profile,
             candidates=candidates,
         ).to_prompt_text()
-        raw = self.llm.invoke(prompt).content
-        raw = strip_code_fences(raw)
+        response = self.llm.invoke(prompt)
+        record_llm_call(
+            raw_response=response,
+            model_name=self.model_name,
+            conversation_id=get_current_conversation_id(),
+            roundtrip_id=get_current_roundtrip_id(),
+            agent=SHARED_MODEL_SCOPE,
+            stage=RERANKER_STAGE,
+            callsite="reranker.candidate_reranker",
+            metadata={"candidate_count": len(candidates), "limit": resolved_limit},
+        )
+        raw = strip_code_fences(response.content)
 
         try:
             rerank_result = RerankerResult.model_validate_json(raw)

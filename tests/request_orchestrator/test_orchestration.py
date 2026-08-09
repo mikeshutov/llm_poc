@@ -74,13 +74,40 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         )
         self.assertIn('Latest User Prompt:', prompt_text)
         self.assertIn('Please remember that I like pizza and eggs.', prompt_text)
+        self.assertNotIn('Use recent_roundtrip_tool_summaries', prompt_text)
+        self.assertNotIn('Use recent_roundtrips when the user refers', prompt_text)
+        self.assertNotIn('Use the older string tool_summary only as fallback context', prompt_text)
+        self.assertNotIn('Utilize multiple tools when it is appropriate to get full context.', prompt_text)
+        self.assertNotIn('Evidence references must be defined before use.', prompt_text)
         self.assertEqual(
             prompt.task,
             'Review this turn for durable user attribute maintenance needs. If attribute work is needed, plan the minimal retrieval and/or update step combination required.',
         )
         self.assertEqual(prompt.latest_user_prompt, 'Please remember that I like pizza and eggs.')
+        self.assertIn('Task:', prompt_text)
+        self.assertNotIn('Goal:', prompt_text)
+        self.assertIn('Review this turn for durable user attribute maintenance needs. If attribute work is needed, plan the minimal retrieval and/or update step combination required.', prompt_text)
         self.assertIn('attribute_type (required): Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.', prompt_text)
         self.assertNotIn('career.likes, career.dislikes', prompt_text)
+
+
+    def test_main_agent_planner_prompt_includes_request_analysis_goal(self) -> None:
+        state = AgentState.new(
+            task='Can you find frozen or dry okonomiyaki kits for sale online?',
+            max_turns=10,
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            llm=MockLLM([]),
+        )
+        state.request_analysis.goal = 'Search the web for frozen or dry okonomiyaki kits for sale, since the user clarified they want okonomiyaki and wants a broader web check.'
+
+        prompt = build_planner_prompt(state)
+        prompt_text = render_agent_prompt(prompt)
+
+        self.assertIn('Goal:', prompt_text)
+        self.assertIn('Search the web for frozen or dry okonomiyaki kits for sale, since the user clarified they want okonomiyaki and wants a broader web check.', prompt_text)
+        self.assertIn('Latest User Prompt:', prompt_text)
+        self.assertIn('Can you find frozen or dry okonomiyaki kits for sale online?', prompt_text)
 
     def test_request_analysis_prompt_requires_self_contained_goal_for_downstream_steps(self) -> None:
         state = AgentState.new(
@@ -96,6 +123,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertIn('Make the goal self-contained for downstream steps because the full conversation context will not be passed through later.', prompt_text)
         self.assertIn('Include any relevant conversation-derived constraints, continuity, entities, or references needed by downstream planning and synthesis because the full conversation context will not be passed through later.', prompt_text)
+        self.assertIn('Name the concrete topic, subject, entity, or item in the goal instead of using vague placeholders like topic, subject, it, them, or the above.', prompt_text)
+        self.assertIn('For lookup or search requests, explicitly state what should be searched for so downstream steps do not need the original conversation to know the target.', prompt_text)
 
     def test_build_llm_for_stage_reuses_existing_non_chat_llm(self) -> None:
         parent_state = AgentState.new(
