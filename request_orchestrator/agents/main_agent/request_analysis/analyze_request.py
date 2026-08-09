@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from langsmith import traceable
 
+from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, REQUEST_ANALYSIS_STAGE
 from request_orchestrator.models.agent_state import AgentState, RequestAnalysis
 from request_orchestrator.constants import MAIN_AGENT_NAME, REQUEST_ANALYSIS_PROMPT_STEP
 from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
@@ -14,7 +15,10 @@ from rendering.debug import REQUEST_ANALYSIS_KIND
 def analyze_request(agent_state: AgentState) -> AgentState:
     prompt = build_request_analysis_prompt(agent_state)
     prompt_text = render_agent_prompt(prompt)
-    raw = agent_state.llm.invoke(prompt_text).content.strip()
+    raw = agent_state.build_llm_for_stage(
+        agent=MAIN_AGENT_MODEL_SCOPE,
+        stage=REQUEST_ANALYSIS_STAGE,
+    ).invoke(prompt_text).content.strip()
 
     parsed_successfully = True
     try:

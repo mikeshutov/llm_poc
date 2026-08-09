@@ -183,10 +183,9 @@ Current shape:
 
 Important current details:
 1. The top-k limit is standardized in `reranker/constants.py` and is currently `6`.
-2. The reranker uses its own model constant, `RERANKER_MODEL`, which currently defaults to `gpt-5.4-mini`.
-3. The reranker prompt uses a `RerankerPrompt` model so prompt construction and payload shaping live outside the reranker service.
-4. Candidate text sent to the reranker is intentionally condensed. Today it prefers `name + summary`, then `name + description`, then `name + trimmed raw text`.
-5. Product web results currently use their URL as the id when no better external identifier is available yet.
+2. The reranker prompt uses a `RerankerPrompt` model so prompt construction and payload shaping live outside the reranker service.
+3. Candidate text sent to the reranker is intentionally condensed. Today it prefers `name + summary`, then `name + description`, then `name + trimmed raw text`.
+4. Product web results currently use their URL as the id when no better external identifier is available yet.
 
 This keeps retrieval, reranking, and final reconstruction separate. Retrieval can stay domain-specific, the reranker can stay generic, and downstream code can still work with the original result objects after ranking.
 # Setup Information

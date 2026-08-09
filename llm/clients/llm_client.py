@@ -4,7 +4,7 @@ from typing import Any, Optional, Sequence
 from openai import OpenAI
 
 from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
-from common.model_constants import LLM_MODEL
+from conversation.models.conversation_model_config import ConversationModelConfig
 from llm.clients.tool_response_parser import parse_tool_args
 from llm.models.tool_call import ToolCall, ToolCallResult
 
@@ -15,14 +15,14 @@ def get_openai_client() -> OpenAI:
     return OpenAI()
 
 # used for the rest of our requests
-def get_llm_client(default_model: str = LLM_MODEL) -> "LlmClient":
+def get_llm_client(default_model: str = ConversationModelConfig.default_main_agent_planner_model()) -> "LlmClient":
     return LlmClient(default_model=default_model)
 
 
 # This is mostly for when we want to utilize our own LLM client
 # We can probably expand on this client to be able to handle a bunch of different models not just openai models
 class LlmClient:
-    def __init__(self, client: Optional[OpenAI] = None, default_model: str = LLM_MODEL):
+    def __init__(self, client: Optional[OpenAI] = None, default_model: str = ConversationModelConfig.default_main_agent_planner_model()):
         self.client = client or get_openai_client()
         self.default_model = default_model
 

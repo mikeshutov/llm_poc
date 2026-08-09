@@ -3,6 +3,7 @@ from __future__ import annotations
 from langsmith import traceable
 
 from common.parsing import strip_code_fences
+from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, SYNTHESIS_STAGE
 from conversation.repository.repo_factory import get_conversation_repo
 from request_orchestrator.constants import SYNTHESIS_PROMPT_STEP
 from request_orchestrator.models.agent_prompt import PlanEvidenceStep
@@ -38,7 +39,10 @@ def run_synthesis(state: AgentState) -> AgentState:
 
     prompt = build_solver_prompt(plan_with_evidence=plan_with_evidence, state=state)
     prompt_text = render_agent_prompt(prompt)
-    raw = state.llm.invoke(prompt_text).content
+    raw = state.build_llm_for_stage(
+        agent=MAIN_AGENT_MODEL_SCOPE,
+        stage=SYNTHESIS_STAGE,
+    ).invoke(prompt_text).content
     raw = strip_code_fences(raw)
 
     try:
@@ -72,4 +76,3 @@ def run_synthesis(state: AgentState) -> AgentState:
         )
 
     return state
-

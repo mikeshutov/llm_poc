@@ -8,6 +8,7 @@ from request_orchestrator.shared.prompts.render_agent_prompt import render_agent
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from request_orchestrator.constants import PLANNER_PROMPT_STEP
 from common.parsing import strip_code_fences
+from conversation.models.conversation_model_config import PLANNER_STAGE
 from conversation.repository.repo_factory import get_conversation_repo
 from tool.repository.plan_repository import PlanRepository
 from tool.tools import tools
@@ -20,7 +21,7 @@ tool_list = "\n".join(
 
 
 def _invoke_planner(agent_state: AgentState, prompt_text: str) -> Plan:
-    raw = strip_code_fences(agent_state.llm.invoke(prompt_text).content)
+    raw = strip_code_fences(agent_state.build_llm_for_stage(stage=PLANNER_STAGE).invoke(prompt_text).content)
     return Plan.model_validate_json(raw)
 
 

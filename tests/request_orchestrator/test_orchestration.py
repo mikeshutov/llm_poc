@@ -21,6 +21,7 @@ if 'pycountry' not in sys.modules:
     sys.modules['pycountry'] = pycountry_module
 
 from request_orchestrator.agents.main_agent.agent import run_agent
+from request_orchestrator.agents.main_agent.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
 from request_orchestrator.agents.profile_management.agent import _prepare_subagent_state
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
@@ -80,6 +81,32 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertEqual(prompt.latest_user_prompt, 'Please remember that I like pizza and eggs.')
         self.assertIn('attribute_type (required): Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.', prompt_text)
         self.assertNotIn('career.likes, career.dislikes', prompt_text)
+
+    def test_request_analysis_prompt_requires_self_contained_goal_for_downstream_steps(self) -> None:
+        state = AgentState.new(
+            task='Can you use the jackets you suggested earlier and narrow them to waterproof options under $200?',
+            max_turns=10,
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            llm=MockLLM([]),
+        )
+
+        prompt = build_request_analysis_prompt(state)
+        prompt_text = render_agent_prompt(prompt)
+
+        self.assertIn('Make the goal self-contained for downstream steps because the full conversation context will not be passed through later.', prompt_text)
+        self.assertIn('Include any relevant conversation-derived constraints, continuity, entities, or references needed by downstream planning and synthesis because the full conversation context will not be passed through later.', prompt_text)
+
+    def test_build_llm_for_stage_reuses_existing_non_chat_llm(self) -> None:
+        parent_state = AgentState.new(
+            task='Please remember that I like pizza.',
+            max_turns=10,
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            llm=MockLLM([]),
+        )
+
+        self.assertIs(parent_state.build_llm_for_stage(stage='planner'), parent_state.llm)
 
     def test_user_attribute_creation_orchestration(self) -> None:
         fake_repo = FakeUserAttributeRepository()
@@ -601,5 +628,9 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+
+
 
 

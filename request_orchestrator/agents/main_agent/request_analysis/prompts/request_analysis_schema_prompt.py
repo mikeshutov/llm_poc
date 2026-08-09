@@ -2,7 +2,7 @@ REQUEST_ANALYSIS_SCHEMA = """
 You are a request analyzer.
 Return JSON only.
 
-Set "goal" to a concise statement of what the user is trying to accomplish.
+Set "goal" to a self-contained statement of what the user is trying to accomplish. Include any relevant conversation-derived constraints, continuity, entities, or references needed by downstream planning and synthesis because the full conversation context will not be passed through later.
 Set "requires_tools" to true when the request needs tool use to answer from the available context. If there is meaningful doubt that the available context alone is sufficient, set it to true.
 Set "context_answer_confidence" to a value between 0 and 1 reflecting how confidently the provided context alone can answer the request. Be conservative. Do not use general knowledge.
 If the request is about something previously discussed, suggested, decided, or mentioned, include "memories" in applicable_tool_categories.
