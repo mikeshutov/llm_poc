@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import UUID
 
 from dotenv import load_dotenv
 import streamlit as st
@@ -14,7 +15,7 @@ from rendering.replay import clear_replay_state, pop_replay_target
 from rendering.file_upload import render_file_upload
 from rendering.messages.chat import append_assistant_response, render_messages
 from rendering.rendering import render_message
-from rendering.sidebar import render_sidebar
+from rendering.sidebar import clear_conversation_model_config_dialog, render_sidebar, request_conversation_model_config_dialog
 
 load_dotenv()
 
@@ -53,10 +54,12 @@ def setup_conversation(cid):
         if current != cid:
             clear_feedback_state()
             clear_replay_state()
+            clear_conversation_model_config_dialog()
         st.session_state.conversation_id = cid
     else:
         clear_feedback_state()
         clear_replay_state()
+        clear_conversation_model_config_dialog()
         conv = conversation_repository.create_conversation(user_id="anonymous", metadata={"source": "streamlit"})
         st.session_state.conversation_id = str(conv.id)
         st.query_params["cid"] = st.session_state.conversation_id
@@ -110,7 +113,13 @@ if replay_target:
     st.session_state.loaded_cid = None
     st.session_state.messages = []
     st.session_state.debug_turns = []
-    st.session_state[PENDING_REPLAY_KEY] = replay_context
+    replay_conversation = conversation_repository.get_conversation(UUID(replay_context["conversation_id"]))
+    replay_title = (replay_conversation.title or "Replay").strip() if replay_conversation else "Replay"
+    request_conversation_model_config_dialog(
+        conversation_id=replay_context["conversation_id"],
+        title=replay_title,
+        replay_source_roundtrip_id=replay_context["source_roundtrip_id"],
+    )
     st.rerun()
 
 with st.sidebar:
@@ -122,6 +131,7 @@ if st.session_state.get(FEEDBACK_TARGET_KEY):
 
 pending_replay = st.session_state.get(PENDING_REPLAY_KEY)
 if pending_replay and pending_replay.get("conversation_id") == st.session_state.conversation_id:
+    clear_conversation_model_config_dialog()
     with st.spinner("Replaying conversation..."):
         replay_context = populate_replay_conversation(
             pending_replay["conversation_id"],
@@ -132,6 +142,7 @@ if pending_replay and pending_replay.get("conversation_id") == st.session_state.
         st.session_state.messages = []
         render_messages(conversation_repository, st.session_state.conversation_id, render_message)
         run_live_turn(replay_context["user_prompt"])
+    st.rerun()
 
 render_file_upload()
 

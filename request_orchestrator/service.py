@@ -4,7 +4,6 @@ from uuid import UUID
 from request_orchestrator.agents.main_agent.agent import run_agent
 from request_orchestrator.models.agent_state import GeoMetadata, build_geometadata
 from request_orchestrator.models.agent_result import AgentResult
-from common.model_constants import LLM_MODEL
 from llm.clients.embeddings import embed_text
 from tool.summarize_tool_call import summarize_tool_calls
 from conversation.context_builder import build_roundtrip_context
@@ -20,7 +19,13 @@ def run_request_orchestrator_for_query(
     geometadata: GeoMetadata | None = None,
 ) -> tuple[AgentResult, ConversationRoundtrip]:
     repo = get_conversation_repo()
-    roundtrip = repo.create_pending_roundtrip(UUID(conversation_id), user_query, model=LLM_MODEL)
+    resolved_model_config = repo.resolve_conversation_model_config(UUID(conversation_id))
+    roundtrip = repo.create_pending_roundtrip(
+        UUID(conversation_id),
+        user_query,
+        model=resolved_model_config.main_agent.planner,
+        metadata={"resolved_model_config": resolved_model_config.to_metadata_payload()},
+    )
 
     conversation_context = build_roundtrip_context(
         conversation_id,
@@ -36,6 +41,7 @@ def run_request_orchestrator_for_query(
         conversation_id=conversation_id,
         roundtrip_id=str(roundtrip.id),
         user_profile=user_profile,
+        conversation_model_config=resolved_model_config,
     )
 
     roundtrip_summary_embedding = embed_text(result.roundtrip_summary) if result.roundtrip_summary else None

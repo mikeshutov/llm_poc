@@ -9,8 +9,13 @@ from zoneinfo import ZoneInfo
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
-from common.model_constants import LLM_MODEL
 from common.serialization import sanitize_for_json_storage
+from conversation.models.conversation_model_config import (
+    ConversationModelConfig,
+    MAIN_AGENT_MODEL_SCOPE,
+    PLANNER_STAGE,
+    PROFILE_AGENT_MODEL_SCOPE,
+)
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import GeoLocation, GeoMetadata, UserProfile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
@@ -219,6 +224,7 @@ class SubagentState:
             result=self.result,
             goal_reached=self.goal_reached,
             llm=parent_state.llm,
+            conversation_model_config=parent_state.conversation_model_config.model_copy(deep=True),
         )
 
     def update_from_runtime_state(self, runtime_state: AgentState) -> SubagentState:
@@ -260,7 +266,8 @@ class AgentState:
     agent_log: AgentStateLog = field(default_factory=AgentStateLog)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
     goal_reached: bool = False
-    llm: Any = field(default_factory=lambda: ChatOpenAI(model=LLM_MODEL), repr=False)
+    llm: Any = field(default_factory=lambda: ChatOpenAI(model=ConversationModelConfig.default_main_agent_planner_model()), repr=False)
+    conversation_model_config: ConversationModelConfig = field(default_factory=ConversationModelConfig.build_default)
 
     @classmethod
     def new(
@@ -273,6 +280,7 @@ class AgentState:
         conversation_id: str | None = None,
         roundtrip_id: UUID | None = None,
         llm: Any | None = None,
+        conversation_model_config: ConversationModelConfig | None = None,
     ) -> "AgentState":
         return cls(
             task=task,
@@ -282,7 +290,8 @@ class AgentState:
             agent_profile=MAIN_AGENT_PROFILE if agent_profile is None else agent_profile,
             conversation_id=conversation_id,
             roundtrip_id=roundtrip_id,
-            llm=ChatOpenAI(model=LLM_MODEL) if llm is None else llm,
+            llm=ChatOpenAI(model=ConversationModelConfig.default_main_agent_planner_model()) if llm is None else llm,
+            conversation_model_config=ConversationModelConfig.build_default() if conversation_model_config is None else conversation_model_config,
         )
 
     def add_iteration(self, iteration: IterationState) -> IterationState:
@@ -329,6 +338,7 @@ class AgentState:
             result=self.result,
             goal_reached=self.goal_reached,
             llm=self.llm,
+            conversation_model_config=self.conversation_model_config.model_copy(deep=True),
         )
 
     def log_status(
@@ -372,3 +382,23 @@ class AgentState:
             for agent_name, entries in subagent_state.agent_log.to_grouped_dict().items():
                 logs.setdefault(agent_name, []).extend(entries)
         return logs
+
+    def resolve_model_for_stage(self, *, agent: str, stage: str) -> str:
+        return self.conversation_model_config.resolve(agent, stage)
+
+    def resolve_agent_scope(self) -> str:
+        if self.agent_profile.name == "profile_management":
+            return PROFILE_AGENT_MODEL_SCOPE
+        return MAIN_AGENT_MODEL_SCOPE
+
+    def build_llm_for_stage(self, *, stage: str, agent: str | None = None) -> Any:
+        if not isinstance(self.llm, ChatOpenAI):
+            return self.llm
+        resolved_agent = self.resolve_agent_scope() if agent is None else agent
+        model_name = self.resolve_model_for_stage(agent=resolved_agent, stage=stage)
+        if resolved_agent == MAIN_AGENT_MODEL_SCOPE and stage == PLANNER_STAGE and model_name == ConversationModelConfig.default_main_agent_planner_model():
+            return self.llm
+        return ChatOpenAI(model=model_name)
+
+
+

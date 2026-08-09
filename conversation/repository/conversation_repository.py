@@ -8,6 +8,8 @@ from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from conversation.model_config_resolver import resolve_conversation_model_config
+from conversation.models.conversation_model_config import ConversationModelConfig, ConversationModelConfigEntry
 from conversation.models.conversation_models import (
     Conversation,
     ConversationMemory,
@@ -47,17 +49,19 @@ class ConversationRepository:
         model: Optional[str] = None,
         roundtrip_summary: Optional[str] = None,
         roundtrip_summary_embedding: Optional[list[float]] = None,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> ConversationRoundtrip:
+        metadata = metadata or {}
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 INSERT INTO conversation_roundtrip (conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, model, metadata)
-                SELECT %s, COALESCE(MAX(message_index), -1) + 1, %s, '', %s, (%s)::vector, '{}'::jsonb, '{}'::jsonb, %s, '{}'::jsonb
+                SELECT %s, COALESCE(MAX(message_index), -1) + 1, %s, '', %s, (%s)::vector, '{}'::jsonb, '{}'::jsonb, %s, %s
                 FROM conversation_roundtrip
                 WHERE conversation_id = %s
                 RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model
                 """,
-                (conversation_id, user_prompt, roundtrip_summary, roundtrip_summary_embedding, model, conversation_id),
+                (conversation_id, user_prompt, roundtrip_summary, roundtrip_summary_embedding, model, Jsonb(metadata), conversation_id),
             )
             row = cur.fetchone()
             assert row is not None
@@ -292,6 +296,88 @@ class ConversationRepository:
             )
             row = cur.fetchone()
             return Conversation(**row) if row else None
+
+    def list_conversation_model_config(self, conversation_id: UUID) -> list[ConversationModelConfigEntry]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT conversation_id, agent, stage, model, created_at, updated_at
+                FROM conversation_model_config
+                WHERE conversation_id = %s
+                ORDER BY agent ASC, stage ASC
+                """,
+                (conversation_id,),
+            )
+            rows = cur.fetchall()
+            return [
+                ConversationModelConfigEntry(
+                    conversation_id=row['conversation_id'],
+                    agent=row['agent'],
+                    stage=row['stage'],
+                    model=row['model'],
+                    created_at=str(row['created_at']),
+                    updated_at=str(row['updated_at']),
+                )
+                for row in rows
+            ]
+
+    def upsert_conversation_model_config(
+        self,
+        conversation_id: UUID,
+        agent: str,
+        stage: str,
+        model: str,
+    ) -> ConversationModelConfigEntry:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO conversation_model_config (conversation_id, agent, stage, model)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (conversation_id, agent, stage)
+                DO UPDATE SET
+                    model = EXCLUDED.model,
+                    updated_at = now()
+                RETURNING conversation_id, agent, stage, model, created_at, updated_at
+                """,
+                (conversation_id, agent, stage, model),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            return ConversationModelConfigEntry(
+                conversation_id=row['conversation_id'],
+                agent=row['agent'],
+                stage=row['stage'],
+                model=row['model'],
+                created_at=str(row['created_at']),
+                updated_at=str(row['updated_at']),
+            )
+
+    def clear_conversation_model_config(self, conversation_id: UUID, agent: str, stage: str) -> bool:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                DELETE FROM conversation_model_config
+                WHERE conversation_id = %s
+                  AND agent = %s
+                  AND stage = %s
+                """,
+                (conversation_id, agent, stage),
+            )
+            return cur.rowcount > 0
+
+    def clear_all_conversation_model_config(self, conversation_id: UUID) -> bool:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                DELETE FROM conversation_model_config
+                WHERE conversation_id = %s
+                """,
+                (conversation_id,),
+            )
+            return cur.rowcount > 0
+
+    def resolve_conversation_model_config(self, conversation_id: UUID) -> ConversationModelConfig:
+        return resolve_conversation_model_config(self.list_conversation_model_config(conversation_id))
 
     def list_roundtrips(
         self,
@@ -592,3 +678,9 @@ class ConversationRepository:
                 (title, conversation_id),
             )
             return cur.rowcount > 0
+
+
+
+
+
+

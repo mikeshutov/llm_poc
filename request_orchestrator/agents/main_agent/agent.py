@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
+from conversation.models.conversation_model_config import ConversationModelConfig
 from conversation.models.conversation_models import ConversationContext
 from langgraph.graph import END, StateGraph
 from langsmith import traceable
@@ -66,6 +67,7 @@ def run_agent(
     max_turns: int = 10,
     user_profile: UserProfile | None = None,
     llm: Any | None = None,
+    conversation_model_config: ConversationModelConfig | None = None,
 ) -> AgentResult:
     agent_state = AgentState.new(
         task=user_query,
@@ -76,6 +78,7 @@ def run_agent(
         conversation_id=conversation_id,
         roundtrip_id=UUID(roundtrip_id) if roundtrip_id else None,
         llm=llm,
+        conversation_model_config=conversation_model_config,
     )
 
     builder = StateGraph(AgentState)

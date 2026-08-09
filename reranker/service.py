@@ -4,16 +4,23 @@ from typing import Any
 
 from langchain_openai import ChatOpenAI
 
-from common.model_constants import RERANKER_MODEL
 from common.parsing import strip_code_fences
+from conversation.models.conversation_model_config import ConversationModelConfig, RERANKER_STAGE, SHARED_MODEL_SCOPE
 from personalization.profile.models import UserProfile
+from request_orchestrator.shared.runtime_context import get_current_conversation_model_config
 from reranker.constants import DEFAULT_TOP_K
 from reranker.models import Candidate, RerankerPrompt, RerankerResult
 
 
 class CandidateReranker:
-    def __init__(self, llm: Any | None = None):
-        self.llm = ChatOpenAI(model=RERANKER_MODEL) if llm is None else llm
+    def __init__(
+        self,
+        llm: Any | None = None,
+        conversation_model_config: ConversationModelConfig | None = None,
+    ):
+        resolved_config = conversation_model_config or get_current_conversation_model_config() or ConversationModelConfig.build_default()
+        resolved_model = resolved_config.resolve(SHARED_MODEL_SCOPE, RERANKER_STAGE)
+        self.llm = ChatOpenAI(model=resolved_model) if llm is None else llm
 
     def rerank(
         self,
@@ -82,8 +89,9 @@ def rerank_candidates(
     user_profile: UserProfile | None = None,
     llm: Any | None = None,
     limit: int | None = None,
+    conversation_model_config: ConversationModelConfig | None = None,
 ) -> list[Candidate]:
-    return CandidateReranker(llm=llm).rerank(
+    return CandidateReranker(llm=llm, conversation_model_config=conversation_model_config).rerank(
         candidates,
         goal=goal,
         query=query,
