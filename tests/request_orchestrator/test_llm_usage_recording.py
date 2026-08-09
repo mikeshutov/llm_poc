@@ -20,6 +20,7 @@ from request_orchestrator.agents.main_agent.request_analysis.analyze_request imp
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from request_orchestrator.models.agent_state import AgentState, IterationState, RequestAnalysis
 from request_orchestrator.models.plan import Plan
+from request_orchestrator.shared.evaluator.evaluator import run_evaluator
 from request_orchestrator.shared.planner.planner import run_planner
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from request_orchestrator.shared.synthesis.synthesis import run_synthesis
@@ -190,3 +191,95 @@ def test_llm_client_records_tool_calling_and_image_caption_usage() -> None:
             llm_client.generate_caption_from_image_file('fake.jpg')
 
     assert [call['stage'] for call in repo.llm_calls] == ['tool_calling', 'image_caption']
+
+
+def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
+    repo = RecordingRepo()
+    state = AgentState.new(
+        task='Find current pricing for shortlisted products.',
+        max_turns=5,
+        conversation_context=ConversationContext(),
+        user_profile=UserProfile(),
+        conversation_id=str(uuid4()),
+        llm=FakeInvokeLLM('{"satisfied": false, "relevant_evidence": ["E1"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.4'),
+    )
+    state.request_analysis = RequestAnalysis(goal='Check whether the shortlisted products satisfy the request.', requires_tools=False)
+    state.iteration_trace = [
+        IterationState(
+            plan=Plan.model_validate({
+                'steps': [
+                    {
+                        'id': 'E1',
+                        'plan': 'Search for the shortlisted products.',
+                        'tool': 'generic_web_search',
+                        'args': {'query_text': 'shortlisted products'},
+                    }
+                ],
+                'final_answer': None,
+                'needs_replan': False,
+            }),
+            results={'E1': {'items': ['result']}},
+        )
+    ]
+
+    with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
+        'request_orchestrator.shared.evaluator.evaluator.get_conversation_repo',
+        return_value=repo,
+    ):
+        run_evaluator(state)
+
+    assert len(repo.llm_calls) == 1
+    assert repo.llm_calls[0]['agent'] == 'shared'
+    assert repo.llm_calls[0]['stage'] == 'evaluator'
+    assert repo.llm_calls[0]['model'] == 'gpt-5.4'
+    assert state.request_analysis.goal == 'Find current Canadian pricing and availability for the two shortlisted products.'
+    assert state.agent_log.entries[-1].data['llm_usage']['model'] == 'gpt-5.4'
+    assert state.agent_log.entries[-1].data['relevant_evidence'] == ['E1']
+    assert state.agent_log.entries[-1].data['missing_information'] == [
+        'Need current pricing for the top two products',
+        'Need shipping availability in Canada',
+    ]
+
+
+def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None:
+    repo = RecordingRepo()
+    captured_prompt: dict[str, object] = {}
+
+    class CapturingLLM(FakeInvokeLLM):
+        def invoke(self, prompt: str):
+            captured_prompt['text'] = prompt
+            return super().invoke(prompt)
+
+    state = AgentState.new(
+        task='Summarize this.',
+        max_turns=5,
+        conversation_context=ConversationContext(),
+        user_profile=UserProfile(),
+        conversation_id=str(uuid4()),
+        llm=CapturingLLM('{"result": ["done"], "follow_up": "", "clarifying_question": "", "roundtrip_summary": "summary", "tool_summary": {"used_tools": [], "produced": [], "entities": [], "freshness": ""}}', 'gpt-5.4'),
+    )
+    state.relevant_evidence_ids = ['E2']
+    state.iteration_trace = [
+        IterationState(
+            plan=Plan.model_validate({
+                'steps': [
+                    {'id': 'E1', 'plan': 'First step', 'tool': 'tool_a', 'args': {}},
+                    {'id': 'E2', 'plan': 'Second step', 'tool': 'tool_b', 'args': {}},
+                ],
+                'final_answer': None,
+                'needs_replan': False,
+            }),
+            results={'E1': {'value': 'a'}, 'E2': {'value': 'b'}},
+        )
+    ]
+
+    with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
+        'request_orchestrator.shared.synthesis.synthesis.get_conversation_repo',
+        return_value=repo,
+    ):
+        run_synthesis(state)
+
+    prompt_text = str(captured_prompt['text'])
+    assert '"step_id": "E2"' in prompt_text
+    assert '"step_id": "E1"' not in prompt_text
+    assert state.agent_log.entries[-1].data['relevant_evidence_ids'] == ['E2']

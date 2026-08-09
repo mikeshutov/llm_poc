@@ -12,14 +12,7 @@ from conversation.models.conversation_model_config import PLANNER_STAGE
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.usage import record_llm_call, serialize_llm_call_record
 from tool.repository.plan_repository import PlanRepository
-from tool.tools import tools
 from rendering.debug import PLAN_KIND
-
-tool_list = "\n".join(
-    f'- {tool.name}: {getattr(tool, "description", "")}'.strip()
-    for tool in tools
-)
-
 
 def _serialize_llm_call_for_log(llm_call) -> dict | None:
     if llm_call is None:
@@ -39,6 +32,12 @@ def _invoke_planner(agent_state: AgentState, prompt_text: str) -> tuple[Plan, ob
         agent=agent_scope,
         stage=PLANNER_STAGE,
         callsite="shared_planner.run_planner",
+        input_object={
+            "prompt": prompt_text,
+        },
+        output_object={
+            "raw_content": response.content,
+        },
     )
     raw = strip_code_fences(response.content)
     return Plan.model_validate_json(raw), llm_call

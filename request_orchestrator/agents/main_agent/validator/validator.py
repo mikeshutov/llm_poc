@@ -13,8 +13,4 @@ def validator(state: AgentState) -> str:
     if plan is None or plan.final_answer or len(plan.steps) == 0:
         return SYNTHESIZE_EDGE
 
-    all_steps_have_results = all(step.id in last_iteration.results for step in plan.steps)
-    if all_steps_have_results and not plan.needs_replan:
-        return SYNTHESIZE_EDGE
-
     return EXECUTE_TOOLS_EDGE

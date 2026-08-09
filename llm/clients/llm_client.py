@@ -55,6 +55,17 @@ class LlmClient:
             stage="tool_calling",
             callsite="llm_client.call_with_tools",
             metadata={"tool_count": len(tools)},
+            input_object={
+                "messages": [
+                    {ROLE_KEY: ROLE_SYSTEM, CONTENT_KEY: system_prompt},
+                    *messages,
+                ],
+                "tools": list(tools),
+                "temperature": temperature,
+            },
+            output_object={
+                "raw_message": getattr(resp.choices[0], "message", None),
+            },
         )
 
         msg = resp.choices[0].message

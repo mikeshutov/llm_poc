@@ -10,7 +10,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from conversation.model_config_resolver import resolve_conversation_model_config
-from conversation.models.conversation_model_config import ConversationModelConfig, ConversationModelConfigEntry
+from conversation.models.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig, ConversationModelConfigEntry
 from conversation.models.conversation_models import (
     Conversation,
     ConversationMemory,
@@ -42,7 +42,10 @@ class ConversationRepository:
             )
             row = cur.fetchone()
             assert row is not None
-            return Conversation(**row)
+            conversation = Conversation(**row)
+
+        self.ensure_conversation_model_config_defaults(conversation.id)
+        return conversation
 
     def create_pending_roundtrip(
         self,
@@ -462,6 +465,25 @@ class ConversationRepository:
             row = cur.fetchone()
             return Conversation(**row) if row else None
 
+    def ensure_conversation_model_config_defaults(
+        self,
+        conversation_id: UUID,
+        entries: list[ConversationModelConfigEntry] | None = None,
+    ) -> list[ConversationModelConfigEntry]:
+        existing_entries = list(entries) if entries is not None else self.list_conversation_model_config(conversation_id)
+        existing_keys = {(entry.agent, entry.stage) for entry in existing_entries}
+        default_config = ConversationModelConfig.build_default()
+        missing_entries: list[ConversationModelConfigEntry] = []
+
+        for spec in CONVERSATION_MODEL_CONFIG_SPECS:
+            if (spec.agent, spec.stage) in existing_keys:
+                continue
+            model = default_config.resolve(spec.agent, spec.stage)
+            persisted_entry = self.upsert_conversation_model_config(conversation_id, spec.agent, spec.stage, model)
+            missing_entries.append(persisted_entry)
+
+        return [*existing_entries, *missing_entries]
+
     def list_conversation_model_config(self, conversation_id: UUID) -> list[ConversationModelConfigEntry]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -542,7 +564,9 @@ class ConversationRepository:
             return cur.rowcount > 0
 
     def resolve_conversation_model_config(self, conversation_id: UUID) -> ConversationModelConfig:
-        return resolve_conversation_model_config(self.list_conversation_model_config(conversation_id))
+        entries = self.list_conversation_model_config(conversation_id)
+        ensured_entries = self.ensure_conversation_model_config_defaults(conversation_id, entries)
+        return resolve_conversation_model_config(ensured_entries)
 
     def list_roundtrips(
         self,

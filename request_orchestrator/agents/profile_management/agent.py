@@ -5,8 +5,9 @@ from langsmith import traceable
 
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from request_orchestrator.agents.profile_management.router import router
-from request_orchestrator.constants import EXECUTE_TOOLS_EDGE, PLAN_EDGE
+from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
 from request_orchestrator.models.agent_state import AgentState, RequestAnalysis, SubagentState
+from request_orchestrator.shared.evaluator import evaluator_router, run_evaluator
 from request_orchestrator.shared.executor.executor import run_executor
 from request_orchestrator.shared.planner.planner import run_planner
 
@@ -46,6 +47,7 @@ def _compile_graph():
     builder = StateGraph(AgentState)
     builder.add_node(PROFILE_MANAGEMENT_ROUTER_EDGE, _route_node)
     builder.add_node(PLAN_EDGE, run_planner)
+    builder.add_node(EVALUATE_EDGE, run_evaluator)
     builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
     builder.set_entry_point(PROFILE_MANAGEMENT_ROUTER_EDGE)
 
@@ -55,11 +57,22 @@ def _compile_graph():
         {
             PLAN_EDGE: PLAN_EDGE,
             EXECUTE_TOOLS_EDGE: EXECUTE_TOOLS_EDGE,
+            EVALUATE_EDGE: EVALUATE_EDGE,
             END: END,
         },
     )
 
     builder.add_edge(PLAN_EDGE, PROFILE_MANAGEMENT_ROUTER_EDGE)
+
+    builder.add_conditional_edges(
+        EVALUATE_EDGE,
+        evaluator_router,
+        {
+            PLAN_EDGE: PLAN_EDGE,
+            SYNTHESIZE_EDGE: END,
+        },
+    )
+
     builder.add_edge(EXECUTE_TOOLS_EDGE, PROFILE_MANAGEMENT_ROUTER_EDGE)
 
     return builder.compile()

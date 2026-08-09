@@ -4,6 +4,7 @@ from decimal import Decimal
 from unittest.mock import patch
 from uuid import uuid4
 
+from conversation.models.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS
 from conversation.repository.conversation_repository import ConversationRepository
 
 
@@ -145,3 +146,77 @@ def test_list_llm_calls_for_roundtrip_returns_rows_in_order() -> None:
 
     assert 'FROM llm_call' in cursor.executed[0][0]
     assert [record.stage for record in records] == ['request_analysis', 'synthesis']
+
+
+def test_create_conversation_persists_default_model_config_rows() -> None:
+    row = {
+        'id': uuid4(),
+        'user_id': 'anonymous',
+        'title': 'anonymous',
+        'created_at': '2026-08-09T00:00:00Z',
+        'metadata': {'source': 'streamlit'},
+        'tone_state': {},
+        'summary': '',
+    }
+    create_cursor = FakeCursor(fetchone_row=row)
+    config_cursors = [
+        FakeCursor(fetchone_row={
+            'conversation_id': row['id'],
+            'agent': spec.agent,
+            'stage': spec.stage,
+            'model': 'gpt-5.4-mini' if spec.stage in {'request_analysis', 'reranker', 'evaluator'} or spec.agent == 'profile_agent' else 'gpt-5.4',
+            'created_at': '2026-08-09T00:00:00Z',
+            'updated_at': '2026-08-09T00:00:00Z',
+        })
+        for spec in CONVERSATION_MODEL_CONFIG_SPECS
+    ]
+
+    with patch('conversation.repository.conversation_repository.register_vector', lambda conn: None):
+        repo = ConversationRepository(conn=FakeConnection([create_cursor, FakeCursor(fetchall_rows=[]), *config_cursors]))
+
+    conversation = repo.create_conversation(user_id='anonymous', metadata={'source': 'streamlit'})
+
+    assert conversation.id == row['id']
+    assert 'INSERT INTO conversation' in create_cursor.executed[0][0]
+    assert len(config_cursors) == len(CONVERSATION_MODEL_CONFIG_SPECS)
+    assert all('INSERT INTO conversation_model_config' in cursor.executed[0][0] for cursor in config_cursors)
+
+
+def test_resolve_conversation_model_config_backfills_missing_default_rows() -> None:
+    conversation_id = uuid4()
+    existing_rows = [
+        {
+            'conversation_id': conversation_id,
+            'agent': 'main_agent',
+            'stage': 'planner',
+            'model': 'gpt-5.4',
+            'created_at': '2026-08-09T00:00:00Z',
+            'updated_at': '2026-08-09T00:00:00Z',
+        }
+    ]
+    list_cursor = FakeCursor(fetchall_rows=existing_rows)
+    backfill_cursors = [
+        FakeCursor(fetchone_row={
+            'conversation_id': conversation_id,
+            'agent': spec.agent,
+            'stage': spec.stage,
+            'model': 'gpt-5.4-mini' if spec.stage in {'request_analysis', 'reranker', 'evaluator'} or spec.agent == 'profile_agent' else 'gpt-5.4',
+            'created_at': '2026-08-09T00:00:00Z',
+            'updated_at': '2026-08-09T00:00:00Z',
+        })
+        for spec in CONVERSATION_MODEL_CONFIG_SPECS
+        if not (spec.agent == 'main_agent' and spec.stage == 'planner')
+    ]
+
+    with patch('conversation.repository.conversation_repository.register_vector', lambda conn: None):
+        repo = ConversationRepository(conn=FakeConnection([list_cursor, *backfill_cursors]))
+
+    resolved = repo.resolve_conversation_model_config(conversation_id)
+
+    assert resolved.main_agent.planner == 'gpt-5.4'
+    assert resolved.main_agent.request_analysis == 'gpt-5.4-mini'
+    assert resolved.profile_agent.planner == 'gpt-5.4-mini'
+    assert resolved.shared.evaluator == 'gpt-5.4-mini'
+    assert resolved.shared.reranker == 'gpt-5.4-mini'
+    assert len(backfill_cursors) == len(CONVERSATION_MODEL_CONFIG_SPECS) - 1
+    assert all('INSERT INTO conversation_model_config' in cursor.executed[0][0] for cursor in backfill_cursors)

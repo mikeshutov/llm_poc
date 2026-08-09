@@ -9,13 +9,14 @@ You MUST output valid JSON with this structure:
       "args": { <JSON object> }
     }
   ],
-  "final_answer": "<sentence if one is available, otherwise null>",
+  "final_answer": null,
   "needs_replan": false
 }
 
 Schema Rules:
-- Set "needs_replan": true if the current plan alone is not sufficient to answer the task and further tool calls will be needed after these results come back.
-- Set "needs_replan": false when the current plan steps are expected to produce enough data to answer the task when considering the full context. This is the default.
+- Return tool steps only when there is a concrete useful tool call to make.
+- If there is nothing actionable to call, return an empty "steps" list.
+- Always set "final_answer" to null.
+- Always set "needs_replan" to false.
+- Return JSON only.
 """
-
-

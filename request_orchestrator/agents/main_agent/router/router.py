@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from request_orchestrator.models.agent_state import AgentState
-from request_orchestrator.constants import PLAN_EDGE, SYNTHESIZE_EDGE
+from request_orchestrator.constants import EVALUATE_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
 
 
 def router(state: AgentState) -> str:
@@ -12,9 +12,7 @@ def router(state: AgentState) -> str:
         return SYNTHESIZE_EDGE
 
     last_iteration = state.iteration_trace[-1] if state.iteration_trace else None
-    if last_iteration and last_iteration.plan and not last_iteration.plan.needs_replan:
-        return SYNTHESIZE_EDGE
+    if last_iteration and last_iteration.results:
+        return EVALUATE_EDGE
 
     return PLAN_EDGE
-
-

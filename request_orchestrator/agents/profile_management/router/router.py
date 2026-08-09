@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from langgraph.graph import END
 
-from request_orchestrator.constants import EXECUTE_TOOLS_EDGE, PLAN_EDGE
+from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE
 from request_orchestrator.models.agent_state import AgentState
 
 
@@ -22,5 +22,8 @@ def router(state: AgentState) -> str:
     has_pending_steps = any(step.id not in last_iteration.results for step in plan.steps)
     if has_pending_steps:
         return EXECUTE_TOOLS_EDGE
+
+    if last_iteration.results:
+        return EVALUATE_EDGE
 
     return PLAN_EDGE

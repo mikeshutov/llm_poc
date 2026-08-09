@@ -16,6 +16,10 @@ from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_so
 from rendering.debug import SYNTHESIS_KIND
 
 
+def _resolve_relevant_evidence_ids(state: AgentState) -> set[str]:
+    return {step_id for step_id in state.relevant_evidence_ids if isinstance(step_id, str) and step_id.strip()}
+
+
 @traceable(name="Synthesis Node")
 def run_synthesis(state: AgentState) -> AgentState:
     if not state.iteration_trace and not state.goal_reached:
@@ -23,13 +27,14 @@ def run_synthesis(state: AgentState) -> AgentState:
         state.goal_reached = True
         return state
 
-    plan_with_evidence: list[PlanEvidenceStep] = []
+    relevant_evidence_ids = _resolve_relevant_evidence_ids(state)
+    all_plan_with_evidence: list[PlanEvidenceStep] = []
     for iteration in state.iteration_trace:
         if iteration.plan is None:
             continue
 
         for step in iteration.plan.steps:
-            plan_with_evidence.append(
+            all_plan_with_evidence.append(
                 PlanEvidenceStep(
                     step_id=step.id,
                     plan=step.plan,
@@ -38,6 +43,13 @@ def run_synthesis(state: AgentState) -> AgentState:
                     evidence=iteration.results.get(step.id, ""),
                 )
             )
+
+    if relevant_evidence_ids:
+        plan_with_evidence = [step for step in all_plan_with_evidence if step.step_id in relevant_evidence_ids]
+        if not plan_with_evidence:
+            plan_with_evidence = all_plan_with_evidence
+    else:
+        plan_with_evidence = all_plan_with_evidence
 
     prompt = build_solver_prompt(plan_with_evidence=plan_with_evidence, state=state)
     prompt_text = render_agent_prompt(prompt)
@@ -54,6 +66,12 @@ def run_synthesis(state: AgentState) -> AgentState:
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=SYNTHESIS_STAGE,
         callsite="shared_synthesis.run_synthesis",
+        input_object={
+            "prompt": prompt_text,
+        },
+        output_object={
+            "raw_content": response.content,
+        },
     )
     raw = strip_code_fences(response.content)
 
@@ -76,6 +94,7 @@ def run_synthesis(state: AgentState) -> AgentState:
             "answer_preview": synthesis_result.result[:3],
             "follow_up": synthesis_result.follow_up,
             "clarifying_question": synthesis_result.clarifying_question,
+            "relevant_evidence_ids": [step.step_id for step in plan_with_evidence],
             "llm_usage": None if llm_call is None else serialize_llm_call_record(llm_call),
         },
     )

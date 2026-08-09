@@ -249,7 +249,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertEqual(created_attribute.attribute_type, 'food.likes')
         self.assertEqual(created_attribute.source, 'explicit')
 
-        self.assertEqual(len(llm.invocations), 5)
+        self.assertEqual(len(llm.invocations), 6)
         self.assertIn('Latest User Prompt:', llm.prompts[0] or '')
         self.assertIn('User Profile (JSON):\n\n{}', llm.prompts[0] or '')
         self.assertNotIn('Conversation Context (JSON):', llm.prompts[3] or '')
@@ -362,7 +362,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         )
 
         self.assertEqual(result.answer, ['I used your stored food preferences while looking up a meal idea.'])
-        self.assertEqual(len(llm.invocations), 4)
+        self.assertEqual(len(llm.invocations), 5)
         self.assertIn('User Profile (JSON):\n\n{}', llm.prompts[0] or '')
         self.assertNotIn('pizza', llm.prompts[0] or '')
 
@@ -480,7 +480,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(result.answer, ['The result is 47.0.'])
         self.assertEqual(result.tool_summary.get('used_tools'), ['calculate'])
-        self.assertEqual(len(llm.invocations), 5)
+        self.assertEqual(len(llm.invocations), 6)
 
     def test_world_time_tool_orchestration(self) -> None:
         fake_repo = FakeUserAttributeRepository()
@@ -588,7 +588,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(result.answer, ['The current time in Tokyo is 2026-08-04T21:30:00+09:00.'])
         self.assertEqual(result.tool_summary.get('used_tools'), ['get_world_time'])
-        self.assertEqual(len(llm.invocations), 5)
+        self.assertEqual(len(llm.invocations), 6)
 
     def test_clarifying_question_wins_over_follow_up(self) -> None:
         fake_repo = FakeUserAttributeRepository()

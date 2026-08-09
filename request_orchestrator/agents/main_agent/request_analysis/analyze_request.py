@@ -29,6 +29,12 @@ def analyze_request(agent_state: AgentState) -> AgentState:
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=REQUEST_ANALYSIS_STAGE,
         callsite="request_analysis.analyze_request",
+        input_object={
+            "prompt": prompt_text,
+        },
+        output_object={
+            "raw_content": response.content,
+        },
     )
     raw = response.content.strip()
 

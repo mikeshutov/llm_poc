@@ -9,6 +9,11 @@ from rendering.feedback import clear_feedback_state
 from rendering.replay import clear_replay_state
 
 MODEL_CONFIG_DIALOG_KEY = "conversation_model_config_dialog"
+MODEL_CONFIG_SECTION_TITLES = {
+    "main_agent": "Main Agent",
+    "profile_agent": "Profile Management Agent",
+    "shared": "Shared",
+}
 
 
 def clear_conversation_model_config_dialog() -> None:
@@ -152,10 +157,16 @@ def render_conversation_model_config_dialog(
     else:
         st.caption(f"Configure model overrides for `{title}`. Unset stages fall back to defaults.")
 
+    current_section: str | None = None
     for row in rows:
+        if row["agent"] != current_section:
+            current_section = row["agent"]
+            if rows.index(row) > 0:
+                st.divider()
+            st.subheader(MODEL_CONFIG_SECTION_TITLES.get(current_section, str(current_section)))
+
         select_key = f"conversation_model_config::{conversation_id}::{row['agent']}::{row['stage']}"
         default_option_label = f"Default ({row['effective_model_option']})"
-        model_options = [row["option_to_model"][model_option] for model_option in row["option_to_model"]]
         options = [default_option_label, *row["option_to_model"].keys()]
         selected_value = row["effective_model_option"] if row["override_model"] else default_option_label
         selected_index = options.index(selected_value) if selected_value in options else 0

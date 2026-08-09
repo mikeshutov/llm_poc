@@ -8,6 +8,7 @@ from common.message_constants import CONTENT_KEY, ROLE_DEBUG, ROLE_KEY
 REQUEST_ANALYSIS_KIND = "request_analysis"
 PROFILE_LOAD_KIND = "profile_load"
 PLAN_KIND = "plan"
+EVALUATOR_KIND = "evaluator"
 TOOL_CALL_KIND = "tool_call"
 SYNTHESIS_KIND = "synthesis"
 
@@ -155,6 +156,26 @@ def _render_synthesis_entry(entry: dict) -> list[str]:
     return parts
 
 
+def _render_evaluator_entry(entry: dict) -> list[str]:
+    data = entry.get("data") or {}
+    parts = ["**Evaluation**"]
+    parts.append(f"Satisfied: {bool(data.get('satisfied'))}")
+    relevant_evidence = data.get("relevant_evidence") or []
+    if relevant_evidence:
+        parts.append("Relevant evidence: " + ", ".join(str(item) for item in relevant_evidence))
+    missing_information = data.get("missing_information") or []
+    if missing_information:
+        parts.append("Missing information:\n" + "\n".join(f"- {item}" for item in missing_information))
+    refined_goal = (data.get("refined_goal") or "").strip()
+    if refined_goal:
+        parts.append(f"Refined goal: {refined_goal}")
+    parse_error = data.get("parse_error") or ""
+    if parse_error:
+        parts.append(f"Parse error: {parse_error}")
+    llm_usage = _render_llm_usage_section(entry)
+    if llm_usage:
+        parts.append(llm_usage)
+    return parts
 def _render_tool_call_entry(entry: dict) -> list[str]:
     parts = ["**Tool Call**"]
     data = entry.get("data") or {}
@@ -196,6 +217,8 @@ def _assemble_log_message(entry: dict) -> str:
         parts = _render_profile_load_entry(entry)
     elif kind == PLAN_KIND:
         parts = _render_plan_entry(entry)
+    elif kind == EVALUATOR_KIND:
+        parts = _render_evaluator_entry(entry)
     elif kind == SYNTHESIS_KIND:
         parts = _render_synthesis_entry(entry)
     elif kind == TOOL_CALL_KIND:

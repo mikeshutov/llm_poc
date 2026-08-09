@@ -12,6 +12,13 @@ FEEDBACK_TARGET_KEY = "feedback_target"
 FEEDBACK_DIALOG_INIT_KEY = "feedback_dialog_initialized_for"
 
 
+def _render_footer_text(text: str) -> None:
+    st.markdown(
+        f"<div style='color:#6b7280;font-size:0.875rem;line-height:1.35'>{text}</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def clear_feedback_state() -> None:
     target = st.session_state.pop(FEEDBACK_TARGET_KEY, None)
     st.session_state.pop(FEEDBACK_DIALOG_INIT_KEY, None)
@@ -63,6 +70,7 @@ def render_feedback_controls(
     model: str | None,
     feedback_id: UUID | None = None,
     timestamp: str | None = None,
+    usage_summary: str | None = None,
 ) -> None:
     if roundtrip_id is None:
         return
@@ -70,8 +78,10 @@ def render_feedback_controls(
     rid = str(roundtrip_id)
     col_caption, col_status, col_up, col_down = st.columns([8, 3, 1, 1], vertical_alignment="center")
     with col_caption:
+        if usage_summary:
+            _render_footer_text(usage_summary)
         if timestamp:
-            st.caption(timestamp)
+            _render_footer_text(timestamp)
     with col_status:
         if feedback_id is not None:
             st.caption("Feedback saved")

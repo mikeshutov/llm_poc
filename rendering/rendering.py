@@ -27,6 +27,26 @@ def format_timestamp(ts) -> str | None:
     return None
 
 
+def _format_roundtrip_usage_summary(llm_usage: dict | None) -> str | None:
+    if not isinstance(llm_usage, dict):
+        return None
+    summary = llm_usage.get("summary")
+    if not isinstance(summary, dict):
+        return None
+
+    total_tokens = summary.get("total_tokens")
+    total_cost = summary.get("computed_total_cost")
+    if total_tokens is None and total_cost is None:
+        return None
+
+    parts: list[str] = []
+    if total_tokens is not None:
+        parts.append(f"Total Tokens: {int(total_tokens):,}")
+    if total_cost is not None:
+        parts.append(f"Estimated Cost: ${total_cost}")
+    return " | ".join(parts) if parts else None
+
+
 def _render_roundtrip_llm_usage(llm_usage: dict | None) -> None:
     if not isinstance(llm_usage, dict):
         return
@@ -117,6 +137,7 @@ def render_message(msg: dict) -> None:
                     model=msg.get("model"),
                     feedback_id=msg.get("feedback_id"),
                     timestamp=timestamp,
+                    usage_summary=_format_roundtrip_usage_summary(msg.get("payload", {}).get("llm_usage") if isinstance(msg.get("payload"), dict) else None),
                 )
             else:
                 st.write(content)

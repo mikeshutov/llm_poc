@@ -13,9 +13,10 @@ from request_orchestrator.agents.main_agent.request_analysis.analyze_request imp
 from request_orchestrator.agents.main_agent.router.router import router
 from request_orchestrator.agents.main_agent.validator.validator import validator
 from request_orchestrator.agents.profile_management import run_agent as run_profile_management_agent
-from request_orchestrator.constants import EXECUTE_TOOLS_EDGE, PLAN_EDGE, REQUEST_ANALYSIS_EDGE, SYNTHESIZE_EDGE
+from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, REQUEST_ANALYSIS_EDGE, SYNTHESIZE_EDGE
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.shared.evaluator import evaluator_router, run_evaluator
 from request_orchestrator.shared.executor.executor import run_executor
 from request_orchestrator.shared.planner.planner import run_planner
 from request_orchestrator.shared.profile import load_user_profile
@@ -89,6 +90,7 @@ def run_agent(
     builder.add_node(INITIAL_PLAN_EDGE, _run_planner_update)
     builder.add_node(COLLECT_EDGE, _collect_node)
     builder.add_node(PLAN_EDGE, _run_planner_update)
+    builder.add_node(EVALUATE_EDGE, run_evaluator)
     builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
     builder.add_node(SYNTHESIZE_EDGE, run_synthesis)
     builder.set_entry_point(REQUEST_ANALYSIS_EDGE)
@@ -112,11 +114,21 @@ def run_agent(
     builder.add_edge(PLAN_EDGE, COLLECT_EDGE)
 
     builder.add_conditional_edges(
+        EVALUATE_EDGE,
+        evaluator_router,
+        {
+            PLAN_EDGE: PLAN_EDGE,
+            SYNTHESIZE_EDGE: SYNTHESIZE_EDGE,
+        },
+    )
+
+    builder.add_conditional_edges(
         EXECUTE_TOOLS_EDGE,
         router,
         {
             PLAN_EDGE: PLAN_EDGE,
-            SYNTHESIZE_EDGE: COLLECT_EDGE,
+            EVALUATE_EDGE: EVALUATE_EDGE,
+            SYNTHESIZE_EDGE: SYNTHESIZE_EDGE,
         },
     )
 
