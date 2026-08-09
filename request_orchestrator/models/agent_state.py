@@ -207,6 +207,7 @@ class SubagentState:
     iteration_trace: list[IterationState] = field(default_factory=list)
     agent_log: AgentStateLog = field(default_factory=AgentStateLog)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
+    relevant_evidence_ids: list[str] = field(default_factory=list)
     goal_reached: bool = False
 
     def to_runtime_state(self, parent_state: AgentState) -> AgentState:
@@ -222,6 +223,7 @@ class SubagentState:
             iteration_trace=[iteration.clone() for iteration in self.iteration_trace],
             agent_log=self.agent_log.clone(),
             result=self.result,
+            relevant_evidence_ids=list(self.relevant_evidence_ids),
             goal_reached=self.goal_reached,
             llm=parent_state.llm,
             conversation_model_config=parent_state.conversation_model_config.model_copy(deep=True),
@@ -235,6 +237,7 @@ class SubagentState:
         self.iteration_trace = [iteration.clone() for iteration in runtime_state.iteration_trace]
         self.agent_log = runtime_state.agent_log.clone()
         self.result = runtime_state.result
+        self.relevant_evidence_ids = list(runtime_state.relevant_evidence_ids)
         self.goal_reached = runtime_state.goal_reached
         return self
 
@@ -247,6 +250,7 @@ class SubagentState:
             iteration_trace=[iteration.clone() for iteration in self.iteration_trace],
             agent_log=self.agent_log.clone(),
             result=self.result,
+            relevant_evidence_ids=list(self.relevant_evidence_ids),
             goal_reached=self.goal_reached,
         )
 
@@ -265,6 +269,7 @@ class AgentState:
     subagent_states: dict[str, SubagentState] = field(default_factory=dict)
     agent_log: AgentStateLog = field(default_factory=AgentStateLog)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
+    relevant_evidence_ids: list[str] = field(default_factory=list)
     goal_reached: bool = False
     llm: Any = field(default_factory=lambda: ChatOpenAI(model=ConversationModelConfig.default_main_agent_planner_model()), repr=False)
     conversation_model_config: ConversationModelConfig = field(default_factory=ConversationModelConfig.build_default)
@@ -336,6 +341,7 @@ class AgentState:
             subagent_states={name: subagent_state.clone() for name, subagent_state in self.subagent_states.items()},
             agent_log=self.agent_log.clone(),
             result=self.result,
+            relevant_evidence_ids=list(self.relevant_evidence_ids),
             goal_reached=self.goal_reached,
             llm=self.llm,
             conversation_model_config=self.conversation_model_config.model_copy(deep=True),

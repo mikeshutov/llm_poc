@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from langgraph.graph import END
 
-from request_orchestrator.constants import EXECUTE_TOOLS_EDGE, PLAN_EDGE
+from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE
 from request_orchestrator.models.agent_state import AgentState
 
 
@@ -16,11 +16,14 @@ def router(state: AgentState) -> str:
     if len(state.iteration_trace) >= state.max_turns:
         return END
 
-    if plan is None or plan.final_answer or len(plan.steps) == 0:
+    if plan is None or len(plan.steps) == 0:
         return END
 
     has_pending_steps = any(step.id not in last_iteration.results for step in plan.steps)
     if has_pending_steps:
         return EXECUTE_TOOLS_EDGE
+
+    if last_iteration.results:
+        return EVALUATE_EDGE
 
     return PLAN_EDGE

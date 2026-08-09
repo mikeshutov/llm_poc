@@ -21,6 +21,7 @@ from conversation.models.conversation_model_config import (
     ConversationModelConfigEntry,
     MAIN_AGENT_MODEL_SCOPE,
     ModelPricing,
+    EVALUATOR_STAGE,
     PLANNER_STAGE,
     PROFILE_AGENT_MODEL_SCOPE,
     REQUEST_ANALYSIS_STAGE,
@@ -144,6 +145,12 @@ def test_conversation_model_config_resolves_partial_overrides_with_defaults() ->
             ConversationModelConfigEntry(
                 conversation_id=conversation_id,
                 agent=SHARED_MODEL_SCOPE,
+                stage=EVALUATOR_STAGE,
+                model='gpt-4o-mini',
+            ),
+            ConversationModelConfigEntry(
+                conversation_id=conversation_id,
+                agent=SHARED_MODEL_SCOPE,
                 stage=RERANKER_STAGE,
                 model='gpt-5.4',
             ),
@@ -154,6 +161,7 @@ def test_conversation_model_config_resolves_partial_overrides_with_defaults() ->
     assert config.main_agent.planner == 'gpt-5.4'
     assert config.main_agent.synthesis == 'gpt-5.4'
     assert config.profile_agent.planner == 'gpt-5.4-mini'
+    assert config.shared.evaluator == 'gpt-4o-mini'
     assert config.shared.reranker == 'gpt-5.4'
 
 
@@ -164,6 +172,7 @@ def test_conversation_model_config_build_default_returns_defaults() -> None:
     assert config.main_agent.planner == 'gpt-5.4'
     assert config.main_agent.synthesis == 'gpt-5.4'
     assert config.profile_agent.planner == 'gpt-5.4-mini'
+    assert config.shared.evaluator == 'gpt-5.4-mini'
     assert config.shared.reranker == 'gpt-5.4-mini'
 
 
@@ -179,6 +188,10 @@ def test_conversation_model_config_build_default_resolves_pricing_for_every_stag
         output_price_per_million_tokens=Decimal('15.00'),
     )
     assert config.resolve_pricing(PROFILE_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
+        input_price_per_million_tokens=Decimal('0.75'),
+        output_price_per_million_tokens=Decimal('4.50'),
+    )
+    assert config.resolve_pricing(SHARED_MODEL_SCOPE, EVALUATOR_STAGE) == ModelPricing(
         input_price_per_million_tokens=Decimal('0.75'),
         output_price_per_million_tokens=Decimal('4.50'),
     )
@@ -331,17 +344,28 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
 
 def test_build_model_config_rows_exposes_effective_models_overrides_and_pricing() -> None:
     conversation_id = uuid4()
-    override = ConversationModelConfigEntry(
+    evaluator_override = ConversationModelConfigEntry(
+        conversation_id=conversation_id,
+        agent=SHARED_MODEL_SCOPE,
+        stage=EVALUATOR_STAGE,
+        model='gpt-4o-mini',
+    )
+    reranker_override = ConversationModelConfigEntry(
         conversation_id=conversation_id,
         agent=SHARED_MODEL_SCOPE,
         stage=RERANKER_STAGE,
         model='gpt-5.4',
     )
-    resolved = resolve_conversation_model_config([override])
+    resolved = resolve_conversation_model_config([evaluator_override, reranker_override])
 
-    rows = build_model_config_rows(resolved, [override])
+    rows = build_model_config_rows(resolved, [evaluator_override, reranker_override])
+    evaluator_row = next(row for row in rows if row['agent'] == SHARED_MODEL_SCOPE and row['stage'] == EVALUATOR_STAGE)
     reranker_row = next(row for row in rows if row['agent'] == SHARED_MODEL_SCOPE and row['stage'] == RERANKER_STAGE)
 
+    assert evaluator_row['effective_model'] == 'gpt-4o-mini'
+    assert evaluator_row['override_model'] == 'gpt-4o-mini'
+    assert evaluator_row['input_price'] == '$0.15 per 1M'
+    assert evaluator_row['output_price'] == '$0.6 per 1M'
     assert reranker_row['effective_model'] == 'gpt-5.4'
     assert reranker_row['override_model'] == 'gpt-5.4'
     assert reranker_row['input_price'] == '$2.5 per 1M'

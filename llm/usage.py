@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Any, Iterable
 from uuid import UUID
 
+from common.serialization import sanitize_for_json_storage
 from conversation.models.conversation_model_config import ConversationModelConfig
 from conversation.models.conversation_models import LlmCallRecord, LlmUsage
 from conversation.repository.repo_factory import get_conversation_repo
@@ -47,6 +48,27 @@ def _decimal_to_str(value: Decimal | int | float | str) -> str:
     normalized = decimal_value.normalize()
     rendered = format(normalized, 'f')
     return rendered.rstrip('0').rstrip('.') if '.' in rendered else rendered
+
+
+def _normalize_llm_trace_object(value: Any) -> Any:
+    normalized = sanitize_for_json_storage(value)
+    if isinstance(normalized, str) and len(normalized) > 4000:
+        return normalized[:4000] + "..."
+    return normalized
+
+
+def _build_llm_call_metadata(
+    *,
+    metadata: dict[str, Any] | None,
+    input_object: Any = None,
+    output_object: Any = None,
+) -> dict[str, Any]:
+    payload = {} if metadata is None else dict(metadata)
+    if input_object is not None:
+        payload["input_object"] = _normalize_llm_trace_object(input_object)
+    if output_object is not None:
+        payload["output_object"] = _normalize_llm_trace_object(output_object)
+    return sanitize_for_json_storage(payload)
 
 
 def _usage_from_openai_response(raw_response: Any) -> LlmUsage | None:
@@ -132,6 +154,8 @@ def _resolve_response_model_name(raw_response: Any, fallback_model_name: str | N
 def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[str, Any]:
     if isinstance(record, dict):
         metadata = dict(record.get("metadata") or {})
+        input_object = metadata.pop("input_object", None)
+        output_object = metadata.pop("output_object", None)
         return {
             "agent": record.get("agent"),
             "stage": record.get("stage"),
@@ -146,9 +170,14 @@ def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[st
             "computed_input_cost": str(record.get("computed_input_cost")),
             "computed_output_cost": str(record.get("computed_output_cost")),
             "computed_total_cost": str(record.get("computed_total_cost")),
+            "input_object": input_object,
+            "output_object": output_object,
             "metadata": metadata,
         }
 
+    metadata = dict(record.metadata or {})
+    input_object = metadata.pop("input_object", None)
+    output_object = metadata.pop("output_object", None)
     return {
         "agent": record.agent,
         "stage": record.stage,
@@ -163,7 +192,9 @@ def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[st
         "computed_input_cost": _decimal_to_str(record.computed_input_cost),
         "computed_output_cost": _decimal_to_str(record.computed_output_cost),
         "computed_total_cost": _decimal_to_str(record.computed_total_cost),
-        "metadata": dict(record.metadata or {}),
+        "input_object": input_object,
+        "output_object": output_object,
+        "metadata": metadata,
     }
 
 
@@ -202,6 +233,8 @@ def record_llm_call(
     agent: str | None = None,
     stage: str | None = None,
     metadata: dict[str, Any] | None = None,
+    input_object: Any = None,
+    output_object: Any = None,
 ):
     usage = extract_llm_usage(raw_response)
     if usage is None:
@@ -236,5 +269,5 @@ def record_llm_call(
         computed_input_cost=input_cost,
         computed_output_cost=output_cost,
         computed_total_cost=total_cost,
-        metadata={} if metadata is None else dict(metadata),
+        metadata=_build_llm_call_metadata(metadata=metadata, input_object=input_object, output_object=output_object),
     )

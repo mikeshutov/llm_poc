@@ -12,14 +12,7 @@ from conversation.models.conversation_model_config import PLANNER_STAGE
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.usage import record_llm_call, serialize_llm_call_record
 from tool.repository.plan_repository import PlanRepository
-from tool.tools import tools
 from rendering.debug import PLAN_KIND
-
-tool_list = "\n".join(
-    f'- {tool.name}: {getattr(tool, "description", "")}'.strip()
-    for tool in tools
-)
-
 
 def _serialize_llm_call_for_log(llm_call) -> dict | None:
     if llm_call is None:
@@ -39,6 +32,12 @@ def _invoke_planner(agent_state: AgentState, prompt_text: str) -> tuple[Plan, ob
         agent=agent_scope,
         stage=PLANNER_STAGE,
         callsite="shared_planner.run_planner",
+        input_object={
+            "prompt": prompt_text,
+        },
+        output_object={
+            "raw_content": response.content,
+        },
     )
     raw = strip_code_fences(response.content)
     return Plan.model_validate_json(raw), llm_call
@@ -61,7 +60,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         if (
             agent_state.request_analysis.requires_tools
             and not had_prior_tool_results
-            and (len(plan.steps) == 0 or plan.final_answer)
+            and len(plan.steps) == 0
         ):
             retry_prompt = (
                 f"{prompt_text}\n\n"
@@ -69,7 +68,6 @@ def run_planner(agent_state: AgentState) -> AgentState:
                 "- Request analysis already determined that tool use is required.\n"
                 "- No tool results have been gathered yet.\n"
                 "- Return at least one tool step.\n"
-                "- Set final_answer to null on this pass.\n"
             )
             plan, llm_call = _invoke_planner(agent_state, retry_prompt)
             serialized = _serialize_llm_call_for_log(llm_call)
@@ -88,7 +86,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
     it_state.plan = plan
     agent_state.add_iteration(it_state)
 
-    if len(plan.steps) == 0 or plan.final_answer:
+    if len(plan.steps) == 0:
         agent_state.goal_reached = True
 
     agent_state.log_status(
@@ -96,7 +94,6 @@ def run_planner(agent_state: AgentState) -> AgentState:
         kind=PLAN_KIND,
         data={
             "step_plans": [step.plan for step in plan.steps],
-            "final_answer": plan.final_answer,
             "llm_usage": llm_calls,
         },
     )

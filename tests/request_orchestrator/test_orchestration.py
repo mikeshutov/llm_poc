@@ -163,18 +163,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "source": "explicit"
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         profile_management_completion_response = """
         {
-          "steps": [],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          "steps": []}
         """
 
         main_planner_response = """
@@ -189,10 +183,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "is_active": true
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         synthesis_response = """
@@ -216,8 +207,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 request_analysis=request_analysis_response,
                 profile_planner=[
                     profile_management_planner_response,
-                    profile_management_completion_response,
-                ],
+                    profile_management_completion_response],
                 main_planner=[main_planner_response],
                 synthesis=[synthesis_response],
             ),
@@ -237,8 +227,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 patch(
                     'request_orchestrator.shared.tool_adapter.user_attributes.create_user_attribute.embed_text',
                     return_value=[0.1, 0.2, 0.3],
-                ),
-            ],
+                )],
         )
 
         self.assertEqual(result.answer, ['Stored your food likes as a user attribute.'])
@@ -249,7 +238,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertEqual(created_attribute.attribute_type, 'food.likes')
         self.assertEqual(created_attribute.source, 'explicit')
 
-        self.assertEqual(len(llm.invocations), 5)
+        self.assertEqual(len(llm.invocations), 6)
         self.assertIn('Latest User Prompt:', llm.prompts[0] or '')
         self.assertIn('User Profile (JSON):\n\n{}', llm.prompts[0] or '')
         self.assertNotIn('Conversation Context (JSON):', llm.prompts[3] or '')
@@ -303,10 +292,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         profile_management_planner_response = """
         {
-          "steps": [],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          "steps": []}
         """
 
         main_planner_response = """
@@ -320,10 +306,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "query": "pizza"
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         synthesis_response = """
@@ -357,12 +340,11 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 patch(
                     'request_orchestrator.shared.tool_adapter.food.search_meals._meal_db_client.search',
                     return_value=[{'strMeal': 'Pizza Margherita'}],
-                ),
-            ],
+                )],
         )
 
         self.assertEqual(result.answer, ['I used your stored food preferences while looking up a meal idea.'])
-        self.assertEqual(len(llm.invocations), 4)
+        self.assertEqual(len(llm.invocations), 5)
         self.assertIn('User Profile (JSON):\n\n{}', llm.prompts[0] or '')
         self.assertNotIn('pizza', llm.prompts[0] or '')
 
@@ -379,8 +361,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 {
                     'attribute_type': 'food.likes',
                     'group_key': None,
-                    'value': ['pizza', 'eggs'],
-                }
+                    'value': ['pizza', 'eggs']}
             ],
         )
 
@@ -409,18 +390,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "is_active": true
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         profile_management_completion_response = """
         {
-          "steps": [],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          "steps": []}
         """
 
         main_planner_response = """
@@ -434,10 +409,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "expression": "(15 * 8) / 3 + 7"
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         synthesis_response = """
@@ -461,8 +433,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 request_analysis=request_analysis_response,
                 profile_planner=[
                     profile_management_planner_response,
-                    profile_management_completion_response,
-                ],
+                    profile_management_completion_response],
                 main_planner=[main_planner_response],
                 synthesis=[synthesis_response],
             ),
@@ -480,7 +451,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(result.answer, ['The result is 47.0.'])
         self.assertEqual(result.tool_summary.get('used_tools'), ['calculate'])
-        self.assertEqual(len(llm.invocations), 5)
+        self.assertEqual(len(llm.invocations), 6)
 
     def test_world_time_tool_orchestration(self) -> None:
         fake_repo = FakeUserAttributeRepository()
@@ -507,18 +478,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "is_active": true
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         profile_management_completion_response = """
         {
-          "steps": [],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          "steps": []}
         """
 
         main_planner_response = """
@@ -532,10 +497,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "timezone": "Asia/Tokyo"
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         synthesis_response = """
@@ -559,8 +521,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 request_analysis=request_analysis_response,
                 profile_planner=[
                     profile_management_planner_response,
-                    profile_management_completion_response,
-                ],
+                    profile_management_completion_response],
                 main_planner=[main_planner_response],
                 synthesis=[synthesis_response],
             ),
@@ -588,7 +549,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(result.answer, ['The current time in Tokyo is 2026-08-04T21:30:00+09:00.'])
         self.assertEqual(result.tool_summary.get('used_tools'), ['get_world_time'])
-        self.assertEqual(len(llm.invocations), 5)
+        self.assertEqual(len(llm.invocations), 6)
 
     def test_clarifying_question_wins_over_follow_up(self) -> None:
         fake_repo = FakeUserAttributeRepository()
@@ -605,18 +566,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         profile_management_planner_response = """
         {
-          "steps": [],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          "steps": []}
         """
 
         main_planner_response = """
         {
-          "steps": [],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          "steps": []}
         """
 
         synthesis_response = """
@@ -646,8 +601,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 patch(
                     'personalization.profile.service.get_user_attribute_repo',
                     return_value=fake_repo,
-                ),
-            ],
+                )],
         )
 
         self.assertEqual(result.follow_up, '')

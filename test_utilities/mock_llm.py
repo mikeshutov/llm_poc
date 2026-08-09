@@ -16,6 +16,7 @@ class MockLLMScenario:
     profile_planner: list[str] = field(default_factory=list)
     main_planner: list[str] = field(default_factory=list)
     synthesis: list[str] = field(default_factory=list)
+    evaluator: list[str] = field(default_factory=list)
     fallback: list[str] = field(default_factory=list)
 
 
@@ -45,6 +46,9 @@ class MockLLM:
             or prompt.startswith('Solve the following task or problem.')
         )
 
+    def _is_evaluator_prompt(self, prompt: str) -> bool:
+        return prompt.startswith('You are an evaluator between planning and synthesis.')
+
     def _is_profile_planner_prompt(self, prompt: str) -> bool:
         return (
             'Review this turn for durable user attribute maintenance needs.' in prompt
@@ -67,6 +71,11 @@ class MockLLM:
             if self._scenario.synthesis:
                 return self._scenario.synthesis.pop(0)
             raise AssertionError('MockLLM synthesis response queue is empty.')
+
+        if self._is_evaluator_prompt(prompt):
+            if self._scenario.evaluator:
+                return self._scenario.evaluator.pop(0)
+            return '{"satisfied": true, "missing_information": [], "refined_goal": ""}'
 
         if self._is_profile_planner_prompt(prompt):
             if self._scenario.profile_planner:

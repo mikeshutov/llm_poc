@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from llm.usage import extract_llm_usage, record_llm_call
+from llm.usage import extract_llm_usage, record_llm_call, serialize_llm_call_record
 
 
 class FakeRepo:
@@ -120,3 +120,55 @@ def test_record_llm_call_raises_when_model_has_no_pricing() -> None:
                 stage='request_analysis',
                 callsite='request_analysis.analyze_request',
             )
+
+
+def test_record_llm_call_persists_input_and_output_objects() -> None:
+    fake_repo = FakeRepo()
+
+    with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
+        record_llm_call(
+            raw_response=FakeLangChainResponse(),
+            model_name='gpt-5.4-mini',
+            conversation_id=None,
+            roundtrip_id=None,
+            agent='main_agent',
+            stage='request_analysis',
+            callsite='request_analysis.analyze_request',
+            input_object={'prompt': 'hello', 'items': [1, 2]},
+            output_object={'raw_content': '{}'},
+            metadata={'kind': 'test'},
+        )
+
+    stored = fake_repo.calls[0]
+    assert stored['metadata']['input_object'] == {'prompt': 'hello', 'items': [1, 2]}
+    assert stored['metadata']['output_object'] == {'raw_content': '{}'}
+    assert stored['metadata']['kind'] == 'test'
+
+
+def test_serialize_llm_call_record_promotes_input_and_output_objects() -> None:
+    serialized = serialize_llm_call_record(
+        {
+            'agent': 'main_agent',
+            'stage': 'request_analysis',
+            'callsite': 'request_analysis.analyze_request',
+            'model': 'gpt-5.4-mini',
+            'input_tokens': 120,
+            'output_tokens': 30,
+            'total_tokens': 150,
+            'cached_input_tokens': 0,
+            'input_price_per_million_tokens': '0.75',
+            'output_price_per_million_tokens': '4.50',
+            'computed_input_cost': '0.00009',
+            'computed_output_cost': '0.000135',
+            'computed_total_cost': '0.000225',
+            'metadata': {
+                'input_object': {'prompt': 'hello'},
+                'output_object': {'raw_content': '{}'},
+                'kind': 'test',
+            },
+        }
+    )
+
+    assert serialized['input_object'] == {'prompt': 'hello'}
+    assert serialized['output_object'] == {'raw_content': '{}'}
+    assert serialized['metadata'] == {'kind': 'test'}

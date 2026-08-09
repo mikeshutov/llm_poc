@@ -16,14 +16,17 @@ SHARED_MODEL_SCOPE = "shared"
 REQUEST_ANALYSIS_STAGE = "request_analysis"
 PLANNER_STAGE = "planner"
 SYNTHESIS_STAGE = "synthesis"
+EVALUATOR_STAGE = "evaluator"
 RERANKER_STAGE = "reranker"
 
+DEFAULT_MINI_MODEL = "gpt-5.4-mini"
 DEFAULT_MAIN_AGENT_MODEL = os.getenv("LLM_MODEL", "gpt-5.4")
-DEFAULT_MAIN_AGENT_REQUEST_ANALYSIS_MODEL = os.getenv("MAIN_AGENT_REQUEST_ANALYSIS_MODEL", "gpt-5.4-mini")
+DEFAULT_MAIN_AGENT_REQUEST_ANALYSIS_MODEL = DEFAULT_MINI_MODEL
 DEFAULT_MAIN_AGENT_PLANNER_MODEL = os.getenv("MAIN_AGENT_PLANNER_MODEL", DEFAULT_MAIN_AGENT_MODEL)
 DEFAULT_MAIN_AGENT_SYNTHESIS_MODEL = os.getenv("MAIN_AGENT_SYNTHESIS_MODEL", DEFAULT_MAIN_AGENT_MODEL)
-DEFAULT_PROFILE_AGENT_PLANNER_MODEL = os.getenv("PROFILE_MANAGEMENT_MODEL", "gpt-5.4-mini")
-DEFAULT_SHARED_RERANKER_MODEL = os.getenv("RERANKER_MODEL", "gpt-5.4-mini")
+DEFAULT_PROFILE_AGENT_PLANNER_MODEL = DEFAULT_MINI_MODEL
+DEFAULT_SHARED_EVALUATOR_MODEL = DEFAULT_MINI_MODEL
+DEFAULT_SHARED_RERANKER_MODEL = DEFAULT_MINI_MODEL
 
 
 class ModelPricing(BaseModel):
@@ -70,6 +73,12 @@ CONVERSATION_MODEL_CONFIG_SPECS: tuple[ConversationModelConfigSpec, ...] = (
     ),
     ConversationModelConfigSpec(
         agent=SHARED_MODEL_SCOPE,
+        stage=EVALUATOR_STAGE,
+        label="Shared / evaluator",
+        default_model=DEFAULT_SHARED_EVALUATOR_MODEL,
+    ),
+    ConversationModelConfigSpec(
+        agent=SHARED_MODEL_SCOPE,
         stage=RERANKER_STAGE,
         label="Shared / reranker",
         default_model=DEFAULT_SHARED_RERANKER_MODEL,
@@ -105,12 +114,17 @@ class ProfileAgentConversationModelConfig(BaseModel):
 
 
 class SharedConversationModelConfig(BaseModel):
+    evaluator: str
     reranker: str
 
 
 class ConversationModelConfig(BaseModel):
     SNAPSHOT_MODEL_SUFFIX_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"^(?P<base>.+)-\d{4}-\d{2}-\d{2}$")
     MODEL_PRICING_REGISTRY: ClassVar[dict[str, ModelPricing]] = {
+        "gpt-5.6": ModelPricing(input_price_per_million_tokens=Decimal("5.00"), output_price_per_million_tokens=Decimal("30.00")),
+        "gpt-5.6-sol": ModelPricing(input_price_per_million_tokens=Decimal("5.00"), output_price_per_million_tokens=Decimal("30.00")),
+        "gpt-5.6-terra": ModelPricing(input_price_per_million_tokens=Decimal("2.50"), output_price_per_million_tokens=Decimal("15.00")),
+        "gpt-5.6-luna": ModelPricing(input_price_per_million_tokens=Decimal("1.00"), output_price_per_million_tokens=Decimal("6.00")),
         "gpt-5.4": ModelPricing(input_price_per_million_tokens=Decimal("2.50"), output_price_per_million_tokens=Decimal("15.00")),
         "gpt-5.4-mini": ModelPricing(input_price_per_million_tokens=Decimal("0.75"), output_price_per_million_tokens=Decimal("4.50")),
         "gpt-5.1": ModelPricing(input_price_per_million_tokens=Decimal("1.25"), output_price_per_million_tokens=Decimal("10.00")),
@@ -124,7 +138,11 @@ class ConversationModelConfig(BaseModel):
         "gpt-4o": ModelPricing(input_price_per_million_tokens=Decimal("2.50"), output_price_per_million_tokens=Decimal("10.00")),
         "gpt-4o-mini": ModelPricing(input_price_per_million_tokens=Decimal("0.15"), output_price_per_million_tokens=Decimal("0.60")),
         "o3": ModelPricing(input_price_per_million_tokens=Decimal("2.00"), output_price_per_million_tokens=Decimal("8.00")),
+        "o3-pro": ModelPricing(input_price_per_million_tokens=Decimal("20.00"), output_price_per_million_tokens=Decimal("80.00")),
+        "o3-mini": ModelPricing(input_price_per_million_tokens=Decimal("1.10"), output_price_per_million_tokens=Decimal("4.40")),
         "o4-mini": ModelPricing(input_price_per_million_tokens=Decimal("1.10"), output_price_per_million_tokens=Decimal("4.40")),
+        "o1": ModelPricing(input_price_per_million_tokens=Decimal("15.00"), output_price_per_million_tokens=Decimal("60.00")),
+        "o1-pro": ModelPricing(input_price_per_million_tokens=Decimal("150.00"), output_price_per_million_tokens=Decimal("600.00")),
     }
 
     main_agent: MainAgentConversationModelConfig
@@ -143,6 +161,7 @@ class ConversationModelConfig(BaseModel):
                 planner=DEFAULT_PROFILE_AGENT_PLANNER_MODEL,
             ),
             shared=SharedConversationModelConfig(
+                evaluator=DEFAULT_SHARED_EVALUATOR_MODEL,
                 reranker=DEFAULT_SHARED_RERANKER_MODEL,
             ),
         )

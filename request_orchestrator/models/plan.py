@@ -25,8 +25,6 @@ class PlanStep(BaseModel):
 
 class Plan(BaseModel):
     steps: list[PlanStep]
-    final_answer: str | None = None
-    needs_replan: bool = False
     db_id: Optional[UUID] = None
     current_step_index: int = 0
     status: PlanStatus = PlanStatus.PENDING
