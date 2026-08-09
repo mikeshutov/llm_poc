@@ -23,7 +23,7 @@ def test_validator_routes_empty_plan_to_synthesis() -> None:
     state = AgentState.new(task="Find something", max_turns=5, llm=object())
     state.iteration_trace = [
         IterationState(
-            plan=Plan.model_validate({"steps": [], "final_answer": None, "needs_replan": False}),
+            plan=Plan.model_validate({"steps": []}),
             results={},
         )
     ]
@@ -31,11 +31,11 @@ def test_validator_routes_empty_plan_to_synthesis() -> None:
     assert validator(state) == SYNTHESIZE_EDGE
 
 
-def test_validator_routes_final_answer_plan_to_synthesis() -> None:
+def test_validator_routes_empty_plan_to_synthesis_again() -> None:
     state = AgentState.new(task="Find something", max_turns=5, llm=object())
     state.iteration_trace = [
         IterationState(
-            plan=Plan.model_validate({"steps": [], "final_answer": "done", "needs_replan": False}),
+            plan=Plan.model_validate({"steps": []}),
             results={},
         )
     ]
@@ -53,12 +53,8 @@ def test_validator_routes_action_plan_to_execute() -> None:
                         "id": "E1",
                         "plan": "Look it up",
                         "tool": "generic_web_search",
-                        "args": {"query_text": "okonomiyaki kit"},
-                    }
-                ],
-                "final_answer": None,
-                "needs_replan": False,
-            }),
+                        "args": {"query_text": "okonomiyaki kit"}}
+                ]}),
             results={},
         )
     ]
@@ -76,12 +72,8 @@ def test_router_routes_executed_results_to_evaluator() -> None:
                         "id": "E1",
                         "plan": "Look it up",
                         "tool": "generic_web_search",
-                        "args": {"query_text": "okonomiyaki kit"},
-                    }
-                ],
-                "final_answer": None,
-                "needs_replan": False,
-            }),
+                        "args": {"query_text": "okonomiyaki kit"}}
+                ]}),
             results={"E1": {"items": []}},
         )
     ]
@@ -99,12 +91,8 @@ def test_router_routes_missing_results_back_to_plan() -> None:
                         "id": "E1",
                         "plan": "Look it up",
                         "tool": "generic_web_search",
-                        "args": {"query_text": "okonomiyaki kit"},
-                    }
-                ],
-                "final_answer": None,
-                "needs_replan": False,
-            }),
+                        "args": {"query_text": "okonomiyaki kit"}}
+                ]}),
             results={},
         )
     ]

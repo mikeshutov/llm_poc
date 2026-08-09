@@ -11,6 +11,7 @@ from request_orchestrator.models.agent_prompt import PlanEvidenceStep
 from request_orchestrator.models.evaluation_result import EvaluationResult
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.evaluator.prompts import build_evaluator_prompt
+from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 
 EVALUATOR_KIND = "evaluator"
 
@@ -36,7 +37,8 @@ def _build_plan_with_evidence(state: AgentState) -> list[PlanEvidenceStep]:
 @traceable(name="Evaluator Node")
 def run_evaluator(state: AgentState) -> AgentState:
     plan_with_evidence = _build_plan_with_evidence(state)
-    prompt_text = build_evaluator_prompt(state=state, plan_with_evidence=plan_with_evidence)
+    prompt = build_evaluator_prompt(state=state, plan_with_evidence=plan_with_evidence)
+    prompt_text = render_agent_prompt(prompt)
     llm = state.build_llm_for_stage(agent=SHARED_MODEL_SCOPE, stage=EVALUATOR_STAGE)
     response = llm.invoke(prompt_text)
     llm_call = record_llm_call(

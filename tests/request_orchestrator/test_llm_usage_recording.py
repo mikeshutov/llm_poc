@@ -46,8 +46,7 @@ class FakeLangChainResponse:
         self.usage_metadata = {
             'input_tokens': 100,
             'output_tokens': 20,
-            'total_tokens': 120,
-        }
+            'total_tokens': 120}
         self.response_metadata = {'model_name': model_name}
 
 
@@ -100,7 +99,7 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
         conversation_context=ConversationContext(),
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
-        llm=FakeInvokeLLM('{"steps": [], "final_answer": null, "needs_replan": false}'),
+        llm=FakeInvokeLLM('{"steps": []}'),
     )
     main_state.request_analysis = RequestAnalysis(goal='Find boots', requires_tools=False)
 
@@ -110,7 +109,7 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
         conversation_context=ConversationContext(),
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
-        llm=FakeInvokeLLM('{"steps": [], "final_answer": null, "needs_replan": false}'),
+        llm=FakeInvokeLLM('{"steps": []}'),
         agent_profile=PROFILE_MANAGEMENT_PROFILE,
     )
     profile_state.request_analysis = RequestAnalysis(goal='Update profile', requires_tools=False)
@@ -138,7 +137,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
         conversation_id=str(uuid4()),
         llm=FakeInvokeLLM('{"result": ["done"], "follow_up": "", "clarifying_question": "", "roundtrip_summary": "summary", "tool_summary": {"used_tools": [], "produced": [], "entities": [], "freshness": ""}}', 'gpt-5.4'),
     )
-    state.iteration_trace = [IterationState(plan=Plan.model_validate({'steps': [], 'final_answer': None, 'needs_replan': False}), results={})]
+    state.iteration_trace = [IterationState(plan=Plan.model_validate({'steps': []}), results={})]
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'request_orchestrator.shared.synthesis.synthesis.get_conversation_repo',
@@ -180,8 +179,7 @@ def test_llm_client_records_tool_calling_and_image_caption_usage() -> None:
         SimpleNamespace(
             usage=SimpleNamespace(prompt_tokens=80, completion_tokens=15, total_tokens=95),
             choices=[SimpleNamespace(message=SimpleNamespace(content='caption'))],
-        ),
-    ]
+        )]
 
     llm_client = LlmClient(client=client, default_model='gpt-5.4-mini')
 
@@ -212,11 +210,8 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
                         'id': 'E1',
                         'plan': 'Search for the shortlisted products.',
                         'tool': 'generic_web_search',
-                        'args': {'query_text': 'shortlisted products'},
-                    }
-                ],
-                'final_answer': None,
-                'needs_replan': False,
+                        'args': {'query_text': 'shortlisted products'}}
+                ]
             }),
             results={'E1': {'items': ['result']}},
         )
@@ -237,8 +232,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     assert state.agent_log.entries[-1].data['relevant_evidence'] == ['E1']
     assert state.agent_log.entries[-1].data['missing_information'] == [
         'Need current pricing for the top two products',
-        'Need shipping availability in Canada',
-    ]
+        'Need shipping availability in Canada']
 
 
 def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None:
@@ -264,10 +258,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
             plan=Plan.model_validate({
                 'steps': [
                     {'id': 'E1', 'plan': 'First step', 'tool': 'tool_a', 'args': {}},
-                    {'id': 'E2', 'plan': 'Second step', 'tool': 'tool_b', 'args': {}},
-                ],
-                'final_answer': None,
-                'needs_replan': False,
+                    {'id': 'E2', 'plan': 'Second step', 'tool': 'tool_b', 'args': {}}]
             }),
             results={'E1': {'value': 'a'}, 'E2': {'value': 'b'}},
         )

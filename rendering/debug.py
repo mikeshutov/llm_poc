@@ -122,13 +122,9 @@ def _render_profile_load_entry(entry: dict) -> list[str]:
 def _render_plan_entry(entry: dict) -> list[str]:
     data = entry.get("data") or {}
     step_plans = data.get("step_plans") or []
-    final_answer = data.get("final_answer")
-
     parts = ["**Plan Generated**"]
     if step_plans:
         parts.append("\n".join(f"{index}. {step_plan}" for index, step_plan in enumerate(step_plans, start=1)))
-    elif final_answer:
-        parts.append("Answer directly without tool calls.")
     else:
         parts.append("No steps were generated.")
     llm_usage = _render_llm_usage_section(entry)

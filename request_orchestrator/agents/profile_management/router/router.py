@@ -16,7 +16,7 @@ def router(state: AgentState) -> str:
     if len(state.iteration_trace) >= state.max_turns:
         return END
 
-    if plan is None or plan.final_answer or len(plan.steps) == 0:
+    if plan is None or len(plan.steps) == 0:
         return END
 
     has_pending_steps = any(step.id not in last_iteration.results for step in plan.steps)

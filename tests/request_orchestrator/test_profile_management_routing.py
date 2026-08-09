@@ -30,7 +30,7 @@ def test_profile_router_routes_empty_plan_to_end() -> None:
     state = AgentState.new(task="Remember this", max_turns=5, llm=object())
     state.iteration_trace = [
         IterationState(
-            plan=Plan.model_validate({"steps": [], "final_answer": None, "needs_replan": False}),
+            plan=Plan.model_validate({"steps": []}),
             results={},
         )
     ]
@@ -48,12 +48,8 @@ def test_profile_router_routes_pending_steps_to_execute() -> None:
                         "id": "E1",
                         "plan": "Load current profile state.",
                         "tool": "get_user_attributes",
-                        "args": {"limit": 10, "is_active": True},
-                    }
-                ],
-                "final_answer": None,
-                "needs_replan": False,
-            }),
+                        "args": {"limit": 10, "is_active": True}}
+                ]}),
             results={},
         )
     ]
@@ -71,12 +67,8 @@ def test_profile_router_routes_completed_results_to_evaluator() -> None:
                         "id": "E1",
                         "plan": "Load current profile state.",
                         "tool": "get_user_attributes",
-                        "args": {"limit": 10, "is_active": True},
-                    }
-                ],
-                "final_answer": None,
-                "needs_replan": False,
-            }),
+                        "args": {"limit": 10, "is_active": True}}
+                ]}),
             results={"E1": {"items": []}},
         )
     ]

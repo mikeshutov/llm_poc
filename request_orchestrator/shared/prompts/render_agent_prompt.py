@@ -5,6 +5,7 @@ from typing import Any
 
 from conversation.utils import build_conversation_context_json
 from request_orchestrator.constants import (
+    EVALUATOR_PROMPT_KIND,
     PLANNER_PROMPT_KIND,
     REQUEST_ANALYSIS_PROMPT_KIND,
     SYNTHESIS_PROMPT_KIND,
@@ -158,5 +159,16 @@ def render_agent_prompt(prompt: AgentPrompt) -> str:
                 include_schema_raw=True,
             )
         )
+
+    if prompt.prompt_kind == EVALUATOR_PROMPT_KIND:
+        parts = _build_parts(
+            prompt,
+            include_user_profile=True,
+            include_plan_with_evidence=True,
+            include_latest_user_prompt=True,
+            schema_as_response_label=True,
+        )
+        _append_task(parts, prompt, heading="Goal:")
+        return _join_parts(parts)
 
     raise ValueError(f"Unsupported prompt_kind: {prompt.prompt_kind}")

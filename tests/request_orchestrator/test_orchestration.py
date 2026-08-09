@@ -163,18 +163,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "source": "explicit"
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         profile_management_completion_response = """
         {
-          "steps": [],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          "steps": []}
         """
 
         main_planner_response = """
@@ -189,10 +183,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "is_active": true
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         synthesis_response = """
@@ -216,8 +207,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 request_analysis=request_analysis_response,
                 profile_planner=[
                     profile_management_planner_response,
-                    profile_management_completion_response,
-                ],
+                    profile_management_completion_response],
                 main_planner=[main_planner_response],
                 synthesis=[synthesis_response],
             ),
@@ -237,8 +227,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 patch(
                     'request_orchestrator.shared.tool_adapter.user_attributes.create_user_attribute.embed_text',
                     return_value=[0.1, 0.2, 0.3],
-                ),
-            ],
+                )],
         )
 
         self.assertEqual(result.answer, ['Stored your food likes as a user attribute.'])
@@ -303,10 +292,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         profile_management_planner_response = """
         {
-          "steps": [],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          "steps": []}
         """
 
         main_planner_response = """
@@ -320,10 +306,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "query": "pizza"
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         synthesis_response = """
@@ -357,8 +340,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 patch(
                     'request_orchestrator.shared.tool_adapter.food.search_meals._meal_db_client.search',
                     return_value=[{'strMeal': 'Pizza Margherita'}],
-                ),
-            ],
+                )],
         )
 
         self.assertEqual(result.answer, ['I used your stored food preferences while looking up a meal idea.'])
@@ -379,8 +361,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 {
                     'attribute_type': 'food.likes',
                     'group_key': None,
-                    'value': ['pizza', 'eggs'],
-                }
+                    'value': ['pizza', 'eggs']}
             ],
         )
 
@@ -409,18 +390,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "is_active": true
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         profile_management_completion_response = """
         {
-          "steps": [],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          "steps": []}
         """
 
         main_planner_response = """
@@ -434,10 +409,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "expression": "(15 * 8) / 3 + 7"
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         synthesis_response = """
@@ -461,8 +433,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 request_analysis=request_analysis_response,
                 profile_planner=[
                     profile_management_planner_response,
-                    profile_management_completion_response,
-                ],
+                    profile_management_completion_response],
                 main_planner=[main_planner_response],
                 synthesis=[synthesis_response],
             ),
@@ -507,18 +478,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "is_active": true
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         profile_management_completion_response = """
         {
-          "steps": [],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          "steps": []}
         """
 
         main_planner_response = """
@@ -532,10 +497,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 "timezone": "Asia/Tokyo"
               }
             }
-          ],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          ]}
         """
 
         synthesis_response = """
@@ -559,8 +521,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 request_analysis=request_analysis_response,
                 profile_planner=[
                     profile_management_planner_response,
-                    profile_management_completion_response,
-                ],
+                    profile_management_completion_response],
                 main_planner=[main_planner_response],
                 synthesis=[synthesis_response],
             ),
@@ -605,18 +566,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         profile_management_planner_response = """
         {
-          "steps": [],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          "steps": []}
         """
 
         main_planner_response = """
         {
-          "steps": [],
-          "final_answer": null,
-          "needs_replan": false
-        }
+          "steps": []}
         """
 
         synthesis_response = """
@@ -646,8 +601,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 patch(
                     'personalization.profile.service.get_user_attribute_repo',
                     return_value=fake_repo,
-                ),
-            ],
+                )],
         )
 
         self.assertEqual(result.follow_up, '')
