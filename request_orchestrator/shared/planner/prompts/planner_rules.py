@@ -1,28 +1,43 @@
 from common.parsing import format_prompt_bullet_list
 
 
+BASE_PLANNER_RULES = [
+    "Do not invent tool names. Use tool names exactly as provided.",
+    "Keep each Plan explanation to one sentence.",
+    "Do not repeat tool calls that have already been executed.",
+    "Carry forward prior plans, evidence, and constraints that remain relevant.",
+    "If there is meaningful doubt that prior context or previous tool results are sufficient, plan tool calls to verify or fill the gap.",
+    "When a question depends on the result of another tool try to sequence them when it is obvious from the request and available context.",
+    "If a plan could have multiple independent tool calls including calls to the same tool with different inputs, include them all as separate steps in a single plan rather than one at a time.",
+]
+
+MAIN_AGENT_PLANNER_RULES = [
+    "If final_answer is not null, steps MUST be an empty list.",
+    "If previous iterations have already gathered sufficient data to answer the task, set final_answer and return an empty steps list.",
+    "Evidence references must be defined before use. Do not reference evidence unless you have already produced it earlier in the plan.",
+    "Use recent_roundtrip_tool_summaries as helpful context about prior tool usage, entities, produced fields, and freshness.",
+    "Use recent_roundtrips when the user refers to a recent prior message, wording from earlier in the conversation, or a recent turn summary.",
+    "Use the older string tool_summary only as fallback context when recent_roundtrip_tool_summaries are absent or incomplete.",
+    "Utilize multiple tools when it is appropriate to get full context.",
+]
+
+PROFILE_MANAGEMENT_PLANNER_RULES = [
+    "Prefer the smallest useful set of retrieval and mutation steps needed to maintain the profile.",
+]
+
+
 def build_planner_rules(
     extra_rules: dict[str, list[str]] | None = None,
     *,
     requires_tools: bool = False,
     has_prior_tool_results: bool = False,
+    include_contextual_rules: bool = True,
 ) -> str:
-    rules = [
-        "Do not invent tool names. Use tool names exactly as provided.",
-        "Keep each Plan explanation to one sentence.",
-        "Evidence references must be defined before use. Do not reference evidence unless you have already produced it earlier in the plan.",
-        "If final_answer is not null, steps MUST be an empty list.",
-        "Do not repeat tool calls that have already been executed.",
-        "Carry forward prior plans, evidence, and constraints that remain relevant.",
-        "Use recent_roundtrip_tool_summaries as helpful context about prior tool usage, entities, produced fields, and freshness.",
-        "Use recent_roundtrips when the user refers to a recent prior message, wording from earlier in the conversation, or a recent turn summary.",
-        "Use the older string tool_summary only as fallback context when recent_roundtrip_tool_summaries are absent or incomplete.",
-        "If previous iterations have already gathered sufficient data to answer the task, set final_answer and return an empty steps list.",
-        "If there is meaningful doubt that prior context or previous tool results are sufficient, plan tool calls to verify or fill the gap.",
-        "When a question depends on the result of another tool try to sequence them when it is obvious from the request and available context.",
-        "If a plan could have multiple independent tool calls including calls to the same tool with different inputs, include them all as separate steps in a single plan rather than one at a time.",
-        "Utilize multiple tools when it is appropriate to get full context.",
-    ]
+    rules = list(BASE_PLANNER_RULES)
+    if include_contextual_rules:
+        rules.extend(MAIN_AGENT_PLANNER_RULES)
+    else:
+        rules.extend(PROFILE_MANAGEMENT_PLANNER_RULES)
 
     if requires_tools and not has_prior_tool_results:
         rules.append(

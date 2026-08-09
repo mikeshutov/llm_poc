@@ -7,6 +7,8 @@ from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_US
 from conversation.models.conversation_model_config import ConversationModelConfig
 from llm.clients.tool_response_parser import parse_tool_args
 from llm.models.tool_call import ToolCall, ToolCallResult
+from llm.usage import record_llm_call
+from request_orchestrator.shared.runtime_context import get_current_conversation_id, get_current_roundtrip_id
 
 CAPTION_MAX_TOKENS = 200
 
@@ -34,14 +36,25 @@ class LlmClient:
         model: Optional[str] = None,
         temperature: float | None = None,
     ) -> ToolCallResult:
+        resolved_model = model or self.default_model
         resp = self.client.chat.completions.create(
-            model=model or self.default_model,
+            model=resolved_model,
             messages=[
                 {ROLE_KEY: ROLE_SYSTEM, CONTENT_KEY: system_prompt},
                 *messages,
             ],
             tools=list(tools),
             **({"temperature": temperature} if temperature is not None else {}),
+        )
+        record_llm_call(
+            raw_response=resp,
+            model_name=resolved_model,
+            conversation_id=get_current_conversation_id(),
+            roundtrip_id=get_current_roundtrip_id(),
+            agent="utility",
+            stage="tool_calling",
+            callsite="llm_client.call_with_tools",
+            metadata={"tool_count": len(tools)},
         )
 
         msg = resp.choices[0].message
@@ -87,6 +100,16 @@ class LlmClient:
                 }
             ],
             max_completion_tokens=CAPTION_MAX_TOKENS,
+        )
+        record_llm_call(
+            raw_response=response,
+            model_name=self.default_model,
+            conversation_id=get_current_conversation_id(),
+            roundtrip_id=get_current_roundtrip_id(),
+            agent="utility",
+            stage="image_caption",
+            callsite="llm_client.generate_caption_from_image_file",
+            metadata={"max_completion_tokens": CAPTION_MAX_TOKENS},
         )
 
         return response.choices[0].message.content

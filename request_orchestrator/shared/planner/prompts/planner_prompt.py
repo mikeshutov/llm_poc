@@ -122,6 +122,7 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         context.rules,
         requires_tools=state.request_analysis.requires_tools,
         has_prior_tool_results=has_prior_tool_results,
+        include_contextual_rules=state.agent_profile.name != 'profile_management',
     )
     if state.agent_profile.planner_rules:
         compiled_rules = f"{compiled_rules}\n\nAgent Rules:\n{state.agent_profile.planner_rules}"

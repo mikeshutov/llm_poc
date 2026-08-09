@@ -59,7 +59,6 @@ def render_messages(conversation_repository, conversation_id: str, render_messag
 
 
 
-
 def _update_conversation_summary(conversation_id: str, roundtrip: ConversationRoundtrip) -> None:
     if roundtrip.message_index < 1:
         return
@@ -79,7 +78,7 @@ def append_assistant_response(
 ) -> None:
     conversation_repository = get_conversation_repo()
 
-    payload = {
+    payload = roundtrip.response_payload if isinstance(roundtrip.response_payload, dict) else {
         "response": answer.raw_response,
         "cards": answer.cards,
         "follow_up": answer.follow_up,

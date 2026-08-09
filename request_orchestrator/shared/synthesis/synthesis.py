@@ -5,6 +5,7 @@ from langsmith import traceable
 from common.parsing import strip_code_fences
 from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, SYNTHESIS_STAGE
 from conversation.repository.repo_factory import get_conversation_repo
+from llm.usage import record_llm_call, serialize_llm_call_record
 from request_orchestrator.constants import SYNTHESIS_PROMPT_STEP
 from request_orchestrator.models.agent_prompt import PlanEvidenceStep
 from request_orchestrator.models.agent_result import AgentResult
@@ -12,6 +13,7 @@ from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.synthesized_result import SynthesisResult
 from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_solver_prompt
+from rendering.debug import SYNTHESIS_KIND
 
 
 @traceable(name="Synthesis Node")
@@ -39,11 +41,21 @@ def run_synthesis(state: AgentState) -> AgentState:
 
     prompt = build_solver_prompt(plan_with_evidence=plan_with_evidence, state=state)
     prompt_text = render_agent_prompt(prompt)
-    raw = state.build_llm_for_stage(
+    llm = state.build_llm_for_stage(
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=SYNTHESIS_STAGE,
-    ).invoke(prompt_text).content
-    raw = strip_code_fences(raw)
+    )
+    response = llm.invoke(prompt_text)
+    llm_call = record_llm_call(
+        raw_response=response,
+        model_name=state.resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=SYNTHESIS_STAGE),
+        conversation_id=state.conversation_id,
+        roundtrip_id=state.roundtrip_id,
+        agent=MAIN_AGENT_MODEL_SCOPE,
+        stage=SYNTHESIS_STAGE,
+        callsite="shared_synthesis.run_synthesis",
+    )
+    raw = strip_code_fences(response.content)
 
     try:
         synthesis_result = SynthesisResult.model_validate_json(raw)
@@ -56,6 +68,17 @@ def run_synthesis(state: AgentState) -> AgentState:
 
     had_tool_results = any(bool(iteration.results) for iteration in state.iteration_trace)
     tool_summary = synthesis_result.tool_summary.model_dump() if had_tool_results else {}
+
+    state.log_status(
+        agent_name=state.agent_profile.name,
+        kind=SYNTHESIS_KIND,
+        data={
+            "answer_preview": synthesis_result.result[:3],
+            "follow_up": synthesis_result.follow_up,
+            "clarifying_question": synthesis_result.clarifying_question,
+            "llm_usage": None if llm_call is None else serialize_llm_call_record(llm_call),
+        },
+    )
 
     state.result = AgentResult.from_state(
         state=state,

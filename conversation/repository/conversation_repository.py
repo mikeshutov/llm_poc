@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any, Optional, Sequence
 from uuid import UUID
 
@@ -14,6 +15,7 @@ from conversation.models.conversation_models import (
     Conversation,
     ConversationMemory,
     ConversationRoundtrip,
+    LlmCallRecord,
     ConversationSummary,
     RoundtripFeedback,
     RoundtripMemory,
@@ -162,6 +164,169 @@ class ConversationRepository:
             row = cur.fetchone()
             assert row is not None
             return RoundtripPrompt(**row)
+
+    def create_llm_call(
+        self,
+        *,
+        conversation_id: UUID | None,
+        roundtrip_id: UUID | None,
+        agent: str | None,
+        stage: str | None,
+        callsite: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        total_tokens: int,
+        cached_input_tokens: int,
+        input_price_per_million_tokens: Decimal,
+        output_price_per_million_tokens: Decimal,
+        computed_input_cost: Decimal,
+        computed_output_cost: Decimal,
+        computed_total_cost: Decimal,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> LlmCallRecord:
+        metadata = metadata or {}
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO llm_call (
+                    conversation_id,
+                    roundtrip_id,
+                    agent,
+                    stage,
+                    callsite,
+                    model,
+                    input_tokens,
+                    output_tokens,
+                    total_tokens,
+                    cached_input_tokens,
+                    input_price_per_million_tokens,
+                    output_price_per_million_tokens,
+                    computed_input_cost,
+                    computed_output_cost,
+                    computed_total_cost,
+                    metadata
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING
+                    id,
+                    conversation_id,
+                    roundtrip_id,
+                    agent,
+                    stage,
+                    callsite,
+                    model,
+                    input_tokens,
+                    output_tokens,
+                    total_tokens,
+                    cached_input_tokens,
+                    input_price_per_million_tokens,
+                    output_price_per_million_tokens,
+                    computed_input_cost,
+                    computed_output_cost,
+                    computed_total_cost,
+                    metadata,
+                    created_at,
+                    updated_at
+                """,
+                (
+                    conversation_id,
+                    roundtrip_id,
+                    agent,
+                    stage,
+                    callsite,
+                    model,
+                    input_tokens,
+                    output_tokens,
+                    total_tokens,
+                    cached_input_tokens,
+                    input_price_per_million_tokens,
+                    output_price_per_million_tokens,
+                    computed_input_cost,
+                    computed_output_cost,
+                    computed_total_cost,
+                    Jsonb(metadata),
+                ),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            return LlmCallRecord(
+                id=row['id'],
+                conversation_id=row['conversation_id'],
+                roundtrip_id=row['roundtrip_id'],
+                agent=row['agent'],
+                stage=row['stage'],
+                callsite=row['callsite'],
+                model=row['model'],
+                input_tokens=row['input_tokens'],
+                output_tokens=row['output_tokens'],
+                total_tokens=row['total_tokens'],
+                cached_input_tokens=row.get('cached_input_tokens', 0),
+                input_price_per_million_tokens=row['input_price_per_million_tokens'],
+                output_price_per_million_tokens=row['output_price_per_million_tokens'],
+                computed_input_cost=row['computed_input_cost'],
+                computed_output_cost=row['computed_output_cost'],
+                computed_total_cost=row['computed_total_cost'],
+                metadata=row['metadata'],
+                created_at=str(row['created_at']),
+                updated_at=str(row['updated_at']),
+            )
+
+    def list_llm_calls_for_roundtrip(self, roundtrip_id: UUID) -> list[LlmCallRecord]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    conversation_id,
+                    roundtrip_id,
+                    agent,
+                    stage,
+                    callsite,
+                    model,
+                    input_tokens,
+                    output_tokens,
+                    total_tokens,
+                    cached_input_tokens,
+                    input_price_per_million_tokens,
+                    output_price_per_million_tokens,
+                    computed_input_cost,
+                    computed_output_cost,
+                    computed_total_cost,
+                    metadata,
+                    created_at,
+                    updated_at
+                FROM llm_call
+                WHERE roundtrip_id = %s
+                ORDER BY created_at ASC
+                """,
+                (roundtrip_id,),
+            )
+            rows = cur.fetchall()
+            return [
+                LlmCallRecord(
+                    id=row['id'],
+                    conversation_id=row['conversation_id'],
+                    roundtrip_id=row['roundtrip_id'],
+                    agent=row['agent'],
+                    stage=row['stage'],
+                    callsite=row['callsite'],
+                    model=row['model'],
+                    input_tokens=row['input_tokens'],
+                    output_tokens=row['output_tokens'],
+                    total_tokens=row['total_tokens'],
+                    cached_input_tokens=row.get('cached_input_tokens', 0),
+                    input_price_per_million_tokens=row['input_price_per_million_tokens'],
+                    output_price_per_million_tokens=row['output_price_per_million_tokens'],
+                    computed_input_cost=row['computed_input_cost'],
+                    computed_output_cost=row['computed_output_cost'],
+                    computed_total_cost=row['computed_total_cost'],
+                    metadata=row['metadata'],
+                    created_at=str(row['created_at']),
+                    updated_at=str(row['updated_at']),
+                )
+                for row in rows
+            ]
 
     def get_roundtrip_feedback(self, roundtrip_id: UUID) -> Optional[RoundtripFeedback]:
         with self._conn.cursor(row_factory=dict_row) as cur:

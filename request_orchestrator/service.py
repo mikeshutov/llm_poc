@@ -4,7 +4,9 @@ from uuid import UUID
 from request_orchestrator.agents.main_agent.agent import run_agent
 from request_orchestrator.models.agent_state import GeoMetadata, build_geometadata
 from request_orchestrator.models.agent_result import AgentResult
+from request_orchestrator.shared.runtime_context import bind_runtime_context
 from llm.clients.embeddings import embed_text
+from llm.usage import build_llm_usage_payload
 from tool.summarize_tool_call import summarize_tool_calls
 from conversation.context_builder import build_roundtrip_context
 from personalization.profile.service import build_user_profile
@@ -35,20 +37,29 @@ def run_request_orchestrator_for_query(
     resolved_geometadata = build_geometadata() if geometadata is None else geometadata
     user_profile = build_user_profile(geometadata=resolved_geometadata)
 
-    result = run_agent(
-        conversation_context=conversation_context,
-        user_query=user_query,
+    with bind_runtime_context(
         conversation_id=conversation_id,
-        roundtrip_id=str(roundtrip.id),
-        user_profile=user_profile,
         conversation_model_config=resolved_model_config,
-    )
+        roundtrip_id=str(roundtrip.id),
+    ):
+        result = run_agent(
+            conversation_context=conversation_context,
+            user_query=user_query,
+            conversation_id=conversation_id,
+            roundtrip_id=str(roundtrip.id),
+            user_profile=user_profile,
+            conversation_model_config=resolved_model_config,
+        )
+
+    llm_calls = repo.list_llm_calls_for_roundtrip(roundtrip.id)
+    payload = result.to_payload_for_update_roundtrip()
+    payload["llm_usage"] = build_llm_usage_payload(llm_calls)
 
     roundtrip_summary_embedding = embed_text(result.roundtrip_summary) if result.roundtrip_summary else None
     roundtrip = repo.update_roundtrip(
         roundtrip.id,
         result.raw_response,
-        result.to_payload_for_update_roundtrip(),
+        payload,
         roundtrip_summary=result.roundtrip_summary,
         roundtrip_summary_embedding=roundtrip_summary_embedding,
     )

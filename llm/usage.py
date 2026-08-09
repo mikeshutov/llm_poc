@@ -1,0 +1,240 @@
+from __future__ import annotations
+
+from decimal import Decimal
+from typing import Any, Iterable
+from uuid import UUID
+
+from conversation.models.conversation_model_config import ConversationModelConfig
+from conversation.models.conversation_models import LlmCallRecord, LlmUsage
+from conversation.repository.repo_factory import get_conversation_repo
+
+ONE_MILLION = Decimal("1000000")
+
+
+def _get_value(payload: Any, key: str) -> Any:
+    if payload is None:
+        return None
+    if isinstance(payload, dict):
+        return payload.get(key)
+    return getattr(payload, key, None)
+
+
+def _coerce_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_uuid(value: str | UUID | None) -> UUID | None:
+    if value is None:
+        return None
+    if isinstance(value, UUID):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return UUID(text)
+    except ValueError:
+        return None
+
+
+def _decimal_to_str(value: Decimal | int | float | str) -> str:
+    decimal_value = value if isinstance(value, Decimal) else Decimal(str(value))
+    normalized = decimal_value.normalize()
+    rendered = format(normalized, 'f')
+    return rendered.rstrip('0').rstrip('.') if '.' in rendered else rendered
+
+
+def _usage_from_openai_response(raw_response: Any) -> LlmUsage | None:
+    usage = getattr(raw_response, "usage", None)
+    if usage is None:
+        return None
+
+    prompt_tokens_details = _get_value(usage, "prompt_tokens_details")
+    input_tokens = _coerce_int(_get_value(usage, "prompt_tokens"))
+    output_tokens = _coerce_int(_get_value(usage, "completion_tokens"))
+    total_tokens = _coerce_int(_get_value(usage, "total_tokens"))
+    cached_input_tokens = _coerce_int(_get_value(prompt_tokens_details, "cached_tokens")) or 0
+    if input_tokens is None and output_tokens is None and total_tokens is None:
+        return None
+    if input_tokens is None or output_tokens is None:
+        return None
+    if total_tokens is None:
+        total_tokens = input_tokens + output_tokens
+    return LlmUsage(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=total_tokens,
+        cached_input_tokens=cached_input_tokens,
+    )
+
+
+def _usage_from_langchain_response(raw_response: Any) -> LlmUsage | None:
+    usage_metadata = getattr(raw_response, "usage_metadata", None)
+    if usage_metadata is not None:
+        input_token_details = _get_value(usage_metadata, "input_token_details")
+        input_tokens = _coerce_int(_get_value(usage_metadata, "input_tokens"))
+        output_tokens = _coerce_int(_get_value(usage_metadata, "output_tokens"))
+        total_tokens = _coerce_int(_get_value(usage_metadata, "total_tokens"))
+        cached_input_tokens = _coerce_int(_get_value(input_token_details, "cache_read"))
+        if cached_input_tokens is None:
+            cached_input_tokens = _coerce_int(_get_value(input_token_details, "cached_tokens"))
+        if input_tokens is not None and output_tokens is not None:
+            if total_tokens is None:
+                total_tokens = input_tokens + output_tokens
+            return LlmUsage(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+                cached_input_tokens=cached_input_tokens or 0,
+            )
+
+    response_metadata = getattr(raw_response, "response_metadata", None)
+    token_usage = _get_value(response_metadata, "token_usage")
+    if token_usage is None:
+        token_usage = _get_value(response_metadata, "usage")
+    if token_usage is None:
+        return None
+
+    prompt_tokens_details = _get_value(token_usage, "prompt_tokens_details")
+    input_tokens = _coerce_int(_get_value(token_usage, "prompt_tokens"))
+    output_tokens = _coerce_int(_get_value(token_usage, "completion_tokens"))
+    total_tokens = _coerce_int(_get_value(token_usage, "total_tokens"))
+    cached_input_tokens = _coerce_int(_get_value(prompt_tokens_details, "cached_tokens")) or 0
+    if input_tokens is None or output_tokens is None:
+        return None
+    if total_tokens is None:
+        total_tokens = input_tokens + output_tokens
+    return LlmUsage(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=total_tokens,
+        cached_input_tokens=cached_input_tokens,
+    )
+
+
+def extract_llm_usage(raw_response: Any) -> LlmUsage | None:
+    return _usage_from_openai_response(raw_response) or _usage_from_langchain_response(raw_response)
+
+
+def _resolve_response_model_name(raw_response: Any, fallback_model_name: str | None) -> str | None:
+    response_metadata = getattr(raw_response, "response_metadata", None)
+    model_name = _get_value(response_metadata, "model_name")
+    if model_name:
+        return str(model_name)
+    return fallback_model_name
+
+
+def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(record, dict):
+        metadata = dict(record.get("metadata") or {})
+        return {
+            "agent": record.get("agent"),
+            "stage": record.get("stage"),
+            "callsite": record.get("callsite"),
+            "model": record.get("model"),
+            "input_tokens": record.get("input_tokens", 0),
+            "output_tokens": record.get("output_tokens", 0),
+            "total_tokens": record.get("total_tokens", 0),
+            "cached_input_tokens": record.get("cached_input_tokens", 0),
+            "input_price_per_million_tokens": str(record.get("input_price_per_million_tokens")),
+            "output_price_per_million_tokens": str(record.get("output_price_per_million_tokens")),
+            "computed_input_cost": str(record.get("computed_input_cost")),
+            "computed_output_cost": str(record.get("computed_output_cost")),
+            "computed_total_cost": str(record.get("computed_total_cost")),
+            "metadata": metadata,
+        }
+
+    return {
+        "agent": record.agent,
+        "stage": record.stage,
+        "callsite": record.callsite,
+        "model": record.model,
+        "input_tokens": record.input_tokens,
+        "output_tokens": record.output_tokens,
+        "total_tokens": record.total_tokens,
+        "cached_input_tokens": record.cached_input_tokens,
+        "input_price_per_million_tokens": _decimal_to_str(record.input_price_per_million_tokens),
+        "output_price_per_million_tokens": _decimal_to_str(record.output_price_per_million_tokens),
+        "computed_input_cost": _decimal_to_str(record.computed_input_cost),
+        "computed_output_cost": _decimal_to_str(record.computed_output_cost),
+        "computed_total_cost": _decimal_to_str(record.computed_total_cost),
+        "metadata": dict(record.metadata or {}),
+    }
+
+
+def build_llm_usage_payload(records: Iterable[LlmCallRecord]) -> dict[str, Any]:
+    serialized_calls = [serialize_llm_call_record(record) for record in records]
+    total_input_tokens = sum(int(call.get("input_tokens") or 0) for call in serialized_calls)
+    total_cached_input_tokens = sum(int(call.get("cached_input_tokens") or 0) for call in serialized_calls)
+    total_output_tokens = sum(int(call.get("output_tokens") or 0) for call in serialized_calls)
+    total_tokens = sum(int(call.get("total_tokens") or 0) for call in serialized_calls)
+    total_input_cost = sum(Decimal(str(call.get("computed_input_cost") or "0")) for call in serialized_calls)
+    total_output_cost = sum(Decimal(str(call.get("computed_output_cost") or "0")) for call in serialized_calls)
+    total_cost = total_input_cost + total_output_cost
+
+    return {
+        "retrieved_call_count": len(serialized_calls),
+        "summary": {
+            "input_tokens": total_input_tokens,
+            "cached_input_tokens": total_cached_input_tokens,
+            "output_tokens": total_output_tokens,
+            "total_tokens": total_tokens,
+            "computed_input_cost": _decimal_to_str(total_input_cost),
+            "computed_output_cost": _decimal_to_str(total_output_cost),
+            "computed_total_cost": _decimal_to_str(total_cost),
+        },
+        "calls": serialized_calls,
+    }
+
+
+def record_llm_call(
+    *,
+    raw_response: Any,
+    model_name: str | None,
+    conversation_id: str | UUID | None,
+    roundtrip_id: str | UUID | None,
+    callsite: str,
+    agent: str | None = None,
+    stage: str | None = None,
+    metadata: dict[str, Any] | None = None,
+):
+    usage = extract_llm_usage(raw_response)
+    if usage is None:
+        return None
+
+    resolved_model_name = _resolve_response_model_name(raw_response, model_name)
+    if not resolved_model_name:
+        return None
+
+    pricing = ConversationModelConfig.resolve_model_pricing(resolved_model_name)
+    input_cost = (Decimal(usage.input_tokens) * pricing.input_price_per_million_tokens) / ONE_MILLION
+    output_cost = (Decimal(usage.output_tokens) * pricing.output_price_per_million_tokens) / ONE_MILLION
+    total_cost = input_cost + output_cost
+
+    repo = get_conversation_repo()
+    if not hasattr(repo, "create_llm_call"):
+        return None
+
+    return repo.create_llm_call(
+        conversation_id=_parse_uuid(conversation_id),
+        roundtrip_id=_parse_uuid(roundtrip_id),
+        agent=agent,
+        stage=stage,
+        callsite=callsite,
+        model=resolved_model_name,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        total_tokens=usage.total_tokens,
+        cached_input_tokens=usage.cached_input_tokens,
+        input_price_per_million_tokens=pricing.input_price_per_million_tokens,
+        output_price_per_million_tokens=pricing.output_price_per_million_tokens,
+        computed_input_cost=input_cost,
+        computed_output_cost=output_cost,
+        computed_total_cost=total_cost,
+        metadata={} if metadata is None else dict(metadata),
+    )

@@ -20,6 +20,8 @@ def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
             "Infer the user's goal, decide whether tools are required, and return the relevant category names. "
             "Make the goal self-contained for downstream steps because the full conversation context will not be passed through later. "
             "The goal should capture the actual objective plus any relevant conversation-derived constraints, references, or continuity needed for planning and synthesis. "
+            "Name the concrete topic, subject, entity, or item in the goal instead of using vague placeholders like topic, subject, it, them, or the above. "
+            "For lookup or search requests, explicitly state what should be searched for so downstream steps do not need the original conversation to know the target. "
             "Use recent_roundtrip_tool_summaries as helpful context about prior tool usage, entities, produced fields, and freshness. "
             "Use recent_roundtrips when the user refers to something said in a recent prior message or to a recent turn summary. "
             "Use the older string tool_summary only as fallback context when the structured roundtrip tool summaries are absent or incomplete. "

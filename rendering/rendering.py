@@ -27,10 +27,27 @@ def format_timestamp(ts) -> str | None:
     return None
 
 
+def _render_roundtrip_llm_usage(llm_usage: dict | None) -> None:
+    if not isinstance(llm_usage, dict):
+        return
+    summary = llm_usage.get("summary") if isinstance(llm_usage.get("summary"), dict) else {}
+    calls = llm_usage.get("calls") if isinstance(llm_usage.get("calls"), list) else []
+    if not summary and not calls:
+        return
+
+    title = f"LLM Usage ({llm_usage.get('retrieved_call_count', len(calls))} calls)"
+    with st.expander(title):
+        if summary:
+            st.json(summary)
+        if calls:
+            st.json(calls)
+
+
 def render_assistant_content(content: str, payload: dict | None) -> None:
     cards = None
     next_question = None
     agent_logs = None
+    llm_usage = None
     if isinstance(payload, dict):
         cards = payload.get("cards")
         if cards is None:
@@ -38,6 +55,7 @@ def render_assistant_content(content: str, payload: dict | None) -> None:
         follow_up = payload.get("follow_up")
         clarifying_question = payload.get("clarifying_question")
         agent_logs = payload.get("agent_logs")
+        llm_usage = payload.get("llm_usage")
         if isinstance(clarifying_question, str) and clarifying_question:
             next_question = clarifying_question
         elif isinstance(follow_up, str) and follow_up:
@@ -62,6 +80,7 @@ def render_assistant_content(content: str, payload: dict | None) -> None:
     if has_next_question and has_cards:
         st.markdown(next_question)
 
+    _render_roundtrip_llm_usage(llm_usage)
     render_agent_logs(agent_logs)
 
 
