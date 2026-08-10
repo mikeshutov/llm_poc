@@ -26,6 +26,7 @@ def analyze_request(agent_state: AgentState) -> AgentState:
         model_name=agent_state.resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=REQUEST_ANALYSIS_STAGE),
         conversation_id=agent_state.conversation_id,
         roundtrip_id=agent_state.roundtrip_id,
+        user_id=agent_state.user_profile.user_id,
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=REQUEST_ANALYSIS_STAGE,
         callsite="request_analysis.analyze_request",
@@ -65,3 +66,4 @@ def analyze_request(agent_state: AgentState) -> AgentState:
         )
 
     return agent_state
+

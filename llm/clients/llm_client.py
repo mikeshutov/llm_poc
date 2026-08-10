@@ -8,7 +8,7 @@ from conversation.models.conversation_model_config import ConversationModelConfi
 from llm.clients.tool_response_parser import parse_tool_args
 from llm.models.tool_call import ToolCall, ToolCallResult
 from llm.usage import record_llm_call
-from request_orchestrator.shared.runtime_context import get_current_conversation_id, get_current_roundtrip_id
+from request_orchestrator.shared.runtime_context import get_current_conversation_id, get_current_roundtrip_id, get_current_user_id
 
 CAPTION_MAX_TOKENS = 200
 
@@ -51,6 +51,7 @@ class LlmClient:
             model_name=resolved_model,
             conversation_id=get_current_conversation_id(),
             roundtrip_id=get_current_roundtrip_id(),
+            user_id=get_current_user_id(),
             agent="utility",
             stage="tool_calling",
             callsite="llm_client.call_with_tools",
@@ -117,6 +118,7 @@ class LlmClient:
             model_name=self.default_model,
             conversation_id=get_current_conversation_id(),
             roundtrip_id=get_current_roundtrip_id(),
+            user_id=get_current_user_id(),
             agent="utility",
             stage="image_caption",
             callsite="llm_client.generate_caption_from_image_file",

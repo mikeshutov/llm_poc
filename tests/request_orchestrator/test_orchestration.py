@@ -251,7 +251,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             created_attributes=[
                 UserAttribute(
                     id=uuid4(),
-                    user_id=None,
+                    user_id='user-123',
                     value=['pizza'],
                     attribute_embedding=None,
                     attribute_type='food.likes',
@@ -265,7 +265,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 ),
                 UserAttribute(
                     id=uuid4(),
-                    user_id=None,
+                    user_id='user-123',
                     value=['eggs'],
                     attribute_embedding=None,
                     attribute_type='food.likes',
@@ -611,6 +611,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

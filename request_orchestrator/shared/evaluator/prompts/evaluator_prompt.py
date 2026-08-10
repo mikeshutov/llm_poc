@@ -9,13 +9,13 @@ from request_orchestrator.shared.evaluator.prompts.evaluator_schema_prompt impor
 def _build_instruction(state: AgentState) -> str:
     return (
         "You are an evaluator between planning and synthesis. "
-        "Check whether the current evidence is sufficient to satisfy the goal. "
-        "If the evidence is sufficient, mark satisfied=true. "
-        "If the evidence is not sufficient, identify the missing information and refine the goal for the next planning pass."
+        "Decide whether the current evidence is enough to answer well, whether another meaningful action remains, "
+        "or whether the search should terminate without another planning pass. "
+        "Return SATISFIED, RETRYABLE, or TERMINAL accordingly."
     )
 
 
-def build_evaluator_prompt(*, state: AgentState, plan_with_evidence: list[PlanEvidenceStep]) -> AgentPrompt:
+def build_evaluator_prompt(state: AgentState, plan_with_evidence: list[PlanEvidenceStep]) -> AgentPrompt:
     return AgentPrompt(
         prompt_kind=EVALUATOR_PROMPT_KIND,
         instruction=_build_instruction(state),

@@ -6,6 +6,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from files.repository.file_repository import FileRepository
+from request_orchestrator.shared.runtime_context import get_current_user_id
 
 
 class GetFileByIdArgs(BaseModel):
@@ -31,7 +32,7 @@ def get_file_by_id(file_id: str) -> dict:
         parsed_id = UUID(file_id)
     except ValueError:
         return {"error": f"Invalid file_id '{file_id}'."}
-    row = FileRepository().get_file_by_id(parsed_id)
+    row = FileRepository().get_file_by_id(parsed_id, user_id=get_current_user_id())
     if not row:
         return {"error": f"No file found with id '{file_id}'."}
     return {

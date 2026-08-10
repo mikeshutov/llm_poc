@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from conversation.models.conversation_models import RoundtripMemory
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.clients.embeddings import embed_text
+from request_orchestrator.shared.runtime_context import get_current_user_id
 from request_orchestrator.shared.tool_adapter.memories.constants import DEFAULT_MEMORY_RESULT_LIMIT
 
 
@@ -47,4 +48,5 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
         query_embedding=query_embedding,
         conversation_ids=parsed_ids,
         limit=limit,
+        user_id=get_current_user_id(),
     )

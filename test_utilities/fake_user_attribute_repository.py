@@ -14,6 +14,7 @@ class FakeUserAttributeRepository:
         self,
         *,
         value: list[str],
+        user_id: str | None = None,
         attribute_embedding: list[float] | None,
         attribute_type: str,
         group_key: str | None = None,
@@ -23,7 +24,7 @@ class FakeUserAttributeRepository:
     ) -> UserAttribute:
         attribute = UserAttribute(
             id=uuid4(),
-            user_id=None,
+            user_id=user_id,
             value=value,
             attribute_embedding=attribute_embedding,
             attribute_type=attribute_type,
@@ -54,6 +55,8 @@ class FakeUserAttributeRepository:
 
         if is_active is not None:
             attributes = [attribute for attribute in attributes if attribute.is_active == is_active]
+        if user_id is not None:
+            attributes = [attribute for attribute in attributes if attribute.user_id == user_id]
         if attribute_type is not None:
             attributes = [attribute for attribute in attributes if attribute.attribute_type == attribute_type]
         if group_key is not None:

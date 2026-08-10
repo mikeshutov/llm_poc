@@ -16,6 +16,8 @@ from langgraph.graph import END
 from request_orchestrator.agents.profile_management.router.router import router
 from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE
 from request_orchestrator.models.agent_state import AgentState, IterationState
+from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_SATISFIED
+from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_SATISFIED
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.evaluator import evaluator_router
 
@@ -78,6 +80,6 @@ def test_profile_router_routes_completed_results_to_evaluator() -> None:
 
 def test_profile_evaluator_router_can_end_when_satisfied() -> None:
     state = AgentState.new(task="Remember this", max_turns=5, llm=object())
-    state.goal_reached = True
+    state.evaluation_status = EVALUATION_STATUS_SATISFIED
 
     assert evaluator_router(state) == 'synthesize'

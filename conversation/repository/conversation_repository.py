@@ -38,7 +38,7 @@ class ConversationRepository:
                 VALUES (%s, %s, %s, %s)
                 RETURNING id, user_id, title, created_at, metadata, tone_state, summary
                 """,
-                (user_id, Jsonb(metadata), user_id, Jsonb({})),
+                (user_id, Jsonb(metadata), "Unnamed", Jsonb({})),
             )
             row = cur.fetchone()
             assert row is not None
@@ -173,6 +173,7 @@ class ConversationRepository:
         *,
         conversation_id: UUID | None,
         roundtrip_id: UUID | None,
+        user_id: str | None,
         agent: str | None,
         stage: str | None,
         callsite: str,
@@ -195,6 +196,7 @@ class ConversationRepository:
                 INSERT INTO llm_call (
                     conversation_id,
                     roundtrip_id,
+                    user_id,
                     agent,
                     stage,
                     callsite,
@@ -210,11 +212,12 @@ class ConversationRepository:
                     computed_total_cost,
                     metadata
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING
                     id,
                     conversation_id,
                     roundtrip_id,
+                    user_id,
                     agent,
                     stage,
                     callsite,
@@ -235,6 +238,7 @@ class ConversationRepository:
                 (
                     conversation_id,
                     roundtrip_id,
+                    user_id,
                     agent,
                     stage,
                     callsite,
@@ -257,6 +261,7 @@ class ConversationRepository:
                 id=row['id'],
                 conversation_id=row['conversation_id'],
                 roundtrip_id=row['roundtrip_id'],
+                user_id=row.get('user_id'),
                 agent=row['agent'],
                 stage=row['stage'],
                 callsite=row['callsite'],
@@ -283,6 +288,7 @@ class ConversationRepository:
                     id,
                     conversation_id,
                     roundtrip_id,
+                    user_id,
                     agent,
                     stage,
                     callsite,
@@ -311,6 +317,7 @@ class ConversationRepository:
                     id=row['id'],
                     conversation_id=row['conversation_id'],
                     roundtrip_id=row['roundtrip_id'],
+                    user_id=row.get('user_id'),
                     agent=row['agent'],
                     stage=row['stage'],
                     callsite=row['callsite'],
@@ -697,6 +704,19 @@ class ConversationRepository:
             rows = cur.fetchall()
             return [Conversation(**r) for r in rows]
 
+    def count_conversations(self, user_id: str) -> int:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS conversation_count
+                FROM conversation
+                WHERE user_id = %s
+                """,
+                (user_id,),
+            )
+            row = cur.fetchone()
+            return int(row["conversation_count"]) if row else 0
+
     def copy_roundtrip_to_conversation(
         self,
         conversation_id: UUID,
@@ -745,6 +765,7 @@ class ConversationRepository:
         self,
         query_embedding: Sequence[float],
         limit: int = 5,
+        user_id: str | None = None,
     ) -> list[ConversationMemory]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -757,10 +778,11 @@ class ConversationRepository:
                 FROM conversation
                 WHERE summary_embedding IS NOT NULL
                   AND BTRIM(summary) <> ''
+                  AND (CAST(%s AS text) IS NULL OR user_id = %s)
                 ORDER BY summary_embedding <-> (%s)::vector ASC
                 LIMIT %s
                 """,
-                (list(query_embedding), list(query_embedding), limit),
+                (list(query_embedding), user_id, user_id, list(query_embedding), limit),
             )
             rows = cur.fetchall()
             return [
@@ -778,6 +800,7 @@ class ConversationRepository:
         query_embedding: Sequence[float],
         conversation_ids: Sequence[UUID],
         limit: int = 5,
+        user_id: str | None = None,
     ) -> list[RoundtripMemory]:
         if not conversation_ids:
             return []
@@ -786,22 +809,24 @@ class ConversationRepository:
             cur.execute(
                 """
                 SELECT
-                    conversation_id,
-                    id AS roundtrip_id,
-                    message_index,
-                    user_prompt,
-                    generated_response,
-                    roundtrip_summary,
-                    created_at,
-                    (roundtrip_summary_embedding <-> (%s)::vector) AS relevance_score
-                FROM conversation_roundtrip
-                WHERE conversation_id = ANY(%s)
-                  AND roundtrip_summary_embedding IS NOT NULL
-                  AND BTRIM(COALESCE(roundtrip_summary, '')) <> ''
-                ORDER BY roundtrip_summary_embedding <-> (%s)::vector ASC
+                    rt.conversation_id,
+                    rt.id AS roundtrip_id,
+                    rt.message_index,
+                    rt.user_prompt,
+                    rt.generated_response,
+                    rt.roundtrip_summary,
+                    rt.created_at,
+                    (rt.roundtrip_summary_embedding <-> (%s)::vector) AS relevance_score
+                FROM conversation_roundtrip rt
+                JOIN conversation c ON c.id = rt.conversation_id
+                WHERE rt.conversation_id = ANY(%s)
+                  AND (CAST(%s AS text) IS NULL OR c.user_id = %s)
+                  AND rt.roundtrip_summary_embedding IS NOT NULL
+                  AND BTRIM(COALESCE(rt.roundtrip_summary, '')) <> ''
+                ORDER BY rt.roundtrip_summary_embedding <-> (%s)::vector ASC
                 LIMIT %s
                 """,
-                (list(query_embedding), list(conversation_ids), list(query_embedding), limit),
+                (list(query_embedding), list(conversation_ids), user_id, user_id, list(query_embedding), limit),
             )
             rows = cur.fetchall()
             return [
@@ -867,9 +892,3 @@ class ConversationRepository:
                 (title, conversation_id),
             )
             return cur.rowcount > 0
-
-
-
-
-
-

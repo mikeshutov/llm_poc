@@ -7,6 +7,7 @@ from llm.clients.embeddings import embed_text
 from personalization.user_attributes.models.user_attribute_models import UserAttributeSearchResult
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
+from request_orchestrator.shared.runtime_context import get_current_user_id
 
 
 class SearchUserAttributesArgs(BaseModel):
@@ -41,6 +42,7 @@ def search_user_attributes(
     return get_user_attribute_repo().search_attributes(
         query_embedding=query_embedding,
         limit=limit,
+        user_id=get_current_user_id(),
         is_active=is_active,
         attribute_type=attribute_type,
         group_key=group_key,

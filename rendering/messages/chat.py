@@ -11,7 +11,7 @@ from request_orchestrator.models.agent_result import AgentResult
 from conversation.repository.repo_factory import get_conversation_repo
 from conversation.summary_service import rebuild_conversation_summaries
 from rendering.feedback import render_feedback_controls
-from rendering.rendering import render_assistant_content, format_timestamp
+from rendering.rendering import render_assistant_content, format_timestamp, _format_roundtrip_usage_summary
 from common.message_constants import (
     CONTENT_KEY,
     ROLE_ASSISTANT,
@@ -104,6 +104,7 @@ def append_assistant_response(
             model=roundtrip.model,
             feedback_id=None,
             timestamp=format_timestamp(now),
+            usage_summary=_format_roundtrip_usage_summary(payload.get("llm_usage") if isinstance(payload, dict) else None),
         )
 
     _update_conversation_summary(conversation_id, roundtrip)

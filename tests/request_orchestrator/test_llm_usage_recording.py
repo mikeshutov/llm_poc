@@ -19,6 +19,8 @@ from personalization.profile.models import UserProfile
 from request_orchestrator.agents.main_agent.request_analysis.analyze_request import analyze_request
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from request_orchestrator.models.agent_state import AgentState, IterationState, RequestAnalysis
+from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
+from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.evaluator.evaluator import run_evaluator
 from request_orchestrator.shared.planner.planner import run_planner
@@ -199,7 +201,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
         conversation_context=ConversationContext(),
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
-        llm=FakeInvokeLLM('{"satisfied": false, "relevant_evidence": ["E1"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.4'),
+        llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["E1"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.4'),
     )
     state.request_analysis = RequestAnalysis(goal='Check whether the shortlisted products satisfy the request.', requires_tools=False)
     state.iteration_trace = [
@@ -227,6 +229,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     assert repo.llm_calls[0]['agent'] == 'shared'
     assert repo.llm_calls[0]['stage'] == 'evaluator'
     assert repo.llm_calls[0]['model'] == 'gpt-5.4'
+    assert state.evaluation_status == EVALUATION_STATUS_RETRYABLE
     assert state.request_analysis.goal == 'Find current Canadian pricing and availability for the two shortlisted products.'
     assert state.agent_log.entries[-1].data['llm_usage']['model'] == 'gpt-5.4'
     assert state.agent_log.entries[-1].data['relevant_evidence'] == ['E1']

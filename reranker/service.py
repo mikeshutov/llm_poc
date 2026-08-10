@@ -8,7 +8,7 @@ from common.parsing import strip_code_fences
 from conversation.models.conversation_model_config import ConversationModelConfig, RERANKER_STAGE, SHARED_MODEL_SCOPE
 from llm.usage import record_llm_call
 from personalization.profile.models import UserProfile
-from request_orchestrator.shared.runtime_context import get_current_conversation_model_config, get_current_conversation_id, get_current_roundtrip_id
+from request_orchestrator.shared.runtime_context import get_current_conversation_model_config, get_current_conversation_id, get_current_roundtrip_id, get_current_user_id
 from reranker.constants import DEFAULT_TOP_K
 from reranker.models import Candidate, RerankerPrompt, RerankerResult
 
@@ -51,6 +51,7 @@ class CandidateReranker:
             model_name=self.model_name,
             conversation_id=get_current_conversation_id(),
             roundtrip_id=get_current_roundtrip_id(),
+            user_id=get_current_user_id(),
             agent=SHARED_MODEL_SCOPE,
             stage=RERANKER_STAGE,
             callsite="reranker.candidate_reranker",

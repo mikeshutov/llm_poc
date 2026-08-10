@@ -11,7 +11,7 @@ from request_orchestrator.shared.planner.prompts.planner_schema_prompt import PL
 ATTRIBUTE_TYPE_MINIMAL_DESCRIPTION = 'Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.'
 
 
-def _format_field_line(name: str, field_info, *, required: bool, minimal: bool = False) -> str:
+def _format_field_line(name: str, field_info, required: bool, minimal: bool = False) -> str:
     description = getattr(field_info, 'description', None) or 'No description provided.'
     if minimal and name == 'attribute_type':
         description = ATTRIBUTE_TYPE_MINIMAL_DESCRIPTION

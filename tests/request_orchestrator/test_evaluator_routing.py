@@ -15,6 +15,12 @@ from request_orchestrator.agents.main_agent.router.router import router
 from request_orchestrator.agents.main_agent.validator.validator import validator
 from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
 from request_orchestrator.models.agent_state import AgentState, IterationState
+from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE, EVALUATION_STATUS_SATISFIED, EVALUATION_STATUS_TERMINAL
+from request_orchestrator.models.evaluation_result import (
+    EVALUATION_STATUS_RETRYABLE,
+    EVALUATION_STATUS_SATISFIED,
+    EVALUATION_STATUS_TERMINAL,
+)
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.evaluator import evaluator_router
 
@@ -100,15 +106,23 @@ def test_router_routes_missing_results_back_to_plan() -> None:
     assert router(state) == PLAN_EDGE
 
 
-def test_evaluator_router_returns_synthesis_when_goal_reached() -> None:
+def test_evaluator_router_returns_synthesis_when_status_is_satisfied() -> None:
     state = AgentState.new(task="Find something", max_turns=5, llm=object())
-    state.goal_reached = True
+    state.evaluation_status = EVALUATION_STATUS_SATISFIED
 
     assert evaluator_router(state) == SYNTHESIZE_EDGE
 
 
-def test_evaluator_router_returns_plan_when_more_work_is_needed() -> None:
+def test_evaluator_router_returns_synthesis_when_status_is_terminal() -> None:
     state = AgentState.new(task="Find something", max_turns=5, llm=object())
+    state.evaluation_status = EVALUATION_STATUS_TERMINAL
+
+    assert evaluator_router(state) == SYNTHESIZE_EDGE
+
+
+def test_evaluator_router_returns_plan_when_status_is_retryable() -> None:
+    state = AgentState.new(task="Find something", max_turns=5, llm=object())
+    state.evaluation_status = EVALUATION_STATUS_RETRYABLE
     state.goal_reached = False
 
     assert evaluator_router(state) == PLAN_EDGE

@@ -62,8 +62,11 @@ def test_user_attributes_section_accepts_dataclass_shaped_attributes() -> None:
 
 
 def test_load_user_profile_attributes_condenses_same_type_and_group_key() -> None:
+    captured_user_ids: list[str | None] = []
+
     class FakeRepo:
         def list_attributes(self, *, limit=50, order_by='updated_at', descending=True, user_id=None, is_active=None, attribute_type=None, group_key=None, source=None):
+            captured_user_ids.append(user_id)
             return [
                 UserAttribute(
                     id=uuid4(),
@@ -109,7 +112,7 @@ def test_load_user_profile_attributes_condenses_same_type_and_group_key() -> Non
                 ),
             ]
 
-    profile = UserProfile()
+    profile = UserProfile(user_id='user-123')
 
     import personalization.profile.service as profile_service
     original_repo_getter = profile_service.get_user_attribute_repo
@@ -130,6 +133,7 @@ def test_load_user_profile_attributes_condenses_same_type_and_group_key() -> Non
     assert ungrouped.attribute_type == 'food.likes'
     assert ungrouped.value == ['pizza', 'eggs', 'coffee']
     assert desserts.value == ['cake']
+    assert captured_user_ids == ['user-123']
 
 
 def test_prompt_profile_excludes_management_fields_by_default() -> None:
@@ -192,3 +196,6 @@ def test_prompt_profile_prunes_empty_fields() -> None:
     rendered = profile.to_prompt_dict()
 
     assert rendered == {}
+
+
+

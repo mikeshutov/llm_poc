@@ -58,9 +58,9 @@ def _render_roundtrip_llm_usage(llm_usage: dict | None) -> None:
     title = f"LLM Usage ({llm_usage.get('retrieved_call_count', len(calls))} calls)"
     with st.expander(title):
         if summary:
-            st.json(summary)
+            st.json(summary, expanded=False)
         if calls:
-            st.json(calls)
+            st.json(calls, expanded=False)
 
 
 def render_assistant_content(content: str, payload: dict | None) -> None:

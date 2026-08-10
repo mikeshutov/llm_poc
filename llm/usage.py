@@ -229,6 +229,7 @@ def record_llm_call(
     model_name: str | None,
     conversation_id: str | UUID | None,
     roundtrip_id: str | UUID | None,
+    user_id: str | None,
     callsite: str,
     agent: str | None = None,
     stage: str | None = None,
@@ -256,6 +257,7 @@ def record_llm_call(
     return repo.create_llm_call(
         conversation_id=_parse_uuid(conversation_id),
         roundtrip_id=_parse_uuid(roundtrip_id),
+        user_id=user_id,
         agent=agent,
         stage=stage,
         callsite=callsite,

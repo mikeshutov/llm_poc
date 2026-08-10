@@ -13,6 +13,8 @@ class File:
     file_type: str
     metadata: dict[str, Any]
     uploaded_at: str
+    user_id: str | None = None
+    conversation_id: UUID | None = None
 
 
 @dataclass(frozen=True)

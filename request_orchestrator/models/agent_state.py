@@ -21,6 +21,7 @@ from personalization.profile.models import GeoLocation, GeoMetadata, UserProfile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.models.agent_profile import AgentProfile
 from .agent_result import AgentResult
+from .evaluation_result import EvaluationStatus, EVALUATION_STATUS_RETRYABLE
 from .plan import Plan
 
 
@@ -208,6 +209,7 @@ class SubagentState:
     agent_log: AgentStateLog = field(default_factory=AgentStateLog)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
     relevant_evidence_ids: list[str] = field(default_factory=list)
+    evaluation_status: EvaluationStatus = EVALUATION_STATUS_RETRYABLE
     goal_reached: bool = False
 
     def to_runtime_state(self, parent_state: AgentState) -> AgentState:
@@ -224,6 +226,7 @@ class SubagentState:
             agent_log=self.agent_log.clone(),
             result=self.result,
             relevant_evidence_ids=list(self.relevant_evidence_ids),
+            evaluation_status=self.evaluation_status,
             goal_reached=self.goal_reached,
             llm=parent_state.llm,
             conversation_model_config=parent_state.conversation_model_config.model_copy(deep=True),
@@ -238,6 +241,7 @@ class SubagentState:
         self.agent_log = runtime_state.agent_log.clone()
         self.result = runtime_state.result
         self.relevant_evidence_ids = list(runtime_state.relevant_evidence_ids)
+        self.evaluation_status = runtime_state.evaluation_status
         self.goal_reached = runtime_state.goal_reached
         return self
 
@@ -251,6 +255,7 @@ class SubagentState:
             agent_log=self.agent_log.clone(),
             result=self.result,
             relevant_evidence_ids=list(self.relevant_evidence_ids),
+            evaluation_status=self.evaluation_status,
             goal_reached=self.goal_reached,
         )
 
@@ -270,6 +275,7 @@ class AgentState:
     agent_log: AgentStateLog = field(default_factory=AgentStateLog)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
     relevant_evidence_ids: list[str] = field(default_factory=list)
+    evaluation_status: EvaluationStatus = EVALUATION_STATUS_RETRYABLE
     goal_reached: bool = False
     llm: Any = field(default_factory=lambda: ChatOpenAI(model=ConversationModelConfig.default_main_agent_planner_model()), repr=False)
     conversation_model_config: ConversationModelConfig = field(default_factory=ConversationModelConfig.build_default)
@@ -342,6 +348,7 @@ class AgentState:
             agent_log=self.agent_log.clone(),
             result=self.result,
             relevant_evidence_ids=list(self.relevant_evidence_ids),
+            evaluation_status=self.evaluation_status,
             goal_reached=self.goal_reached,
             llm=self.llm,
             conversation_model_config=self.conversation_model_config.model_copy(deep=True),

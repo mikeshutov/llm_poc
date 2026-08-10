@@ -39,12 +39,13 @@ class FileChunkRepository:
         query_embedding: list[float],
         file_id: UUID | None = None,
         file_type: FileTypeFilter | None = None,
+        user_id: str | None = None,
         limit: int = TOP_K,
     ) -> list[FileChunkResult]:
         distinct = "DISTINCT ON (cf.id)" if not file_id else ""
 
-        conditions = ["cfc.embedding <=> (%s)::vector <= %s"]
-        params: list = [query_embedding, query_embedding, MAX_CHUNK_DISTANCE]
+        conditions = ["cfc.embedding <=> (%s)::vector <= %s", "(CAST(%s AS text) IS NULL OR cf.user_id = %s)"]
+        params: list = [query_embedding, query_embedding, MAX_CHUNK_DISTANCE, user_id, user_id]
         if file_id:
             conditions.append("cfc.file_id = %s")
             params.append(file_id)
@@ -66,5 +67,4 @@ class FileChunkRepository:
         with self._conn.cursor() as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
-            #messyish but we can improve this later
             return [FileChunkResult(**{row_key: row_value for row_key, row_value in row.items() if row_key != "distance"}) for row in rows]

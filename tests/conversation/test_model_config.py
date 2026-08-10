@@ -320,7 +320,7 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
         'request_orchestrator.service.embed_text',
         return_value=[0.1, 0.2, 0.3],
     ):
-        run_request_orchestrator_for_query(str(conversation_id), 'hello world')
+        run_request_orchestrator_for_query(str(conversation_id), 'hello world', user_id='anonymous')
 
     assert fake_repo.pending_calls[0]['model'] == config.main_agent.planner
     assert fake_repo.pending_calls[0]['metadata'] == {
