@@ -27,6 +27,9 @@ from request_orchestrator.shared.tool_adapter.user_attributes.get_user_attribute
 from request_orchestrator.shared.tool_adapter.user_attributes.search_user_attributes import search_user_attributes
 from request_orchestrator.shared.tool_adapter.user_attributes.update_user_attribute import update_user_attribute
 from request_orchestrator.shared.tool_adapter.products.find_products import find_products
+from request_orchestrator.shared.tool_adapter.profile.set_user_display_name import set_user_display_name
+from request_orchestrator.shared.tool_adapter.profile.set_user_first_name import set_user_first_name
+from request_orchestrator.shared.tool_adapter.profile.set_user_last_name import set_user_last_name
 from request_orchestrator.shared.tool_adapter.products.find_products_web import find_products_web
 from request_orchestrator.shared.tool_adapter.products.list_product_categories import list_product_categories
 from request_orchestrator.shared.tool_adapter.search.brave_news_search import news_search
@@ -64,6 +67,7 @@ MATH_TOOLS = [calculate]
 MEMORY_TOOLS = [search_memories, search_roundtrip_memories]
 USER_ATTRIBUTE_TOOLS = [create_user_attribute, update_user_attribute, get_user_attributes, search_user_attributes]
 FILE_TOOLS = [search_files, search_file_for_details, get_file_by_id]
+PROFILE_TOOLS = [set_user_display_name, set_user_first_name, set_user_last_name]
 
 # if this were to grow much larger I would probably create sub categories or a tree structure of tools
 TOOL_CATEGORIES: dict[str, ToolCategory] = {
@@ -171,5 +175,5 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     ),
 }
 
-tools = [*PRODUCT_TOOLS, *PRODUCT_WEB_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *WEB_SEARCH_TOOLS, *KNOWLEDGE_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *FUN_TOOLS, *MATH_TOOLS, *MEMORY_TOOLS, *USER_ATTRIBUTE_TOOLS, *FILE_TOOLS]
+tools = [*PRODUCT_TOOLS, *PRODUCT_WEB_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *WEB_SEARCH_TOOLS, *KNOWLEDGE_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *FUN_TOOLS, *MATH_TOOLS, *MEMORY_TOOLS, *USER_ATTRIBUTE_TOOLS, *FILE_TOOLS, *PROFILE_TOOLS]
 

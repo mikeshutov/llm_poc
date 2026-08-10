@@ -73,6 +73,35 @@ class UserProfileRepository:
             row = cur.fetchone()
             return UserProfile(**self._normalize_row(row)) if row else None
 
+    def update_profile(
+        self,
+        user_id: str,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        display_name: str | None = None,
+        email: str | None = None,
+    ) -> UserProfile | None:
+        resolved_user_id = user_id.strip()
+        if not resolved_user_id:
+            raise ValueError("user_id is required")
+
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                UPDATE user_profile
+                SET first_name = %s,
+                    last_name = %s,
+                    display_name = %s,
+                    email = %s,
+                    updated_at = now()
+                WHERE user_id = %s
+                RETURNING user_id, first_name, last_name, display_name, email, metadata, created_at, updated_at
+                """,
+                (first_name, last_name, display_name, email, resolved_user_id),
+            )
+            row = cur.fetchone()
+            return UserProfile(**self._normalize_row(row)) if row else None
+
     def list_profiles(self, limit: int = 100) -> list[UserProfile]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(

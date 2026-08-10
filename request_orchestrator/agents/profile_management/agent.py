@@ -3,7 +3,7 @@ from __future__ import annotations
 from langgraph.graph import END, StateGraph
 from langsmith import traceable
 
-from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
+from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE, build_profile_management_profile
 from request_orchestrator.agents.profile_management.router import router
 from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
 from request_orchestrator.models.agent_state import AgentState, RequestAnalysis, SubagentState
@@ -21,22 +21,23 @@ def _route_node(state: AgentState) -> AgentState:
 
 def _build_profile_management_task() -> str:
     return (
-        "Review this turn for durable user attribute maintenance needs. "
-        "If attribute work is needed, plan the minimal retrieval and/or update step combination required."
+        "Review this turn for durable user profile field and user attribute maintenance needs. "
+        "If profile work is needed, plan the minimal retrieval and/or update step combination required."
     )
 
 
 def _prepare_subagent_state(parent_state: AgentState) -> SubagentState:
     subagent_task = parent_state.task
     subagent_goal = _build_profile_management_task()
+    profile_management_profile = build_profile_management_profile(parent_state.user_profile)
     subagent_state = parent_state.get_subagent_state(
-        PROFILE_MANAGEMENT_PROFILE,
+        profile_management_profile,
         task=subagent_task,
         max_turns=MAX_PROFILE_MANAGEMENT_TURNS,
     )
     subagent_state.request_analysis = RequestAnalysis(
         goal=subagent_goal,
-        applicable_tool_categories=sorted(PROFILE_MANAGEMENT_PROFILE.allowed_categories),
+        applicable_tool_categories=sorted(profile_management_profile.allowed_categories),
         requires_tools=False,
         context_answer_confidence=0.0,
     )

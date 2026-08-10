@@ -4,7 +4,8 @@ from request_orchestrator.models.evaluation_result import (
     EVALUATION_STATUS_TERMINAL,
 )
 
-EVALUATOR_SCHEMA = f"""{{
+EVALUATOR_SCHEMA = f"""Return a single JSON object with this shape:
+{{
   "status": "{EVALUATION_STATUS_RETRYABLE}",
   "relevant_evidence": ["E1", "E3"],
   "missing_information": [
@@ -14,7 +15,7 @@ EVALUATOR_SCHEMA = f"""{{
   "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."
 }}
 
-Status values:
+Status values for the "status" field:
 - {EVALUATION_STATUS_SATISFIED}
 - {EVALUATION_STATUS_RETRYABLE}
 - {EVALUATION_STATUS_TERMINAL}

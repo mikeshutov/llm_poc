@@ -11,7 +11,7 @@ def _build_instruction(state: AgentState) -> str:
         "You are an evaluator between planning and synthesis. "
         "Decide whether the current evidence is enough to answer well, whether another meaningful action remains, "
         "or whether the search should terminate without another planning pass. "
-        "Return SATISFIED, RETRYABLE, or TERMINAL accordingly."
+        "Return exactly one JSON object matching the provided schema, with the `status` field set to SATISFIED, RETRYABLE, or TERMINAL."
     )
 
 
