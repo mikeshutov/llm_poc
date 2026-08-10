@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from personalization.profile.models import GeoMetadata, UserAttributesSection, UserProfile
+from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
@@ -32,22 +33,40 @@ def _condense_attributes(attributes: list[UserAttribute]) -> list[UserAttribute]
     return list(condensed_by_key.values())
 
 
+def hydrate_user_profile_core(user_profile: UserProfile) -> UserProfile:
+    resolved_user_id = (user_profile.user_id or "").strip()
+    if not resolved_user_id:
+        return user_profile
+
+    persisted_profile = get_user_profile_repo().get_profile(resolved_user_id)
+    if persisted_profile is None:
+        return user_profile
+
+    user_profile.user_id = persisted_profile.user_id
+    user_profile.first_name = persisted_profile.first_name
+    user_profile.last_name = persisted_profile.last_name
+    user_profile.display_name = persisted_profile.display_name
+    user_profile.email = persisted_profile.email
+    user_profile.metadata = dict(persisted_profile.metadata)
+    user_profile.created_at = persisted_profile.created_at
+    user_profile.updated_at = persisted_profile.updated_at
+    return user_profile
+
+
 def build_user_profile(
-    *,
     user_id: str | None = None,
     geometadata: GeoMetadata | None = None,
     attributes: list[UserAttribute] | None = None,
 ) -> UserProfile:
-    return UserProfile(
+    return hydrate_user_profile_core(UserProfile(
         user_id=user_id,
         geometadata=geometadata,
         user_attributes=UserAttributesSection(attributes=[] if attributes is None else attributes),
-    )
+    ))
 
 
 def load_user_profile_attributes(
     user_profile: UserProfile,
-    *,
     requested_attribute_types: list[str],
     attribute_limit: int = 100,
 ) -> UserProfile:

@@ -102,9 +102,14 @@ class UserProfile(BaseModel):
     geometadata: GeoMetadata | None = None
     user_attributes: UserAttributesSection = Field(default_factory=UserAttributesSection)
 
-    def to_prompt_dict(self, *, include_management_fields: bool = False) -> dict[str, Any]:
+    def to_prompt_dict(self, include_management_fields: bool = False) -> dict[str, Any]:
         return prune_empty_prompt_values(
             {
+                "user_id": self.user_id,
+                "first_name": self.first_name,
+                "last_name": self.last_name,
+                "display_name": self.display_name,
+                "email": self.email,
                 "geometadata": None if self.geometadata is None else self.geometadata.model_dump(),
                 "user_attributes": self.user_attributes.to_prompt_dict(
                     include_management_fields=include_management_fields,

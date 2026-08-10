@@ -20,6 +20,7 @@ MODEL_CONFIG_SECTION_TITLES = {
 }
 USER_CREATE_FORM_KEY = "show_create_user_form"
 PROFILE_DETAILS_DIALOG_KEY = "profile_details_dialog"
+PROFILE_EDIT_MODE_KEY = "profile_details_edit_mode"
 
 
 def clear_conversation_model_config_dialog() -> None:
@@ -45,6 +46,7 @@ def get_conversation_model_config_dialog_request() -> dict[str, str] | None:
 
 def clear_profile_details_dialog() -> None:
     st.session_state.pop(PROFILE_DETAILS_DIALOG_KEY, None)
+    st.session_state.pop(PROFILE_EDIT_MODE_KEY, None)
 
 
 def request_profile_details_dialog(user_id: str) -> None:
@@ -302,6 +304,7 @@ def render_profile_details_dialog(conversation_repository, user_id: str) -> None
     conversation_count = conversation_repository.count_conversations(user_id)
     attribute_count = get_user_attribute_repo().count_attributes(user_id=user_id)
     full_name = " ".join(part for part in [selected_profile.first_name, selected_profile.last_name] if part).strip()
+    edit_mode = bool(st.session_state.get(PROFILE_EDIT_MODE_KEY, False))
 
     st.markdown(
         """
@@ -330,9 +333,41 @@ def render_profile_details_dialog(conversation_repository, user_id: str) -> None
         if selected_profile.updated_at:
             st.caption(f"Updated: {selected_profile.updated_at}")
 
-    if st.button("Close", use_container_width=True):
-        clear_profile_details_dialog()
-        st.rerun()
+    if edit_mode:
+        with st.form(f"profile_edit_form::{user_id}"):
+            edited_first_name = st.text_input("First name", value=selected_profile.first_name or "")
+            edited_last_name = st.text_input("Last name", value=selected_profile.last_name or "")
+            edited_display_name = st.text_input("Display name", value=selected_profile.display_name or "")
+            edited_email = st.text_input("Email", value=selected_profile.email or "")
+            save_col, cancel_col = st.columns(2)
+            with save_col:
+                save_profile = st.form_submit_button("Save", type="primary", use_container_width=True)
+            with cancel_col:
+                cancel_edit = st.form_submit_button("Cancel", use_container_width=True)
+
+        if save_profile:
+            user_profile_repository.update_profile(
+                user_id=user_id,
+                first_name=edited_first_name.strip() or None,
+                last_name=edited_last_name.strip() or None,
+                display_name=edited_display_name.strip() or None,
+                email=edited_email.strip() or None,
+            )
+            st.session_state[PROFILE_EDIT_MODE_KEY] = False
+            st.rerun()
+        if cancel_edit:
+            st.session_state[PROFILE_EDIT_MODE_KEY] = False
+            st.rerun()
+    else:
+        edit_col, close_col = st.columns(2)
+        with edit_col:
+            if st.button("Edit profile", use_container_width=True):
+                st.session_state[PROFILE_EDIT_MODE_KEY] = True
+                st.rerun()
+        with close_col:
+            if st.button("Close", use_container_width=True):
+                clear_profile_details_dialog()
+                st.rerun()
 
 
 def render_sidebar(conversation_repository) -> None:
