@@ -10,6 +10,7 @@ from request_orchestrator.service import run_request_orchestrator_for_query
 from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from conversation.repository.repo_factory import get_conversation_repo
 from conversation.replay import populate_replay_conversation, prepare_replay_conversation
+from personalization.profile.repository.repo_factory import get_user_profile_repo
 from rendering.feedback import FEEDBACK_TARGET_KEY, clear_feedback_state, render_feedback_dialog
 from rendering.replay import clear_replay_state, pop_replay_target
 from rendering.file_upload import render_file_upload
@@ -35,34 +36,58 @@ st.markdown(
         overflow: hidden !important;
         text-overflow: ellipsis !important;
     }
-    button[data-testid="stBaseButton-secondary"] > div {
-        justify-content: flex-start !important;
-    }
 </style>""",
     unsafe_allow_html=True,
 )
 
 conversation_repository = get_conversation_repo()
+user_profile_repository = get_user_profile_repo()
 qp = st.query_params
 cid = qp.get("cid")
+uid = qp.get("uid")
 PENDING_REPLAY_KEY = "pending_replay"
 
 
-def setup_conversation(cid):
+def ensure_selected_user_id() -> str:
+    profiles = user_profile_repository.list_profiles(limit=100)
+    if not profiles:
+        user_profile_repository.ensure_profile("anonymous", display_name="Anonymous")
+        profiles = user_profile_repository.list_profiles(limit=100)
+
+    selected_user_id = str(uid).strip() if uid else st.session_state.get("selected_user_id")
+    available_user_ids = {profile.user_id for profile in profiles}
+    if not selected_user_id or selected_user_id not in available_user_ids:
+        selected_user_id = profiles[0].user_id
+
+    st.session_state.selected_user_id = selected_user_id
+    st.query_params["uid"] = selected_user_id
+    return selected_user_id
+
+
+def setup_conversation(cid_value, user_id: str):
     current = st.session_state.get("conversation_id")
-    if cid:
-        if current != cid:
-            clear_feedback_state()
-            clear_replay_state()
-            clear_conversation_model_config_dialog()
-        st.session_state.conversation_id = cid
+    if cid_value:
+        conversation = conversation_repository.get_conversation(UUID(str(cid_value)))
+        if conversation is not None and conversation.user_id == user_id:
+            if current != cid_value:
+                clear_feedback_state()
+                clear_replay_state()
+                clear_conversation_model_config_dialog()
+            st.session_state.conversation_id = str(cid_value)
+            st.query_params["cid"] = str(cid_value)
+            return
+
+    clear_feedback_state()
+    clear_replay_state()
+    clear_conversation_model_config_dialog()
+    latest = conversation_repository.get_latest_conversation(user_id)
+    if latest:
+        st.session_state.conversation_id = str(latest.id)
     else:
-        clear_feedback_state()
-        clear_replay_state()
-        clear_conversation_model_config_dialog()
-        conv = conversation_repository.create_conversation(user_id="anonymous", metadata={"source": "streamlit"})
+        conv = conversation_repository.create_conversation(user_id=user_id, metadata={"source": "streamlit"})
         st.session_state.conversation_id = str(conv.id)
-        st.query_params["cid"] = st.session_state.conversation_id
+    st.query_params["uid"] = user_id
+    st.query_params["cid"] = st.session_state.conversation_id
 
 
 def run_live_turn(user_query: str, attached_file: dict | None = None) -> None:
@@ -88,6 +113,7 @@ def run_live_turn(user_query: str, attached_file: dict | None = None) -> None:
         agent_result, roundtrip = run_request_orchestrator_for_query(
             conversation_id=st.session_state.conversation_id,
             user_query=final_user_query,
+            user_id=st.session_state.get("selected_user_id"),
         )
 
     if st.session_state.messages and st.session_state.messages[-1].get(ROLE_KEY) == ROLE_USER:
@@ -101,11 +127,15 @@ def run_live_turn(user_query: str, attached_file: dict | None = None) -> None:
     )
 
 
-setup_conversation(cid)
+selected_user_id = ensure_selected_user_id()
+setup_conversation(cid, selected_user_id)
 
 replay_target = pop_replay_target()
 if replay_target:
-    replay_context = prepare_replay_conversation(replay_target["roundtrip_id"])
+    replay_context = prepare_replay_conversation(
+        replay_target["roundtrip_id"],
+        user_id=selected_user_id,
+    )
     clear_feedback_state()
     clear_replay_state()
     st.session_state.conversation_id = replay_context["conversation_id"]
@@ -114,6 +144,9 @@ if replay_target:
     st.session_state.messages = []
     st.session_state.debug_turns = []
     replay_conversation = conversation_repository.get_conversation(UUID(replay_context["conversation_id"]))
+    if replay_conversation is not None:
+        st.session_state.selected_user_id = replay_conversation.user_id
+        st.query_params["uid"] = replay_conversation.user_id
     replay_title = (replay_conversation.title or "Replay").strip() if replay_conversation else "Replay"
     request_conversation_model_config_dialog(
         conversation_id=replay_context["conversation_id"],

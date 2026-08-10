@@ -29,6 +29,7 @@ def _invoke_planner(agent_state: AgentState, prompt_text: str) -> tuple[Plan, ob
         model_name=agent_state.resolve_model_for_stage(agent=agent_scope, stage=PLANNER_STAGE),
         conversation_id=agent_state.conversation_id,
         roundtrip_id=agent_state.roundtrip_id,
+        user_id=agent_state.user_profile.user_id,
         agent=agent_scope,
         stage=PLANNER_STAGE,
         callsite="shared_planner.run_planner",
@@ -107,3 +108,4 @@ def run_planner(agent_state: AgentState) -> AgentState:
         )
 
     return agent_state
+

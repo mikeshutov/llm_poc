@@ -63,6 +63,7 @@ def run_synthesis(state: AgentState) -> AgentState:
         model_name=state.resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=SYNTHESIS_STAGE),
         conversation_id=state.conversation_id,
         roundtrip_id=state.roundtrip_id,
+        user_id=state.user_profile.user_id,
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=SYNTHESIS_STAGE,
         callsite="shared_synthesis.run_synthesis",
@@ -118,3 +119,4 @@ def run_synthesis(state: AgentState) -> AgentState:
         )
 
     return state
+

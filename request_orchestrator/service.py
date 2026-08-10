@@ -17,10 +17,25 @@ from conversation.repository.repo_factory import get_conversation_repo
 def run_request_orchestrator_for_query(
     conversation_id: str,
     user_query: str,
+    user_id: str | None = None,
     context_limit: int = 5,
     geometadata: GeoMetadata | None = None,
 ) -> tuple[AgentResult, ConversationRoundtrip]:
     repo = get_conversation_repo()
+    conversation = repo.get_conversation(UUID(conversation_id))
+    if conversation is None:
+        raise ValueError(f"Conversation not found: {conversation_id}")
+
+    resolved_user_id = user_id.strip() if isinstance(user_id, str) else None
+    if not resolved_user_id:
+        raise ValueError("user_id is required")
+
+    conversation_user_id = conversation.user_id.strip() if isinstance(conversation.user_id, str) else conversation.user_id
+    if resolved_user_id != conversation_user_id:
+        raise ValueError(
+            f"Conversation {conversation_id} belongs to user {conversation.user_id}, not {resolved_user_id}"
+        )
+
     resolved_model_config = repo.resolve_conversation_model_config(UUID(conversation_id))
     roundtrip = repo.create_pending_roundtrip(
         UUID(conversation_id),
@@ -35,12 +50,16 @@ def run_request_orchestrator_for_query(
     )
 
     resolved_geometadata = build_geometadata() if geometadata is None else geometadata
-    user_profile = build_user_profile(geometadata=resolved_geometadata)
+    user_profile = build_user_profile(
+        user_id=resolved_user_id,
+        geometadata=resolved_geometadata,
+    )
 
     with bind_runtime_context(
         conversation_id=conversation_id,
         conversation_model_config=resolved_model_config,
         roundtrip_id=str(roundtrip.id),
+        user_id=user_profile.user_id,
     ):
         result = run_agent(
             conversation_context=conversation_context,

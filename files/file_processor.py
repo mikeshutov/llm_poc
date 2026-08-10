@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from uuid import UUID
 
 import io
 
@@ -22,11 +23,13 @@ SUPPORTED_IMAGE_TYPES = ["png", "jpg", "jpeg", "webp"]
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
 
+
 @dataclass
 class UploadedFile:
     name: str
     type: str
     raw_bytes: bytes
+
 
 def _extract_text(file: UploadedFile) -> str:
     if file.name.endswith(".pdf"):
@@ -38,8 +41,12 @@ def _extract_text(file: UploadedFile) -> str:
         return "\n".join(para.text for para in doc.paragraphs)
     return file.raw_bytes.decode("utf-8", errors="replace")
 
+
 def process_uploaded_file(
     file: UploadedFile,
+    *,
+    user_id: str | None = None,
+    conversation_id: str | UUID | None = None,
 ) -> tuple[str, str, list[str]]:
     file_path = os.path.join(FILES_DIR, file.name)
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -57,7 +64,14 @@ def process_uploaded_file(
             chunk_overlap=CHUNK_OVERLAP,
         ).split_text(raw_text)
 
-    saved_file = FileRepository().create_file(file_path, file.name, file.type)
+    parsed_conversation_id = UUID(str(conversation_id)) if conversation_id else None
+    saved_file = FileRepository().create_file(
+        file_path,
+        file.name,
+        file.type,
+        user_id=user_id,
+        conversation_id=parsed_conversation_id,
+    )
     embedded_chunks = [(i, chunk, embed_text(chunk)) for i, chunk in enumerate(chunks)]
     FileChunkRepository().save_chunks(saved_file.id, embedded_chunks)
 

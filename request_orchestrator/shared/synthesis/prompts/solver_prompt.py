@@ -14,7 +14,7 @@ def _build_synthesis_context(state: AgentState) -> ConversationContext:
     )
 
 
-def build_solver_prompt(*, plan_with_evidence: list[PlanEvidenceStep], state: AgentState) -> AgentPrompt:
+def build_solver_prompt(plan_with_evidence: list[PlanEvidenceStep], state: AgentState) -> AgentPrompt:
     return AgentPrompt(
         prompt_kind=SYNTHESIS_PROMPT_KIND,
         instruction=state.agent_profile.synthesis_instruction,

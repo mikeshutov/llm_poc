@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from files.repository.file_chunk_repository import FileChunkRepository
 from llm.clients.embeddings import embed_text
+from request_orchestrator.shared.runtime_context import get_current_user_id
 
 
 class SearchFileForDetailsArgs(BaseModel):
@@ -34,10 +35,11 @@ def search_file_for_details(file_id: str, query: str) -> list[dict]:
         parsed_id = UUID(file_id)
     except ValueError:
         return [{"error": f"Invalid file_id '{file_id}'. Use search_files to obtain a valid file_id first."}]
-    
+
     embedded_query = embed_text(query)
     results = FileChunkRepository().search_file_via_chunks(
         query_embedding=embedded_query,
         file_id=parsed_id,
+        user_id=get_current_user_id(),
     )
     return [{"file_id": str(r.file_id), "file_name": r.file_name, "file_path": r.file_path, "content": r.content} for r in results]

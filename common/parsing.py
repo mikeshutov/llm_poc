@@ -19,7 +19,7 @@ def strip_code_fences(s: str) -> str:
     return s.strip()
 
 
-def normalize_string_list(values: Sequence[object], *, field_name: str = "value") -> list[str]:
+def normalize_string_list(values: Sequence[object], field_name: str = "value") -> list[str]:
     normalized = [str(item).strip() for item in values if str(item).strip()]
     if not normalized:
         raise ValueError(f"{field_name} must contain at least one non-empty string.")

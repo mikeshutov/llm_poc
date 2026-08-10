@@ -7,10 +7,13 @@ from pydantic import BaseModel
 
 from files.repository.file_chunk_repository import FileChunkRepository, FileTypeFilter
 from llm.clients.embeddings import embed_text
+from request_orchestrator.shared.runtime_context import get_current_user_id
+
 
 class SearchFilesArgs(BaseModel):
     query: str
     file_type: Optional[FileTypeFilter] = None
+
 
 @tool(
     "search_files",
@@ -34,5 +37,6 @@ def search_files(query: str, file_type: Optional[FileTypeFilter] = None) -> list
     results = FileChunkRepository().search_file_via_chunks(
         query_embedding=embedded_query,
         file_type=file_type,
+        user_id=get_current_user_id(),
     )
     return [{"file_id": str(r.file_id), "file_name": r.file_name, "file_path": r.file_path, "top_chunk": r.content} for r in results]

@@ -44,6 +44,7 @@ def run_executor(agent_state: AgentState) -> AgentState:
         conversation_id=agent_state.conversation_id,
         conversation_model_config=agent_state.conversation_model_config,
         roundtrip_id=str(agent_state.roundtrip_id) if agent_state.roundtrip_id else None,
+        user_id=agent_state.user_profile.user_id,
     ):
         while (step := _next_step(iteration)) is not None:
             args = _substitute_refs(step.args, iteration.results)

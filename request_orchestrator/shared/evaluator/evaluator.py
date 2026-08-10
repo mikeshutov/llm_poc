@@ -8,12 +8,28 @@ from conversation.repository.repo_factory import get_conversation_repo
 from llm.usage import record_llm_call, serialize_llm_call_record
 from request_orchestrator.constants import EVALUATOR_PROMPT_STEP
 from request_orchestrator.models.agent_prompt import PlanEvidenceStep
-from request_orchestrator.models.evaluation_result import EvaluationResult
 from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.models.evaluation_result import (
+    EVALUATION_STATUS_TERMINAL,
+    EvaluationResult,
+    TERMINAL_EVALUATION_STATUSES,
+)
 from request_orchestrator.shared.evaluator.prompts import build_evaluator_prompt
 from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 
 EVALUATOR_KIND = "evaluator"
+
+
+def _dedupe_string_list(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(normalized)
+    return deduped
 
 
 def _build_plan_with_evidence(state: AgentState) -> list[PlanEvidenceStep]:
@@ -46,6 +62,7 @@ def run_evaluator(state: AgentState) -> AgentState:
         model_name=state.resolve_model_for_stage(agent=SHARED_MODEL_SCOPE, stage=EVALUATOR_STAGE),
         conversation_id=state.conversation_id,
         roundtrip_id=state.roundtrip_id,
+        user_id=state.user_profile.user_id,
         agent=SHARED_MODEL_SCOPE,
         stage=EVALUATOR_STAGE,
         callsite="shared_evaluator.run_evaluator",
@@ -62,13 +79,15 @@ def run_evaluator(state: AgentState) -> AgentState:
     try:
         evaluation = EvaluationResult.model_validate_json(raw)
     except Exception as exc:
+        state.evaluation_status = EVALUATION_STATUS_TERMINAL
         state.goal_reached = True
         state.relevant_evidence_ids = []
         state.log_status(
             agent_name=state.agent_profile.name,
             kind=EVALUATOR_KIND,
+            status=EVALUATION_STATUS_TERMINAL,
             data={
-                "satisfied": True,
+                "status": EVALUATION_STATUS_TERMINAL,
                 "relevant_evidence": [],
                 "missing_information": [],
                 "refined_goal": "",
@@ -78,9 +97,11 @@ def run_evaluator(state: AgentState) -> AgentState:
         )
         return state
 
-    state.relevant_evidence_ids = list(evaluation.relevant_evidence)
+    deduped_relevant_evidence = _dedupe_string_list(evaluation.relevant_evidence)
+    state.relevant_evidence_ids = deduped_relevant_evidence
+    state.evaluation_status = evaluation.status
 
-    if evaluation.satisfied:
+    if evaluation.status in TERMINAL_EVALUATION_STATUSES:
         state.goal_reached = True
     else:
         refined_goal = evaluation.refined_goal.strip()
@@ -91,9 +112,10 @@ def run_evaluator(state: AgentState) -> AgentState:
     state.log_status(
         agent_name=state.agent_profile.name,
         kind=EVALUATOR_KIND,
+        status=evaluation.status,
         data={
-            "satisfied": evaluation.satisfied,
-            "relevant_evidence": evaluation.relevant_evidence,
+            "status": evaluation.status,
+            "relevant_evidence": deduped_relevant_evidence,
             "missing_information": evaluation.missing_information,
             "refined_goal": evaluation.refined_goal,
             "llm_usage": None if llm_call is None else serialize_llm_call_record(llm_call),

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from conversation.models.conversation_models import ConversationMemory
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.clients.embeddings import embed_text
+from request_orchestrator.shared.runtime_context import get_current_user_id
 from request_orchestrator.shared.tool_adapter.memories.constants import DEFAULT_MEMORY_RESULT_LIMIT
 
 
@@ -31,4 +32,5 @@ def search_memories(query: str) -> list[ConversationMemory]:
     return get_conversation_repo().search_conversation_memories(
         query_embedding=query_embedding,
         limit=DEFAULT_MEMORY_RESULT_LIMIT,
+        user_id=get_current_user_id(),
     )

@@ -9,7 +9,7 @@ from conversation.summary_service import rebuild_conversation_summaries
 from tool.repository.tool_call_repository import ToolCallRepository
 
 
-def prepare_replay_conversation(roundtrip_id: str | UUID) -> dict[str, Any]:
+def prepare_replay_conversation(roundtrip_id: str | UUID, user_id: str) -> dict[str, Any]:
     repo = get_conversation_repo()
     parsed_roundtrip_id = UUID(str(roundtrip_id))
     source_roundtrip = repo.get_roundtrip(parsed_roundtrip_id)
@@ -19,6 +19,10 @@ def prepare_replay_conversation(roundtrip_id: str | UUID) -> dict[str, Any]:
     source_conversation = repo.get_conversation(source_roundtrip.conversation_id)
     if source_conversation is None:
         raise ValueError(f"Conversation {source_roundtrip.conversation_id} was not found.")
+    if user_id != source_conversation.user_id:
+        raise ValueError(
+            f"Roundtrip {parsed_roundtrip_id} belongs to user {source_conversation.user_id}, not {user_id}"
+        )
 
     replay_metadata = {
         "source": "replay",
@@ -27,7 +31,7 @@ def prepare_replay_conversation(roundtrip_id: str | UUID) -> dict[str, Any]:
         "source_message_index": source_roundtrip.message_index,
     }
     new_conversation = repo.create_conversation(
-        user_id=source_conversation.user_id,
+        user_id=user_id,
         metadata=replay_metadata,
     )
 

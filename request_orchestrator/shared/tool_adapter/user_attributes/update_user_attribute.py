@@ -10,6 +10,7 @@ from llm.clients.embeddings import embed_text
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
+from request_orchestrator.shared.runtime_context import get_current_user_id
 
 
 class UpdateUserAttributeArgs(BaseModel):
@@ -53,6 +54,7 @@ def update_user_attribute(
     attribute_embedding = embed_text(_value_text(value)) if value else None
     return get_user_attribute_repo().update_attribute(
         attribute_id=parsed_attribute_id,
+        user_id=get_current_user_id(),
         value=value,
         attribute_embedding=attribute_embedding,
         attribute_type=attribute_type,

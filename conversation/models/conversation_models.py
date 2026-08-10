@@ -137,6 +137,7 @@ class LlmCallRecord:
     id: UUID
     conversation_id: Optional[UUID]
     roundtrip_id: Optional[UUID]
+    user_id: Optional[str]
     agent: Optional[str]
     stage: Optional[str]
     callsite: str

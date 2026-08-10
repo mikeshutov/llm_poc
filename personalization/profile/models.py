@@ -91,6 +91,14 @@ class UserAttributesSection(BaseModel):
 
 
 class UserProfile(BaseModel):
+    user_id: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    display_name: str | None = None
+    email: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: str | None = None
+    updated_at: str | None = None
     geometadata: GeoMetadata | None = None
     user_attributes: UserAttributesSection = Field(default_factory=UserAttributesSection)
 

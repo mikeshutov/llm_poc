@@ -11,6 +11,7 @@ from common.parsing import normalize_string_list
 from db.connection import get_connection
 from personalization.user_attributes.models.user_attribute_models import UserAttribute, UserAttributeSearchResult
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
+from personalization.profile.repository.repo_factory import get_user_profile_repo
 
 ATTRIBUTE_ORDER_FIELDS = {
     "created_at": "created_at",
@@ -155,6 +156,7 @@ class UserAttributeRepository:
         self,
         attribute_id: UUID,
         *,
+        user_id: Optional[str] = None,
         value: Optional[Sequence[str]] = None,
         attribute_embedding: Optional[list[float]] = None,
         attribute_type: str,
@@ -180,6 +182,7 @@ class UserAttributeRepository:
                     importance = COALESCE(%s, importance),
                     updated_at = now()
                 WHERE id = %s
+                  AND (CAST(%s AS text) IS NULL OR user_id = %s)
                 RETURNING
                     id,
                     user_id,
@@ -204,12 +207,14 @@ class UserAttributeRepository:
                     confidence,
                     importance,
                     attribute_id,
+                    user_id,
+                    user_id,
                 ),
             )
             row = cur.fetchone()
             return UserAttribute(**self._normalize_attribute_row(row)) if row else None
 
-    def _deactivate_attribute(self, attribute_id: UUID) -> None:
+    def _deactivate_attribute(self, attribute_id: UUID, *, user_id: Optional[str] = None) -> None:
         with self._conn.cursor() as cur:
             cur.execute(
                 """
@@ -217,8 +222,9 @@ class UserAttributeRepository:
                 SET is_active = false,
                     updated_at = now()
                 WHERE id = %s
+                  AND (CAST(%s AS text) IS NULL OR user_id = %s)
                 """,
-                (attribute_id,),
+                (attribute_id, user_id, user_id),
             )
 
     def create_attribute(
@@ -235,6 +241,8 @@ class UserAttributeRepository:
     ) -> UserAttribute:
         self._validate_attribute_type(attribute_type)
         normalized_value = normalize_string_list(value)
+        if user_id is not None and user_id.strip():
+            get_user_profile_repo().ensure_profile(user_id)
         exact_match = self._find_exact_attribute(
             normalized_value,
             user_id=user_id,
@@ -244,6 +252,7 @@ class UserAttributeRepository:
         if exact_match is not None:
             updated_attribute = self._update_attribute_record(
                 exact_match.id,
+                user_id=user_id,
                 value=normalized_value,
                 attribute_embedding=attribute_embedding,
                 attribute_type=attribute_type,
@@ -266,6 +275,7 @@ class UserAttributeRepository:
             if similar_match is not None:
                 updated_attribute = self._update_attribute_record(
                     similar_match.id,
+                    user_id=user_id,
                     value=normalized_value,
                     attribute_embedding=attribute_embedding,
                     attribute_type=attribute_type,
@@ -327,6 +337,7 @@ class UserAttributeRepository:
         self,
         attribute_id: UUID,
         attribute_type: str,
+        user_id: Optional[str] = None,
         value: Optional[Sequence[str]] = None,
         attribute_embedding: Optional[list[float]] = None,
         group_key: Optional[str] = None,
@@ -340,6 +351,7 @@ class UserAttributeRepository:
         if normalized_value is not None:
             exact_match = self._find_exact_attribute(
                 normalized_value,
+                user_id=user_id,
                 attribute_type=attribute_type,
                 group_key=group_key,
                 exclude_attribute_id=attribute_id,
@@ -347,6 +359,7 @@ class UserAttributeRepository:
             if exact_match is not None:
                 updated_attribute = self._update_attribute_record(
                     exact_match.id,
+                    user_id=user_id,
                     value=normalized_value,
                     attribute_embedding=attribute_embedding,
                     attribute_type=attribute_type,
@@ -356,12 +369,13 @@ class UserAttributeRepository:
                     confidence=confidence,
                     importance=importance,
                 )
-                self._deactivate_attribute(attribute_id)
+                self._deactivate_attribute(attribute_id, user_id=user_id)
                 return updated_attribute
 
             if attribute_embedding is not None:
                 similar_match = self._find_similar_attribute(
                     attribute_embedding,
+                    user_id=user_id,
                     attribute_type=attribute_type,
                     group_key=group_key,
                     exclude_attribute_id=attribute_id,
@@ -369,6 +383,7 @@ class UserAttributeRepository:
                 if similar_match is not None:
                     updated_attribute = self._update_attribute_record(
                         similar_match.id,
+                        user_id=user_id,
                         value=normalized_value,
                         attribute_embedding=attribute_embedding,
                         attribute_type=attribute_type,
@@ -378,11 +393,12 @@ class UserAttributeRepository:
                         confidence=confidence,
                         importance=importance,
                     )
-                    self._deactivate_attribute(attribute_id)
+                    self._deactivate_attribute(attribute_id, user_id=user_id)
                     return updated_attribute
 
         return self._update_attribute_record(
             attribute_id,
+            user_id=user_id,
             value=normalized_value,
             attribute_embedding=attribute_embedding,
             attribute_type=attribute_type,
@@ -480,6 +496,43 @@ class UserAttributeRepository:
             rows = cur.fetchall()
             return [UserAttribute(**self._normalize_attribute_row(row)) for row in rows]
 
+    def count_attributes(
+        self,
+        *,
+        user_id: Optional[str] = None,
+        is_active: Optional[bool] = None,
+        attribute_type: Optional[str] = None,
+        group_key: Optional[str] = None,
+        source: Optional[str] = None,
+    ) -> int:
+        self._validate_attribute_type(attribute_type)
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS attribute_count
+                FROM user_attributes
+                WHERE (CAST(%s AS text) IS NULL OR user_id = %s)
+                  AND (CAST(%s AS boolean) IS NULL OR is_active = %s)
+                  AND (CAST(%s AS text) IS NULL OR attribute_type = %s)
+                  AND (CAST(%s AS text) IS NULL OR group_key = %s)
+                  AND (CAST(%s AS text) IS NULL OR source = %s)
+                """,
+                (
+                    user_id,
+                    user_id,
+                    is_active,
+                    is_active,
+                    attribute_type,
+                    attribute_type,
+                    group_key,
+                    group_key,
+                    source,
+                    source,
+                ),
+            )
+            row = cur.fetchone()
+            return int(row["attribute_count"]) if row else 0
+
     def search_attributes(
         self,
         query_embedding: Sequence[float],
@@ -536,3 +589,4 @@ class UserAttributeRepository:
             )
             rows = cur.fetchall()
             return [UserAttributeSearchResult(**self._normalize_attribute_row(row)) for row in rows]
+

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
+from request_orchestrator.shared.runtime_context import get_current_user_id
 
 
 class GetUserAttributesArgs(BaseModel):
@@ -39,6 +40,7 @@ def get_user_attributes(
         limit=limit,
         order_by=order_by,
         descending=descending,
+        user_id=get_current_user_id(),
         is_active=is_active,
         attribute_type=attribute_type,
         group_key=group_key,

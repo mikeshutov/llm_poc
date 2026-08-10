@@ -13,7 +13,7 @@ from request_orchestrator.constants import (
 from request_orchestrator.models.agent_prompt import AgentPrompt
 
 
-def _serialize_json(value: Any, *, default: Any = str) -> str:
+def _serialize_json(value: Any, default: Any = str) -> str:
     return json.dumps(value, indent=2, ensure_ascii=True, default=default)
 
 
@@ -72,7 +72,6 @@ def _join_parts(parts: list[str]) -> str:
 
 def _build_parts(
     prompt: AgentPrompt,
-    *,
     include_user_profile: bool = False,
     include_conversation_context: bool = False,
     conversation_context_heading: str = "Conversation Context (JSON):",

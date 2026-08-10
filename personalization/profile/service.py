@@ -34,10 +34,12 @@ def _condense_attributes(attributes: list[UserAttribute]) -> list[UserAttribute]
 
 def build_user_profile(
     *,
+    user_id: str | None = None,
     geometadata: GeoMetadata | None = None,
     attributes: list[UserAttribute] | None = None,
 ) -> UserProfile:
     return UserProfile(
+        user_id=user_id,
         geometadata=geometadata,
         user_attributes=UserAttributesSection(attributes=[] if attributes is None else attributes),
     )
@@ -67,6 +69,7 @@ def load_user_profile_attributes(
     for attribute_type in normalized_types:
         attributes = repo.list_attributes(
             limit=per_type_limit,
+            user_id=user_profile.user_id,
             is_active=True,
             attribute_type=attribute_type,
         )

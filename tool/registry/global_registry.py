@@ -69,7 +69,7 @@ def register_default_tools() -> None:
     _REGISTERED_DEFAULTS = True
 
 
-def call_tool(name: str, tool_input: Any = None, *, allowed_tool_names: set[str] | None = None) -> Any:
+def call_tool(name: str, tool_input: Any = None, allowed_tool_names: set[str] | None = None) -> Any:
     register_default_tools()
     return GLOBAL_TOOL_REGISTRY.call_tool(name=name, tool_input=tool_input, allowed_tool_names=allowed_tool_names)
 

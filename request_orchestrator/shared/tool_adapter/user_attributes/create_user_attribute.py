@@ -8,6 +8,7 @@ from llm.clients.embeddings import embed_text
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
+from request_orchestrator.shared.runtime_context import get_current_user_id
 
 
 class CreateUserAttributeArgs(BaseModel):
@@ -41,6 +42,7 @@ def create_user_attribute(
 ) -> UserAttribute:
     return get_user_attribute_repo().create_attribute(
         value=value,
+        user_id=get_current_user_id(),
         attribute_embedding=embed_text(_value_text(value)),
         attribute_type=attribute_type,
         group_key=group_key,

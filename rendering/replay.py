@@ -20,7 +20,7 @@ def pop_replay_target() -> dict[str, str] | None:
     return target if isinstance(target, dict) else None
 
 
-def render_replay_control(*, roundtrip_id: UUID | str | None, timestamp: str | None = None) -> None:
+def render_replay_control(roundtrip_id: UUID | str | None, timestamp: str | None = None) -> None:
     if roundtrip_id is None and not timestamp:
         return
 

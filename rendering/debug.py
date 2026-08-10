@@ -3,6 +3,8 @@ import json
 import streamlit as st
 
 from common.message_constants import CONTENT_KEY, ROLE_DEBUG, ROLE_KEY
+from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
+from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 
 
 REQUEST_ANALYSIS_KIND = "request_analysis"
@@ -17,7 +19,7 @@ def debug_render_message(content, content_title: str) -> None:
     with st.chat_message("assistant", avatar=":material/edit:"):
         with st.expander(content_title):
             if isinstance(content, (dict, list)):
-                st.json(content)
+                st.json(content, expanded=False)
             else:
                 st.code(str(content), language="text")
 
@@ -155,7 +157,8 @@ def _render_synthesis_entry(entry: dict) -> list[str]:
 def _render_evaluator_entry(entry: dict) -> list[str]:
     data = entry.get("data") or {}
     parts = ["**Evaluation**"]
-    parts.append(f"Satisfied: {bool(data.get('satisfied'))}")
+    status = data.get("status") or entry.get("status") or EVALUATION_STATUS_RETRYABLE
+    parts.append(f"Status: {status}")
     relevant_evidence = data.get("relevant_evidence") or []
     if relevant_evidence:
         parts.append("Relevant evidence: " + ", ".join(str(item) for item in relevant_evidence))
