@@ -28,9 +28,16 @@ def set_user_first_name(first_name: str) -> dict[str, str | None]:
     if profile is None:
         profile = get_user_profile_repo().ensure_profile(user_id)
 
+    if (profile.first_name or "").strip():
+        raise ValueError("first_name is already set for this user profile and cannot be updated with this tool.")
+
+    resolved_first_name = first_name.strip()
+    if not resolved_first_name:
+        raise ValueError("first_name must not be empty.")
+
     updated_profile = get_user_profile_repo().update_profile(
         user_id=user_id,
-        first_name=first_name.strip(),
+        first_name=resolved_first_name,
         last_name=profile.last_name,
         display_name=profile.display_name,
         email=profile.email,
