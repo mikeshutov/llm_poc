@@ -67,15 +67,15 @@ class MockLLM:
             self._scenario.request_analysis = None
             return response
 
+        if self._is_evaluator_prompt(prompt):
+            if self._scenario.evaluator:
+                return self._scenario.evaluator.pop(0)
+            return '{"status": "SATISFIED", "relevant_evidence": [], "missing_information": [], "refined_goal": ""}'
+
         if self._is_synthesis_prompt(prompt):
             if self._scenario.synthesis:
                 return self._scenario.synthesis.pop(0)
             raise AssertionError('MockLLM synthesis response queue is empty.')
-
-        if self._is_evaluator_prompt(prompt):
-            if self._scenario.evaluator:
-                return self._scenario.evaluator.pop(0)
-            return '{"satisfied": true, "missing_information": [], "refined_goal": ""}'
 
         if self._is_profile_planner_prompt(prompt):
             if self._scenario.profile_planner:

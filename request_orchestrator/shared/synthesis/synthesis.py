@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from time import perf_counter
+
 from langsmith import traceable
 
 from common.parsing import strip_code_fences
@@ -57,7 +59,9 @@ def run_synthesis(state: AgentState) -> AgentState:
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=SYNTHESIS_STAGE,
     )
+    started_at = perf_counter()
     response = llm.invoke(prompt_text)
+    latency_ms = int((perf_counter() - started_at) * 1000)
     llm_call = record_llm_call(
         raw_response=response,
         model_name=state.resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=SYNTHESIS_STAGE),
@@ -67,6 +71,7 @@ def run_synthesis(state: AgentState) -> AgentState:
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=SYNTHESIS_STAGE,
         callsite="shared_synthesis.run_synthesis",
+        latency_ms=latency_ms,
         input_object={
             "prompt": prompt_text,
         },

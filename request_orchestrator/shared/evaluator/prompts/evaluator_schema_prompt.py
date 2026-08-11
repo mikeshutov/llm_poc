@@ -25,4 +25,5 @@ Rules:
 - {EVALUATION_STATUS_SATISFIED}: evidence is enough to answer well. Leave "missing_information" and "refined_goal" empty.
 - {EVALUATION_STATUS_RETRYABLE}: evidence is not enough and there is still a meaningful next action. List the missing pieces and provide a refined_goal the planner can act on next.
 - {EVALUATION_STATUS_TERMINAL}: no materially different useful action remains, or the evidence is enough to conclude the search failed or no match was found. Keep "refined_goal" empty. Use "missing_information" only if it helps explain the limitation or failure.
+- When referring to an entity in refined_goal include its ID.
 """

@@ -40,7 +40,6 @@ class GeoLocation(BaseModel):
 
 class GeoMetadata(BaseModel):
     current_datetime: str
-    current_date: str
     current_weekday: str
     timezone: str
     location: GeoLocation | None = None

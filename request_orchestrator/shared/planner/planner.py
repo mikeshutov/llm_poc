@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from time import perf_counter
+
 from langsmith import traceable
 
 from request_orchestrator.models.agent_state import AgentState, IterationState
-from request_orchestrator.models import AgentResult, Plan
+from request_orchestrator.models import AgentResult, Plan, PlanningResult
 from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from request_orchestrator.constants import PLANNER_PROMPT_STEP
@@ -14,15 +16,20 @@ from llm.usage import record_llm_call, serialize_llm_call_record
 from tool.repository.plan_repository import PlanRepository
 from rendering.debug import PLAN_KIND
 
+REQUIRED_CAPABILITY_UNAVAILABLE_REASON = "required capability unavailable."
+
+
 def _serialize_llm_call_for_log(llm_call) -> dict | None:
     if llm_call is None:
         return None
     return serialize_llm_call_record(llm_call)
 
 
-def _invoke_planner(agent_state: AgentState, prompt_text: str) -> tuple[Plan, object | None]:
+def _invoke_planner(agent_state: AgentState, prompt_text: str) -> tuple[PlanningResult, object | None]:
     llm = agent_state.build_llm_for_stage(stage=PLANNER_STAGE)
+    started_at = perf_counter()
     response = llm.invoke(prompt_text)
+    latency_ms = int((perf_counter() - started_at) * 1000)
     agent_scope = agent_state.resolve_agent_scope()
     llm_call = record_llm_call(
         raw_response=response,
@@ -33,6 +40,7 @@ def _invoke_planner(agent_state: AgentState, prompt_text: str) -> tuple[Plan, ob
         agent=agent_scope,
         stage=PLANNER_STAGE,
         callsite="shared_planner.run_planner",
+        latency_ms=latency_ms,
         input_object={
             "prompt": prompt_text,
         },
@@ -41,7 +49,7 @@ def _invoke_planner(agent_state: AgentState, prompt_text: str) -> tuple[Plan, ob
         },
     )
     raw = strip_code_fences(response.content)
-    return Plan.model_validate_json(raw), llm_call
+    return PlanningResult.model_validate_json(raw), llm_call
 
 
 @traceable(name="Planner Node")
@@ -50,36 +58,29 @@ def run_planner(agent_state: AgentState) -> AgentState:
 
     prompt = build_planner_prompt(state=agent_state)
     prompt_text = render_agent_prompt(prompt)
-    had_prior_tool_results = any(bool(iteration.results) for iteration in agent_state.iteration_trace)
     llm_calls: list[dict[str, object]] = []
+    planning_result: PlanningResult
 
     try:
-        plan, llm_call = _invoke_planner(agent_state, prompt_text)
+        planning_result, llm_call = _invoke_planner(agent_state, prompt_text)
         serialized = _serialize_llm_call_for_log(llm_call)
         if serialized is not None:
             llm_calls.append(serialized)
-        if (
-            agent_state.request_analysis.requires_tools
-            and not had_prior_tool_results
-            and len(plan.steps) == 0
-        ):
-            retry_prompt = (
-                f"{prompt_text}\n\n"
-                "Additional requirement:\n"
-                "- Request analysis already determined that tool use is required.\n"
-                "- No tool results have been gathered yet.\n"
-                "- Return at least one tool step.\n"
-            )
-            plan, llm_call = _invoke_planner(agent_state, retry_prompt)
-            serialized = _serialize_llm_call_for_log(llm_call)
-            if serialized is not None:
-                llm_calls.append(serialized)
     except Exception as e:
         agent_state.goal_reached = True
         agent_state.result = AgentResult(
             answer=f"Planner produced invalid JSON plan: {e}"
         )
         return agent_state
+
+    if len(planning_result.steps) == 0 and planning_result.status == "blocked" and not planning_result.reason:
+        planning_result = PlanningResult(
+            steps=[],
+            status="blocked",
+            reason=REQUIRED_CAPABILITY_UNAVAILABLE_REASON,
+        )
+
+    plan = Plan(steps=planning_result.steps)
 
     if agent_state.roundtrip_id:
         plan.db_id = PlanRepository().save_plan(agent_state.roundtrip_id, plan)
@@ -93,8 +94,11 @@ def run_planner(agent_state: AgentState) -> AgentState:
     agent_state.log_status(
         agent_name=agent_state.agent_profile.name,
         kind=PLAN_KIND,
+        status=planning_result.status,
         data={
             "step_plans": [step.plan for step in plan.steps],
+            "planner_status": planning_result.status,
+            "planner_reason": planning_result.reason,
             "llm_usage": llm_calls,
         },
     )

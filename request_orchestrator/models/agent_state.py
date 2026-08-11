@@ -29,8 +29,6 @@ class RequestAnalysis(BaseModel):
     goal: str = ""
     applicable_tool_categories: list[str] = []
     requested_user_attribute_types: list[str] = []
-    requires_tools: bool = False
-    context_answer_confidence: float = 0.0
 
 
 
@@ -48,7 +46,6 @@ def build_geometadata(
     now = datetime.now(ZoneInfo(resolved_timezone))
     return GeoMetadata(
         current_datetime=now.isoformat(),
-        current_date=now.date().isoformat(),
         current_weekday=now.strftime("%A"),
         timezone=resolved_timezone,
         location=location,

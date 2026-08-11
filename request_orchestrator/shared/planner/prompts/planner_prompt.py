@@ -1,5 +1,6 @@
 import json
 
+from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_CATEGORIES, ATTRIBUTE_QUALIFIERS
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PreviousIteration, PreviousIterationStep
 from request_orchestrator.models.agent_state import AgentState
@@ -84,7 +85,8 @@ def _build_planner_task(state: AgentState) -> str:
 def build_planner_prompt(state: AgentState) -> AgentPrompt:
     context = _compile_tools_rules_from_state(state)
     previous_iterations: list[PreviousIteration] = []
-    has_prior_tool_results = any(bool(iteration.results) for iteration in state.iteration_trace)
+    attribute_prefixes = ", ".join(ATTRIBUTE_CATEGORIES)
+    attribute_suffixes = ", ".join(ATTRIBUTE_QUALIFIERS)
 
     if state.iteration_trace:
         for i, it in enumerate(state.iteration_trace, start=1):
@@ -120,10 +122,16 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
 
     compiled_rules = build_planner_rules(
         context.rules,
-        requires_tools=state.request_analysis.requires_tools,
-        has_prior_tool_results=has_prior_tool_results,
         include_contextual_rules=state.agent_profile.name != 'profile_management',
     )
+    if state.agent_profile.name == 'profile_management':
+        compiled_rules = (
+            f"{compiled_rules}\n\n"
+            "Attribute Type Rules:\n"
+            f"- Available attribute prefixes: {attribute_prefixes}.\n"
+            f"- Available attribute suffixes: {attribute_suffixes}.\n"
+            "- Requested or updated attribute types must use the format prefix.suffix such as food.likes or projects.goals."
+        )
     if state.agent_profile.planner_rules:
         compiled_rules = f"{compiled_rules}\n\nAgent Rules:\n{state.agent_profile.planner_rules}"
 

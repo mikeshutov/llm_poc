@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from time import perf_counter
+
 from langsmith import traceable
 
 from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, REQUEST_ANALYSIS_STAGE
@@ -20,7 +22,9 @@ def analyze_request(agent_state: AgentState) -> AgentState:
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=REQUEST_ANALYSIS_STAGE,
     )
+    started_at = perf_counter()
     response = llm.invoke(prompt_text)
+    latency_ms = int((perf_counter() - started_at) * 1000)
     llm_call = record_llm_call(
         raw_response=response,
         model_name=agent_state.resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=REQUEST_ANALYSIS_STAGE),
@@ -30,6 +34,7 @@ def analyze_request(agent_state: AgentState) -> AgentState:
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=REQUEST_ANALYSIS_STAGE,
         callsite="request_analysis.analyze_request",
+        latency_ms=latency_ms,
         input_object={
             "prompt": prompt_text,
         },
@@ -52,7 +57,6 @@ def analyze_request(agent_state: AgentState) -> AgentState:
         data={
             "applicable_tool_categories": agent_state.request_analysis.applicable_tool_categories,
             "requested_user_attribute_types": agent_state.request_analysis.requested_user_attribute_types,
-            "context_answer_confidence": agent_state.request_analysis.context_answer_confidence,
             "goal": agent_state.request_analysis.goal,
             "llm_usage": None if llm_call is None else serialize_llm_call_record(llm_call),
         },

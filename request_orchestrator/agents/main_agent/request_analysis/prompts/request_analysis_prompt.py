@@ -17,14 +17,13 @@ def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
         prompt_kind=REQUEST_ANALYSIS_PROMPT_KIND,
         instruction=(
             "You are a request analyzer. "
-            "Infer the user's goal, decide whether tools are required, and return the relevant category names. "
+            "Infer the user's goal, when tools are required return the relevant category names. "
             "Make the goal self-contained for downstream steps because the full conversation context will not be passed through later. "
             "The goal should capture the actual objective plus any relevant conversation-derived constraints, references, or continuity needed for planning and synthesis. "
             "Name the concrete topic, subject, entity, or item in the goal instead of using vague placeholders like topic, subject, it, them, or the above. "
             "For lookup or search requests, explicitly state what should be searched for so downstream steps do not need the original conversation to know the target. "
             "Use recent_roundtrip_tool_summaries as helpful context about prior tool usage, entities, produced fields, and freshness. "
             "Use recent_roundtrips when the user refers to something said in a recent prior message or to a recent turn summary. "
-            "Use the older string tool_summary only as fallback context when the structured roundtrip tool summaries are absent or incomplete. "
             "If the user is asking about something previously discussed, suggested, decided, or mentioned, include the memories category. "
             "The prompt includes geometadata but does not pre-load stored user attributes for this step. "
             "When stored user attributes would be beneficial for the request, set requested_user_attribute_types to an array of specific attribute types to load using the available attribute prefixes and suffixes. "
@@ -32,7 +31,6 @@ def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
             f"Available attribute suffixes: {attribute_suffixes}. "
             "Requested attribute types must use the format prefix.suffix such as food.likes or projects.goals. "
             "Only request user attribute types that would materially help with the current request. "
-            "If there is meaningful doubt that the available context alone is sufficient, set requires_tools to true."
         ),
         conversation_context=agent_state.conversation_context,
         user_profile=agent_state.user_profile,

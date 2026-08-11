@@ -14,6 +14,11 @@ class PlanStatus(str, Enum):
     FAILED = "failed"
 
 
+class PlanningResultStatus(str, Enum):
+    READY = "ready"
+    BLOCKED = "blocked"
+
+
 class PlanStep(BaseModel):
     id: str        
     db_id: UUID = Field(default_factory=uuid4) 
@@ -34,3 +39,9 @@ class Plan(BaseModel):
         for i, step in enumerate(self.steps):
             step.step_index = i
         return self
+
+
+class PlanningResult(BaseModel):
+    steps: list[PlanStep]
+    status: PlanningResultStatus = PlanningResultStatus.READY
+    reason: str = ""

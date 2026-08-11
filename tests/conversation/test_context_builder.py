@@ -110,6 +110,61 @@ def test_build_roundtrip_context_requests_latest_unsummarized_roundtrips() -> No
     assert [roundtrip.user_prompt for roundtrip in context.recent_roundtrips] == ['user six', 'user seven', 'user eight']
 
 
+def test_build_roundtrip_context_uses_completed_roundtrips_from_repository() -> None:
+    fake_repo = FakeConversationRepository()
+    conversation_id = str(uuid4())
+
+    def list_completed_roundtrips(conversation_id, limit=50, after_message_index=None, newest_first=False):
+        fake_repo.list_roundtrips_calls.append(
+            {
+                'conversation_id': conversation_id,
+                'limit': limit,
+                'after_message_index': after_message_index,
+                'newest_first': newest_first,
+            }
+        )
+        return [
+            ConversationRoundtrip(
+                id=uuid4(),
+                conversation_id=conversation_id,
+                message_index=6,
+                user_prompt='user six',
+                generated_response='assistant six',
+                roundtrip_summary='summary six',
+                roundtrip_summary_embedding=None,
+                response_payload={},
+                parsed_query={},
+                created_at='2026-08-05T00:00:00Z',
+                    metadata={},
+                    model=None,
+                    feedback_id=None,
+                ),
+            ConversationRoundtrip(
+                id=uuid4(),
+                conversation_id=conversation_id,
+                message_index=8,
+                user_prompt='user eight',
+                generated_response='assistant eight',
+                roundtrip_summary='summary eight',
+                roundtrip_summary_embedding=None,
+                response_payload={},
+                parsed_query={},
+                created_at='2026-08-05T00:00:00Z',
+                metadata={},
+                model=None,
+                feedback_id=None,
+            ),
+        ]
+
+    fake_repo.list_roundtrips = list_completed_roundtrips
+
+    with patch('conversation.context_builder.get_conversation_repo', return_value=fake_repo):
+        context = build_roundtrip_context(conversation_id, limit=3)
+
+    assert [roundtrip.message_index for roundtrip in context.recent_roundtrips] == [6, 8]
+    assert [roundtrip.user_prompt for roundtrip in context.recent_roundtrips] == ['user six', 'user eight']
+
+
 
 def test_build_conversation_context_json_prunes_empty_fields() -> None:
     from conversation.models.conversation_models import ConversationContext, RecentRoundtrip

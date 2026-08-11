@@ -60,18 +60,10 @@ def _render_request_analysis_entry(entry: dict) -> list[str]:
     data = entry.get("data") or {}
     categories = data.get("applicable_tool_categories") or []
     requested_types = data.get("requested_user_attribute_types") or []
-    confidence = data.get("context_answer_confidence")
     goal = data.get("goal") or ""
 
     parts = ["**Request Analysis**"]
-    if confidence is not None:
-        if confidence >= 0.8:
-            summary = f"Can answer directly (context answer confidence: {confidence:.0%})"
-        elif categories:
-            summary = f"Categories: {', '.join(categories)} (context answer confidence: {confidence:.0%})"
-        else:
-            summary = f"No matching categories, using all tools (context answer confidence: {confidence:.0%})"
-    elif categories:
+    if categories:
         summary = f"Categories: {', '.join(categories)}"
     else:
         summary = "No matching categories, using all tools"

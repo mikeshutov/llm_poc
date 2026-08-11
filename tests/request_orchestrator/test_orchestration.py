@@ -8,6 +8,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from conversation.models.conversation_models import ConversationContext
+from conversation.models.conversation_models import RecentRoundtrip
 from integrations.world_time.models import WorldTime
 from personalization.profile.models import UserProfile
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
@@ -23,9 +24,12 @@ if 'pycountry' not in sys.modules:
 from request_orchestrator.agents.main_agent.agent import run_agent
 from request_orchestrator.agents.main_agent.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
 from request_orchestrator.agents.profile_management.agent import _prepare_subagent_state
+from request_orchestrator.constants import SYNTHESIS_PROMPT_KIND
+from request_orchestrator.models.agent_prompt import AgentPrompt, PlanEvidenceStep
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
+from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_solver_prompt
 from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
 
 
@@ -88,6 +92,9 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertNotIn('Goal:', prompt_text)
         self.assertIn('Review this turn for durable user attribute maintenance needs. If attribute work is needed, plan the minimal retrieval and/or update step combination required.', prompt_text)
         self.assertIn('attribute_type (required): Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.', prompt_text)
+        self.assertIn('Available attribute prefixes:', prompt_text)
+        self.assertIn('Available attribute suffixes:', prompt_text)
+        self.assertIn('Requested or updated attribute types must use the format prefix.suffix such as food.likes or projects.goals.', prompt_text)
         self.assertNotIn('career.likes, career.dislikes', prompt_text)
 
 
@@ -137,6 +144,95 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertIs(parent_state.build_llm_for_stage(stage='planner'), parent_state.llm)
 
+    def test_render_agent_prompt_prunes_null_fields_from_plan_evidence(self) -> None:
+        prompt = AgentPrompt(
+            prompt_kind=SYNTHESIS_PROMPT_KIND,
+            instruction='Synthesize the answer.',
+            user_profile=UserProfile(),
+            plan_with_evidence=[
+                PlanEvidenceStep(
+                    step_id='E1',
+                    plan='Review product search evidence.',
+                    tool='find_products',
+                    args={'query_text': 'soba noodles'},
+                    evidence={
+                        'internal_results': [],
+                        'external_results': [
+                            {
+                                'id': 'https://example.com/soba',
+                                'name': 'Soba Noodles',
+                                'description': 'Authentic soba noodles',
+                                'category': None,
+                                'color': None,
+                                'style': None,
+                                'gender': None,
+                                'season': None,
+                                'year': None,
+                                'price': None,
+                                'url': 'https://example.com/soba',
+                                'image_url': 'https://example.com/soba.png',
+                                'score': None,
+                                'source': 'web',
+                            }
+                        ],
+                    },
+                )
+            ],
+            schema='{}',
+        )
+
+        prompt_text = render_agent_prompt(prompt)
+
+        self.assertIn('"external_results"', prompt_text)
+        self.assertIn('"name": "Soba Noodles"', prompt_text)
+        self.assertIn('"image_url": "https://example.com/soba.png"', prompt_text)
+        self.assertNotIn('"category": null', prompt_text)
+        self.assertNotIn('"color": null', prompt_text)
+        self.assertNotIn('"style": null', prompt_text)
+        self.assertNotIn('"gender": null', prompt_text)
+        self.assertNotIn('"season": null', prompt_text)
+        self.assertNotIn('"year": null', prompt_text)
+        self.assertNotIn('"price": null', prompt_text)
+        self.assertNotIn('"score": null', prompt_text)
+
+    def test_synthesis_prompt_excludes_recent_roundtrips(self) -> None:
+        state = AgentState.new(
+            task='Summarize this.',
+            max_turns=10,
+            conversation_context=ConversationContext(
+                latest_conversation_summary='User was comparing noodle options.',
+                recent_roundtrips=[
+                    RecentRoundtrip(
+                        message_index=4,
+                        user_prompt='Earlier user prompt',
+                        roundtrip_summary='Earlier roundtrip summary',
+                    )
+                ],
+            ),
+            user_profile=UserProfile(),
+            llm=MockLLM([]),
+        )
+
+        prompt = build_solver_prompt(
+            plan_with_evidence=[
+                PlanEvidenceStep(
+                    step_id='E1',
+                    plan='Review evidence.',
+                    tool='generic_web_search',
+                    args={},
+                    evidence={'items': ['result']},
+                )
+            ],
+            state=state,
+        )
+        prompt_text = render_agent_prompt(prompt)
+
+        self.assertIn('Conversation Context (JSON):', prompt_text)
+        self.assertIn('latest_conversation_summary', prompt_text)
+        self.assertNotIn('recent_roundtrips', prompt_text)
+        self.assertNotIn('Earlier user prompt', prompt_text)
+        self.assertNotIn('Earlier roundtrip summary', prompt_text)
+
     def test_user_attribute_creation_orchestration(self) -> None:
         fake_repo = FakeUserAttributeRepository()
 
@@ -144,9 +240,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "goal": "Store the user's food preferences.",
           "applicable_tool_categories": ["user_attributes"],
-          "requested_user_attribute_types": [],
-          "requires_tools": true,
-          "context_answer_confidence": 0
+          "requested_user_attribute_types": []
         }
         """
 
@@ -284,9 +378,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "goal": "Use the user's food preferences to help with the request.",
           "applicable_tool_categories": ["food"],
-          "requested_user_attribute_types": ["food.likes"],
-          "requires_tools": true,
-          "context_answer_confidence": 0
+          "requested_user_attribute_types": ["food.likes"]
         }
         """
 
@@ -372,9 +464,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "goal": "Calculate the result of the math expression.",
           "applicable_tool_categories": ["math"],
-          "requested_user_attribute_types": [],
-          "requires_tools": true,
-          "context_answer_confidence": 0
+          "requested_user_attribute_types": []
         }
         """
 
@@ -460,9 +550,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "goal": "Find the current time in Tokyo.",
           "applicable_tool_categories": ["calendar"],
-          "requested_user_attribute_types": [],
-          "requires_tools": true,
-          "context_answer_confidence": 0
+          "requested_user_attribute_types": []
         }
         """
 
@@ -558,9 +646,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "goal": "Clarify an underspecified request.",
           "applicable_tool_categories": [],
-          "requested_user_attribute_types": [],
-          "requires_tools": false,
-          "context_answer_confidence": 1
+          "requested_user_attribute_types": []
         }
         """
 

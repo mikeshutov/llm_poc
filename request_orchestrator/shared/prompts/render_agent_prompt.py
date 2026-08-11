@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from conversation.utils import build_conversation_context_json
+from common.serialization import prune_empty_prompt_values
 from request_orchestrator.constants import (
     EVALUATOR_PROMPT_KIND,
     PLANNER_PROMPT_KIND,
@@ -30,13 +31,13 @@ def _serialize_user_profile(prompt: AgentPrompt) -> str:
 def _serialize_previous_iterations(prompt: AgentPrompt) -> str:
     if not prompt.previous_iterations:
         return ""
-    return _serialize_json([iteration.model_dump() for iteration in prompt.previous_iterations])
+    return _serialize_json(prune_empty_prompt_values([iteration.model_dump() for iteration in prompt.previous_iterations]))
 
 
 def _serialize_plan_with_evidence(prompt: AgentPrompt) -> str:
     if not prompt.plan_with_evidence:
         return ""
-    return _serialize_json([step.model_dump() for step in prompt.plan_with_evidence])
+    return _serialize_json(prune_empty_prompt_values([step.model_dump() for step in prompt.plan_with_evidence]))
 
 
 def _append_section(parts: list[str], heading: str, content: str) -> None:

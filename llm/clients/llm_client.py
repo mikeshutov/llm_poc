@@ -1,4 +1,5 @@
 import base64
+from time import perf_counter
 from typing import Any, Optional, Sequence
 
 from openai import OpenAI
@@ -37,6 +38,7 @@ class LlmClient:
         temperature: float | None = None,
     ) -> ToolCallResult:
         resolved_model = model or self.default_model
+        started_at = perf_counter()
         resp = self.client.chat.completions.create(
             model=resolved_model,
             messages=[
@@ -46,6 +48,7 @@ class LlmClient:
             tools=list(tools),
             **({"temperature": temperature} if temperature is not None else {}),
         )
+        latency_ms = int((perf_counter() - started_at) * 1000)
         record_llm_call(
             raw_response=resp,
             model_name=resolved_model,
@@ -56,6 +59,7 @@ class LlmClient:
             stage="tool_calling",
             callsite="llm_client.call_with_tools",
             metadata={"tool_count": len(tools)},
+            latency_ms=latency_ms,
             input_object={
                 "messages": [
                     {ROLE_KEY: ROLE_SYSTEM, CONTENT_KEY: system_prompt},
@@ -91,6 +95,7 @@ class LlmClient:
         with open(path, "rb") as f:
             base64_image = base64.b64encode(f.read()).decode("utf-8")
 
+        started_at = perf_counter()
         response = self.client.chat.completions.create(
             model=self.default_model,
             messages=[
@@ -113,6 +118,7 @@ class LlmClient:
             ],
             max_completion_tokens=CAPTION_MAX_TOKENS,
         )
+        latency_ms = int((perf_counter() - started_at) * 1000)
         record_llm_call(
             raw_response=response,
             model_name=self.default_model,
@@ -123,6 +129,7 @@ class LlmClient:
             stage="image_caption",
             callsite="llm_client.generate_caption_from_image_file",
             metadata={"max_completion_tokens": CAPTION_MAX_TOKENS},
+            latency_ms=latency_ms,
         )
 
         return response.choices[0].message.content

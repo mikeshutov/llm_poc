@@ -29,6 +29,7 @@ from conversation.models.conversation_model_config import (
     SHARED_MODEL_SCOPE,
 )
 from conversation.models.conversation_models import ConversationContext, ConversationRoundtrip
+from conversation.models.conversation_models import Conversation
 from personalization.profile.models import UserProfile
 from rendering.sidebar import build_model_config_rows
 from request_orchestrator.service import run_request_orchestrator_for_query
@@ -77,6 +78,19 @@ class FakeConversationRepository:
     def resolve_conversation_model_config(self, conversation_id):
         assert conversation_id == self.conversation_id
         return self.config
+
+    def get_conversation(self, conversation_id):
+        assert conversation_id == self.conversation_id
+        return Conversation(
+            id=self.conversation_id,
+            user_id='anonymous',
+            title='Test Conversation',
+            created_at='2026-08-08T00:00:00Z',
+            metadata={},
+            tone_state={},
+            summary='',
+            summary_embedding=None,
+        )
 
     def create_pending_roundtrip(self, conversation_id, user_prompt, model=None, roundtrip_summary=None, roundtrip_summary_embedding=None, metadata=None):
         self.pending_calls.append(
@@ -306,10 +320,16 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
     config = ConversationModelConfig.build_default()
     fake_repo = FakeConversationRepository(config)
     fake_repo.conversation_id = conversation_id
+    captured_context_kwargs: dict[str, object] = {}
+
+    def fake_build_roundtrip_context(conversation_id_arg, limit=5):
+        captured_context_kwargs['conversation_id'] = conversation_id_arg
+        captured_context_kwargs['limit'] = limit
+        return ConversationContext()
 
     with patch('request_orchestrator.service.get_conversation_repo', return_value=fake_repo), patch(
         'request_orchestrator.service.build_roundtrip_context',
-        return_value=ConversationContext(),
+        side_effect=fake_build_roundtrip_context,
     ), patch(
         'request_orchestrator.service.build_user_profile',
         return_value=UserProfile(),
@@ -326,6 +346,10 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
     assert fake_repo.pending_calls[0]['metadata'] == {
         'resolved_model_config': config.to_metadata_payload(),
     }
+    assert captured_context_kwargs == {
+        'conversation_id': str(conversation_id),
+        'limit': 5,
+    }
     assert fake_repo.list_llm_calls_requests == [fake_repo.roundtrip_id]
     assert fake_repo.update_calls[0]['payload']['llm_usage'] == {
         'retrieved_call_count': 0,
@@ -334,6 +358,7 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
             'cached_input_tokens': 0,
             'output_tokens': 0,
             'total_tokens': 0,
+            'total_latency_ms': 0,
             'computed_input_cost': '0',
             'computed_output_cost': '0',
             'computed_total_cost': '0',

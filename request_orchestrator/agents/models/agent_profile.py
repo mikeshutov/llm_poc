@@ -11,7 +11,6 @@ DEFAULT_PLANNER_RULES = ""
 DEFAULT_SYNTHESIS_INSTRUCTION = (
     "Solve the following task or problem. To solve the problem, we have made "
     "step-by-step Plan and retrieved corresponding Evidence to each Plan. "
-    "Use them with caution since long evidence might contain irrelevant information."
 )
 
 
