@@ -14,12 +14,13 @@ if 'pycountry' not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules['pycountry'] = pycountry_module
 
-from personalization.profile.models import UserAttributesSection, UserProfile
+from personalization.profile.models import GeoLocation, GeoMetadata, UserAttributesSection, UserProfile
 from personalization.profile.service import build_user_profile, hydrate_user_profile_core, load_user_profile_attributes
 from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
+from request_orchestrator.models.synthesized_result import DEFAULT_SYNTHESIS_FOLLOW_UP, SynthesisResult
 from common.parsing import repair_common_json_issues
 
 
@@ -222,6 +223,37 @@ def test_prompt_profile_includes_shared_tone_preferences() -> None:
     }
 
 
+def test_prompt_profile_excludes_geometadata_latitude_and_longitude() -> None:
+    profile = UserProfile(
+        geometadata=GeoMetadata(
+            current_datetime="2026-08-11T09:07:57.790737-04:00",
+            current_weekday="Tuesday",
+            timezone="America/Toronto",
+            location=GeoLocation(
+                city="Toronto",
+                region="Ontario",
+                country="Canada",
+                latitude=43.6576,
+                longitude=-79.3798,
+                timezone="America/Toronto",
+            ),
+        )
+    )
+
+    rendered = profile.to_prompt_dict()
+
+    assert rendered["geometadata"] == {
+        "current_datetime": "2026-08-11T09:07:57.790737-04:00",
+        "current_weekday": "Tuesday",
+        "timezone": "America/Toronto",
+        "location": {
+            "city": "Toronto",
+            "region": "Ontario",
+            "country": "Canada",
+        },
+    }
+
+
 def test_prompt_profile_excludes_tone_by_default() -> None:
     profile = UserProfile(
         tone=TonePreferences(
@@ -262,6 +294,51 @@ def test_repair_common_json_issues_replaces_semicolon_between_fields() -> None:
     repaired = repair_common_json_issues(raw)
 
     assert repaired == '{"result":["a"], "clarifying_question":"","follow_up":""}'
+
+
+def test_synthesis_result_requires_exactly_one_question_field() -> None:
+    result = SynthesisResult.model_validate(
+        {
+            "result": ["done"],
+            "follow_up": "Do you want more detail?",
+            "clarifying_question": "",
+            "roundtrip_summary": "summary",
+            "tool_summary": {},
+        }
+    )
+
+    assert result.follow_up == "Do you want more detail?"
+    assert result.clarifying_question == ""
+
+
+def test_synthesis_result_falls_back_when_both_question_fields_are_empty() -> None:
+    result = SynthesisResult.model_validate(
+        {
+            "result": ["done"],
+            "follow_up": "",
+            "clarifying_question": "",
+            "roundtrip_summary": "summary",
+            "tool_summary": {},
+        }
+    )
+
+    assert result.follow_up == DEFAULT_SYNTHESIS_FOLLOW_UP
+    assert result.clarifying_question == ""
+
+
+def test_synthesis_result_prefers_clarifying_question_when_both_question_fields_are_set() -> None:
+    result = SynthesisResult.model_validate(
+        {
+            "result": ["done"],
+            "follow_up": "Do you want more detail?",
+            "clarifying_question": "Which option do you mean?",
+            "roundtrip_summary": "summary",
+            "tool_summary": {},
+        }
+    )
+
+    assert result.follow_up == ""
+    assert result.clarifying_question == "Which option do you mean?"
 
 
 def test_hydrate_user_profile_core_loads_persisted_tone() -> None:

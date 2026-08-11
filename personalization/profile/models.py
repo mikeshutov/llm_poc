@@ -30,6 +30,19 @@ ATTRIBUTE_PROMPT_MANAGEMENT_EXCLUDED_FIELDS = {
 }
 
 
+class PromptGeoLocation(BaseModel):
+    city: str | None = None
+    region: str | None = None
+    country: str | None = None
+
+
+class PromptGeoMetadata(BaseModel):
+    current_datetime: str
+    current_weekday: str
+    timezone: str
+    location: PromptGeoLocation | None = None
+
+
 class GeoLocation(BaseModel):
     city: str | None = None
     region: str | None = None
@@ -38,12 +51,27 @@ class GeoLocation(BaseModel):
     longitude: float | None = None
     timezone: str | None = None
 
+    def to_prompt_model(self) -> PromptGeoLocation:
+        return PromptGeoLocation(
+            city=self.city,
+            region=self.region,
+            country=self.country,
+        )
+
 
 class GeoMetadata(BaseModel):
     current_datetime: str
     current_weekday: str
     timezone: str
     location: GeoLocation | None = None
+
+    def to_prompt_model(self) -> PromptGeoMetadata:
+        return PromptGeoMetadata(
+            current_datetime=self.current_datetime,
+            current_weekday=self.current_weekday,
+            timezone=self.timezone,
+            location=None if self.location is None else self.location.to_prompt_model(),
+        )
 
 
 class UserAttributesSection(BaseModel):
@@ -112,7 +140,7 @@ class UserProfile(BaseModel):
                 "display_name": self.display_name,
                 "email": self.email,
                 "tone": None if not include_tone or self.tone is None else self.tone.model_dump(),
-                "geometadata": None if self.geometadata is None else self.geometadata.model_dump(),
+                "geometadata": None if self.geometadata is None else prune_empty_prompt_values(self.geometadata.to_prompt_model().model_dump()),
                 "user_attributes": self.user_attributes.to_prompt_dict(
                     include_management_fields=include_management_fields,
                 ),

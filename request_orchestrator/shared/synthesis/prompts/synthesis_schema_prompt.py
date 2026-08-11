@@ -6,7 +6,7 @@ Ensure the `roundtrip_summary` field is a detailed plain-language diagnostic sum
 The `roundtrip_summary` should usually be around 80 to 120 tokens and should be meaningfully richer than the top-level rolling conversation summary.
 The `roundtrip_summary` should capture the user's request, the approach taken, the main evidence or tool findings used, important constraints or entities, and the final outcome.
 Ensure the `tool_summary` object captures the tools actually used, what they produced, any key entities involved, and freshness if relevant.
-Set one of `follow_up` or `clarifying_question`, but never both. Leave the unused one as an empty string.
+Set exactly one of `follow_up` or `clarifying_question` to a non-empty string. Never set both. Never leave both empty. Leave the unused one as an empty string.
 
 The `result` field MUST NOT contain:
 - follow-up questions

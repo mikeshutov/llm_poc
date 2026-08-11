@@ -1,8 +1,9 @@
 import threading
 from uuid import UUID
 
+from integrations.ip_api import IpApiClient
 from request_orchestrator.agents.main_agent.agent import run_agent
-from request_orchestrator.models.agent_state import GeoMetadata, build_geometadata
+from request_orchestrator.models.agent_state import GeoLocation, GeoMetadata, build_geometadata
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from llm.clients.embeddings import embed_text
@@ -12,6 +13,29 @@ from conversation.context_builder import build_roundtrip_context
 from personalization.profile.service import build_user_profile
 from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo
+
+_ip_api_client = IpApiClient()
+
+
+def _resolve_geometadata(geometadata: GeoMetadata | None) -> GeoMetadata:
+    if geometadata is not None:
+        return geometadata
+
+    try:
+        location = _ip_api_client.get_location()
+        return build_geometadata(
+            timezone=location.timezone,
+            location=GeoLocation(
+                city=location.city,
+                region=location.region_name or location.region,
+                country=location.country,
+                latitude=location.lat,
+                longitude=location.lon,
+                timezone=location.timezone,
+            ),
+        )
+    except Exception:
+        return build_geometadata()
 
 
 def run_request_orchestrator_for_query(
@@ -49,7 +73,7 @@ def run_request_orchestrator_for_query(
         limit=context_limit,
     )
 
-    resolved_geometadata = build_geometadata() if geometadata is None else geometadata
+    resolved_geometadata = _resolve_geometadata(geometadata)
     user_profile = build_user_profile(
         user_id=resolved_user_id,
         geometadata=resolved_geometadata,

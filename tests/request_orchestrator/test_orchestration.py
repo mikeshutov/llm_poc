@@ -84,6 +84,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertNotIn('Use the older string tool_summary only as fallback context', prompt_text)
         self.assertNotIn('Utilize multiple tools when it is appropriate to get full context.', prompt_text)
         self.assertNotIn('Evidence references must be defined before use.', prompt_text)
+        self.assertIn("Do not make one planned tool step depend on another step's output.", prompt_text)
+        self.assertIn('You may use already-available tool results from previous work', prompt_text)
         self.assertEqual(
             prompt.task,
             'Review this turn for durable user profile field and user attribute maintenance needs. If profile work is needed, plan the minimal retrieval and/or update step combination required.',
@@ -380,7 +382,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         synthesis_response = """
         {
           "result": ["Stored your food likes as a user attribute."],
-          "follow_up": "",
+          "follow_up": "Do you want me to remember any other food preferences?",
           "clarifying_question": "",
           "roundtrip_summary": "Stored the user's stated food likes as a persistent user attribute and confirmed the profile state.",
           "tool_summary": {
@@ -431,7 +433,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(len(llm.invocations), 6)
         self.assertIn('Latest User Prompt:', llm.prompts[0] or '')
-        self.assertIn('User Profile (JSON):\n\n{}', llm.prompts[0] or '')
+        self.assertNotIn('User Profile (JSON):', llm.prompts[0] or '')
         self.assertNotIn('Conversation Context (JSON):', llm.prompts[3] or '')
         self.assertNotIn('recent_roundtrip_tool_summaries', llm.prompts[4] or '')
         self.assertNotIn('conversation_summary', llm.prompts[4] or '')
@@ -501,7 +503,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         synthesis_response = """
         {
           "result": ["I used your stored food preferences while looking up a meal idea."],
-          "follow_up": "",
+          "follow_up": "Do you want a few more options based on those preferences?",
           "clarifying_question": "",
           "roundtrip_summary": "Loaded the user's stored food likes and used them while planning a meal-related response.",
           "tool_summary": {
@@ -534,7 +536,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(result.answer, ['I used your stored food preferences while looking up a meal idea.'])
         self.assertEqual(len(llm.invocations), 5)
-        self.assertIn('User Profile (JSON):\n\n{}', llm.prompts[0] or '')
+        self.assertNotIn('User Profile (JSON):', llm.prompts[0] or '')
         self.assertNotIn('pizza', llm.prompts[0] or '')
 
         main_agent_logs = result.agent_logs.get('main_agent', [])
@@ -602,7 +604,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         synthesis_response = """
         {
           "result": ["The result is 47.0."],
-          "follow_up": "",
+          "follow_up": "Do you want me to show the calculation steps too?",
           "clarifying_question": "",
           "roundtrip_summary": "Calculated the requested expression using the math tool and returned the numeric result.",
           "tool_summary": {
@@ -688,7 +690,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         synthesis_response = """
         {
           "result": ["The current time in Tokyo is 2026-08-04T21:30:00+09:00."],
-          "follow_up": "",
+          "follow_up": "Do you want the current date there as well?",
           "clarifying_question": "",
           "roundtrip_summary": "Looked up the current time in Tokyo using the world time tool and returned the reported local datetime.",
           "tool_summary": {
@@ -762,7 +764,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
           "result": ["I can help with that."],
           "follow_up": "Do you want a short or detailed answer?",
           "clarifying_question": "Which product category do you want to focus on?",
-          "roundtrip_summary": "The request was underspecified, so the response preserved only the clarifying question and dropped the follow-up variant.",
+          "roundtrip_summary": "The request was underspecified, so the response preserved the clarifying question and dropped the follow-up variant.",
           "tool_summary": {
             "used_tools": [],
             "produced": [],

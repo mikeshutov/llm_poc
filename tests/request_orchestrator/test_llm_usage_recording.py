@@ -93,8 +93,8 @@ def test_request_analysis_records_llm_usage() -> None:
     assert repo.llm_calls[0]['stage'] == 'request_analysis'
     input_object = repo.llm_calls[0]['metadata']['input_object']
     assert input_object['prompt_token_count'] > 0
-    assert any(section['key'] == PromptSectionKeys.USER_PROFILE for section in input_object['prompt_sections'])
     assert any(section['key'] == PromptSectionKeys.LATEST_USER_PROMPT for section in input_object['prompt_sections'])
+    assert all(section['key'] != PromptSectionKeys.USER_PROFILE for section in input_object['prompt_sections'])
     assert all(section['token_count'] >= 0 for section in input_object['prompt_sections'])
     assert state.agent_log.entries[-1].data['llm_usage']['total_tokens'] == 120
     assert isinstance(state.agent_log.entries[-1].data['llm_usage']['latency_ms'], int)
@@ -173,7 +173,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
         conversation_context=ConversationContext(),
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
-        llm=FakeInvokeLLM('{"result": ["done"], "follow_up": "", "clarifying_question": "", "roundtrip_summary": "summary", "tool_summary": {"used_tools": [], "produced": [], "entities": [], "freshness": ""}}', 'gpt-5.4'),
+        llm=FakeInvokeLLM('{"result": ["done"], "follow_up": "Do you want a deeper breakdown?", "clarifying_question": "", "roundtrip_summary": "summary", "tool_summary": {"used_tools": [], "produced": [], "entities": [], "freshness": ""}}', 'gpt-5.4'),
     )
     state.iteration_trace = [IterationState(plan=Plan.model_validate({'steps': []}), results={})]
 
@@ -299,7 +299,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
         conversation_context=ConversationContext(),
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
-        llm=CapturingLLM('{"result": ["done"], "follow_up": "", "clarifying_question": "", "roundtrip_summary": "summary", "tool_summary": {"used_tools": [], "produced": [], "entities": [], "freshness": ""}}', 'gpt-5.4'),
+        llm=CapturingLLM('{"result": ["done"], "follow_up": "Do you want a deeper breakdown?", "clarifying_question": "", "roundtrip_summary": "summary", "tool_summary": {"used_tools": [], "produced": [], "entities": [], "freshness": ""}}', 'gpt-5.4'),
     )
     state.relevant_evidence_ids = ['E2']
     state.iteration_trace = [
