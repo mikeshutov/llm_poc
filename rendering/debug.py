@@ -1,6 +1,7 @@
 import json
 
 import streamlit as st
+from pydantic import BaseModel, Field
 
 from common.message_constants import CONTENT_KEY, ROLE_DEBUG, ROLE_KEY
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
@@ -13,6 +14,62 @@ PLAN_KIND = "plan"
 EVALUATOR_KIND = "evaluator"
 TOOL_CALL_KIND = "tool_call"
 SYNTHESIS_KIND = "synthesis"
+
+
+class RequestAnalysisLogPayload(BaseModel):
+    title: str = "Request Analysis"
+    categories: list[str] = Field(default_factory=list)
+    goal: str = ""
+    requested_user_attribute_types: list[str] = Field(default_factory=list)
+    llm_usage: object | None = None
+
+
+class ProfileLoadLogPayload(BaseModel):
+    title: str = "User Profile Loaded"
+    requested_user_attribute_types: list[str] = Field(default_factory=list)
+    loaded_attribute_types: list[str] = Field(default_factory=list)
+    loaded_attribute_count: int = 0
+    loaded_attributes: list[dict] = Field(default_factory=list)
+
+
+class PlanLogPayload(BaseModel):
+    title: str = "Plan Generated"
+    status: str = ""
+    reason: str = ""
+    step_plans: list[str] = Field(default_factory=list)
+    llm_usage: object | None = None
+
+
+class SynthesisLogPayload(BaseModel):
+    title: str = "Synthesis"
+    answer_preview: list[str] = Field(default_factory=list)
+    follow_up: str = ""
+    clarifying_question: str = ""
+    relevant_evidence_ids: list[str] = Field(default_factory=list)
+    llm_usage: object | None = None
+
+
+class EvaluatorLogPayload(BaseModel):
+    title: str = "Evaluation"
+    status: str = EVALUATION_STATUS_RETRYABLE
+    relevant_evidence: list[str] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+    refined_goal: str = ""
+    parse_error: str = ""
+    llm_usage: object | None = None
+
+
+class ToolCallLogPayload(BaseModel):
+    title: str = "Tool Call"
+    step_plan: str = ""
+    tool_name: str = ""
+    step_id: str = ""
+    iteration: int | None = None
+    request: object | None = None
+    response: object | None = None
+    error: str = ""
+    latency_ms: int | None = None
+    metadata: dict = Field(default_factory=dict)
 
 
 def debug_render_message(content, content_title: str) -> None:
@@ -48,180 +105,95 @@ def _serialize_value(value) -> str:
     return json.dumps(value, indent=2, sort_keys=True, default=str)
 
 
-def _render_llm_usage_section(entry: dict) -> str | None:
+def _build_request_analysis_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    llm_usage = data.get("llm_usage")
-    if not llm_usage:
-        return None
-    return f"LLM Usage:\n```json\n{_serialize_value(llm_usage)}\n```"
+    return RequestAnalysisLogPayload(
+        categories=data.get("applicable_tool_categories") or [],
+        goal=data.get("goal") or "",
+        requested_user_attribute_types=data.get("requested_user_attribute_types") or [],
+        llm_usage=data.get("llm_usage"),
+    ).model_dump()
 
 
-def _render_request_analysis_entry(entry: dict) -> list[str]:
+def _build_profile_load_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    categories = data.get("applicable_tool_categories") or []
-    requested_types = data.get("requested_user_attribute_types") or []
-    goal = data.get("goal") or ""
-
-    parts = ["**Request Analysis**"]
-    if categories:
-        summary = f"Categories: {', '.join(categories)}"
-    else:
-        summary = "No matching categories, using all tools"
-    parts.append(summary)
-    if goal:
-        parts.append(f"Goal: {goal}")
-    if requested_types:
-        parts.append(f"Useful stored attributes: {', '.join(requested_types)}")
-    else:
-        parts.append("Useful stored attributes: none requested")
-    llm_usage = _render_llm_usage_section(entry)
-    if llm_usage:
-        parts.append(llm_usage)
-    return parts
+    return ProfileLoadLogPayload(
+        requested_user_attribute_types=data.get("requested_user_attribute_types") or [],
+        loaded_attribute_types=data.get("loaded_attribute_types") or [],
+        loaded_attribute_count=data.get("loaded_attribute_count", 0),
+        loaded_attributes=data.get("loaded_attributes") or [],
+    ).model_dump()
 
 
-def _render_profile_load_entry(entry: dict) -> list[str]:
+def _build_plan_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    requested_types = data.get("requested_user_attribute_types") or []
-    loaded_attribute_types = data.get("loaded_attribute_types") or []
-    loaded_attributes = data.get("loaded_attributes") or []
-    loaded_count = data.get("loaded_attribute_count", 0)
-
-    parts = ["**User Profile Loaded**"]
-    if requested_types:
-        parts.append(f"Requested attributes: {', '.join(requested_types)}")
-    else:
-        parts.append("Requested attributes: none")
-
-    if loaded_attribute_types:
-        parts.append(f"Loaded attribute types: {', '.join(loaded_attribute_types)}")
-    else:
-        parts.append("Loaded attribute types: none")
-
-    parts.append(f"Loaded profile attributes: {loaded_count}")
-
-    if loaded_attributes:
-        lines = []
-        for attribute in loaded_attributes:
-            attribute_type = attribute.get("attribute_type") or "unknown"
-            values = attribute.get("value") or []
-            group_key = attribute.get("group_key")
-            suffix = f" [{group_key}]" if group_key else ""
-            value_text = ", ".join(str(value) for value in values)
-            lines.append(f"- {attribute_type}{suffix}: {value_text}")
-        parts.append("\n".join(lines))
-    return parts
+    return PlanLogPayload(
+        status=entry.get("status") or data.get("planner_status") or "",
+        reason=data.get("planner_reason") or "",
+        step_plans=data.get("step_plans") or [],
+        llm_usage=data.get("llm_usage"),
+    ).model_dump()
 
 
-def _render_plan_entry(entry: dict) -> list[str]:
+def _build_synthesis_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    step_plans = data.get("step_plans") or []
-    parts = ["**Plan Generated**"]
-    if step_plans:
-        parts.append("\n".join(f"{index}. {step_plan}" for index, step_plan in enumerate(step_plans, start=1)))
-    else:
-        parts.append("No steps were generated.")
-    llm_usage = _render_llm_usage_section(entry)
-    if llm_usage:
-        parts.append(llm_usage)
-    return parts
+    return SynthesisLogPayload(
+        answer_preview=data.get("answer_preview") or [],
+        follow_up=data.get("follow_up") or "",
+        clarifying_question=data.get("clarifying_question") or "",
+        relevant_evidence_ids=data.get("relevant_evidence_ids") or [],
+        llm_usage=data.get("llm_usage"),
+    ).model_dump()
 
 
-def _render_synthesis_entry(entry: dict) -> list[str]:
+def _build_evaluator_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    answer_preview = data.get("answer_preview") or []
-    follow_up = data.get("follow_up") or ""
-    clarifying_question = data.get("clarifying_question") or ""
-
-    parts = ["**Synthesis**"]
-    if answer_preview:
-        parts.append("Answer preview:\n" + "\n".join(f"- {item}" for item in answer_preview))
-    if follow_up:
-        parts.append(f"Follow up: {follow_up}")
-    if clarifying_question:
-        parts.append(f"Clarifying question: {clarifying_question}")
-    llm_usage = _render_llm_usage_section(entry)
-    if llm_usage:
-        parts.append(llm_usage)
-    return parts
+    return EvaluatorLogPayload(
+        status=data.get("status") or entry.get("status") or EVALUATION_STATUS_RETRYABLE,
+        relevant_evidence=data.get("relevant_evidence") or [],
+        missing_information=data.get("missing_information") or [],
+        refined_goal=(data.get("refined_goal") or "").strip(),
+        parse_error=data.get("parse_error") or "",
+        llm_usage=data.get("llm_usage"),
+    ).model_dump()
 
 
-def _render_evaluator_entry(entry: dict) -> list[str]:
+def _build_tool_call_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    parts = ["**Evaluation**"]
-    status = data.get("status") or entry.get("status") or EVALUATION_STATUS_RETRYABLE
-    parts.append(f"Status: {status}")
-    relevant_evidence = data.get("relevant_evidence") or []
-    if relevant_evidence:
-        parts.append("Relevant evidence: " + ", ".join(str(item) for item in relevant_evidence))
-    missing_information = data.get("missing_information") or []
-    if missing_information:
-        parts.append("Missing information:\n" + "\n".join(f"- {item}" for item in missing_information))
-    refined_goal = (data.get("refined_goal") or "").strip()
-    if refined_goal:
-        parts.append(f"Refined goal: {refined_goal}")
-    parse_error = data.get("parse_error") or ""
-    if parse_error:
-        parts.append(f"Parse error: {parse_error}")
-    llm_usage = _render_llm_usage_section(entry)
-    if llm_usage:
-        parts.append(llm_usage)
-    return parts
-def _render_tool_call_entry(entry: dict) -> list[str]:
-    parts = ["**Tool Call**"]
-    data = entry.get("data") or {}
-    step_plan = data.get("step_plan") or entry.get("summary")
-    if step_plan:
-        parts.append(f"Working on: {step_plan}")
-
-    tool_name = entry.get("tool_name") or data.get("tool_name")
-    step_id = entry.get("step_id") or data.get("step_id")
-    iteration = entry.get("iteration")
-    request = entry.get("request")
-    response = entry.get("response")
-    error = entry.get("error")
-    metadata = entry.get("metadata") or {}
-
-    if tool_name:
-        parts.append(f"Tool: `{tool_name}`")
-    if step_id:
-        parts.append(f"Step: `{step_id}`")
-    if iteration is not None:
-        parts.append(f"Iteration: `{iteration}`")
-    if request is not None:
-        parts.append(f"Request:\n```json\n{_serialize_value(request)}\n```")
-    if response is not None:
-        parts.append(f"Response:\n```json\n{_serialize_value(response)}\n```")
-    if error:
-        parts.append(f"Error:\n```text\n{error}\n```")
-    if metadata:
-        parts.append(f"Metadata:\n```json\n{_serialize_value(metadata)}\n```")
-    return parts
+    return ToolCallLogPayload(
+        step_plan=data.get("step_plan") or entry.get("summary") or "",
+        tool_name=entry.get("tool_name") or data.get("tool_name") or "",
+        step_id=entry.get("step_id") or data.get("step_id") or "",
+        iteration=entry.get("iteration"),
+        request=entry.get("request"),
+        response=entry.get("response"),
+        error=entry.get("error") or "",
+        latency_ms=data.get("latency_ms"),
+        metadata=entry.get("metadata") or {},
+    ).model_dump()
 
 
-def _assemble_log_message(entry: dict) -> str:
+def _build_log_payload(entry: dict) -> tuple[str, dict]:
     kind = entry.get("kind") or "event"
 
     if kind == REQUEST_ANALYSIS_KIND:
-        parts = _render_request_analysis_entry(entry)
+        payload = _build_request_analysis_payload(entry)
     elif kind == PROFILE_LOAD_KIND:
-        parts = _render_profile_load_entry(entry)
+        payload = _build_profile_load_payload(entry)
     elif kind == PLAN_KIND:
-        parts = _render_plan_entry(entry)
+        payload = _build_plan_payload(entry)
     elif kind == EVALUATOR_KIND:
-        parts = _render_evaluator_entry(entry)
+        payload = _build_evaluator_payload(entry)
     elif kind == SYNTHESIS_KIND:
-        parts = _render_synthesis_entry(entry)
+        payload = _build_synthesis_payload(entry)
     elif kind == TOOL_CALL_KIND:
-        parts = _render_tool_call_entry(entry)
+        payload = _build_tool_call_payload(entry)
     else:
-        parts = [f"**{entry.get('title', 'Log Entry')}**"]
-        for key in ("summary", "details"):
-            value = entry.get(key)
-            if value:
-                parts.append(value)
+        payload = dict(entry)
+        payload.setdefault("title", entry.get("title", "Log Entry"))
 
-    return "\n\n".join(part for part in parts if part)
+    title = str(payload.get("title") or entry.get("title") or "Log Entry")
+    return title, payload
 
 
 def render_agent_logs(agent_logs: dict[str, list[dict]] | None) -> None:
@@ -233,6 +205,8 @@ def render_agent_logs(agent_logs: dict[str, list[dict]] | None) -> None:
             continue
         with st.expander(f"{agent_name} log"):
             for index, entry in enumerate(entries):
-                st.code(_assemble_log_message(entry), language="markdown")
+                title, payload = _build_log_payload(entry)
+                st.markdown(f"**{title}**")
+                st.json(payload, expanded=False)
                 if index < len(entries) - 1:
                     st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)

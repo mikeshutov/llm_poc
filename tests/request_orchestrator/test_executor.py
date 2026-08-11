@@ -74,6 +74,8 @@ def test_run_executor_parallelizes_pending_steps() -> None:
         "E2": {"tool": "tool_b", "value": "b"},
     }
     assert started_steps[:2] == ["tool_a", "tool_b"]
+    assert len(state.agent_log.entries) == 2
+    assert all(isinstance(entry.data.get("latency_ms"), int) for entry in state.agent_log.entries)
 
 
 def test_run_executor_leaves_unresolved_refs_unchanged_with_parallel_execution() -> None:

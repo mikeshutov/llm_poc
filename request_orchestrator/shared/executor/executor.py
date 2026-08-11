@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any
 
 from langsmith import traceable
@@ -21,6 +22,7 @@ class StepExecutionResult:
     args: dict[str, Any]
     output: Any
     error_text: str = ""
+    latency_ms: int = 0
 
 
 def _substitute_refs(obj, results: dict):
@@ -38,7 +40,7 @@ def _substitute_refs(obj, results: dict):
 
 def _execute_step(step: PlanStep, *, iteration: IterationState, allowed_tool_names: set[str] | None) -> StepExecutionResult:
     args = _substitute_refs(step.args, iteration.results)
-
+    started_at = perf_counter()
     try:
         output = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)
         error_text = ""
@@ -48,12 +50,14 @@ def _execute_step(step: PlanStep, *, iteration: IterationState, allowed_tool_nam
     except Exception as e:
         output = {"error": f"Tool '{step.tool}' failed: {e}", "tool": step.tool}
         error_text = str(output["error"])
+    latency_ms = int((perf_counter() - started_at) * 1000)
 
     return StepExecutionResult(
         step=step,
         args=args,
         output=output,
         error_text=error_text,
+        latency_ms=latency_ms,
     )
 
 
@@ -77,11 +81,22 @@ def _record_step_result(
         request=execution_result.args,
         response=execution_result.output,
         error=execution_result.error_text,
-        data={"step_plan": step.plan},
+        data={
+            "step_plan": step.plan,
+            "latency_ms": execution_result.latency_ms,
+        },
     )
 
     if tool_repo and agent_state.roundtrip_id:
-        tool_repo.append_tool_call(agent_state.roundtrip_id, iteration, step)
+        tool_repo.append_tool_call(
+            agent_state.roundtrip_id,
+            iteration,
+            step,
+            input_payload=execution_result.args,
+            output_payload=execution_result.output,
+            error_message=execution_result.error_text or None,
+            duration_ms=execution_result.latency_ms,
+        )
 
 
 @traceable(name="Executor Node")
