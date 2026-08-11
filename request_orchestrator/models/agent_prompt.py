@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 import tiktoken
 
 from common.model_constants import CHUNK_ENCODING
-from common.serialization import prune_empty_prompt_values
+from common.serialization import is_meaningful_prompt_value, prune_empty_prompt_values
 from personalization.profile.models import UserProfile
 from conversation.models.conversation_models import ConversationContext
 
@@ -99,7 +99,7 @@ class AgentPrompt:
     _sections: dict[str, PromptSection] = field(default_factory=dict, init=False, repr=False)
 
     def _append_section(self, heading: str, content: str, *, key: str | None = None) -> AgentPrompt:
-        if content:
+        if is_meaningful_prompt_value(content):
             resolved_key = key or heading or f"section_{len(self._sections)}"
             self._sections[resolved_key] = PromptSection(
                 key=resolved_key,
@@ -190,7 +190,7 @@ class AgentPrompt:
         return self.include_text(f"{label} {self.schema}", key=key)
 
     def include_text(self, text: str, *, key: str | None = None) -> AgentPrompt:
-        if text:
+        if is_meaningful_prompt_value(text):
             resolved_key = key or f"text_{len(self._sections)}"
             self._sections[resolved_key] = PromptSection(
                 key=resolved_key,

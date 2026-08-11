@@ -7,6 +7,17 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
+def is_meaningful_prompt_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        normalized = value.strip()
+        return normalized not in {"", "{}", "[]", '""'}
+    if isinstance(value, (list, dict, tuple, set)):
+        return len(value) > 0
+    return True
+
+
 def prune_empty_prompt_values(value: Any) -> Any:
     if isinstance(value, dict):
         pruned = {
@@ -16,12 +27,12 @@ def prune_empty_prompt_values(value: Any) -> Any:
         return {
             key: item
             for key, item in pruned.items()
-            if item not in (None, "", [], {})
+            if is_meaningful_prompt_value(item)
         }
 
     if isinstance(value, list):
         pruned = [prune_empty_prompt_values(item) for item in value]
-        return [item for item in pruned if item not in (None, "", [], {})]
+        return [item for item in pruned if is_meaningful_prompt_value(item)]
 
     return value
 

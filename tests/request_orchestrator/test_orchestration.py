@@ -235,6 +235,33 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertNotIn('Earlier user prompt', prompt_text)
         self.assertNotIn('Earlier roundtrip summary', prompt_text)
 
+    def test_synthesis_prompt_omits_empty_conversation_context_section(self) -> None:
+        state = AgentState.new(
+            task='Summarize this.',
+            max_turns=10,
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            llm=MockLLM([]),
+        )
+
+        prompt = build_solver_prompt(
+            plan_with_evidence=[
+                PlanEvidenceStep(
+                    step_id='E1',
+                    plan='Review evidence.',
+                    tool='generic_web_search',
+                    args={},
+                    evidence={'items': ['result']},
+                )
+            ],
+            state=state,
+        )
+
+        prompt_text = prompt.prompt_text()
+
+        self.assertNotIn('Conversation Context (JSON):', prompt_text)
+        self.assertNotIn('\n\n{}\n\n', prompt_text)
+
     def test_user_attribute_creation_orchestration(self) -> None:
         fake_repo = FakeUserAttributeRepository()
 
