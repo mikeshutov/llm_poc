@@ -30,6 +30,19 @@ ATTRIBUTE_PROMPT_MANAGEMENT_EXCLUDED_FIELDS = {
 }
 
 
+class PromptGeoLocation(BaseModel):
+    city: str | None = None
+    region: str | None = None
+    country: str | None = None
+
+
+class PromptGeoMetadata(BaseModel):
+    current_datetime: str
+    current_weekday: str
+    timezone: str
+    location: PromptGeoLocation | None = None
+
+
 class GeoLocation(BaseModel):
     city: str | None = None
     region: str | None = None
@@ -40,11 +53,11 @@ class GeoLocation(BaseModel):
 
     def to_prompt_dict(self) -> dict[str, Any]:
         return prune_empty_prompt_values(
-            {
-                "city": self.city,
-                "region": self.region,
-                "country": self.country,
-            }
+            PromptGeoLocation(
+                city=self.city,
+                region=self.region,
+                country=self.country,
+            ).model_dump()
         )
 
 
@@ -56,12 +69,12 @@ class GeoMetadata(BaseModel):
 
     def to_prompt_dict(self) -> dict[str, Any]:
         return prune_empty_prompt_values(
-            {
-                "current_datetime": self.current_datetime,
-                "current_weekday": self.current_weekday,
-                "timezone": self.timezone,
-                "location": None if self.location is None else self.location.to_prompt_dict(),
-            }
+            PromptGeoMetadata(
+                current_datetime=self.current_datetime,
+                current_weekday=self.current_weekday,
+                timezone=self.timezone,
+                location=None if self.location is None else PromptGeoLocation.model_validate(self.location.to_prompt_dict()),
+            ).model_dump()
         )
 
 
