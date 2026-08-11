@@ -51,13 +51,11 @@ class GeoLocation(BaseModel):
     longitude: float | None = None
     timezone: str | None = None
 
-    def to_prompt_dict(self) -> dict[str, Any]:
-        return prune_empty_prompt_values(
-            PromptGeoLocation(
-                city=self.city,
-                region=self.region,
-                country=self.country,
-            ).model_dump()
+    def to_prompt_model(self) -> PromptGeoLocation:
+        return PromptGeoLocation(
+            city=self.city,
+            region=self.region,
+            country=self.country,
         )
 
 
@@ -67,14 +65,12 @@ class GeoMetadata(BaseModel):
     timezone: str
     location: GeoLocation | None = None
 
-    def to_prompt_dict(self) -> dict[str, Any]:
-        return prune_empty_prompt_values(
-            PromptGeoMetadata(
-                current_datetime=self.current_datetime,
-                current_weekday=self.current_weekday,
-                timezone=self.timezone,
-                location=None if self.location is None else PromptGeoLocation.model_validate(self.location.to_prompt_dict()),
-            ).model_dump()
+    def to_prompt_model(self) -> PromptGeoMetadata:
+        return PromptGeoMetadata(
+            current_datetime=self.current_datetime,
+            current_weekday=self.current_weekday,
+            timezone=self.timezone,
+            location=None if self.location is None else self.location.to_prompt_model(),
         )
 
 
@@ -144,7 +140,7 @@ class UserProfile(BaseModel):
                 "display_name": self.display_name,
                 "email": self.email,
                 "tone": None if not include_tone or self.tone is None else self.tone.model_dump(),
-                "geometadata": None if self.geometadata is None else self.geometadata.to_prompt_dict(),
+                "geometadata": None if self.geometadata is None else prune_empty_prompt_values(self.geometadata.to_prompt_model().model_dump()),
                 "user_attributes": self.user_attributes.to_prompt_dict(
                     include_management_fields=include_management_fields,
                 ),
