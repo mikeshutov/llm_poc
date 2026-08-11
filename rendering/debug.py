@@ -1,6 +1,7 @@
 import json
 
 import streamlit as st
+from pydantic import BaseModel, Field
 
 from common.message_constants import CONTENT_KEY, ROLE_DEBUG, ROLE_KEY
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
@@ -13,6 +14,62 @@ PLAN_KIND = "plan"
 EVALUATOR_KIND = "evaluator"
 TOOL_CALL_KIND = "tool_call"
 SYNTHESIS_KIND = "synthesis"
+
+
+class RequestAnalysisLogPayload(BaseModel):
+    title: str = "Request Analysis"
+    categories: list[str] = Field(default_factory=list)
+    goal: str = ""
+    requested_user_attribute_types: list[str] = Field(default_factory=list)
+    llm_usage: object | None = None
+
+
+class ProfileLoadLogPayload(BaseModel):
+    title: str = "User Profile Loaded"
+    requested_user_attribute_types: list[str] = Field(default_factory=list)
+    loaded_attribute_types: list[str] = Field(default_factory=list)
+    loaded_attribute_count: int = 0
+    loaded_attributes: list[dict] = Field(default_factory=list)
+
+
+class PlanLogPayload(BaseModel):
+    title: str = "Plan Generated"
+    status: str = ""
+    reason: str = ""
+    step_plans: list[str] = Field(default_factory=list)
+    llm_usage: object | None = None
+
+
+class SynthesisLogPayload(BaseModel):
+    title: str = "Synthesis"
+    answer_preview: list[str] = Field(default_factory=list)
+    follow_up: str = ""
+    clarifying_question: str = ""
+    relevant_evidence_ids: list[str] = Field(default_factory=list)
+    llm_usage: object | None = None
+
+
+class EvaluatorLogPayload(BaseModel):
+    title: str = "Evaluation"
+    status: str = EVALUATION_STATUS_RETRYABLE
+    relevant_evidence: list[str] = Field(default_factory=list)
+    missing_information: list[str] = Field(default_factory=list)
+    refined_goal: str = ""
+    parse_error: str = ""
+    llm_usage: object | None = None
+
+
+class ToolCallLogPayload(BaseModel):
+    title: str = "Tool Call"
+    step_plan: str = ""
+    tool_name: str = ""
+    step_id: str = ""
+    iteration: int | None = None
+    request: object | None = None
+    response: object | None = None
+    error: str = ""
+    latency_ms: int | None = None
+    metadata: dict = Field(default_factory=dict)
 
 
 def debug_render_message(content, content_title: str) -> None:
@@ -50,76 +107,70 @@ def _serialize_value(value) -> str:
 
 def _build_request_analysis_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    return {
-        "title": "Request Analysis",
-        "categories": data.get("applicable_tool_categories") or [],
-        "goal": data.get("goal") or "",
-        "requested_user_attribute_types": data.get("requested_user_attribute_types") or [],
-        "llm_usage": data.get("llm_usage"),
-    }
+    return RequestAnalysisLogPayload(
+        categories=data.get("applicable_tool_categories") or [],
+        goal=data.get("goal") or "",
+        requested_user_attribute_types=data.get("requested_user_attribute_types") or [],
+        llm_usage=data.get("llm_usage"),
+    ).model_dump()
 
 
 def _build_profile_load_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    return {
-        "title": "User Profile Loaded",
-        "requested_user_attribute_types": data.get("requested_user_attribute_types") or [],
-        "loaded_attribute_types": data.get("loaded_attribute_types") or [],
-        "loaded_attribute_count": data.get("loaded_attribute_count", 0),
-        "loaded_attributes": data.get("loaded_attributes") or [],
-    }
+    return ProfileLoadLogPayload(
+        requested_user_attribute_types=data.get("requested_user_attribute_types") or [],
+        loaded_attribute_types=data.get("loaded_attribute_types") or [],
+        loaded_attribute_count=data.get("loaded_attribute_count", 0),
+        loaded_attributes=data.get("loaded_attributes") or [],
+    ).model_dump()
 
 
 def _build_plan_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    return {
-        "title": "Plan Generated",
-        "status": entry.get("status") or data.get("planner_status") or "",
-        "reason": data.get("planner_reason") or "",
-        "step_plans": data.get("step_plans") or [],
-        "llm_usage": data.get("llm_usage"),
-    }
+    return PlanLogPayload(
+        status=entry.get("status") or data.get("planner_status") or "",
+        reason=data.get("planner_reason") or "",
+        step_plans=data.get("step_plans") or [],
+        llm_usage=data.get("llm_usage"),
+    ).model_dump()
 
 
 def _build_synthesis_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    return {
-        "title": "Synthesis",
-        "answer_preview": data.get("answer_preview") or [],
-        "follow_up": data.get("follow_up") or "",
-        "clarifying_question": data.get("clarifying_question") or "",
-        "relevant_evidence_ids": data.get("relevant_evidence_ids") or [],
-        "llm_usage": data.get("llm_usage"),
-    }
+    return SynthesisLogPayload(
+        answer_preview=data.get("answer_preview") or [],
+        follow_up=data.get("follow_up") or "",
+        clarifying_question=data.get("clarifying_question") or "",
+        relevant_evidence_ids=data.get("relevant_evidence_ids") or [],
+        llm_usage=data.get("llm_usage"),
+    ).model_dump()
 
 
 def _build_evaluator_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    return {
-        "title": "Evaluation",
-        "status": data.get("status") or entry.get("status") or EVALUATION_STATUS_RETRYABLE,
-        "relevant_evidence": data.get("relevant_evidence") or [],
-        "missing_information": data.get("missing_information") or [],
-        "refined_goal": (data.get("refined_goal") or "").strip(),
-        "parse_error": data.get("parse_error") or "",
-        "llm_usage": data.get("llm_usage"),
-    }
+    return EvaluatorLogPayload(
+        status=data.get("status") or entry.get("status") or EVALUATION_STATUS_RETRYABLE,
+        relevant_evidence=data.get("relevant_evidence") or [],
+        missing_information=data.get("missing_information") or [],
+        refined_goal=(data.get("refined_goal") or "").strip(),
+        parse_error=data.get("parse_error") or "",
+        llm_usage=data.get("llm_usage"),
+    ).model_dump()
 
 
 def _build_tool_call_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    return {
-        "title": "Tool Call",
-        "step_plan": data.get("step_plan") or entry.get("summary") or "",
-        "tool_name": entry.get("tool_name") or data.get("tool_name") or "",
-        "step_id": entry.get("step_id") or data.get("step_id") or "",
-        "iteration": entry.get("iteration"),
-        "request": entry.get("request"),
-        "response": entry.get("response"),
-        "error": entry.get("error") or "",
-        "latency_ms": data.get("latency_ms"),
-        "metadata": entry.get("metadata") or {},
-    }
+    return ToolCallLogPayload(
+        step_plan=data.get("step_plan") or entry.get("summary") or "",
+        tool_name=entry.get("tool_name") or data.get("tool_name") or "",
+        step_id=entry.get("step_id") or data.get("step_id") or "",
+        iteration=entry.get("iteration"),
+        request=entry.get("request"),
+        response=entry.get("response"),
+        error=entry.get("error") or "",
+        latency_ms=data.get("latency_ms"),
+        metadata=entry.get("metadata") or {},
+    ).model_dump()
 
 
 def _build_log_payload(entry: dict) -> tuple[str, dict]:
