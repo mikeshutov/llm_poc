@@ -85,7 +85,6 @@ def _build_planner_task(state: AgentState) -> str:
 def build_planner_prompt(state: AgentState) -> AgentPrompt:
     context = _compile_tools_rules_from_state(state)
     previous_iterations: list[PreviousIteration] = []
-    has_prior_tool_results = any(bool(iteration.results) for iteration in state.iteration_trace)
     attribute_prefixes = ", ".join(ATTRIBUTE_CATEGORIES)
     attribute_suffixes = ", ".join(ATTRIBUTE_QUALIFIERS)
 
