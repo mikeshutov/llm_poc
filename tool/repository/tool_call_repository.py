@@ -23,12 +23,17 @@ class ToolCallRepository:
         roundtrip_id: UUID,
         iteration: IterationState,
         step: PlanStep,
+        *,
+        input_payload: Any | None = None,
+        output_payload: Any | None = None,
+        error_message: str | None = None,
+        duration_ms: int | None = None,
     ) -> None:
         plan = iteration.plan
         plan_id = plan.db_id if plan else None
-        result = iteration.results.get(step.id)
+        result = iteration.results.get(step.id) if output_payload is None else output_payload
         status = "completed" if result is not None else "pending"
-        input_payload = self._sanitize_for_storage(step.args or {})
+        sanitized_input_payload = self._sanitize_for_storage(step.args if input_payload is None else input_payload)
         output = self._sanitize_for_storage(result) if result is not None else None
 
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -43,9 +48,11 @@ class ToolCallRepository:
                     status,
                     input_payload,
                     output_payload,
+                    error_message,
+                    duration_ms,
                     goal
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     roundtrip_id,
@@ -54,8 +61,10 @@ class ToolCallRepository:
                     step.step_index,
                     step.tool,
                     status,
-                    Jsonb(input_payload),
+                    Jsonb(sanitized_input_payload),
                     Jsonb(output) if output is not None else None,
+                    error_message,
+                    duration_ms,
                     step.plan,
                 ),
             )
