@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_serializer
+from pydantic import BaseModel, Field, field_validator
 
 from common.serialization import prune_empty_prompt_values
+from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 
 ATTRIBUTE_PROMPT_EXCLUDED_FIELDS = {
@@ -84,24 +85,25 @@ class UserAttributesSection(BaseModel):
             }
         )
 
-    @model_serializer(mode="plain")
-    def serialize_model(self) -> dict[str, Any]:
-        return self.to_prompt_dict()
-
-
 class UserProfile(BaseModel):
     user_id: str | None = None
     first_name: str | None = None
     last_name: str | None = None
     display_name: str | None = None
     email: str | None = None
+    tone: TonePreferences | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: str | None = None
     updated_at: str | None = None
     geometadata: GeoMetadata | None = None
     user_attributes: UserAttributesSection = Field(default_factory=UserAttributesSection)
 
-    def to_prompt_dict(self, include_management_fields: bool = False) -> dict[str, Any]:
+    def to_prompt_dict(
+        self,
+        include_management_fields: bool = False,
+        *,
+        include_tone: bool = False,
+    ) -> dict[str, Any]:
         return prune_empty_prompt_values(
             {
                 "user_id": self.user_id,
@@ -109,6 +111,7 @@ class UserProfile(BaseModel):
                 "last_name": self.last_name,
                 "display_name": self.display_name,
                 "email": self.email,
+                "tone": None if not include_tone or self.tone is None else self.tone.model_dump(),
                 "geometadata": None if self.geometadata is None else self.geometadata.model_dump(),
                 "user_attributes": self.user_attributes.to_prompt_dict(
                     include_management_fields=include_management_fields,
@@ -116,6 +119,3 @@ class UserProfile(BaseModel):
             }
         )
 
-    @model_serializer(mode="plain")
-    def serialize_model(self) -> dict[str, Any]:
-        return self.to_prompt_dict()

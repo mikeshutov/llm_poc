@@ -7,7 +7,9 @@ from request_orchestrator.shared.synthesis.prompts.synthesis_schema_prompt impor
 
 def _build_synthesis_context(state: AgentState) -> ConversationContext:
     return ConversationContext(
+        conversation_summary=state.conversation_context.conversation_summary,
         latest_conversation_summary=state.conversation_context.latest_conversation_summary,
+        tool_summary=state.conversation_context.tool_summary,
     )
 
 
@@ -22,7 +24,7 @@ def build_solver_prompt(plan_with_evidence: list[PlanEvidenceStep], state: Agent
         schema=SYNTHESIS_SCHEMA,
         task=state.task,
     )
-    prompt.include_user_profile()
+    prompt.include_user_profile(include_tone=True)
     prompt.include_rules_section()
     prompt.include_conversation_context()
     prompt.include_plan_with_evidence()

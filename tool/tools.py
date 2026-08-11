@@ -30,6 +30,7 @@ from request_orchestrator.shared.tool_adapter.products.find_products import find
 from request_orchestrator.shared.tool_adapter.profile.set_user_display_name import set_user_display_name
 from request_orchestrator.shared.tool_adapter.profile.set_user_first_name import set_user_first_name
 from request_orchestrator.shared.tool_adapter.profile.set_user_last_name import set_user_last_name
+from request_orchestrator.shared.tool_adapter.profile.update_user_tone import update_user_tone
 from request_orchestrator.shared.tool_adapter.products.find_products_web import find_products_web
 from request_orchestrator.shared.tool_adapter.products.list_product_categories import list_product_categories
 from request_orchestrator.shared.tool_adapter.search.brave_news_search import news_search
@@ -67,7 +68,7 @@ MATH_TOOLS = [calculate]
 MEMORY_TOOLS = [search_memories, search_roundtrip_memories]
 USER_ATTRIBUTE_TOOLS = [create_user_attribute, update_user_attribute, get_user_attributes, search_user_attributes]
 FILE_TOOLS = [search_files, search_file_for_details, get_file_by_id]
-PROFILE_TOOLS = [set_user_display_name, set_user_first_name, set_user_last_name]
+PROFILE_TOOLS = [set_user_display_name, set_user_first_name, set_user_last_name, update_user_tone]
 
 # if this were to grow much larger I would probably create sub categories or a tree structure of tools
 TOOL_CATEGORIES: dict[str, ToolCategory] = {

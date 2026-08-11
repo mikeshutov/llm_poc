@@ -137,7 +137,10 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         previous_iterations=previous_iterations,
         schema=PLANNER_SCHEMA,
     )
-    prompt.include_user_profile(include_management_fields=_is_profile_management_agent(state))
+    prompt.include_user_profile(
+        include_management_fields=_is_profile_management_agent(state),
+        include_tone=True,
+    )
     prompt.include_conversation_context()
     prompt.include_available_tools()
     prompt.include_rules_raw()

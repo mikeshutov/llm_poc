@@ -4,7 +4,7 @@ from time import perf_counter
 
 from langsmith import traceable
 
-from common.parsing import strip_code_fences
+from common.parsing import repair_common_json_issues, strip_code_fences
 from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, SYNTHESIS_STAGE
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.usage import record_llm_call, serialize_llm_call_record
@@ -77,7 +77,7 @@ def run_synthesis(state: AgentState) -> AgentState:
             "raw_content": response.content,
         },
     )
-    raw = strip_code_fences(response.content)
+    raw = repair_common_json_issues(strip_code_fences(response.content))
 
     try:
         synthesis_result = SynthesisResult.model_validate_json(raw)

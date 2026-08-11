@@ -8,11 +8,14 @@ from psycopg.types.json import Jsonb
 
 from db.connection import get_connection
 from personalization.profile.models import UserProfile
+from personalization.tone.models import TonePreferences
+from personalization.tone.repository.tone_repository import ToneRepository
 
 
 class UserProfileRepository:
     def __init__(self, conn: psycopg.Connection | None = None):
         self._conn = conn or get_connection()
+        self._tone_repo = ToneRepository(self._conn)
 
     def _normalize_row(self, row: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(row)
@@ -22,6 +25,13 @@ class UserProfileRepository:
                 normalized[field_name] = field_value.isoformat()
         return normalized
 
+    def _hydrate_profile_tone(self, profile: UserProfile) -> UserProfile:
+        if not profile.user_id:
+            return profile
+        tone = self._tone_repo.get_tone(user_id=profile.user_id, tone_type="profile")
+        profile.tone = None if tone is None else tone.to_preferences()
+        return profile
+
     def ensure_profile(
         self,
         user_id: str,
@@ -30,6 +40,7 @@ class UserProfileRepository:
         last_name: str | None = None,
         display_name: str | None = None,
         email: str | None = None,
+        tone: TonePreferences | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> UserProfile:
         resolved_user_id = user_id.strip()
@@ -58,7 +69,15 @@ class UserProfileRepository:
             )
             row = cur.fetchone()
             assert row is not None
-            return UserProfile(**self._normalize_row(row))
+            profile = UserProfile(**self._normalize_row(row))
+            if tone is not None:
+                profile.tone = self._tone_repo.upsert_tone(
+                    user_id=resolved_user_id,
+                    tone=tone,
+                    tone_type="profile",
+                ).to_preferences()
+                return profile
+            return self._hydrate_profile_tone(profile)
 
     def get_profile(self, user_id: str) -> UserProfile | None:
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -71,7 +90,7 @@ class UserProfileRepository:
                 (user_id,),
             )
             row = cur.fetchone()
-            return UserProfile(**self._normalize_row(row)) if row else None
+            return self._hydrate_profile_tone(UserProfile(**self._normalize_row(row))) if row else None
 
     def update_profile(
         self,
@@ -80,6 +99,7 @@ class UserProfileRepository:
         last_name: str | None = None,
         display_name: str | None = None,
         email: str | None = None,
+        tone: TonePreferences | None = None,
     ) -> UserProfile | None:
         resolved_user_id = user_id.strip()
         if not resolved_user_id:
@@ -100,7 +120,17 @@ class UserProfileRepository:
                 (first_name, last_name, display_name, email, resolved_user_id),
             )
             row = cur.fetchone()
-            return UserProfile(**self._normalize_row(row)) if row else None
+            if row is None:
+                return None
+            profile = UserProfile(**self._normalize_row(row))
+            if tone is not None:
+                profile.tone = self._tone_repo.upsert_tone(
+                    user_id=resolved_user_id,
+                    tone=tone,
+                    tone_type="profile",
+                ).to_preferences()
+                return profile
+            return self._hydrate_profile_tone(profile)
 
     def list_profiles(self, limit: int = 100) -> list[UserProfile]:
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -114,4 +144,7 @@ class UserProfileRepository:
                 (limit,),
             )
             rows = cur.fetchall()
-            return [UserProfile(**self._normalize_row(row)) for row in rows]
+            return [
+                self._hydrate_profile_tone(UserProfile(**self._normalize_row(row)))
+                for row in rows
+            ]

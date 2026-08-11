@@ -11,6 +11,7 @@ from conversation.models.conversation_models import ConversationContext
 from conversation.models.conversation_models import RecentRoundtrip
 from integrations.world_time.models import WorldTime
 from personalization.profile.models import UserProfile
+from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 
 if 'yfinance' not in sys.modules:
@@ -28,6 +29,7 @@ from request_orchestrator.constants import SYNTHESIS_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PlanEvidenceStep
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
+from request_orchestrator.shared.evaluator.prompts.evaluator_prompt import build_evaluator_prompt
 from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_solver_prompt
 from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
 
@@ -114,6 +116,66 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertIn('Search the web for frozen or dry okonomiyaki kits for sale, since the user clarified they want okonomiyaki and wants a broader web check.', prompt_text)
         self.assertIn('Latest User Prompt:', prompt_text)
         self.assertIn('Can you find frozen or dry okonomiyaki kits for sale online?', prompt_text)
+
+    def test_tone_is_included_only_for_planner_and_synthesis_prompts(self) -> None:
+        profile = UserProfile(
+            user_id='user-123',
+            tone=TonePreferences(
+                verbosity='concise',
+                directness='high',
+            ),
+        )
+        state = AgentState.new(
+            task='Help me with this request.',
+            max_turns=10,
+            conversation_context=ConversationContext(),
+            user_profile=profile,
+            llm=MockLLM([]),
+        )
+        state.request_analysis.goal = 'Use the available evidence to answer the request.'
+
+        planner_prompt = build_planner_prompt(state).prompt_text()
+        synthesis_prompt = build_solver_prompt(
+            plan_with_evidence=[
+                PlanEvidenceStep(
+                    step_id='E1',
+                    plan='Use known evidence.',
+                    tool='generic_web_search',
+                    args={},
+                    evidence={'items': ['result']},
+                )
+            ],
+            state=state,
+        ).prompt_text()
+        request_analysis_prompt = build_request_analysis_prompt(state).prompt_text()
+        evaluator_prompt = build_evaluator_prompt(
+            state=state,
+            plan_with_evidence=[
+                PlanEvidenceStep(
+                    step_id='E1',
+                    plan='Use known evidence.',
+                    tool='generic_web_search',
+                    args={},
+                    evidence={'items': ['result']},
+                )
+            ],
+        ).prompt_text()
+
+        self.assertIn('"tone"', planner_prompt)
+        self.assertIn('"verbosity": "concise"', planner_prompt)
+        self.assertIn('"directness": "high"', planner_prompt)
+
+        self.assertIn('"tone"', synthesis_prompt)
+        self.assertIn('"verbosity": "concise"', synthesis_prompt)
+        self.assertIn('"directness": "high"', synthesis_prompt)
+
+        self.assertNotIn('"tone"', request_analysis_prompt)
+        self.assertNotIn('"verbosity": "concise"', request_analysis_prompt)
+        self.assertNotIn('"directness": "high"', request_analysis_prompt)
+
+        self.assertNotIn('"tone"', evaluator_prompt)
+        self.assertNotIn('"verbosity": "concise"', evaluator_prompt)
+        self.assertNotIn('"directness": "high"', evaluator_prompt)
 
     def test_request_analysis_prompt_requires_self_contained_goal_for_downstream_steps(self) -> None:
         state = AgentState.new(
@@ -202,7 +264,9 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             task='Summarize this.',
             max_turns=10,
             conversation_context=ConversationContext(
+                conversation_summary='User has been comparing pantry noodle options and cares about quick preparation.',
                 latest_conversation_summary='User was comparing noodle options.',
+                tool_summary='Earlier tools found soba, udon, and ramen options.',
                 recent_roundtrips=[
                     RecentRoundtrip(
                         message_index=4,
@@ -230,7 +294,11 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         prompt_text = prompt.prompt_text()
 
         self.assertIn('Conversation Context (JSON):', prompt_text)
+        self.assertIn('conversation_summary', prompt_text)
+        self.assertIn('User has been comparing pantry noodle options and cares about quick preparation.', prompt_text)
         self.assertIn('latest_conversation_summary', prompt_text)
+        self.assertIn('tool_summary', prompt_text)
+        self.assertIn('Earlier tools found soba, udon, and ramen options.', prompt_text)
         self.assertNotIn('recent_roundtrips', prompt_text)
         self.assertNotIn('Earlier user prompt', prompt_text)
         self.assertNotIn('Earlier roundtrip summary', prompt_text)

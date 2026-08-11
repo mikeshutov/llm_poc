@@ -8,7 +8,7 @@ from request_orchestrator.models.agent_state import AgentState, IterationState
 from request_orchestrator.models import AgentResult, Plan, PlanningResult
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from request_orchestrator.constants import PLANNER_PROMPT_STEP
-from common.parsing import strip_code_fences
+from common.parsing import repair_common_json_issues, strip_code_fences
 from conversation.models.conversation_model_config import PLANNER_STAGE
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.usage import record_llm_call, serialize_llm_call_record
@@ -50,7 +50,7 @@ def _invoke_planner(
             "raw_content": response.content,
         },
     )
-    raw = strip_code_fences(response.content)
+    raw = repair_common_json_issues(strip_code_fences(response.content))
     return PlanningResult.model_validate_json(raw), llm_call
 
 
