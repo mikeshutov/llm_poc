@@ -60,7 +60,7 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
             '- Requested or updated attribute types must use the format prefix.suffix such as food.likes or projects.goals.\n\n'
             'Execution rules:\n'
             '- Do not repeat executed calls.\n'
-            '- Reuse previous evidence.\n'
+            '- Do not make one planned tool step depend on another step\'s output. Each step must stand on its own inputs for now.\n'
             '- Keep plans to one sentence.'
         ),
     )

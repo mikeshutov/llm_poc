@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+DEFAULT_SYNTHESIS_FOLLOW_UP = "What would you like to do next?"
+
 
 class SynthesisToolSummary(BaseModel):
     used_tools: list[str] = Field(default_factory=list)
@@ -28,7 +30,10 @@ class SynthesisResult(BaseModel):
     def normalize_questions(self) -> "SynthesisResult":
         self.follow_up = self.follow_up.strip()
         self.clarifying_question = self.clarifying_question.strip()
-
-        if self.clarifying_question:
+        has_follow_up = bool(self.follow_up)
+        has_clarifying_question = bool(self.clarifying_question)
+        if has_follow_up and has_clarifying_question:
             self.follow_up = ""
+        if not has_follow_up and not has_clarifying_question:
+            self.follow_up = DEFAULT_SYNTHESIS_FOLLOW_UP
         return self

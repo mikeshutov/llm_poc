@@ -6,7 +6,8 @@ BASE_PLANNER_RULES = [
     "Return tool steps only when they meaningfully advance the goal.",
     "Do not repeat materially equivalent tool calls that have already been executed.",
     "Keep each Plan explanation to one sentence.",
-    "Sequence dependent calls when a later call requires an earlier result. Include independent calls together in the same plan when useful.",
+    "Do not make one planned tool step depend on another step's output. For now, every step must be runnable from its own arguments alone.",
+    "You may use already-available tool results from previous work when deciding what to do next.",
     "Prefer the smallest useful set of tool calls.",
 ]
 

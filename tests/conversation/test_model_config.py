@@ -30,6 +30,7 @@ from conversation.models.conversation_model_config import (
 )
 from conversation.models.conversation_models import ConversationContext, ConversationRoundtrip
 from conversation.models.conversation_models import Conversation
+from integrations.ip_api.models import IpLocation
 from personalization.profile.models import UserProfile
 from rendering.sidebar import build_model_config_rows
 from request_orchestrator.service import run_request_orchestrator_for_query
@@ -365,6 +366,58 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
         },
         'calls': [],
     }
+
+
+def test_run_request_orchestrator_populates_geometadata_location_when_available() -> None:
+    conversation_id = uuid4()
+    config = ConversationModelConfig.build_default()
+    fake_repo = FakeConversationRepository(config)
+    fake_repo.conversation_id = conversation_id
+    captured_profile_kwargs: dict[str, object] = {}
+
+    def fake_build_user_profile(**kwargs):
+        captured_profile_kwargs.update(kwargs)
+        return UserProfile(
+            user_id='anonymous',
+            geometadata=kwargs.get('geometadata'),
+        )
+
+    with patch('request_orchestrator.service.get_conversation_repo', return_value=fake_repo), patch(
+        'request_orchestrator.service.build_roundtrip_context',
+        return_value=ConversationContext(),
+    ), patch(
+        'request_orchestrator.service._ip_api_client.get_location',
+        return_value=IpLocation(
+            status='success',
+            country='Canada',
+            region='ON',
+            region_name='Ontario',
+            city='Toronto',
+            lat=43.6532,
+            lon=-79.3832,
+            timezone='America/Toronto',
+        ),
+    ), patch(
+        'request_orchestrator.service.build_user_profile',
+        side_effect=fake_build_user_profile,
+    ), patch(
+        'request_orchestrator.service.run_agent',
+        return_value=DummyAgentResult(answer=['done'], roundtrip_summary='summary'),
+    ), patch(
+        'request_orchestrator.service.embed_text',
+        return_value=[0.1, 0.2, 0.3],
+    ):
+        run_request_orchestrator_for_query(str(conversation_id), 'hello world', user_id='anonymous')
+
+    geometadata = captured_profile_kwargs['geometadata']
+    assert geometadata is not None
+    assert geometadata.timezone == 'America/Toronto'
+    assert geometadata.location is not None
+    assert geometadata.location.city == 'Toronto'
+    assert geometadata.location.region == 'Ontario'
+    assert geometadata.location.country == 'Canada'
+    assert geometadata.location.latitude == 43.6532
+    assert geometadata.location.longitude == -79.3832
 
 
 def test_build_model_config_rows_exposes_effective_models_overrides_and_pricing() -> None:
