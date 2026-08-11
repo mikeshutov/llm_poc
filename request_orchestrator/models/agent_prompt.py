@@ -257,19 +257,19 @@ class AgentPrompt:
         data = asdict(self)
         data.pop("_sections", None)
         if self.conversation_context is not None:
-            data["conversation_context"] = prune_empty_prompt_values(
+            data[PromptSectionKeys.CONVERSATION_CONTEXT] = prune_empty_prompt_values(
                 self.conversation_context.model_dump()
             )
         if self.user_profile is not None:
-            data["user_profile"] = self.user_profile.to_prompt_dict(
+            data[PromptSectionKeys.USER_PROFILE] = self.user_profile.to_prompt_dict(
                 include_management_fields=False,
             )
         if self.previous_iterations is not None:
-            data["previous_iterations"] = prune_empty_prompt_values([
+            data[PromptSectionKeys.PREVIOUS_ITERATIONS] = prune_empty_prompt_values([
                 iteration.model_dump() for iteration in self.previous_iterations
             ])
         if self.plan_with_evidence is not None:
-            data["plan_with_evidence"] = prune_empty_prompt_values([
+            data[PromptSectionKeys.PLAN_WITH_EVIDENCE] = prune_empty_prompt_values([
                 step.model_dump() for step in self.plan_with_evidence
             ])
         return prune_empty_prompt_values(data)
