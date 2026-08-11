@@ -8,6 +8,7 @@ from tool.tools import TOOL_CATEGORIES
 
 DEFAULT_PLANNER_PROMPT_INSTRUCTION = "You are a planning agent."
 DEFAULT_PLANNER_RULES = ""
+PROFILE_MANAGEMENT_AGENT_NAME = "profile_management"
 DEFAULT_SYNTHESIS_INSTRUCTION = (
     "Solve the following task or problem. To solve the problem, we have made "
     "step-by-step Plan and retrieved corresponding Evidence to each Plan. "

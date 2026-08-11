@@ -28,7 +28,6 @@ from request_orchestrator.constants import SYNTHESIS_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PlanEvidenceStep
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
-from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_solver_prompt
 from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
 
@@ -69,12 +68,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         subagent_state = _prepare_subagent_state(parent_state)
         prompt = build_planner_prompt(subagent_state.to_runtime_state(parent_state))
-        prompt_text = render_agent_prompt(prompt)
+        prompt_text = prompt.prompt_text()
 
         self.assertEqual(subagent_state.task, 'Please remember that I like pizza and eggs.')
         self.assertEqual(
             subagent_state.request_analysis.goal,
-            'Review this turn for durable user attribute maintenance needs. If attribute work is needed, plan the minimal retrieval and/or update step combination required.',
+            'Review this turn for durable user profile field and user attribute maintenance needs. If profile work is needed, plan the minimal retrieval and/or update step combination required.',
         )
         self.assertIn('Latest User Prompt:', prompt_text)
         self.assertIn('Please remember that I like pizza and eggs.', prompt_text)
@@ -85,12 +84,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertNotIn('Evidence references must be defined before use.', prompt_text)
         self.assertEqual(
             prompt.task,
-            'Review this turn for durable user attribute maintenance needs. If attribute work is needed, plan the minimal retrieval and/or update step combination required.',
+            'Review this turn for durable user profile field and user attribute maintenance needs. If profile work is needed, plan the minimal retrieval and/or update step combination required.',
         )
         self.assertEqual(prompt.latest_user_prompt, 'Please remember that I like pizza and eggs.')
         self.assertIn('Task:', prompt_text)
         self.assertNotIn('Goal:', prompt_text)
-        self.assertIn('Review this turn for durable user attribute maintenance needs. If attribute work is needed, plan the minimal retrieval and/or update step combination required.', prompt_text)
+        self.assertIn('Review this turn for durable user profile field and user attribute maintenance needs. If profile work is needed, plan the minimal retrieval and/or update step combination required.', prompt_text)
         self.assertIn('attribute_type (required): Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.', prompt_text)
         self.assertIn('Available attribute prefixes:', prompt_text)
         self.assertIn('Available attribute suffixes:', prompt_text)
@@ -109,7 +108,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         state.request_analysis.goal = 'Search the web for frozen or dry okonomiyaki kits for sale, since the user clarified they want okonomiyaki and wants a broader web check.'
 
         prompt = build_planner_prompt(state)
-        prompt_text = render_agent_prompt(prompt)
+        prompt_text = prompt.prompt_text()
 
         self.assertIn('Goal:', prompt_text)
         self.assertIn('Search the web for frozen or dry okonomiyaki kits for sale, since the user clarified they want okonomiyaki and wants a broader web check.', prompt_text)
@@ -126,7 +125,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         )
 
         prompt = build_request_analysis_prompt(state)
-        prompt_text = render_agent_prompt(prompt)
+        prompt_text = prompt.prompt_text()
 
         self.assertIn('Make the goal self-contained for downstream steps because the full conversation context will not be passed through later.', prompt_text)
         self.assertIn('Include any relevant conversation-derived constraints, continuity, entities, or references needed by downstream planning and synthesis because the full conversation context will not be passed through later.', prompt_text)
@@ -144,7 +143,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertIs(parent_state.build_llm_for_stage(stage='planner'), parent_state.llm)
 
-    def test_render_agent_prompt_prunes_null_fields_from_plan_evidence(self) -> None:
+    def test_prompt_text_prunes_null_fields_from_plan_evidence(self) -> None:
         prompt = AgentPrompt(
             prompt_kind=SYNTHESIS_PROMPT_KIND,
             instruction='Synthesize the answer.',
@@ -180,8 +179,11 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             ],
             schema='{}',
         )
+        prompt.include_user_profile()
+        prompt.include_plan_with_evidence()
+        prompt.include_schema_raw()
 
-        prompt_text = render_agent_prompt(prompt)
+        prompt_text = prompt.prompt_text()
 
         self.assertIn('"external_results"', prompt_text)
         self.assertIn('"name": "Soba Noodles"', prompt_text)
@@ -225,13 +227,40 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             ],
             state=state,
         )
-        prompt_text = render_agent_prompt(prompt)
+        prompt_text = prompt.prompt_text()
 
         self.assertIn('Conversation Context (JSON):', prompt_text)
         self.assertIn('latest_conversation_summary', prompt_text)
         self.assertNotIn('recent_roundtrips', prompt_text)
         self.assertNotIn('Earlier user prompt', prompt_text)
         self.assertNotIn('Earlier roundtrip summary', prompt_text)
+
+    def test_synthesis_prompt_omits_empty_conversation_context_section(self) -> None:
+        state = AgentState.new(
+            task='Summarize this.',
+            max_turns=10,
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            llm=MockLLM([]),
+        )
+
+        prompt = build_solver_prompt(
+            plan_with_evidence=[
+                PlanEvidenceStep(
+                    step_id='E1',
+                    plan='Review evidence.',
+                    tool='generic_web_search',
+                    args={},
+                    evidence={'items': ['result']},
+                )
+            ],
+            state=state,
+        )
+
+        prompt_text = prompt.prompt_text()
+
+        self.assertNotIn('Conversation Context (JSON):', prompt_text)
+        self.assertNotIn('\n\n{}\n\n', prompt_text)
 
     def test_user_attribute_creation_orchestration(self) -> None:
         fake_repo = FakeUserAttributeRepository()

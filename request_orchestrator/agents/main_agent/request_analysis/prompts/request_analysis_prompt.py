@@ -13,7 +13,7 @@ def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
     attribute_prefixes = ", ".join(ATTRIBUTE_CATEGORIES)
     attribute_suffixes = ", ".join(ATTRIBUTE_QUALIFIERS)
 
-    return AgentPrompt(
+    prompt = AgentPrompt(
         prompt_kind=REQUEST_ANALYSIS_PROMPT_KIND,
         instruction=(
             "You are a request analyzer. "
@@ -38,3 +38,9 @@ def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
         schema=REQUEST_ANALYSIS_SCHEMA,
         task=agent_state.task,
     )
+    prompt.include_user_profile()
+    prompt.include_conversation_context(heading="Conversation context (JSON):")
+    prompt.include_available_tool_categories()
+    prompt.include_latest_user_prompt()
+    prompt.include_schema_as_response_label()
+    return prompt

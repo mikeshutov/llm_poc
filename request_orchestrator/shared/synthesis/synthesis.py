@@ -13,7 +13,6 @@ from request_orchestrator.models.agent_prompt import PlanEvidenceStep
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.synthesized_result import SynthesisResult
-from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_solver_prompt
 from rendering.debug import SYNTHESIS_KIND
 
@@ -54,7 +53,8 @@ def run_synthesis(state: AgentState) -> AgentState:
         plan_with_evidence = all_plan_with_evidence
 
     prompt = build_solver_prompt(plan_with_evidence=plan_with_evidence, state=state)
-    prompt_text = render_agent_prompt(prompt)
+    prompt_text = prompt.prompt_text()
+    prompt_input_object = prompt.to_log_input_object()
     llm = state.build_llm_for_stage(
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=SYNTHESIS_STAGE,
@@ -72,9 +72,7 @@ def run_synthesis(state: AgentState) -> AgentState:
         stage=SYNTHESIS_STAGE,
         callsite="shared_synthesis.run_synthesis",
         latency_ms=latency_ms,
-        input_object={
-            "prompt": prompt_text,
-        },
+        input_object=prompt_input_object,
         output_object={
             "raw_content": response.content,
         },

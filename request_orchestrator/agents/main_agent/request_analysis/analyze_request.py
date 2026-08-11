@@ -9,7 +9,6 @@ from conversation.repository.repo_factory import get_conversation_repo
 from llm.usage import record_llm_call, serialize_llm_call_record
 from request_orchestrator.models.agent_state import AgentState, RequestAnalysis
 from request_orchestrator.constants import MAIN_AGENT_NAME, REQUEST_ANALYSIS_PROMPT_STEP
-from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 from request_orchestrator.agents.main_agent.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
 from rendering.debug import REQUEST_ANALYSIS_KIND
 
@@ -17,7 +16,8 @@ from rendering.debug import REQUEST_ANALYSIS_KIND
 @traceable(name="Request Analysis Node")
 def analyze_request(agent_state: AgentState) -> AgentState:
     prompt = build_request_analysis_prompt(agent_state)
-    prompt_text = render_agent_prompt(prompt)
+    prompt_text = prompt.prompt_text()
+    prompt_input_object = prompt.to_log_input_object()
     llm = agent_state.build_llm_for_stage(
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=REQUEST_ANALYSIS_STAGE,
@@ -35,9 +35,7 @@ def analyze_request(agent_state: AgentState) -> AgentState:
         stage=REQUEST_ANALYSIS_STAGE,
         callsite="request_analysis.analyze_request",
         latency_ms=latency_ms,
-        input_object={
-            "prompt": prompt_text,
-        },
+        input_object=prompt_input_object,
         output_object={
             "raw_content": response.content,
         },

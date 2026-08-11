@@ -19,7 +19,7 @@ from conversation.models.conversation_model_config import (
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import GeoLocation, GeoMetadata, UserProfile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
-from request_orchestrator.agents.models.agent_profile import AgentProfile
+from request_orchestrator.agents.models.agent_profile import AgentProfile, PROFILE_MANAGEMENT_AGENT_NAME
 from .agent_result import AgentResult
 from .evaluation_result import EvaluationStatus, EVALUATION_STATUS_RETRYABLE
 from .plan import Plan
@@ -397,7 +397,7 @@ class AgentState:
         return self.conversation_model_config.resolve(agent, stage)
 
     def resolve_agent_scope(self) -> str:
-        if self.agent_profile.name == "profile_management":
+        if self.agent_profile.name == PROFILE_MANAGEMENT_AGENT_NAME:
             return PROFILE_AGENT_MODEL_SCOPE
         return MAIN_AGENT_MODEL_SCOPE
 

@@ -17,7 +17,6 @@ from request_orchestrator.models.evaluation_result import (
     TERMINAL_EVALUATION_STATUSES,
 )
 from request_orchestrator.shared.evaluator.prompts import build_evaluator_prompt
-from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 
 EVALUATOR_KIND = "evaluator"
 
@@ -56,7 +55,8 @@ def _build_plan_with_evidence(state: AgentState) -> list[PlanEvidenceStep]:
 def run_evaluator(state: AgentState) -> AgentState:
     plan_with_evidence = _build_plan_with_evidence(state)
     prompt = build_evaluator_prompt(state=state, plan_with_evidence=plan_with_evidence)
-    prompt_text = render_agent_prompt(prompt)
+    prompt_text = prompt.prompt_text()
+    prompt_input_object = prompt.to_log_input_object()
     llm = state.build_llm_for_stage(agent=SHARED_MODEL_SCOPE, stage=EVALUATOR_STAGE)
     started_at = perf_counter()
     response = llm.invoke(prompt_text)
@@ -72,9 +72,7 @@ def run_evaluator(state: AgentState) -> AgentState:
         callsite="shared_evaluator.run_evaluator",
         metadata={"evidence_count": len(plan_with_evidence)},
         latency_ms=latency_ms,
-        input_object={
-            "prompt": prompt_text,
-        },
+        input_object=prompt_input_object,
         output_object={
             "raw_content": response.content,
         },

@@ -16,7 +16,7 @@ def _build_instruction(state: AgentState) -> str:
 
 
 def build_evaluator_prompt(state: AgentState, plan_with_evidence: list[PlanEvidenceStep]) -> AgentPrompt:
-    return AgentPrompt(
+    prompt = AgentPrompt(
         prompt_kind=EVALUATOR_PROMPT_KIND,
         instruction=_build_instruction(state),
         user_profile=state.user_profile,
@@ -25,3 +25,9 @@ def build_evaluator_prompt(state: AgentState, plan_with_evidence: list[PlanEvide
         plan_with_evidence=plan_with_evidence,
         schema=EVALUATOR_SCHEMA,
     )
+    prompt.include_user_profile()
+    prompt.include_plan_with_evidence()
+    prompt.include_latest_user_prompt()
+    prompt.include_schema_as_response_label()
+    prompt.include_task(heading="Goal:")
+    return prompt

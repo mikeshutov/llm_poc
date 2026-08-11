@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from personalization.profile.models import UserProfile
-from request_orchestrator.agents.models.agent_profile import AgentProfile
+from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_CATEGORIES, ATTRIBUTE_QUALIFIERS
+from request_orchestrator.agents.models.agent_profile import AgentProfile, PROFILE_MANAGEMENT_AGENT_NAME
 from request_orchestrator.shared.tool_adapter.profile.set_user_display_name import set_user_display_name
 from request_orchestrator.shared.tool_adapter.profile.set_user_first_name import set_user_first_name
 from request_orchestrator.shared.tool_adapter.profile.set_user_last_name import set_user_last_name
@@ -9,6 +10,8 @@ from request_orchestrator.shared.tool_adapter.profile.set_user_last_name import 
 
 def build_profile_management_profile(user_profile: UserProfile | None = None) -> AgentProfile:
     extra_tools = [set_user_display_name]
+    attribute_prefixes = ", ".join(ATTRIBUTE_CATEGORIES)
+    attribute_suffixes = ", ".join(ATTRIBUTE_QUALIFIERS)
 
     if user_profile is None or not (user_profile.first_name or '').strip():
         extra_tools.append(set_user_first_name)
@@ -16,7 +19,7 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
         extra_tools.append(set_user_last_name)
 
     return AgentProfile(
-        name='profile_management',
+        name=PROFILE_MANAGEMENT_AGENT_NAME,
         allowed_categories={'user_attributes'},
         extra_tools=extra_tools,
         planner_instruction=(
@@ -43,6 +46,10 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
             '- Do not update merely for equivalent wording.\n'
             '- Store concrete values rather than inferred umbrella labels.\n'
             '- Prefer multiple coherent groups over one large mixed attribute.\n\n'
+            'Attribute Type Rules:\n'
+            f'- Available attribute prefixes: {attribute_prefixes}.\n'
+            f'- Available attribute suffixes: {attribute_suffixes}.\n'
+            '- Requested or updated attribute types must use the format prefix.suffix such as food.likes or projects.goals.\n\n'
             'Execution rules:\n'
             '- Do not repeat executed calls.\n'
             '- Reuse previous evidence.\n'
