@@ -19,6 +19,42 @@ def strip_code_fences(s: str) -> str:
     return s.strip()
 
 
+def repair_common_json_issues(s: str) -> str:
+    if not s:
+        return s
+
+    repaired: list[str] = []
+    in_string = False
+    escaped = False
+
+    for index, char in enumerate(s):
+        if in_string:
+            repaired.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+            repaired.append(char)
+            continue
+
+        if char == ";":
+            previous_significant = next((c for c in reversed(repaired) if not c.isspace()), "")
+            next_significant = next((c for c in s[index + 1:] if not c.isspace()), "")
+            if previous_significant and next_significant == '"':
+                repaired.append(",")
+                continue
+
+        repaired.append(char)
+
+    return "".join(repaired)
+
+
 def normalize_string_list(values: Sequence[object], field_name: str = "value") -> list[str]:
     normalized = [str(item).strip() for item in values if str(item).strip()]
     if not normalized:

@@ -60,6 +60,7 @@ class PromptSection:
     key: str = ""
     heading: str = ""
     value: PromptSectionValue = field(default_factory=PromptSectionValue)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @lru_cache(maxsize=1)
@@ -98,7 +99,14 @@ class AgentPrompt:
     plan_with_evidence: list[PlanEvidenceStep] | None = None
     _sections: dict[str, PromptSection] = field(default_factory=dict, init=False, repr=False)
 
-    def _append_section(self, heading: str, content: str, *, key: str | None = None) -> AgentPrompt:
+    def _append_section(
+        self,
+        heading: str,
+        content: str,
+        *,
+        key: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> AgentPrompt:
         if is_meaningful_prompt_value(content):
             resolved_key = key or heading or f"section_{len(self._sections)}"
             self._sections[resolved_key] = PromptSection(
@@ -108,6 +116,7 @@ class AgentPrompt:
                     text=content,
                     token_count=_count_prompt_tokens(content),
                 ),
+                metadata={} if metadata is None else dict(metadata),
             )
         return self
 
@@ -117,6 +126,7 @@ class AgentPrompt:
         *,
         key: str = PromptSectionKeys.USER_PROFILE,
         include_management_fields: bool = False,
+        include_tone: bool = False,
     ) -> AgentPrompt:
         if self.user_profile is None:
             return self
@@ -125,9 +135,14 @@ class AgentPrompt:
             self._serialize_json(
                 self.user_profile.to_prompt_dict(
                     include_management_fields=include_management_fields,
+                    include_tone=include_tone,
                 )
             ),
             key=key,
+            metadata={
+                "include_management_fields": include_management_fields,
+                "include_tone": include_tone,
+            },
         )
 
     def include_conversation_context(self, heading: str = "Conversation Context (JSON):", *, key: str = PromptSectionKeys.CONVERSATION_CONTEXT) -> AgentPrompt:
@@ -261,8 +276,15 @@ class AgentPrompt:
                 self.conversation_context.model_dump()
             )
         if self.user_profile is not None:
+            user_profile_section = self.get_section(PromptSectionKeys.USER_PROFILE)
+            include_management_fields = False
+            include_tone = False
+            if user_profile_section is not None:
+                include_management_fields = bool(user_profile_section.metadata.get("include_management_fields", False))
+                include_tone = bool(user_profile_section.metadata.get("include_tone", False))
             data[PromptSectionKeys.USER_PROFILE] = self.user_profile.to_prompt_dict(
-                include_management_fields=False,
+                include_management_fields=include_management_fields,
+                include_tone=include_tone,
             )
         if self.previous_iterations is not None:
             data[PromptSectionKeys.PREVIOUS_ITERATIONS] = prune_empty_prompt_values([

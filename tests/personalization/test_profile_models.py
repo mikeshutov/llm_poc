@@ -15,10 +15,12 @@ if 'pycountry' not in sys.modules:
     sys.modules['pycountry'] = pycountry_module
 
 from personalization.profile.models import UserAttributesSection, UserProfile
-from personalization.profile.service import load_user_profile_attributes
+from personalization.profile.service import build_user_profile, hydrate_user_profile_core, load_user_profile_attributes
+from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
+from common.parsing import repair_common_json_issues
 
 
 @dataclass
@@ -198,11 +200,127 @@ def test_prompt_profile_prunes_empty_fields() -> None:
     assert rendered == {}
 
 
+def test_prompt_profile_includes_shared_tone_preferences() -> None:
+    profile = UserProfile(
+        tone=TonePreferences(
+            verbosity="concise",
+            formality="casual",
+            directness="high",
+            humor="light",
+            technical_depth="high",
+        )
+    )
+
+    rendered = profile.to_prompt_dict(include_tone=True)
+
+    assert rendered["tone"] == {
+        "verbosity": "concise",
+        "formality": "casual",
+        "directness": "high",
+        "humor": "light",
+        "technical_depth": "high",
+    }
+
+
+def test_prompt_profile_excludes_tone_by_default() -> None:
+    profile = UserProfile(
+        tone=TonePreferences(
+            verbosity="concise",
+            formality="casual",
+        )
+    )
+
+    rendered = profile.to_prompt_dict()
+
+    assert "tone" not in rendered
+
+
+def test_user_profile_model_dump_includes_stored_tone() -> None:
+    profile = UserProfile(
+        user_id='user-123',
+        tone=TonePreferences(
+            verbosity='concise',
+            directness='high',
+            humor='light',
+        ),
+    )
+
+    dumped = profile.model_dump()
+
+    assert dumped["tone"] == {
+        "verbosity": "concise",
+        "formality": None,
+        "directness": "high",
+        "humor": "light",
+        "technical_depth": None,
+    }
+
+
+def test_repair_common_json_issues_replaces_semicolon_between_fields() -> None:
+    raw = '{"result":["a"]; "clarifying_question":"","follow_up":""}'
+
+    repaired = repair_common_json_issues(raw)
+
+    assert repaired == '{"result":["a"], "clarifying_question":"","follow_up":""}'
+
+
+def test_hydrate_user_profile_core_loads_persisted_tone() -> None:
+    persisted_profile = UserProfile(
+        user_id="user-123",
+        tone=TonePreferences(
+            verbosity="concise",
+            technical_depth="high",
+        ),
+    )
+
+    class FakeProfileRepo:
+        def get_profile(self, user_id: str) -> UserProfile | None:
+            assert user_id == "user-123"
+            return persisted_profile
+
+    import personalization.profile.service as profile_service
+    original_repo_getter = profile_service.get_user_profile_repo
+    profile_service.get_user_profile_repo = lambda: FakeProfileRepo()
+    try:
+        hydrated = hydrate_user_profile_core(UserProfile(user_id="user-123"))
+    finally:
+        profile_service.get_user_profile_repo = original_repo_getter
+
+    assert hydrated.tone is not None
+    assert hydrated.tone.verbosity == "concise"
+    assert hydrated.tone.technical_depth == "high"
+
+
+def test_build_user_profile_preserves_input_tone_without_persisted_profile() -> None:
+    class FakeProfileRepo:
+        def get_profile(self, user_id: str) -> UserProfile | None:
+            assert user_id == "user-123"
+            return None
+
+    import personalization.profile.service as profile_service
+    original_repo_getter = profile_service.get_user_profile_repo
+    profile_service.get_user_profile_repo = lambda: FakeProfileRepo()
+    try:
+        profile = build_user_profile(
+            user_id="user-123",
+            tone=TonePreferences(
+                formality="casual",
+                directness="high",
+            ),
+        )
+    finally:
+        profile_service.get_user_profile_repo = original_repo_getter
+
+    assert profile.tone is not None
+    assert profile.tone.formality == "casual"
+    assert profile.tone.directness == "high"
+
+
 def test_agent_prompt_exposes_prompt_text_sections_and_token_count() -> None:
     prompt = AgentPrompt(
         prompt_kind=PLANNER_PROMPT_KIND,
         instruction='test',
-        user_profile=UserProfile(),
+        user_profile=UserProfile(user_id='user-123'),
         task='Find boots.',
     )
     prompt.include_user_profile().include_latest_user_prompt().include_task(heading='Goal:')
@@ -226,6 +344,61 @@ def test_agent_prompt_exposes_prompt_text_sections_and_token_count() -> None:
     assert prompt.get_section(PromptSectionKeys.TASK).value.text == 'Find boots.'
     assert prompt.get_section(PromptSectionKeys.TASK).value.token_count > 0
     assert prompt.get_section_content(PromptSectionKeys.TASK) == 'Find boots.'
+
+
+def test_agent_prompt_user_profile_includes_tone_only_when_requested() -> None:
+    profile = UserProfile(
+        user_id='user-123',
+        tone=TonePreferences(
+            verbosity='concise',
+            directness='high',
+        ),
+    )
+
+    default_prompt = AgentPrompt(
+        prompt_kind=PLANNER_PROMPT_KIND,
+        instruction='test',
+        user_profile=profile,
+    )
+    default_prompt.include_user_profile()
+
+    tone_prompt = AgentPrompt(
+        prompt_kind=PLANNER_PROMPT_KIND,
+        instruction='test',
+        user_profile=profile,
+    )
+    tone_prompt.include_user_profile(include_tone=True)
+
+    assert '"tone"' not in default_prompt.prompt_text()
+    assert '"verbosity": "concise"' not in default_prompt.prompt_text()
+
+    assert '"tone"' in tone_prompt.prompt_text()
+    assert '"verbosity": "concise"' in tone_prompt.prompt_text()
+    assert '"directness": "high"' in tone_prompt.prompt_text()
+
+
+def test_agent_prompt_to_dict_includes_tone_when_user_profile_section_requested_with_tone() -> None:
+    profile = UserProfile(
+        user_id='user-123',
+        tone=TonePreferences(
+            verbosity='concise',
+            directness='high',
+        ),
+    )
+
+    prompt = AgentPrompt(
+        prompt_kind=PLANNER_PROMPT_KIND,
+        instruction='test',
+        user_profile=profile,
+    )
+    prompt.include_user_profile(include_tone=True)
+
+    payload = prompt.to_dict()
+
+    assert payload["user_profile"]["tone"] == {
+        "verbosity": "concise",
+        "directness": "high",
+    }
 
 
 

@@ -1,11 +1,25 @@
-from personalization.tone.models import Tone, ToneLabel
-from personalization.tone.service import resolve_conversation_tone_label, resolve_conversation_tone_state
-from personalization.tone.tone_manager import update_tone_state
+from personalization.tone.models import (
+    ToneDirectness,
+    ToneFormality,
+    ToneHumor,
+    TonePreferences,
+    ToneRecord,
+    ToneTechnicalDepth,
+    ToneType,
+    ToneVerbosity,
+)
+from personalization.tone.repository.repo_factory import get_tone_repo
+from personalization.tone.repository.tone_repository import ToneRepository
 
 __all__ = [
-    "Tone",
-    "ToneLabel",
-    "update_tone_state",
-    "resolve_conversation_tone_label",
-    "resolve_conversation_tone_state",
+    "TonePreferences",
+    "ToneRecord",
+    "ToneType",
+    "ToneVerbosity",
+    "ToneFormality",
+    "ToneDirectness",
+    "ToneHumor",
+    "ToneTechnicalDepth",
+    "ToneRepository",
+    "get_tone_repo",
 ]

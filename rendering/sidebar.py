@@ -320,18 +320,33 @@ def render_profile_details_dialog(conversation_repository, user_id: str) -> None
 
     with st.container(border=True):
         st.markdown('<div class="user-profile-details"></div>', unsafe_allow_html=True)
-        st.write(f"User ID: `{selected_profile.user_id}`")
-        st.write(f"Display name: {selected_profile.display_name or '-'}")
-        st.write(f"First name: {selected_profile.first_name or '-'}")
-        st.write(f"Last name: {selected_profile.last_name or '-'}")
-        st.write(f"Full name: {full_name or '-'}")
-        st.write(f"Email: {selected_profile.email or '-'}")
-        st.write(f"Conversations: {conversation_count}")
-        st.write(f"Attributes: {attribute_count}")
-        if selected_profile.created_at:
-            st.caption(f"Created: {selected_profile.created_at}")
-        if selected_profile.updated_at:
-            st.caption(f"Updated: {selected_profile.updated_at}")
+        identity_tab, tone_tab, activity_tab = st.tabs(["Identity", "Tone", "Activity"])
+
+        with identity_tab:
+            st.write(f"**User ID:** `{selected_profile.user_id}`")
+            st.write(f"**Display name:** {selected_profile.display_name or '-'}")
+            st.write(f"**First name:** {selected_profile.first_name or '-'}")
+            st.write(f"**Last name:** {selected_profile.last_name or '-'}")
+            st.write(f"**Full name:** {full_name or '-'}")
+            st.write(f"**Email:** {selected_profile.email or '-'}")
+            if selected_profile.created_at:
+                st.caption(f"**Created:** {selected_profile.created_at}")
+            if selected_profile.updated_at:
+                st.caption(f"**Updated:** {selected_profile.updated_at}")
+
+        with tone_tab:
+            if selected_profile.tone is None:
+                st.write("-")
+            else:
+                st.write(f"**Verbosity:** {selected_profile.tone.verbosity or '-'}")
+                st.write(f"**Formality:** {selected_profile.tone.formality or '-'}")
+                st.write(f"**Directness:** {selected_profile.tone.directness or '-'}")
+                st.write(f"**Humor:** {selected_profile.tone.humor or '-'}")
+                st.write(f"**Technical depth:** {selected_profile.tone.technical_depth or '-'}")
+
+        with activity_tab:
+            st.write(f"**Conversations:** {conversation_count}")
+            st.write(f"**Attributes:** {attribute_count}")
 
     if edit_mode:
         with st.form(f"profile_edit_form::{user_id}"):

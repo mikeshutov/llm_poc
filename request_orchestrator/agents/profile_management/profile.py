@@ -6,10 +6,11 @@ from request_orchestrator.agents.models.agent_profile import AgentProfile, PROFI
 from request_orchestrator.shared.tool_adapter.profile.set_user_display_name import set_user_display_name
 from request_orchestrator.shared.tool_adapter.profile.set_user_first_name import set_user_first_name
 from request_orchestrator.shared.tool_adapter.profile.set_user_last_name import set_user_last_name
+from request_orchestrator.shared.tool_adapter.profile.update_user_tone import update_user_tone
 
 
 def build_profile_management_profile(user_profile: UserProfile | None = None) -> AgentProfile:
-    extra_tools = [set_user_display_name]
+    extra_tools = [set_user_display_name, update_user_tone]
     attribute_prefixes = ", ".join(ATTRIBUTE_CATEGORIES)
     attribute_suffixes = ", ".join(ATTRIBUTE_QUALIFIERS)
 
@@ -35,6 +36,13 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
             '- Only use `set_user_first_name` or `set_user_last_name` when that field is currently missing and the user explicitly provides that real name field in this turn.\n'
             '- Do not store a nickname inside first_name or last_name.\n'
             '- Do not overwrite an existing first_name or last_name with a new guess, paraphrase, or nickname.\n\n'
+            'Tone policy:\n'
+            '- `tone` stores durable response-style preferences such as concision, formality, directness, humor, and technical depth.\n'
+            '- Use `update_user_tone` only when the user clearly expresses a stable preference about how responses should sound or be structured.\n'
+            '- Pass a confidence score from 0 to 1. Updates below 0.9 will be rejected by the tool, so only call it when confidence is high.\n'
+            '- Update only the tone fields explicitly supported by the user\'s request, and preserve existing tone fields when the user did not revise them.\n'
+            '- Do not call `update_user_tone` when the requested tone values already match the stored tone profile.\n'
+            '- Do not infer a tone preference from a single task unless the user frames it as an ongoing preference.\n\n'
             'Profile policy:\n'
             '- Store durable user-specific preferences, interests, skills and goals.\n'
             '- Search existing profile data before creating when overlap is plausible.\n'

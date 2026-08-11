@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from personalization.profile.models import GeoMetadata, UserAttributesSection, UserProfile
 from personalization.profile.repository.repo_factory import get_user_profile_repo
+from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
@@ -47,6 +48,7 @@ def hydrate_user_profile_core(user_profile: UserProfile) -> UserProfile:
     user_profile.last_name = persisted_profile.last_name
     user_profile.display_name = persisted_profile.display_name
     user_profile.email = persisted_profile.email
+    user_profile.tone = persisted_profile.tone
     user_profile.metadata = dict(persisted_profile.metadata)
     user_profile.created_at = persisted_profile.created_at
     user_profile.updated_at = persisted_profile.updated_at
@@ -56,11 +58,13 @@ def hydrate_user_profile_core(user_profile: UserProfile) -> UserProfile:
 def build_user_profile(
     user_id: str | None = None,
     geometadata: GeoMetadata | None = None,
+    tone: TonePreferences | None = None,
     attributes: list[UserAttribute] | None = None,
 ) -> UserProfile:
     return hydrate_user_profile_core(UserProfile(
         user_id=user_id,
         geometadata=geometadata,
+        tone=tone,
         user_attributes=UserAttributesSection(attributes=[] if attributes is None else attributes),
     ))
 

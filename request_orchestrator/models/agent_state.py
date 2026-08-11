@@ -18,7 +18,6 @@ from conversation.models.conversation_model_config import (
 )
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import GeoLocation, GeoMetadata, UserProfile
-from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.models.agent_profile import AgentProfile, PROFILE_MANAGEMENT_AGENT_NAME
 from .agent_result import AgentResult
 from .evaluation_result import EvaluationStatus, EVALUATION_STATUS_RETRYABLE
@@ -29,6 +28,12 @@ class RequestAnalysis(BaseModel):
     goal: str = ""
     applicable_tool_categories: list[str] = []
     requested_user_attribute_types: list[str] = []
+
+
+def _get_main_agent_profile() -> AgentProfile:
+    from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
+
+    return MAIN_AGENT_PROFILE
 
 
 
@@ -263,7 +268,7 @@ class AgentState:
     max_turns: int
     conversation_context: ConversationContext = field(default_factory=ConversationContext)
     user_profile: UserProfile = field(default_factory=UserProfile)
-    agent_profile: AgentProfile = field(default_factory=lambda: MAIN_AGENT_PROFILE)
+    agent_profile: AgentProfile = field(default_factory=_get_main_agent_profile)
     conversation_id: str | None = None
     roundtrip_id: UUID | None = None
     request_analysis: RequestAnalysis = field(default_factory=RequestAnalysis)
@@ -295,7 +300,7 @@ class AgentState:
             max_turns=max_turns,
             conversation_context=ConversationContext() if conversation_context is None else conversation_context,
             user_profile=UserProfile() if user_profile is None else user_profile,
-            agent_profile=MAIN_AGENT_PROFILE if agent_profile is None else agent_profile,
+            agent_profile=_get_main_agent_profile() if agent_profile is None else agent_profile,
             conversation_id=conversation_id,
             roundtrip_id=roundtrip_id,
             llm=ChatOpenAI(model=ConversationModelConfig.default_main_agent_planner_model()) if llm is None else llm,
