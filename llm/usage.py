@@ -57,17 +57,28 @@ def _normalize_llm_trace_object(value: Any) -> Any:
     return normalized
 
 
+def _normalize_latency_ms(value: Any) -> int | None:
+    latency_ms = _coerce_int(value)
+    if latency_ms is None:
+        return None
+    return max(0, latency_ms)
+
+
 def _build_llm_call_metadata(
     *,
     metadata: dict[str, Any] | None,
     input_object: Any = None,
     output_object: Any = None,
+    latency_ms: int | None = None,
 ) -> dict[str, Any]:
     payload = {} if metadata is None else dict(metadata)
     if input_object is not None:
         payload["input_object"] = _normalize_llm_trace_object(input_object)
     if output_object is not None:
         payload["output_object"] = _normalize_llm_trace_object(output_object)
+    normalized_latency_ms = _normalize_latency_ms(latency_ms)
+    if normalized_latency_ms is not None:
+        payload["latency_ms"] = normalized_latency_ms
     return sanitize_for_json_storage(payload)
 
 
@@ -156,6 +167,7 @@ def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[st
         metadata = dict(record.get("metadata") or {})
         input_object = metadata.pop("input_object", None)
         output_object = metadata.pop("output_object", None)
+        latency_ms = _normalize_latency_ms(metadata.pop("latency_ms", None))
         return {
             "agent": record.get("agent"),
             "stage": record.get("stage"),
@@ -170,6 +182,7 @@ def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[st
             "computed_input_cost": str(record.get("computed_input_cost")),
             "computed_output_cost": str(record.get("computed_output_cost")),
             "computed_total_cost": str(record.get("computed_total_cost")),
+            "latency_ms": latency_ms,
             "input_object": input_object,
             "output_object": output_object,
             "metadata": metadata,
@@ -178,6 +191,7 @@ def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[st
     metadata = dict(record.metadata or {})
     input_object = metadata.pop("input_object", None)
     output_object = metadata.pop("output_object", None)
+    latency_ms = _normalize_latency_ms(metadata.pop("latency_ms", None))
     return {
         "agent": record.agent,
         "stage": record.stage,
@@ -192,6 +206,7 @@ def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[st
         "computed_input_cost": _decimal_to_str(record.computed_input_cost),
         "computed_output_cost": _decimal_to_str(record.computed_output_cost),
         "computed_total_cost": _decimal_to_str(record.computed_total_cost),
+        "latency_ms": latency_ms,
         "input_object": input_object,
         "output_object": output_object,
         "metadata": metadata,
@@ -204,6 +219,7 @@ def build_llm_usage_payload(records: Iterable[LlmCallRecord]) -> dict[str, Any]:
     total_cached_input_tokens = sum(int(call.get("cached_input_tokens") or 0) for call in serialized_calls)
     total_output_tokens = sum(int(call.get("output_tokens") or 0) for call in serialized_calls)
     total_tokens = sum(int(call.get("total_tokens") or 0) for call in serialized_calls)
+    total_latency_ms = sum(int(call.get("latency_ms") or 0) for call in serialized_calls)
     total_input_cost = sum(Decimal(str(call.get("computed_input_cost") or "0")) for call in serialized_calls)
     total_output_cost = sum(Decimal(str(call.get("computed_output_cost") or "0")) for call in serialized_calls)
     total_cost = total_input_cost + total_output_cost
@@ -215,6 +231,7 @@ def build_llm_usage_payload(records: Iterable[LlmCallRecord]) -> dict[str, Any]:
             "cached_input_tokens": total_cached_input_tokens,
             "output_tokens": total_output_tokens,
             "total_tokens": total_tokens,
+            "total_latency_ms": total_latency_ms,
             "computed_input_cost": _decimal_to_str(total_input_cost),
             "computed_output_cost": _decimal_to_str(total_output_cost),
             "computed_total_cost": _decimal_to_str(total_cost),
@@ -236,6 +253,7 @@ def record_llm_call(
     metadata: dict[str, Any] | None = None,
     input_object: Any = None,
     output_object: Any = None,
+    latency_ms: int | None = None,
 ):
     usage = extract_llm_usage(raw_response)
     if usage is None:
@@ -271,5 +289,10 @@ def record_llm_call(
         computed_input_cost=input_cost,
         computed_output_cost=output_cost,
         computed_total_cost=total_cost,
-        metadata=_build_llm_call_metadata(metadata=metadata, input_object=input_object, output_object=output_object),
+        metadata=_build_llm_call_metadata(
+            metadata=metadata,
+            input_object=input_object,
+            output_object=output_object,
+            latency_ms=latency_ms,
+        ),
     )

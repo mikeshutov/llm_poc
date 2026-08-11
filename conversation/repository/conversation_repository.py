@@ -604,6 +604,7 @@ class ConversationRepository:
                     FROM conversation_roundtrip rt
                     LEFT JOIN roundtrip_feedback fb ON fb.roundtrip_id = rt.id
                     WHERE rt.conversation_id = %s
+                      AND BTRIM(COALESCE(rt.generated_response, '')) <> ''
                     ORDER BY rt.message_index {order_direction}
                     LIMIT %s
                     """,
@@ -630,6 +631,7 @@ class ConversationRepository:
                     LEFT JOIN roundtrip_feedback fb ON fb.roundtrip_id = rt.id
                     WHERE rt.conversation_id = %s
                       AND rt.message_index > %s
+                      AND BTRIM(COALESCE(rt.generated_response, '')) <> ''
                     ORDER BY rt.message_index {order_direction}
                     LIMIT %s
                     """,

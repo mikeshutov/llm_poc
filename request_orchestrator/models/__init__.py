@@ -11,7 +11,7 @@ from request_orchestrator.models.agent_state import (
     RequestAnalysis,
     build_geometadata,
 )
-from request_orchestrator.models.plan import Plan, PlanStep
+from request_orchestrator.models.plan import Plan, PlanStep, PlanningResult
 
 __all__ = [
     "AgentPrompt",
@@ -21,6 +21,7 @@ __all__ = [
     "Plan",
     "PlanEvidenceStep",
     "PlanStep",
+    "PlanningResult",
     "PreviousIteration",
     "PreviousIterationStep",
     "RequestAnalysis",

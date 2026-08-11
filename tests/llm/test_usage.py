@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from llm.usage import extract_llm_usage, record_llm_call, serialize_llm_call_record
+from llm.usage import build_llm_usage_payload, extract_llm_usage, record_llm_call, serialize_llm_call_record
 
 
 class FakeRepo:
@@ -104,6 +104,7 @@ def test_record_llm_call_computes_costs_and_persists() -> None:
     assert stored['computed_input_cost'] == Decimal('0.00009')
     assert stored['computed_output_cost'] == Decimal('0.000135')
     assert stored['computed_total_cost'] == Decimal('0.000225')
+    assert stored['metadata'] == {'kind': 'test'}
 
 
 def test_record_llm_call_raises_when_model_has_no_pricing() -> None:
@@ -118,6 +119,7 @@ def test_record_llm_call_raises_when_model_has_no_pricing() -> None:
                 model_name='not-a-real-model',
                 conversation_id=None,
                 roundtrip_id=None,
+                user_id=None,
                 agent='main_agent',
                 stage='request_analysis',
                 callsite='request_analysis.analyze_request',
@@ -148,6 +150,26 @@ def test_record_llm_call_persists_input_and_output_objects() -> None:
     assert stored['metadata']['kind'] == 'test'
 
 
+def test_record_llm_call_persists_latency_ms_in_metadata() -> None:
+    fake_repo = FakeRepo()
+
+    with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
+        record_llm_call(
+            raw_response=FakeLangChainResponse(),
+            model_name='gpt-5.4-mini',
+            conversation_id=None,
+            roundtrip_id=None,
+            user_id=None,
+            agent='main_agent',
+            stage='request_analysis',
+            callsite='request_analysis.analyze_request',
+            latency_ms=321,
+        )
+
+    stored = fake_repo.calls[0]
+    assert stored['metadata']['latency_ms'] == 321
+
+
 def test_serialize_llm_call_record_promotes_input_and_output_objects() -> None:
     serialized = serialize_llm_call_record(
         {
@@ -165,6 +187,7 @@ def test_serialize_llm_call_record_promotes_input_and_output_objects() -> None:
             'computed_output_cost': '0.000135',
             'computed_total_cost': '0.000225',
             'metadata': {
+                'latency_ms': 321,
                 'input_object': {'prompt': 'hello'},
                 'output_object': {'raw_content': '{}'},
                 'kind': 'test',
@@ -174,4 +197,48 @@ def test_serialize_llm_call_record_promotes_input_and_output_objects() -> None:
 
     assert serialized['input_object'] == {'prompt': 'hello'}
     assert serialized['output_object'] == {'raw_content': '{}'}
+    assert serialized['latency_ms'] == 321
     assert serialized['metadata'] == {'kind': 'test'}
+
+
+def test_build_llm_usage_payload_sums_latency_ms() -> None:
+    payload = build_llm_usage_payload(
+        [
+            {
+                'agent': 'main_agent',
+                'stage': 'planner',
+                'callsite': 'shared_planner.run_planner',
+                'model': 'gpt-5.4-mini',
+                'input_tokens': 120,
+                'output_tokens': 30,
+                'total_tokens': 150,
+                'cached_input_tokens': 0,
+                'input_price_per_million_tokens': '0.75',
+                'output_price_per_million_tokens': '4.50',
+                'computed_input_cost': '0.00009',
+                'computed_output_cost': '0.000135',
+                'computed_total_cost': '0.000225',
+                'metadata': {'latency_ms': 100},
+            },
+            {
+                'agent': 'main_agent',
+                'stage': 'synthesis',
+                'callsite': 'shared_synthesis.run_synthesis',
+                'model': 'gpt-5.4',
+                'input_tokens': 80,
+                'output_tokens': 20,
+                'total_tokens': 100,
+                'cached_input_tokens': 0,
+                'input_price_per_million_tokens': '2.50',
+                'output_price_per_million_tokens': '15.00',
+                'computed_input_cost': '0.0002',
+                'computed_output_cost': '0.0003',
+                'computed_total_cost': '0.0005',
+                'metadata': {'latency_ms': 250},
+            },
+        ]
+    )
+
+    assert payload['summary']['total_latency_ms'] == 350
+    assert payload['calls'][0]['latency_ms'] == 100
+    assert payload['calls'][1]['latency_ms'] == 250

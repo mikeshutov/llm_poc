@@ -23,7 +23,7 @@ from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETR
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.evaluator.evaluator import run_evaluator
-from request_orchestrator.shared.planner.planner import run_planner
+from request_orchestrator.shared.planner.planner import REQUIRED_CAPABILITY_UNAVAILABLE_REASON, run_planner
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from request_orchestrator.shared.synthesis.synthesis import run_synthesis
 from reranker.models import Candidate, CandidateContent
@@ -78,7 +78,7 @@ def test_request_analysis_records_llm_usage() -> None:
         conversation_context=ConversationContext(),
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
-        llm=FakeInvokeLLM('{"goal":"Find boots","applicable_tool_categories":[],"requested_user_attribute_types":[],"requires_tools":false,"context_answer_confidence":0.5}'),
+        llm=FakeInvokeLLM('{"goal":"Find boots","applicable_tool_categories":[],"requested_user_attribute_types":[]}'),
     )
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
@@ -91,6 +91,7 @@ def test_request_analysis_records_llm_usage() -> None:
     assert repo.llm_calls[0]['agent'] == 'main_agent'
     assert repo.llm_calls[0]['stage'] == 'request_analysis'
     assert state.agent_log.entries[-1].data['llm_usage']['total_tokens'] == 120
+    assert isinstance(state.agent_log.entries[-1].data['llm_usage']['latency_ms'], int)
 
 
 def test_run_planner_records_main_and_profile_scopes() -> None:
@@ -103,7 +104,7 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
         conversation_id=str(uuid4()),
         llm=FakeInvokeLLM('{"steps": []}'),
     )
-    main_state.request_analysis = RequestAnalysis(goal='Find boots', requires_tools=False)
+    main_state.request_analysis = RequestAnalysis(goal='Find boots')
 
     profile_state = AgentState.new(
         task='Remember I like pizza.',
@@ -114,7 +115,7 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
         llm=FakeInvokeLLM('{"steps": []}'),
         agent_profile=PROFILE_MANAGEMENT_PROFILE,
     )
-    profile_state.request_analysis = RequestAnalysis(goal='Update profile', requires_tools=False)
+    profile_state.request_analysis = RequestAnalysis(goal='Update profile')
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'request_orchestrator.shared.planner.planner.get_conversation_repo',
@@ -127,6 +128,34 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
     assert all(call['stage'] == 'planner' for call in repo.llm_calls)
     assert len(main_state.agent_log.entries[-1].data['llm_usage']) == 1
     assert main_state.agent_log.entries[-1].data['llm_usage'][0]['total_tokens'] == 120
+    assert isinstance(main_state.agent_log.entries[-1].data['llm_usage'][0]['latency_ms'], int)
+
+
+def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_returned() -> None:
+    repo = RecordingRepo()
+    state = AgentState.new(
+        task='Find me boots.',
+        max_turns=5,
+        conversation_context=ConversationContext(),
+        user_profile=UserProfile(),
+        conversation_id=str(uuid4()),
+        llm=FakeInvokeLLM('{"steps": [], "status": "blocked", "reason": "required capability unavailable."}'),
+    )
+    state.request_analysis = RequestAnalysis(goal='Find boots')
+
+    with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
+        'request_orchestrator.shared.planner.planner.get_conversation_repo',
+        return_value=repo,
+    ):
+        run_planner(state)
+
+    assert len(repo.llm_calls) == 1
+    assert state.goal_reached is True
+    assert state.iteration_trace[-1].plan is not None
+    assert state.iteration_trace[-1].plan.steps == []
+    assert state.agent_log.entries[-1].status == 'blocked'
+    assert state.agent_log.entries[-1].data['planner_status'] == 'blocked'
+    assert state.agent_log.entries[-1].data['planner_reason'] == REQUIRED_CAPABILITY_UNAVAILABLE_REASON
 
 
 def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
@@ -151,6 +180,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
     assert repo.llm_calls[0]['stage'] == 'synthesis'
     assert repo.llm_calls[0]['model'] == 'gpt-5.4'
     assert state.agent_log.entries[-1].data['llm_usage']['model'] == 'gpt-5.4'
+    assert isinstance(state.agent_log.entries[-1].data['llm_usage']['latency_ms'], int)
 
 
 def test_reranker_records_llm_usage_when_it_runs() -> None:
@@ -168,6 +198,10 @@ def test_reranker_records_llm_usage_when_it_runs() -> None:
     assert len(repo.llm_calls) == 1
     assert repo.llm_calls[0]['stage'] == 'reranker'
     assert repo.llm_calls[0]['metadata']['candidate_count'] == 7
+    assert isinstance(repo.llm_calls[0]['metadata']['latency_ms'], int)
+    assert repo.llm_calls[0]['metadata']['input_object']['goal'] == 'Find the best one'
+    assert repo.llm_calls[0]['metadata']['input_object']['candidate_ids'] == [f'c{i}' for i in range(7)]
+    assert repo.llm_calls[0]['metadata']['output_object']['raw_content'] == '{"ranked_ids": ["c3", "c1", "c2"]}'
 
 
 def test_llm_client_records_tool_calling_and_image_caption_usage() -> None:
@@ -191,6 +225,7 @@ def test_llm_client_records_tool_calling_and_image_caption_usage() -> None:
             llm_client.generate_caption_from_image_file('fake.jpg')
 
     assert [call['stage'] for call in repo.llm_calls] == ['tool_calling', 'image_caption']
+    assert all(isinstance(call['metadata']['latency_ms'], int) for call in repo.llm_calls)
 
 
 def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
@@ -203,7 +238,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
         conversation_id=str(uuid4()),
         llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["E1"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.4'),
     )
-    state.request_analysis = RequestAnalysis(goal='Check whether the shortlisted products satisfy the request.', requires_tools=False)
+    state.request_analysis = RequestAnalysis(goal='Check whether the shortlisted products satisfy the request.')
     state.iteration_trace = [
         IterationState(
             plan=Plan.model_validate({
@@ -232,6 +267,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     assert state.evaluation_status == EVALUATION_STATUS_RETRYABLE
     assert state.request_analysis.goal == 'Find current Canadian pricing and availability for the two shortlisted products.'
     assert state.agent_log.entries[-1].data['llm_usage']['model'] == 'gpt-5.4'
+    assert isinstance(state.agent_log.entries[-1].data['llm_usage']['latency_ms'], int)
     assert state.agent_log.entries[-1].data['relevant_evidence'] == ['E1']
     assert state.agent_log.entries[-1].data['missing_information'] == [
         'Need current pricing for the top two products',

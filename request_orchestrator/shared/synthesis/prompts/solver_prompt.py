@@ -5,12 +5,9 @@ from request_orchestrator.models.agent_prompt import AgentPrompt, PlanEvidenceSt
 from request_orchestrator.shared.synthesis.prompts.solver_rules import build_solver_rules
 from request_orchestrator.shared.synthesis.prompts.synthesis_schema_prompt import SYNTHESIS_SCHEMA
 
-SYNTHESIS_RECENT_ROUNDTRIP_LIMIT = 3
-
 def _build_synthesis_context(state: AgentState) -> ConversationContext:
     return ConversationContext(
         latest_conversation_summary=state.conversation_context.latest_conversation_summary,
-        recent_roundtrips=state.conversation_context.recent_roundtrips[-SYNTHESIS_RECENT_ROUNDTRIP_LIMIT:],
     )
 
 

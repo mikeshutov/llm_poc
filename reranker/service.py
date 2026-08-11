@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any
 
 from langchain_openai import ChatOpenAI
@@ -45,7 +46,9 @@ class CandidateReranker:
             user_profile=user_profile,
             candidates=candidates,
         ).to_prompt_text()
+        started_at = perf_counter()
         response = self.llm.invoke(prompt)
+        latency_ms = int((perf_counter() - started_at) * 1000)
         record_llm_call(
             raw_response=response,
             model_name=self.model_name,
@@ -56,6 +59,16 @@ class CandidateReranker:
             stage=RERANKER_STAGE,
             callsite="reranker.candidate_reranker",
             metadata={"candidate_count": len(candidates), "limit": resolved_limit},
+            latency_ms=latency_ms,
+            input_object={
+                "prompt": prompt,
+                "goal": resolved_goal,
+                "limit": resolved_limit,
+                "candidate_ids": [candidate.id for candidate in candidates],
+            },
+            output_object={
+                "raw_content": response.content,
+            },
         )
         raw = strip_code_fences(response.content)
 

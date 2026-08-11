@@ -38,8 +38,6 @@ def _prepare_subagent_state(parent_state: AgentState) -> SubagentState:
     subagent_state.request_analysis = RequestAnalysis(
         goal=subagent_goal,
         applicable_tool_categories=sorted(profile_management_profile.allowed_categories),
-        requires_tools=False,
-        context_answer_confidence=0.0,
     )
     return subagent_state
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from time import perf_counter
+
 from langsmith import traceable
 
 from common.parsing import strip_code_fences
@@ -56,7 +58,9 @@ def run_evaluator(state: AgentState) -> AgentState:
     prompt = build_evaluator_prompt(state=state, plan_with_evidence=plan_with_evidence)
     prompt_text = render_agent_prompt(prompt)
     llm = state.build_llm_for_stage(agent=SHARED_MODEL_SCOPE, stage=EVALUATOR_STAGE)
+    started_at = perf_counter()
     response = llm.invoke(prompt_text)
+    latency_ms = int((perf_counter() - started_at) * 1000)
     llm_call = record_llm_call(
         raw_response=response,
         model_name=state.resolve_model_for_stage(agent=SHARED_MODEL_SCOPE, stage=EVALUATOR_STAGE),
@@ -67,6 +71,7 @@ def run_evaluator(state: AgentState) -> AgentState:
         stage=EVALUATOR_STAGE,
         callsite="shared_evaluator.run_evaluator",
         metadata={"evidence_count": len(plan_with_evidence)},
+        latency_ms=latency_ms,
         input_object={
             "prompt": prompt_text,
         },

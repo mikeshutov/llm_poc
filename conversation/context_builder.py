@@ -11,11 +11,12 @@ from conversation.repository.repo_factory import get_conversation_repo
 
 def build_roundtrip_context(conversation_id: str, limit: int = 5) -> ConversationContext:
     conversation_repository = get_conversation_repo()
-    conversation = conversation_repository.get_conversation(UUID(conversation_id))
-    latest_summary = conversation_repository.get_latest_summary(UUID(conversation_id))
+    resolved_conversation_id = UUID(conversation_id)
+    conversation = conversation_repository.get_conversation(resolved_conversation_id)
+    latest_summary = conversation_repository.get_latest_summary(resolved_conversation_id)
     after_index = latest_summary.message_index_cutoff if latest_summary else None
     conversation_roundtrips = conversation_repository.list_roundtrips(
-        UUID(conversation_id),
+        resolved_conversation_id,
         limit=limit,
         after_message_index=after_index,
         newest_first=True,
