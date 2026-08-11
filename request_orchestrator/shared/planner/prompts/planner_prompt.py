@@ -1,6 +1,6 @@
 import json
 
-from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_CATEGORIES, ATTRIBUTE_QUALIFIERS
+from request_orchestrator.agents.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PreviousIteration, PreviousIterationStep
 from request_orchestrator.models.agent_state import AgentState
@@ -10,6 +10,10 @@ from request_orchestrator.shared.planner.prompts.planner_schema_prompt import PL
 
 
 ATTRIBUTE_TYPE_MINIMAL_DESCRIPTION = 'Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.'
+
+
+def _is_profile_management_agent(state: AgentState) -> bool:
+    return state.agent_profile.name == PROFILE_MANAGEMENT_AGENT_NAME
 
 
 def _format_field_line(name: str, field_info, required: bool, minimal: bool = False) -> str:
@@ -54,12 +58,12 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
             if category is None:
                 continue
             tools.extend(category.tools)
-            if category.rules and state.agent_profile.name != 'profile_management':
+            if category.rules and not _is_profile_management_agent(state):
                 rules[category_name] = category.rules
     else:
         for category in allowed_categories.values():
             tools.extend(category.tools)
-            if category.rules and state.agent_profile.name != 'profile_management':
+            if category.rules and not _is_profile_management_agent(state):
                 rules_name = next((name for name, candidate in allowed_categories.items() if candidate is category), None)
                 if rules_name is not None:
                     rules[rules_name] = category.rules
@@ -70,7 +74,7 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     for tool in tools:
         deduped_tools[getattr(tool, 'name')] = tool
 
-    if state.agent_profile.name == 'profile_management':
+    if _is_profile_management_agent(state):
         compiled_tools = "\n".join(_format_minimal_tool_schema(tool) for tool in deduped_tools.values())
     else:
         compiled_tools = "\n".join(f"- {t.name}: {t.description}".strip() for t in deduped_tools.values())
@@ -85,8 +89,6 @@ def _build_planner_task(state: AgentState) -> str:
 def build_planner_prompt(state: AgentState) -> AgentPrompt:
     context = _compile_tools_rules_from_state(state)
     previous_iterations: list[PreviousIteration] = []
-    attribute_prefixes = ", ".join(ATTRIBUTE_CATEGORIES)
-    attribute_suffixes = ", ".join(ATTRIBUTE_QUALIFIERS)
 
     if state.iteration_trace:
         for i, it in enumerate(state.iteration_trace, start=1):
@@ -120,22 +122,11 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
                 )
             )
 
-    compiled_rules = build_planner_rules(
-        context.rules,
-        include_contextual_rules=state.agent_profile.name != 'profile_management',
-    )
-    if state.agent_profile.name == 'profile_management':
-        compiled_rules = (
-            f"{compiled_rules}\n\n"
-            "Attribute Type Rules:\n"
-            f"- Available attribute prefixes: {attribute_prefixes}.\n"
-            f"- Available attribute suffixes: {attribute_suffixes}.\n"
-            "- Requested or updated attribute types must use the format prefix.suffix such as food.likes or projects.goals."
-        )
+    compiled_rules = build_planner_rules(context.rules)
     if state.agent_profile.planner_rules:
         compiled_rules = f"{compiled_rules}\n\nAgent Rules:\n{state.agent_profile.planner_rules}"
 
-    return AgentPrompt(
+    prompt = AgentPrompt(
         prompt_kind=PLANNER_PROMPT_KIND,
         instruction=state.agent_profile.planner_instruction,
         user_profile=state.user_profile,
@@ -145,5 +136,13 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         rules=compiled_rules,
         previous_iterations=previous_iterations,
         schema=PLANNER_SCHEMA,
-        include_user_attribute_management_fields=state.agent_profile.name == "profile_management",
     )
+    prompt.include_user_profile(include_management_fields=_is_profile_management_agent(state))
+    prompt.include_conversation_context()
+    prompt.include_available_tools()
+    prompt.include_rules_raw()
+    prompt.include_previous_iterations()
+    prompt.include_latest_user_prompt()
+    prompt.include_schema_raw()
+    prompt.include_task(heading="Task:" if _is_profile_management_agent(state) else "Goal:")
+    return prompt

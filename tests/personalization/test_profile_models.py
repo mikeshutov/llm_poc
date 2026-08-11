@@ -18,8 +18,7 @@ from personalization.profile.models import UserAttributesSection, UserProfile
 from personalization.profile.service import load_user_profile_attributes
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
-from request_orchestrator.models.agent_prompt import AgentPrompt
-from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
+from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
 
 
 @dataclass
@@ -163,15 +162,16 @@ def test_prompt_profile_excludes_management_fields_by_default() -> None:
         instruction='test',
         user_profile=profile,
     )
+    default_prompt.include_user_profile()
     management_prompt = AgentPrompt(
         prompt_kind=PLANNER_PROMPT_KIND,
         instruction='test',
         user_profile=profile,
-        include_user_attribute_management_fields=True,
     )
+    management_prompt.include_user_profile(include_management_fields=True)
 
-    default_rendered = render_agent_prompt(default_prompt)
-    management_rendered = render_agent_prompt(management_prompt)
+    default_rendered = default_prompt.prompt_text()
+    management_rendered = management_prompt.prompt_text()
 
     assert 'food.likes' in default_rendered
     assert 'pizza' in default_rendered
@@ -196,6 +196,36 @@ def test_prompt_profile_prunes_empty_fields() -> None:
     rendered = profile.to_prompt_dict()
 
     assert rendered == {}
+
+
+def test_agent_prompt_exposes_prompt_text_sections_and_token_count() -> None:
+    prompt = AgentPrompt(
+        prompt_kind=PLANNER_PROMPT_KIND,
+        instruction='test',
+        user_profile=UserProfile(),
+        task='Find boots.',
+    )
+    prompt.include_user_profile().include_latest_user_prompt().include_task(heading='Goal:')
+
+    prompt_text = prompt.prompt_text()
+    prompt_token_count = prompt.prompt_token_count()
+
+    assert prompt_text
+    assert prompt_token_count > 0
+    assert [section.heading for section in prompt.included_sections()] == [
+        'User Profile (JSON):',
+        'Latest User Prompt:',
+        'Goal:',
+    ]
+    assert [section.key for section in prompt.included_sections()] == [
+        PromptSectionKeys.USER_PROFILE,
+        PromptSectionKeys.LATEST_USER_PROMPT,
+        PromptSectionKeys.TASK,
+    ]
+    assert prompt.get_section(PromptSectionKeys.TASK) is not None
+    assert prompt.get_section(PromptSectionKeys.TASK).value.text == 'Find boots.'
+    assert prompt.get_section(PromptSectionKeys.TASK).value.token_count > 0
+    assert prompt.get_section_content(PromptSectionKeys.TASK) == 'Find boots.'
 
 
 

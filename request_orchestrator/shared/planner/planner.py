@@ -6,7 +6,6 @@ from langsmith import traceable
 
 from request_orchestrator.models.agent_state import AgentState, IterationState
 from request_orchestrator.models import AgentResult, Plan, PlanningResult
-from request_orchestrator.shared.prompts.render_agent_prompt import render_agent_prompt
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from request_orchestrator.constants import PLANNER_PROMPT_STEP
 from common.parsing import strip_code_fences
@@ -25,7 +24,12 @@ def _serialize_llm_call_for_log(llm_call) -> dict | None:
     return serialize_llm_call_record(llm_call)
 
 
-def _invoke_planner(agent_state: AgentState, prompt_text: str) -> tuple[PlanningResult, object | None]:
+def _invoke_planner(
+    agent_state: AgentState,
+    prompt_text: str,
+    *,
+    prompt_input_object: dict[str, object],
+) -> tuple[PlanningResult, object | None]:
     llm = agent_state.build_llm_for_stage(stage=PLANNER_STAGE)
     started_at = perf_counter()
     response = llm.invoke(prompt_text)
@@ -41,9 +45,7 @@ def _invoke_planner(agent_state: AgentState, prompt_text: str) -> tuple[Planning
         stage=PLANNER_STAGE,
         callsite="shared_planner.run_planner",
         latency_ms=latency_ms,
-        input_object={
-            "prompt": prompt_text,
-        },
+        input_object=prompt_input_object,
         output_object={
             "raw_content": response.content,
         },
@@ -57,12 +59,17 @@ def run_planner(agent_state: AgentState) -> AgentState:
     it_state = IterationState.new()
 
     prompt = build_planner_prompt(state=agent_state)
-    prompt_text = render_agent_prompt(prompt)
+    prompt_text = prompt.prompt_text()
+    prompt_input_object = prompt.to_log_input_object()
     llm_calls: list[dict[str, object]] = []
     planning_result: PlanningResult
 
     try:
-        planning_result, llm_call = _invoke_planner(agent_state, prompt_text)
+        planning_result, llm_call = _invoke_planner(
+            agent_state,
+            prompt_text,
+            prompt_input_object=prompt_input_object,
+        )
         serialized = _serialize_llm_call_for_log(llm_call)
         if serialized is not None:
             llm_calls.append(serialized)

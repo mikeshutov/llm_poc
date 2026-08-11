@@ -12,7 +12,7 @@ def _build_synthesis_context(state: AgentState) -> ConversationContext:
 
 
 def build_solver_prompt(plan_with_evidence: list[PlanEvidenceStep], state: AgentState) -> AgentPrompt:
-    return AgentPrompt(
+    prompt = AgentPrompt(
         prompt_kind=SYNTHESIS_PROMPT_KIND,
         instruction=state.agent_profile.synthesis_instruction,
         conversation_context=_build_synthesis_context(state),
@@ -22,3 +22,11 @@ def build_solver_prompt(plan_with_evidence: list[PlanEvidenceStep], state: Agent
         schema=SYNTHESIS_SCHEMA,
         task=state.task,
     )
+    prompt.include_user_profile()
+    prompt.include_rules_section()
+    prompt.include_conversation_context()
+    prompt.include_plan_with_evidence()
+    prompt.include_text("Now solve the question or task according to provided evidence above.")
+    prompt.include_latest_user_prompt()
+    prompt.include_schema_raw()
+    return prompt

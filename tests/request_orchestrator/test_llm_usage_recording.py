@@ -18,6 +18,7 @@ from llm.clients.llm_client import LlmClient
 from personalization.profile.models import UserProfile
 from request_orchestrator.agents.main_agent.request_analysis.analyze_request import analyze_request
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
+from request_orchestrator.models.agent_prompt import PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState, IterationState, RequestAnalysis
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
@@ -90,6 +91,11 @@ def test_request_analysis_records_llm_usage() -> None:
     assert len(repo.llm_calls) == 1
     assert repo.llm_calls[0]['agent'] == 'main_agent'
     assert repo.llm_calls[0]['stage'] == 'request_analysis'
+    input_object = repo.llm_calls[0]['metadata']['input_object']
+    assert input_object['prompt_token_count'] > 0
+    assert any(section['key'] == PromptSectionKeys.USER_PROFILE for section in input_object['prompt_sections'])
+    assert any(section['key'] == PromptSectionKeys.LATEST_USER_PROMPT for section in input_object['prompt_sections'])
+    assert all(section['token_count'] >= 0 for section in input_object['prompt_sections'])
     assert state.agent_log.entries[-1].data['llm_usage']['total_tokens'] == 120
     assert isinstance(state.agent_log.entries[-1].data['llm_usage']['latency_ms'], int)
 
@@ -126,6 +132,7 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
 
     assert [call['agent'] for call in repo.llm_calls] == ['main_agent', 'profile_agent']
     assert all(call['stage'] == 'planner' for call in repo.llm_calls)
+    assert any(section['key'] == PromptSectionKeys.AVAILABLE_TOOLS for section in repo.llm_calls[0]['metadata']['input_object']['prompt_sections'])
     assert len(main_state.agent_log.entries[-1].data['llm_usage']) == 1
     assert main_state.agent_log.entries[-1].data['llm_usage'][0]['total_tokens'] == 120
     assert isinstance(main_state.agent_log.entries[-1].data['llm_usage'][0]['latency_ms'], int)
@@ -179,6 +186,8 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
     assert len(repo.llm_calls) == 1
     assert repo.llm_calls[0]['stage'] == 'synthesis'
     assert repo.llm_calls[0]['model'] == 'gpt-5.4'
+    assert repo.llm_calls[0]['metadata']['input_object']['prompt_token_count'] > 0
+    assert any(section['key'] == PromptSectionKeys.LATEST_USER_PROMPT for section in repo.llm_calls[0]['metadata']['input_object']['prompt_sections'])
     assert state.agent_log.entries[-1].data['llm_usage']['model'] == 'gpt-5.4'
     assert isinstance(state.agent_log.entries[-1].data['llm_usage']['latency_ms'], int)
 
@@ -264,6 +273,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     assert repo.llm_calls[0]['agent'] == 'shared'
     assert repo.llm_calls[0]['stage'] == 'evaluator'
     assert repo.llm_calls[0]['model'] == 'gpt-5.4'
+    assert any(section['key'] == PromptSectionKeys.PLAN_WITH_EVIDENCE for section in repo.llm_calls[0]['metadata']['input_object']['prompt_sections'])
     assert state.evaluation_status == EVALUATION_STATUS_RETRYABLE
     assert state.request_analysis.goal == 'Find current Canadian pricing and availability for the two shortlisted products.'
     assert state.agent_log.entries[-1].data['llm_usage']['model'] == 'gpt-5.4'
