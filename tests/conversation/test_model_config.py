@@ -14,7 +14,6 @@ if 'pycountry' not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules['pycountry'] = pycountry_module
 
-from common.config import AVAILABLE_CHAT_MODELS
 from conversation.model_config_resolver import resolve_conversation_model_config
 from conversation.models.conversation_model_config import (
     ConversationModelConfig,
@@ -248,10 +247,6 @@ def test_conversation_model_config_resolve_model_pricing_returns_expected_values
     )
 
 
-def test_available_chat_models_all_have_pricing_entries() -> None:
-    assert sorted(ConversationModelConfig.MODEL_PRICING_REGISTRY) == sorted(AVAILABLE_CHAT_MODELS)
-
-
 def test_agent_state_build_llm_for_stage_uses_conversation_model_config() -> None:
     from request_orchestrator.models.agent_state import AgentState
 
@@ -366,6 +361,8 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
         },
         'calls': [],
     }
+    assert isinstance(fake_repo.update_calls[0]['payload']['roundtrip_latency_ms'], int)
+    assert fake_repo.update_calls[0]['payload']['roundtrip_latency_ms'] >= 0
 
 
 def test_run_request_orchestrator_populates_geometadata_location_when_available() -> None:

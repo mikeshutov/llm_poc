@@ -109,7 +109,7 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
         conversation_context=ConversationContext(),
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
-        llm=FakeInvokeLLM('{"steps": []}'),
+        llm=FakeInvokeLLM('{"steps": [], "needs_replan": false}'),
     )
     main_state.request_analysis = RequestAnalysis(goal='Find boots')
 
@@ -119,7 +119,7 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
         conversation_context=ConversationContext(),
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
-        llm=FakeInvokeLLM('{"steps": []}'),
+        llm=FakeInvokeLLM('{"steps": [], "needs_replan": false}'),
         agent_profile=PROFILE_MANAGEMENT_PROFILE,
     )
     profile_state.request_analysis = RequestAnalysis(goal='Update profile')
@@ -147,7 +147,7 @@ def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_retu
         conversation_context=ConversationContext(),
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
-        llm=FakeInvokeLLM('{"steps": [], "status": "blocked", "reason": "required capability unavailable."}'),
+        llm=FakeInvokeLLM('{"steps": [], "status": "blocked", "reason": "required capability unavailable.", "needs_replan": false}'),
     )
     state.request_analysis = RequestAnalysis(goal='Find boots')
 
@@ -164,6 +164,7 @@ def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_retu
     assert state.agent_log.entries[-1].status == 'blocked'
     assert state.agent_log.entries[-1].data['planner_status'] == 'blocked'
     assert state.agent_log.entries[-1].data['planner_reason'] == REQUIRED_CAPABILITY_UNAVAILABLE_REASON
+    assert state.agent_log.entries[-1].data['needs_replan'] is False
 
 
 def test_run_synthesis_records_llm_usage_after_tool_results() -> None:

@@ -181,6 +181,7 @@ class AgentStateLog:
 class IterationState:
     plan: Plan | None = None
     results: dict[str, Any] = field(default_factory=dict)
+    needs_replan: bool = False
 
     @classmethod
     def new(
@@ -192,12 +193,14 @@ class IterationState:
         return cls(
             plan=plan,
             results={} if results is None else results,
+            needs_replan=False,
         )
 
     def clone(self) -> IterationState:
         return IterationState(
             plan=None if self.plan is None else self.plan.model_copy(deep=True),
             results=dict(self.results),
+            needs_replan=self.needs_replan,
         )
 
 

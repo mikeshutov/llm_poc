@@ -85,6 +85,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
             steps=[],
             status="blocked",
             reason=REQUIRED_CAPABILITY_UNAVAILABLE_REASON,
+            needs_replan=False,
         )
 
     plan = Plan(steps=planning_result.steps)
@@ -93,6 +94,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         plan.db_id = PlanRepository().save_plan(agent_state.roundtrip_id, plan)
 
     it_state.plan = plan
+    it_state.needs_replan = planning_result.needs_replan
     agent_state.add_iteration(it_state)
 
     if len(plan.steps) == 0:
@@ -106,6 +108,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
             "step_plans": [step.plan for step in plan.steps],
             "planner_status": planning_result.status,
             "planner_reason": planning_result.reason,
+            "needs_replan": planning_result.needs_replan,
             "llm_usage": llm_calls,
         },
     )
