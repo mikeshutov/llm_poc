@@ -46,6 +46,7 @@ qp = st.query_params
 cid = qp.get("cid")
 uid = qp.get("uid")
 PENDING_REPLAY_KEY = "pending_replay"
+PENDING_REPLAY_PREPARE_KEY = "pending_replay_prepare"
 
 
 def ensure_selected_user_id() -> str:
@@ -159,27 +160,36 @@ if replay_target:
     )
     st.rerun()
 
-with st.sidebar:
-    render_sidebar(conversation_repository)
-
-render_messages(conversation_repository, st.session_state.conversation_id, render_message)
-if st.session_state.get(FEEDBACK_TARGET_KEY):
-    render_feedback_dialog(conversation_repository)
+pending_replay_prepare = st.session_state.get(PENDING_REPLAY_PREPARE_KEY)
+if (
+    pending_replay_prepare
+    and pending_replay_prepare.get("conversation_id") == st.session_state.conversation_id
+):
+    st.session_state.pop(PENDING_REPLAY_PREPARE_KEY, None)
+    st.session_state[PENDING_REPLAY_KEY] = pending_replay_prepare
+    st.rerun()
 
 pending_replay = st.session_state.get(PENDING_REPLAY_KEY)
 if pending_replay and pending_replay.get("conversation_id") == st.session_state.conversation_id:
+    st.session_state.pop(PENDING_REPLAY_KEY, None)
     clear_conversation_model_config_dialog()
     with st.spinner("Replaying conversation..."):
         replay_context = populate_replay_conversation(
             pending_replay["conversation_id"],
             pending_replay["source_roundtrip_id"],
         )
-        st.session_state.pop(PENDING_REPLAY_KEY, None)
         st.session_state.loaded_cid = None
         st.session_state.messages = []
         render_messages(conversation_repository, st.session_state.conversation_id, render_message)
         run_live_turn(replay_context["user_prompt"])
     st.rerun()
+
+with st.sidebar:
+    render_sidebar(conversation_repository)
+
+render_messages(conversation_repository, st.session_state.conversation_id, render_message)
+if st.session_state.get(FEEDBACK_TARGET_KEY):
+    render_feedback_dialog(conversation_repository)
 
 render_file_upload()
 

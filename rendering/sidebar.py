@@ -12,6 +12,7 @@ from rendering.feedback import clear_feedback_state
 from rendering.replay import clear_replay_state
 
 MODEL_CONFIG_DIALOG_KEY = "conversation_model_config_dialog"
+PENDING_REPLAY_PREPARE_KEY = "pending_replay_prepare"
 MODEL_CONFIG_SECTION_TITLES = {
     "main_agent": "Main Agent",
     "profile_agent": "Profile Management Agent",
@@ -260,7 +261,7 @@ def render_conversation_model_config_dialog(
             if st.button("Accept replay", use_container_width=True, type="primary"):
                 _apply_model_config_form(conversation_repository, conversation_id, rows)
                 clear_conversation_model_config_dialog()
-                st.session_state["pending_replay"] = {
+                st.session_state[PENDING_REPLAY_PREPARE_KEY] = {
                     "conversation_id": conversation_id,
                     "source_roundtrip_id": replay_source_roundtrip_id,
                 }
