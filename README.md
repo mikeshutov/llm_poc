@@ -41,21 +41,15 @@ flowchart TD
     D --> P1[Main Planner]
     D --> PMP[Profile Management Planner]
     PMP --> PMX[Profile Management Executor]
-    PMX --> PMV{Profile Management Validator}
+    PMX --> PMV{Profile Management Evaluator}
     PMV -->|Needs another pass| PMP
     PMV -->|Done| K[Collect]
     P1 --> X[Execute Tools in Parallel]
-    P1 --> K
-
-    X --> R{Post-Execution Router}
-    R -->|goal reached or max turns| S
-    R -->|planner set needs_replan| P1
-    R -->|results ready for evaluation| EV[Main Agent Evaluator]
+    X --> EV[Main Agent Evaluator]
 
     EV --> ER{Evaluator Router}
     ER -->|satisfied or terminal| S
-    ER -->|retryable| P1
-    P1 --> K
+    ER -->|retryable| K
     S --> L[Response]
 ```
 
