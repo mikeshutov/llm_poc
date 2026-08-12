@@ -7,8 +7,7 @@ from rendering.debug import debug_render_message, render_agent_logs
 from rendering.cards import render_cards
 from rendering.feedback import render_feedback_controls
 from rendering.replay import render_replay_control
-from common.message_constants import CONTENT_KEY, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
-from common.file_constants import FILES_DIR, IMAGE_MIME_PREFIX
+from common.config import CONTENT_KEY, FILES_DIR, IMAGE_MIME_PREFIX, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
 
 
 def format_timestamp(ts) -> str | None:

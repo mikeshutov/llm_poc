@@ -21,7 +21,7 @@ from personalization.user_attributes.models.user_attribute_models import UserAtt
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from request_orchestrator.models.synthesized_result import DEFAULT_SYNTHESIS_FOLLOW_UP, SynthesisResult
-from common.parsing import repair_common_json_issues
+from common.data import repair_common_json_issues
 
 
 @dataclass

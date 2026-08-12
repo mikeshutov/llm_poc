@@ -5,7 +5,7 @@ from typing import Any
 
 from langchain_openai import ChatOpenAI
 
-from common.parsing import strip_code_fences
+from common.data import strip_code_fences
 from conversation.models.conversation_model_config import ConversationModelConfig, RERANKER_STAGE, SHARED_MODEL_SCOPE
 from llm.usage import record_llm_call
 from personalization.profile.models import UserProfile

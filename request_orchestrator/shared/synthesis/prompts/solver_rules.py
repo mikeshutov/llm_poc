@@ -1,5 +1,5 @@
 from request_orchestrator.models.agent_state import RequestAnalysis
-from common.parsing import format_prompt_bullet_list
+from common.data import format_prompt_bullet_list
 from tool.tools import TOOL_CATEGORIES
 
 BASE_RULES = [

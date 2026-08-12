@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_serializer, model_validator
 
 
 class WebSearchResult(BaseModel):
@@ -74,6 +74,13 @@ class NewsResult(BaseModel):
             t = data.get("thumbnail")
             if isinstance(t, dict):
                 data = {**data, "thumbnail_url": t.get("original") or t.get("src")}
+        return data
+
+    @model_serializer(mode="wrap")
+    def _serialize_without_thumbnail_url(self, handler):
+        data = handler(self)
+        if isinstance(data, dict):
+            data.pop("thumbnail_url", None)
         return data
 
 

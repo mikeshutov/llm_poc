@@ -1,4 +1,4 @@
-from common.parsing import format_prompt_bullet_list
+from common.data import format_prompt_bullet_list
 
 
 BASE_PLANNER_RULES = [

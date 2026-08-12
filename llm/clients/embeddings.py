@@ -1,4 +1,4 @@
-from common.model_constants import EMBEDDING_MODEL
+from common.config import EMBEDDING_MODEL
 from llm.clients.llm_client import get_openai_client
 
 

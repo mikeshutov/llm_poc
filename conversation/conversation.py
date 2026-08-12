@@ -4,8 +4,8 @@ from llm.clients.llm_client import get_llm_client
 from conversation.prompts.title_prompt import SYSTEM_PROMPT
 from conversation.prompts.summary_prompt import build_prompt as build_summary_prompt
 from conversation.models.conversation_models import ConversationRoundtrip, ConversationSummaryResponse
-from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER
-from common.parsing import strip_code_fences
+from common.config import CONTENT_KEY, ROLE_KEY, ROLE_USER
+from common.data import strip_code_fences
 from conversation.utils import flatten_conversation_entries
 from tool.repository.models import ToolCall
 from tool.formatting import build_roundtrip_messages
@@ -26,11 +26,16 @@ def generate_conversation_summary(
     tool_call_map: dict[UUID, list[ToolCall]] | None = None,
     previous_summary: str | None = None,
 ) -> ConversationSummaryResponse:
-    roundtrip_messages = build_roundtrip_messages(roundtrips, tool_call_map)
-    messages = [{ROLE_KEY: ROLE_USER, CONTENT_KEY: flatten_conversation_entries(roundtrip_messages)}]
     result = get_llm_client().call_with_tools(
         build_summary_prompt(previous_summary),
-        messages,
+        [
+            {
+                ROLE_KEY: ROLE_USER,
+                CONTENT_KEY: flatten_conversation_entries(
+                    build_roundtrip_messages(roundtrips, tool_call_map)
+                ),
+            }
+        ],
         tools=[],
     )
     raw = strip_code_fences(result.raw_message.content or "")

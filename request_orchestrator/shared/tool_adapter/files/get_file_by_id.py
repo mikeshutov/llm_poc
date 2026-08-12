@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from files.repository.file_repository import FileRepository
 from request_orchestrator.shared.runtime_context import get_current_user_id
+from request_orchestrator.shared.tool_adapter.files.result_models import GetFileByIdResult
 
 
 class GetFileByIdArgs(BaseModel):
@@ -31,14 +32,14 @@ def get_file_by_id(file_id: str) -> dict:
     try:
         parsed_id = UUID(file_id)
     except ValueError:
-        return {"error": f"Invalid file_id '{file_id}'."}
+        return GetFileByIdResult(error=f"Invalid file_id '{file_id}'.")
     row = FileRepository().get_file_by_id(parsed_id, user_id=get_current_user_id())
     if not row:
-        return {"error": f"No file found with id '{file_id}'."}
-    return {
-        "file_id": str(row["id"]),
-        "file_name": row["file_name"],
-        "file_type": row["file_type"],
-        "uploaded_at": str(row["uploaded_at"]),
-        "first_chunk": row.get("first_chunk"),
-    }
+        return GetFileByIdResult(error=f"No file found with id '{file_id}'.")
+    return GetFileByIdResult(
+        file_id=str(row["id"]),
+        file_name=row["file_name"],
+        file_type=row["file_type"],
+        uploaded_at=str(row["uploaded_at"]),
+        first_chunk=row.get("first_chunk"),
+    )

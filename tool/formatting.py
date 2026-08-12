@@ -2,7 +2,7 @@ from uuid import UUID
 
 from tool.repository.models import ToolCall
 from conversation.models.conversation_models import ConversationRoundtrip
-from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER, ROLE_ASSISTANT
+from common.config import CONTENT_KEY, ROLE_ASSISTANT, ROLE_KEY, ROLE_USER
 
 
 def format_tool_calls(response: str, tool_calls: list[ToolCall]) -> str:

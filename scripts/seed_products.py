@@ -8,7 +8,7 @@ from datasets import load_dataset
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from common.model_constants import EMBEDDING_MODEL
+from common.config import EMBEDDING_MODEL
 
 load_dotenv()
 DB_URL = os.getenv("DATABASE_URL", "postgresql://app:app@localhost:5432/products")

@@ -12,7 +12,7 @@ from conversation.repository.repo_factory import get_conversation_repo
 from conversation.summary_service import rebuild_conversation_summaries
 from rendering.feedback import render_feedback_controls
 from rendering.rendering import render_assistant_content, format_timestamp, _format_roundtrip_usage_summary
-from common.message_constants import (
+from common.config import (
     CONTENT_KEY,
     ROLE_ASSISTANT,
     ROLE_KEY,

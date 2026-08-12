@@ -14,6 +14,7 @@ if 'pycountry' not in sys.modules:
     sys.modules['pycountry'] = pycountry_module
 
 from conversation.models.conversation_models import ConversationContext
+from integrations.brave.models import NewsResult
 from llm.clients.llm_client import LlmClient
 from personalization.profile.models import UserProfile
 from request_orchestrator.agents.main_agent.request_analysis.analyze_request import analyze_request
@@ -282,6 +283,23 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     assert state.agent_log.entries[-1].data['missing_information'] == [
         'Need current pricing for the top two products',
         'Need shipping availability in Canada']
+
+
+def test_news_result_model_dump_excludes_thumbnail_url() -> None:
+    result = NewsResult(
+        title='Result',
+        url='https://example.com/result',
+        description='Description',
+        thumbnail_url='https://example.com/thumb.jpg',
+    )
+
+    assert result.thumbnail_url == 'https://example.com/thumb.jpg'
+    assert result.model_dump() == {
+        'title': 'Result',
+        'url': 'https://example.com/result',
+        'description': 'Description',
+        'age': None,
+    }
 
 
 def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None:
