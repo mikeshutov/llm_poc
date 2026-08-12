@@ -46,10 +46,8 @@ flowchart TD
     PMV -->|Done| S[Synthesis]
     P1 --> X[Execute Tools in Parallel]
     X --> EV[Main Agent Evaluator]
-
-    EV --> ER{Evaluator Router}
-    ER -->|satisfied or terminal| S
-    ER -->|retryable| P1
+    EV -->|satisfied or terminal| S
+    EV -->|retryable| P1
     S --> L[Response]
 ```
 
