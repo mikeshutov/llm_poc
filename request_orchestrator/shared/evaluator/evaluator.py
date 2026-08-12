@@ -9,13 +9,13 @@ from conversation.models.conversation_model_config import EVALUATOR_STAGE, SHARE
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.usage import record_llm_call, serialize_llm_call_record
 from request_orchestrator.constants import EVALUATOR_PROMPT_STEP
-from request_orchestrator.models.agent_prompt import PlanEvidenceStep
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evaluation_result import (
     EVALUATION_STATUS_TERMINAL,
     EvaluationResult,
     TERMINAL_EVALUATION_STATUSES,
 )
+from request_orchestrator.shared.evidence import build_evidence_bundle, build_evidence_steps
 from request_orchestrator.shared.evaluator.prompts import build_evaluator_prompt
 
 EVALUATOR_KIND = "evaluator"
@@ -33,28 +33,14 @@ def _dedupe_string_list(values: list[str]) -> list[str]:
     return deduped
 
 
-def _build_plan_with_evidence(state: AgentState) -> list[PlanEvidenceStep]:
-    plan_with_evidence: list[PlanEvidenceStep] = []
-    for iteration in state.iteration_trace:
-        if iteration.plan is None:
-            continue
-        for step in iteration.plan.steps:
-            plan_with_evidence.append(
-                PlanEvidenceStep(
-                    step_id=step.id,
-                    plan=step.plan,
-                    tool=step.tool,
-                    args=step.args,
-                    evidence=iteration.results.get(step.id, ""),
-                )
-            )
-    return plan_with_evidence
-
-
 @traceable(name="Evaluator Node")
 def run_evaluator(state: AgentState) -> AgentState:
-    plan_with_evidence = _build_plan_with_evidence(state)
-    prompt = build_evaluator_prompt(state=state, plan_with_evidence=plan_with_evidence)
+    evidence_bundle = build_evidence_bundle(state.iteration_trace)
+    evidence_steps = build_evidence_steps(
+        state.iteration_trace,
+        evidence_bundle.evidence_views_by_step_id,
+    )
+    prompt = build_evaluator_prompt(state=state, evidence=evidence_steps)
     prompt_text = prompt.prompt_text()
     prompt_input_object = prompt.to_log_input_object()
     llm = state.build_llm_for_stage(agent=SHARED_MODEL_SCOPE, stage=EVALUATOR_STAGE)
@@ -70,7 +56,7 @@ def run_evaluator(state: AgentState) -> AgentState:
         agent=SHARED_MODEL_SCOPE,
         stage=EVALUATOR_STAGE,
         callsite="shared_evaluator.run_evaluator",
-        metadata={"evidence_count": len(plan_with_evidence)},
+        metadata={"evidence_count": len(evidence_steps)},
         latency_ms=latency_ms,
         input_object=prompt_input_object,
         output_object={

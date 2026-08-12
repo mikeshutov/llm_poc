@@ -7,7 +7,7 @@ from request_orchestrator.models.evaluation_result import (
 EVALUATOR_SCHEMA = f"""Return a single JSON object with this shape:
 {{
   "status": "{EVALUATION_STATUS_RETRYABLE}",
-  "relevant_evidence": ["E1", "E3"],
+  "relevant_evidence": ["P1E1R1", "P1E3R1"],
   "missing_information": [
     "Need current pricing for the top two products",
     "Need shipping availability in Canada"
@@ -21,7 +21,7 @@ Status values for the "status" field:
 - {EVALUATION_STATUS_TERMINAL}
 
 Rules:
-- Use "relevant_evidence" to list the step IDs whose evidence actually supports the evaluation outcome.
+- Use "relevant_evidence" to list the evidence IDs whose evidence actually supports the evaluation outcome.
 - {EVALUATION_STATUS_SATISFIED}: evidence is enough to answer well. Leave "missing_information" and "refined_goal" empty.
 - {EVALUATION_STATUS_RETRYABLE}: evidence is not enough and there is still a meaningful next action. List the missing pieces and provide a refined_goal the planner can act on next.
 - {EVALUATION_STATUS_TERMINAL}: no materially different useful action remains, or the evidence is enough to conclude the search failed or no match was found. Keep "refined_goal" empty. Use "missing_information" only if it helps explain the limitation or failure.

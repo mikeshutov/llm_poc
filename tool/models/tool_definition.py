@@ -22,6 +22,7 @@ class RateLimitPolicy:
 @dataclass(frozen=True)
 class Tool:
     fn: Any
+    result_type: str = "generic"
     rate_limit_key: str | None = None
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
     rate_limit_policy: RateLimitPolicy | None = None

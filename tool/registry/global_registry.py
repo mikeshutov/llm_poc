@@ -80,8 +80,8 @@ class ToolRegistry:
             return False
         if retry_policy.retry_on_timeout and isinstance(exc, Timeout):
             return True
-        if isinstance(exc, HttpClientError):
-            message = str(exc)
+        message = str(exc)
+        if isinstance(exc, HttpClientError) or "HTTP " in message:
             if retry_policy.retry_on_429 and "HTTP 429" in message:
                 return True
             if retry_policy.retry_on_5xx and any(f"HTTP {status}" in message for status in range(500, 600)):

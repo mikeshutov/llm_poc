@@ -104,3 +104,27 @@ def test_tool_registry_retries_http_429_when_policy_allows() -> None:
 
     assert result == {"ok": True}
     assert attempts == 2
+
+
+def test_tool_registry_retries_wrapped_http_429_when_policy_allows() -> None:
+    registry = ToolRegistry()
+    attempts = 0
+
+    def callback(_tool_input):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("HTTP 429 on https://api.search.brave.com/res/v1/web/search: rate limited")
+        return {"ok": True}
+
+    registry.register(
+        Tool(
+            _FakeTool("retry_tool", callback),
+            retry_policy=RetryPolicy(max_attempts=2, backoff_seconds=0.0),
+        )
+    )
+
+    result = registry.call_tool("retry_tool", {})
+
+    assert result == {"ok": True}
+    assert attempts == 2

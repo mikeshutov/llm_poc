@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from request_orchestrator.models.agent_state import AgentState, IterationState
 from request_orchestrator.models.plan import PlanStep
+from request_orchestrator.models.plan_step_ids import format_plan_step_id
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from tool.registry import call_tool
 from tool.repository.tool_call_repository import ToolCallRepository
@@ -25,21 +26,28 @@ class StepExecutionResult:
     latency_ms: int = 0
 
 
-def _substitute_refs(obj, results: dict):
+def _substitute_refs(obj, results: dict, *, iteration_number: int):
     if isinstance(obj, str):
         if obj.startswith("#E"):
-            key = obj[1:]
-            return results.get(key, obj)
+            raw_step_id = obj[1:]
+            qualified_step_id = format_plan_step_id(iteration_number, raw_step_id)
+            return results.get(qualified_step_id, obj)
         return obj
     if isinstance(obj, list):
-        return [_substitute_refs(x, results) for x in obj]
+        return [_substitute_refs(x, results, iteration_number=iteration_number) for x in obj]
     if isinstance(obj, dict):
-        return {k: _substitute_refs(v, results) for k, v in obj.items()}
+        return {k: _substitute_refs(v, results, iteration_number=iteration_number) for k, v in obj.items()}
     return obj
 
 
-def _execute_step(step: PlanStep, *, iteration: IterationState, allowed_tool_names: set[str] | None) -> StepExecutionResult:
-    args = _substitute_refs(step.args, iteration.results)
+def _execute_step(
+    step: PlanStep,
+    *,
+    iteration: IterationState,
+    iteration_number: int,
+    allowed_tool_names: set[str] | None,
+) -> StepExecutionResult:
+    args = _substitute_refs(step.args, iteration.results, iteration_number=iteration_number)
     started_at = perf_counter()
     try:
         output = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)
@@ -70,13 +78,14 @@ def _record_step_result(
     execution_result: StepExecutionResult,
 ) -> None:
     step = execution_result.step
-    iteration.results[step.id] = execution_result.output
+    qualified_step_id = format_plan_step_id(iteration_number, step.id)
+    iteration.results[qualified_step_id] = execution_result.output
 
     agent_state.log_status(
         agent_name=agent_state.agent_profile.name,
         kind=TOOL_CALL_KIND,
         tool_name=step.tool,
-        step_id=step.id,
+        step_id=qualified_step_id,
         iteration=iteration_number,
         request=execution_result.args,
         response=execution_result.output,
@@ -122,6 +131,7 @@ def run_executor(agent_state: AgentState) -> AgentState:
                     _execute_step,
                     step,
                     iteration=iteration,
+                    iteration_number=iteration_number,
                     allowed_tool_names=allowed_tool_names,
                 )
                 for step in plan.steps

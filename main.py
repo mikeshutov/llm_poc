@@ -16,11 +16,16 @@ from rendering.replay import clear_replay_state, pop_replay_target
 from rendering.file_upload import render_file_upload
 from rendering.messages.chat import append_assistant_response, render_messages
 from rendering.rendering import render_message
+from rendering.sources import clear_sources_panel, get_sources_panel_request, render_sources_panel
 from rendering.sidebar import clear_conversation_model_config_dialog, render_sidebar, request_conversation_model_config_dialog
 
 load_dotenv()
 
-st.set_page_config(page_title="LLM Agentic Chat", page_icon=":robot_face:")
+st.set_page_config(
+    page_title="LLM Agentic Chat",
+    page_icon=":robot_face:",
+    layout="wide",
+)
 
 st.markdown(
     """<style>
@@ -73,6 +78,7 @@ def setup_conversation(cid_value, user_id: str):
             if current != cid_value:
                 clear_feedback_state()
                 clear_replay_state()
+                clear_sources_panel()
                 clear_conversation_model_config_dialog()
             st.session_state.conversation_id = str(cid_value)
             st.query_params["cid"] = str(cid_value)
@@ -80,6 +86,7 @@ def setup_conversation(cid_value, user_id: str):
 
     clear_feedback_state()
     clear_replay_state()
+    clear_sources_panel()
     clear_conversation_model_config_dialog()
     latest = conversation_repository.get_latest_conversation(user_id)
     if latest:
@@ -143,6 +150,7 @@ if replay_target:
     )
     clear_feedback_state()
     clear_replay_state()
+    clear_sources_panel()
     st.session_state.conversation_id = replay_context["conversation_id"]
     st.query_params["cid"] = replay_context["conversation_id"]
     st.session_state.loaded_cid = None
@@ -188,6 +196,9 @@ with st.sidebar:
     render_sidebar(conversation_repository)
 
 render_messages(conversation_repository, st.session_state.conversation_id, render_message)
+if get_sources_panel_request():
+    render_sources_panel()
+
 if st.session_state.get(FEEDBACK_TARGET_KEY):
     render_feedback_dialog(conversation_repository)
 

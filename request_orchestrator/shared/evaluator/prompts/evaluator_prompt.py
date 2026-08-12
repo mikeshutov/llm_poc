@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.constants import EVALUATOR_PROMPT_KIND
-from request_orchestrator.models.agent_prompt import AgentPrompt, PlanEvidenceStep
+from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep
 from request_orchestrator.shared.evaluator.prompts.evaluator_schema_prompt import EVALUATOR_SCHEMA
 
 
@@ -15,18 +15,18 @@ def _build_instruction(state: AgentState) -> str:
     )
 
 
-def build_evaluator_prompt(state: AgentState, plan_with_evidence: list[PlanEvidenceStep]) -> AgentPrompt:
+def build_evaluator_prompt(state: AgentState, evidence: list[EvidenceStep]) -> AgentPrompt:
     prompt = AgentPrompt(
         prompt_kind=EVALUATOR_PROMPT_KIND,
         instruction=_build_instruction(state),
         user_profile=state.user_profile,
         task=(state.request_analysis.goal or state.task).strip(),
         latest_user_prompt=state.task,
-        plan_with_evidence=plan_with_evidence,
+        evidence=evidence,
         schema=EVALUATOR_SCHEMA,
     )
     prompt.include_user_profile()
-    prompt.include_plan_with_evidence()
+    prompt.include_evidence()
     prompt.include_latest_user_prompt()
     prompt.include_schema_as_response_label()
     prompt.include_task(heading="Goal:")

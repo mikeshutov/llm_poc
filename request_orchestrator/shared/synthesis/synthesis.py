@@ -9,16 +9,24 @@ from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.usage import record_llm_call, serialize_llm_call_record
 from request_orchestrator.constants import SYNTHESIS_PROMPT_STEP
-from request_orchestrator.models.agent_prompt import PlanEvidenceStep
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.synthesized_result import SynthesisResult
+from request_orchestrator.shared.evidence import (
+    build_evidence_bundle,
+    build_evidence_steps,
+    filter_evidence_steps,
+)
 from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_solver_prompt
 from rendering.debug import SYNTHESIS_KIND
 
 
 def _resolve_relevant_evidence_ids(state: AgentState) -> set[str]:
-    return {step_id for step_id in state.relevant_evidence_ids if isinstance(step_id, str) and step_id.strip()}
+    return {
+        evidence_id
+        for evidence_id in state.relevant_evidence_ids
+        if isinstance(evidence_id, str) and evidence_id.strip()
+    }
 
 
 @traceable(name="Synthesis Node")
@@ -29,30 +37,16 @@ def run_synthesis(state: AgentState) -> AgentState:
         return state
 
     relevant_evidence_ids = _resolve_relevant_evidence_ids(state)
-    all_plan_with_evidence: list[PlanEvidenceStep] = []
-    for iteration in state.iteration_trace:
-        if iteration.plan is None:
-            continue
+    evidence_bundle = build_evidence_bundle(state.iteration_trace)
+    all_evidence_steps = build_evidence_steps(
+        state.iteration_trace,
+        evidence_bundle.evidence_views_by_step_id,
+    )
+    evidence_steps = filter_evidence_steps(all_evidence_steps, relevant_evidence_ids)
+    if not evidence_steps:
+        evidence_steps = all_evidence_steps
 
-        for step in iteration.plan.steps:
-            all_plan_with_evidence.append(
-                PlanEvidenceStep(
-                    step_id=step.id,
-                    plan=step.plan,
-                    tool=step.tool,
-                    args=step.args,
-                    evidence=iteration.results.get(step.id, ""),
-                )
-            )
-
-    if relevant_evidence_ids:
-        plan_with_evidence = [step for step in all_plan_with_evidence if step.step_id in relevant_evidence_ids]
-        if not plan_with_evidence:
-            plan_with_evidence = all_plan_with_evidence
-    else:
-        plan_with_evidence = all_plan_with_evidence
-
-    prompt = build_solver_prompt(plan_with_evidence=plan_with_evidence, state=state)
+    prompt = build_solver_prompt(evidence=evidence_steps, state=state)
     prompt_text = prompt.prompt_text()
     prompt_input_object = prompt.to_log_input_object()
     llm = state.build_llm_for_stage(
@@ -90,26 +84,38 @@ def run_synthesis(state: AgentState) -> AgentState:
 
     had_tool_results = any(bool(iteration.results) for iteration in state.iteration_trace)
     tool_summary = synthesis_result.tool_summary.model_dump() if had_tool_results else {}
+    used_evidence_ids = [
+        evidence_id
+        for block in synthesis_result.result
+        for evidence_id in block.evidence_ids
+        if evidence_id
+    ]
+    if not used_evidence_ids:
+        used_evidence_ids = [
+            evidence.evidence_id
+            for step in evidence_steps
+            for evidence in step.evidence
+        ]
 
     state.log_status(
         agent_name=state.agent_profile.name,
         kind=SYNTHESIS_KIND,
         data={
-            "answer_preview": synthesis_result.result[:3],
-            "follow_up": synthesis_result.follow_up,
-            "clarifying_question": synthesis_result.clarifying_question,
-            "relevant_evidence_ids": [step.step_id for step in plan_with_evidence],
+            "answer_preview": [block.content for block in synthesis_result.result[:3]],
+            "next_question": synthesis_result.next_question,
+            "relevant_evidence_ids": used_evidence_ids,
             "llm_usage": None if llm_call is None else serialize_llm_call_record(llm_call),
         },
     )
 
     state.result = AgentResult.from_state(
         state=state,
-        answer=synthesis_result.result,
-        follow_up=synthesis_result.follow_up,
-        clarifying_question=synthesis_result.clarifying_question,
+        answer_blocks=synthesis_result.result,
+        next_question=synthesis_result.next_question,
         roundtrip_summary=synthesis_result.roundtrip_summary,
         tool_summary=tool_summary,
+        used_evidence_ids=used_evidence_ids,
+        hydrated_evidence_by_id=evidence_bundle.hydrated_evidence_by_id,
     )
     state.goal_reached = True
 

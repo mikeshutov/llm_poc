@@ -80,7 +80,7 @@ def test_router_routes_executed_results_to_evaluator() -> None:
                         "tool": "generic_web_search",
                         "args": {"query_text": "okonomiyaki kit"}}
                 ]}),
-            results={"E1": {"items": []}},
+            results={"P1E1": {"items": []}},
         )
     ]
 

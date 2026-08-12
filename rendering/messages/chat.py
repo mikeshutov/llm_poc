@@ -20,7 +20,6 @@ from common.config import (
     SUMMARY_BATCH_SIZE,
     SUMMARY_TRIGGER_SIZE,
 )
-from tool.repository.tool_call_repository import ToolCallRepository
 
 
 MESSAGE_HISTORY_LIMIT = 10
@@ -80,9 +79,13 @@ def append_assistant_response(
 
     payload = roundtrip.response_payload if isinstance(roundtrip.response_payload, dict) else {
         "response": answer.raw_response,
-        "cards": answer.cards,
-        "follow_up": answer.follow_up,
-        "clarifying_question": answer.clarifying_question,
+        "result": [block.model_dump() for block in answer.answer_blocks],
+        "used_evidence_ids": list(answer.used_evidence_ids),
+        "hydrated_evidence_by_id": {
+            evidence_id: evidence.model_dump()
+            for evidence_id, evidence in answer.hydrated_evidence_by_id.items()
+        },
+        "next_question": answer.next_question,
         "agent_logs": answer.agent_logs,
     }
 
@@ -102,6 +105,7 @@ def append_assistant_response(
         render_feedback_controls(
             roundtrip_id=roundtrip.id,
             model=roundtrip.model,
+            sources_payload=payload,
             feedback_id=None,
             timestamp=format_timestamp(now),
             usage_summary=_format_roundtrip_usage_summary(payload.get("llm_usage") if isinstance(payload, dict) else None),

@@ -7,7 +7,7 @@ __all__ = [
     "AgentState",
     "IterationState",
     "Plan",
-    "PlanEvidenceStep",
+    "EvidenceStep",
     "PlanStep",
     "PlanningResult",
     "PreviousIteration",
@@ -19,7 +19,7 @@ __all__ = [
 
 _EXPORTS = {
     "AgentPrompt": ("request_orchestrator.models.agent_prompt", "AgentPrompt"),
-    "PlanEvidenceStep": ("request_orchestrator.models.agent_prompt", "PlanEvidenceStep"),
+    "EvidenceStep": ("request_orchestrator.models.agent_prompt", "EvidenceStep"),
     "PreviousIteration": ("request_orchestrator.models.agent_prompt", "PreviousIteration"),
     "PreviousIterationStep": ("request_orchestrator.models.agent_prompt", "PreviousIterationStep"),
     "AgentResult": ("request_orchestrator.models.agent_result", "AgentResult"),
