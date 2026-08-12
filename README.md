@@ -46,8 +46,8 @@ flowchart TD
     P1 --> K
 
     K --> V{Validator}
-    V -->|No plan or goal reached| S[Synthesis]
-    V -->|Plan has steps| X[Execute Tools in Parallel]
+    V -->|No executable plan or goal reached| S[Synthesis]
+    V -->|Execute current plan| X[Execute Tools in Parallel]
 
     X --> R{Post-Execution Router}
     R -->|goal reached or max turns| S
