@@ -1,21 +1,22 @@
-# LLM Powered agentic chat with a bunch of tooling
-This project was created with the idea of exploring how to build things that utilize LLMs. Over time it has grown from just a simple chatbot that looks at a local product catalog to what it is today. The product catalog used is open data loaded into the database to act as a pretend store, which is where embeddings started to come into the picture for product searching.
+# Chat powered by an agentic harness
+This project was created with the idea of exploring how to build things that utilize LLMs. Over time it has grown from just a simple chatbot that looks at a local product catalog to what it is today. It is now a chat powered by a simple harness with new capabilities being added.
 
 This is not meant to be a production piece of code. It is mostly a place to explore the topic and keep iterating on ideas.
 
 ## Table of Contents
 - [Project Summary](#project-summary)
 - [Main App Flow](#main-app-flow)
-- [Notes](#notes)
 - [Documentation](#documentation)
 - [Setup](#setup)
+- [Notes](#notes)
 
 ## Project Summary
 At a high level this repo explores:
-- agent orchestration with request analysis, planning, execution, and synthesis
-- staged user-profile hydration and durable attribute management
-- retrieval and reranking across products, web/news, files, and memories
-- a Streamlit-based UX for experimenting with the full loop
+- Agent orchestration with request analysis, planning, execution, and synthesis
+- User-profile hydration and durable attribute and profile management
+- Retrieval and reranking across products, web/news, files, and memories
+- Streamlit-based UX is realy just for simplicity so we can experiment quickly but a React UI might be needed
+- Tool registry and tool policies for agents
 
 ## Main App Flow
 Rough breakdown of the current agent loop flow.
@@ -35,9 +36,9 @@ We also store conversations, roundtrips, prompt rows, summaries, and tool calls 
 
 ```mermaid
 flowchart TD
-    A[User Prompt] --> B[Build Conversation Context]
+    A[User Prompt] --> B[Build Context And Agent State]
     B --> C[Request Analysis]
-    C --> D[Load Requested Profile Attributes]
+    C --> D[Hydrate Profile Based On Request Analysis]
     D --> P1[Main Planner]
     D --> PMP[Profile Management Planner]
     PMP --> PMX[Profile Management Executor]
@@ -50,12 +51,6 @@ flowchart TD
     EV -->|retryable| P1
     S --> L[Response]
 ```
-
-## Notes
-### Product Catalog
-Initially the repo was just about searching a product catalog with an LLM. That is why the catalog still has a central place in the project history.
-
-The early goal was to understand embeddings and how prompt-based product search could work against a local dataset. Over time that grew into a broader agentic chat app, but the product catalog remained as one of the internal retrieval tools alongside web, news, files, and memory search.
 
 ## Documentation
 The more detailed documentation now lives in the [`docs/`](docs/) folder.
@@ -120,3 +115,9 @@ python scripts/seed_products.py
 
 Product images are stored in `db/images/` for now.
 Uploaded files (PDFs, DOCX, images, etc.) are stored in `static/files/`.
+
+## Notes
+### Product Catalog
+Initially the repo was just about searching a product catalog with an LLM. That is why the catalog still has a central place in the project history.
+
+The early goal was to understand embeddings and how prompt-based product search could work against a local dataset. Over time that grew into a broader agentic chat app, but the product catalog remained as one of the internal retrieval tools alongside web, news, files, and memory search.
