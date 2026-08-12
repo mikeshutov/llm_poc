@@ -10,8 +10,7 @@ import pdfplumber
 from docx import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from common.file_constants import FILES_DIR, IMAGE_MIME_PREFIX
-from common.model_constants import CHUNK_ENCODING
+from common.config import CHUNK_ENCODING, FILES_DIR, IMAGE_MIME_PREFIX
 from files.repository.file_chunk_repository import FileChunkRepository
 from files.repository.file_repository import FileRepository
 from llm.clients.embeddings import embed_text

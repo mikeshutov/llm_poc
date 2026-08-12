@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
-from common.serialization import sanitize_for_json_storage
+from common.data import sanitize_for_json_storage
 from conversation.models.conversation_model_config import (
     ConversationModelConfig,
     MAIN_AGENT_MODEL_SCOPE,

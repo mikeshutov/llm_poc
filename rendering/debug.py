@@ -3,7 +3,7 @@ import json
 import streamlit as st
 from pydantic import BaseModel, Field
 
-from common.message_constants import CONTENT_KEY, ROLE_DEBUG, ROLE_KEY
+from common.config import CONTENT_KEY, ROLE_DEBUG, ROLE_KEY
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 

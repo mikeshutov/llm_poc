@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import streamlit as st
 
 from request_orchestrator.service import run_request_orchestrator_for_query
-from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER
+from common.config import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from conversation.repository.repo_factory import get_conversation_repo
 from conversation.replay import populate_replay_conversation, prepare_replay_conversation
 from personalization.profile.repository.repo_factory import get_user_profile_repo
@@ -84,8 +84,12 @@ def setup_conversation(cid_value, user_id: str):
     if latest:
         st.session_state.conversation_id = str(latest.id)
     else:
-        conv = conversation_repository.create_conversation(user_id=user_id, metadata={"source": "streamlit"})
-        st.session_state.conversation_id = str(conv.id)
+        st.session_state.conversation_id = str(
+            conversation_repository.create_conversation(
+                user_id=user_id,
+                metadata={"source": "streamlit"},
+            ).id
+        )
     st.query_params["uid"] = user_id
     st.query_params["cid"] = st.session_state.conversation_id
 

@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Any, Iterable
 from uuid import UUID
 
-from common.serialization import sanitize_for_json_storage
+from common.data import sanitize_for_json_storage
 from conversation.models.conversation_model_config import ConversationModelConfig
 from conversation.models.conversation_models import LlmCallRecord, LlmUsage
 from conversation.repository.repo_factory import get_conversation_repo

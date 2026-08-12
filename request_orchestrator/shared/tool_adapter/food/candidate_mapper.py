@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from common.text import normalize_text
+from common.utils import normalize_text
 from integrations.meal_db.models import Meal, MealSearchResult
 from reranker import Candidate, rerank_candidates
 

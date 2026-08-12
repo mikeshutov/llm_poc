@@ -4,7 +4,7 @@ from typing import Any, Optional, Sequence
 
 from openai import OpenAI
 
-from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
+from common.config import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
 from conversation.models.conversation_model_config import ConversationModelConfig
 from llm.clients.tool_response_parser import parse_tool_args
 from llm.models.tool_call import ToolCall, ToolCallResult

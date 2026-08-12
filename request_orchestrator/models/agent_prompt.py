@@ -8,8 +8,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 import tiktoken
 
-from common.model_constants import CHUNK_ENCODING
-from common.serialization import is_meaningful_prompt_value, prune_empty_prompt_values
+from common.config import CHUNK_ENCODING
+from common.data import is_meaningful_prompt_value, prune_empty_prompt_values
 from personalization.profile.models import UserProfile
 from conversation.models.conversation_models import ConversationContext
 

@@ -5,7 +5,7 @@ from uuid import UUID
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from common.parsing import normalize_string_list
+from common.data import normalize_string_list
 from llm.clients.embeddings import embed_text
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType

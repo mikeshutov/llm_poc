@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from common.message_constants import SUMMARY_BATCH_SIZE, SUMMARY_TRIGGER_SIZE
+from common.config import SUMMARY_BATCH_SIZE, SUMMARY_TRIGGER_SIZE
 from conversation.repository.repo_factory import get_conversation_repo
 from conversation.summary_service import rebuild_conversation_summaries
 from tool.repository.tool_call_repository import ToolCallRepository
@@ -24,15 +24,14 @@ def prepare_replay_conversation(roundtrip_id: str | UUID, user_id: str) -> dict[
             f"Roundtrip {parsed_roundtrip_id} belongs to user {source_conversation.user_id}, not {user_id}"
         )
 
-    replay_metadata = {
-        "source": "replay",
-        "source_conversation_id": str(source_conversation.id),
-        "source_roundtrip_id": str(source_roundtrip.id),
-        "source_message_index": source_roundtrip.message_index,
-    }
     new_conversation = repo.create_conversation(
         user_id=user_id,
-        metadata=replay_metadata,
+        metadata={
+            "source": "replay",
+            "source_conversation_id": str(source_conversation.id),
+            "source_roundtrip_id": str(source_roundtrip.id),
+            "source_message_index": source_roundtrip.message_index,
+        },
     )
 
     if source_conversation.tone_state:

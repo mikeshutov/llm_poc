@@ -7,7 +7,7 @@ import psycopg
 from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 
-from common.parsing import normalize_string_list
+from common.data import normalize_string_list
 from db.connection import get_connection
 from personalization.user_attributes.models.user_attribute_models import UserAttribute, UserAttributeSearchResult
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES

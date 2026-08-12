@@ -1,5 +1,4 @@
-from dataclasses import dataclass, field
-
+from common.config import get_env_bool, get_env_float, get_env_int
 from request_orchestrator.shared.tool_adapter.books.search_books import search_books
 from request_orchestrator.shared.tool_adapter.calendar.public_holidays_lookup import public_holidays_lookup
 from request_orchestrator.shared.tool_adapter.calendar.world_time import get_world_time
@@ -41,34 +40,43 @@ from request_orchestrator.shared.tool_adapter.search.wikipedia_search import wik
 from request_orchestrator.shared.tool_adapter.weather.get_current_weather import get_current_weather
 from request_orchestrator.shared.tool_adapter.weather.get_historical_month_weather import get_historical_month_weather
 from request_orchestrator.shared.tool_adapter.weather.resolve_city_location import resolve_city_location
+from tool.models import RateLimitPolicy, RetryPolicy, Tool, ToolCategory
 
+# Rate limiter and retry policy
+BRAVE_RATE_LIMIT_POLICY = RateLimitPolicy(
+    max_requests=max(1, get_env_int("BRAVE_RATE_LIMIT_MAX_REQUESTS", 1)),
+    window_seconds=max(0.0, get_env_float("BRAVE_RATE_LIMIT_WINDOW_SECONDS", 1.0)),
+)
+BRAVE_RETRY_POLICY = RetryPolicy(
+    max_attempts=max(1, get_env_int("BRAVE_RETRY_MAX_ATTEMPTS", 3)),
+    retry_on_timeout=get_env_bool("BRAVE_RETRY_ON_TIMEOUT", True),
+    retry_on_429=get_env_bool("BRAVE_RETRY_ON_429", True),
+    retry_on_5xx=get_env_bool("BRAVE_RETRY_ON_5XX", True),
+    backoff_seconds=max(0.0, get_env_float("BRAVE_RETRY_BACKOFF_SECONDS", 1.0)),
+)
 
-@dataclass
-class ToolCategory:
-    tools: list
-    description: str
-    rules: list[str] = field(default_factory=list)
-    result_rules: list[str] = field(default_factory=list)
-
-
-PRODUCT_TOOLS = [find_products, list_product_categories]
-PRODUCT_WEB_TOOLS = [find_products_web]
-WEATHER_TOOLS = [resolve_city_location, get_current_weather, get_historical_month_weather]
-FINANCE_TOOLS = [exchange_rates_lookup, exchange_rates_time_series, get_latest_exchange_rates, get_stock_price]
-CRYPTO_TOOLS = [get_crypto_markets]
-WEB_SEARCH_TOOLS = [generic_web_search, news_search]
-KNOWLEDGE_TOOLS = [wikipedia_search, structured_facts_lookup, hn_search, country_lookup]
-CALENDAR_TOOLS = [public_holidays_lookup, get_world_time]
-LOCATION_TOOLS = [get_caller_location]
-BOOKS_TOOLS = [search_books]
-LANGUAGE_TOOLS = [define_word]
-FOOD_TOOLS = [search_meals, search_cocktails]
-FUN_TOOLS = [get_advice, get_quote, get_astronomy_picture]
-MATH_TOOLS = [calculate]
-MEMORY_TOOLS = [search_memories, search_roundtrip_memories]
-USER_ATTRIBUTE_TOOLS = [create_user_attribute, update_user_attribute, get_user_attributes, search_user_attributes]
-FILE_TOOLS = [search_files, search_file_for_details, get_file_by_id]
-PROFILE_TOOLS = [set_user_display_name, set_user_first_name, set_user_last_name, update_user_tone]
+# Tool Definitions
+PRODUCT_TOOLS = [Tool(find_products), Tool(list_product_categories)]
+PRODUCT_WEB_TOOLS = [Tool(find_products_web)]
+WEATHER_TOOLS = [Tool(resolve_city_location), Tool(get_current_weather), Tool(get_historical_month_weather)]
+FINANCE_TOOLS = [Tool(exchange_rates_lookup), Tool(exchange_rates_time_series), Tool(get_latest_exchange_rates), Tool(get_stock_price)]
+CRYPTO_TOOLS = [Tool(get_crypto_markets)]
+WEB_SEARCH_TOOLS = [
+    Tool(generic_web_search, rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
+    Tool(news_search, rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
+]
+KNOWLEDGE_TOOLS = [Tool(wikipedia_search), Tool(structured_facts_lookup), Tool(hn_search), Tool(country_lookup)]
+CALENDAR_TOOLS = [Tool(public_holidays_lookup), Tool(get_world_time)]
+LOCATION_TOOLS = [Tool(get_caller_location)]
+BOOKS_TOOLS = [Tool(search_books)]
+LANGUAGE_TOOLS = [Tool(define_word)]
+FOOD_TOOLS = [Tool(search_meals), Tool(search_cocktails)]
+FUN_TOOLS = [Tool(get_advice), Tool(get_quote), Tool(get_astronomy_picture)]
+MATH_TOOLS = [Tool(calculate)]
+MEMORY_TOOLS = [Tool(search_memories), Tool(search_roundtrip_memories)]
+USER_ATTRIBUTE_TOOLS = [Tool(create_user_attribute), Tool(update_user_attribute), Tool(get_user_attributes), Tool(search_user_attributes)]
+FILE_TOOLS = [Tool(search_files), Tool(search_file_for_details), Tool(get_file_by_id)]
+PROFILE_TOOLS = [Tool(set_user_display_name), Tool(set_user_first_name), Tool(set_user_last_name), Tool(update_user_tone)]
 
 # if this were to grow much larger I would probably create sub categories or a tree structure of tools
 TOOL_CATEGORIES: dict[str, ToolCategory] = {

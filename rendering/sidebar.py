@@ -5,7 +5,6 @@ from uuid import UUID, uuid4
 
 import streamlit as st
 
-from common.model_constants import AVAILABLE_CHAT_MODELS
 from conversation.models.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
@@ -79,11 +78,12 @@ def _switch_user(conversation_repository, user_id: str) -> None:
     if latest:
         st.session_state.conversation_id = str(latest.id)
     else:
-        conv = conversation_repository.create_conversation(
-            user_id=user_id,
-            metadata={"source": "streamlit"},
+        st.session_state.conversation_id = str(
+            conversation_repository.create_conversation(
+                user_id=user_id,
+                metadata={"source": "streamlit"},
+            ).id
         )
-        st.session_state.conversation_id = str(conv.id)
     st.query_params["uid"] = user_id
     st.query_params["cid"] = st.session_state.conversation_id
     st.session_state.loaded_cid = None
@@ -102,11 +102,12 @@ def _delete_conversation(conversation_repository, conversation_id: str) -> None:
     if latest:
         st.session_state.conversation_id = str(latest.id)
     else:
-        conv = conversation_repository.create_conversation(
-            user_id=selected_user_id,
-            metadata={"source": "streamlit"},
+        st.session_state.conversation_id = str(
+            conversation_repository.create_conversation(
+                user_id=selected_user_id,
+                metadata={"source": "streamlit"},
+            ).id
         )
-        st.session_state.conversation_id = str(conv.id)
     st.query_params["uid"] = selected_user_id
     st.query_params["cid"] = st.session_state.conversation_id
     st.session_state.loaded_cid = None
@@ -458,8 +459,12 @@ def render_sidebar(conversation_repository) -> None:
             clear_feedback_state()
             clear_replay_state()
             clear_conversation_model_config_dialog()
-            conv = conversation_repository.create_conversation(user_id=selected_user_id, metadata={"source": "streamlit"})
-            st.session_state.conversation_id = str(conv.id)
+            st.session_state.conversation_id = str(
+                conversation_repository.create_conversation(
+                    user_id=selected_user_id,
+                    metadata={"source": "streamlit"},
+                ).id
+            )
             st.query_params["uid"] = selected_user_id
             st.query_params["cid"] = st.session_state.conversation_id
             st.session_state.loaded_cid = None

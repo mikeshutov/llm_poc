@@ -4,7 +4,7 @@ import os
 from enum import Enum
 from uuid import UUID
 
-from common.file_constants import IMAGE_MIME_PREFIX
+from common.config import IMAGE_MIME_PREFIX
 from files.models import FileChunkResult
 from db.connection import get_connection
 

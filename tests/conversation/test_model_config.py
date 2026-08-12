@@ -14,7 +14,7 @@ if 'pycountry' not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules['pycountry'] = pycountry_module
 
-from common.model_constants import AVAILABLE_CHAT_MODELS
+from common.config import AVAILABLE_CHAT_MODELS
 from conversation.model_config_resolver import resolve_conversation_model_config
 from conversation.models.conversation_model_config import (
     ConversationModelConfig,

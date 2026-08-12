@@ -2,7 +2,7 @@ from uuid import UUID
 
 from tool.repository.models import ToolCall
 from tool.repository.tool_call_repository import ToolCallRepository
-from common.message_constants import CONTENT_KEY, ROLE_KEY, ROLE_USER
+from common.config import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from llm.clients.llm_client import get_llm_client
 
 # This is just a start but we need more dynamic prompts so that tools

@@ -1,6 +1,6 @@
 import json
 
-from common.serialization import prune_empty_prompt_values
+from common.data import prune_empty_prompt_values
 from conversation.models.conversation_models import ConversationContext
 
 

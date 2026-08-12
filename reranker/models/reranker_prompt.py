@@ -4,8 +4,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from common.serialization import prune_empty_prompt_values
-from common.text import normalize_text
+from common.data import prune_empty_prompt_values
+from common.utils import normalize_text
 from personalization.profile.models import UserProfile
 from reranker.constants import DEFAULT_TOP_K, RERANKER_RESPONSE_SCHEMA
 from reranker.models.candidate import Candidate

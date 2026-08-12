@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, TYPE_CHECKING
 
-from common.serialization import sanitize_for_json_storage
+from common.data import sanitize_for_json_storage
 from integrations.brave.models import NewsSearchResponse
 from products.models.product_search_results import ProductSearchResults
 from rendering.cards_mapper import news_response_to_cards, product_results_to_cards
