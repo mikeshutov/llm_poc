@@ -175,7 +175,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
         conversation_context=ConversationContext(),
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
-        llm=FakeInvokeLLM('{"result": ["done"], "follow_up": "Do you want a deeper breakdown?", "clarifying_question": "", "roundtrip_summary": "summary", "tool_summary": {"used_tools": [], "produced": [], "entities": [], "freshness": ""}}', 'gpt-5.4'),
+        llm=FakeInvokeLLM('{"result": [{"content": "done", "evidence_ids": []}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"used_tools": [], "produced": [], "entities": [], "freshness": ""}}', 'gpt-5.4'),
     )
     state.iteration_trace = [IterationState(plan=Plan.model_validate({'steps': []}), results={})]
 
@@ -247,7 +247,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
         conversation_context=ConversationContext(),
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
-        llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["E1"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.4'),
+        llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["P1E1R1"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.4'),
     )
     state.request_analysis = RequestAnalysis(goal='Check whether the shortlisted products satisfy the request.')
     state.iteration_trace = [
@@ -261,7 +261,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
                         'args': {'query_text': 'shortlisted products'}}
                 ]
             }),
-            results={'E1': {'items': ['result']}},
+            results={'P1E1': {'items': ['result']}},
         )
     ]
 
@@ -275,12 +275,12 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     assert repo.llm_calls[0]['agent'] == 'shared'
     assert repo.llm_calls[0]['stage'] == 'evaluator'
     assert repo.llm_calls[0]['model'] == 'gpt-5.4'
-    assert any(section['key'] == PromptSectionKeys.PLAN_WITH_EVIDENCE for section in repo.llm_calls[0]['metadata']['input_object']['prompt_sections'])
+    assert any(section['key'] == PromptSectionKeys.EVIDENCE for section in repo.llm_calls[0]['metadata']['input_object']['prompt_sections'])
     assert state.evaluation_status == EVALUATION_STATUS_RETRYABLE
     assert state.request_analysis.goal == 'Find current Canadian pricing and availability for the two shortlisted products.'
     assert state.agent_log.entries[-1].data['llm_usage']['model'] == 'gpt-5.4'
     assert isinstance(state.agent_log.entries[-1].data['llm_usage']['latency_ms'], int)
-    assert state.agent_log.entries[-1].data['relevant_evidence'] == ['E1']
+    assert state.agent_log.entries[-1].data['relevant_evidence'] == ['P1E1R1']
     assert state.agent_log.entries[-1].data['missing_information'] == [
         'Need current pricing for the top two products',
         'Need shipping availability in Canada']
@@ -318,9 +318,9 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
         conversation_context=ConversationContext(),
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
-        llm=CapturingLLM('{"result": ["done"], "follow_up": "Do you want a deeper breakdown?", "clarifying_question": "", "roundtrip_summary": "summary", "tool_summary": {"used_tools": [], "produced": [], "entities": [], "freshness": ""}}', 'gpt-5.4'),
+        llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["P1E2R1"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"used_tools": [], "produced": [], "entities": [], "freshness": ""}}', 'gpt-5.4'),
     )
-    state.relevant_evidence_ids = ['E2']
+    state.relevant_evidence_ids = ['P1E2R1']
     state.iteration_trace = [
         IterationState(
             plan=Plan.model_validate({
@@ -328,7 +328,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
                     {'id': 'E1', 'plan': 'First step', 'tool': 'tool_a', 'args': {}},
                     {'id': 'E2', 'plan': 'Second step', 'tool': 'tool_b', 'args': {}}]
             }),
-            results={'E1': {'value': 'a'}, 'E2': {'value': 'b'}},
+            results={'P1E1': {'value': 'a'}, 'P1E2': {'value': 'b'}},
         )
     ]
 
@@ -339,6 +339,6 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
         run_synthesis(state)
 
     prompt_text = str(captured_prompt['text'])
-    assert '"step_id": "E2"' in prompt_text
-    assert '"step_id": "E1"' not in prompt_text
-    assert state.agent_log.entries[-1].data['relevant_evidence_ids'] == ['E2']
+    assert '"evidence_id": "P1E2R1"' in prompt_text
+    assert '"evidence_id": "P1E1R1"' not in prompt_text
+    assert state.agent_log.entries[-1].data['relevant_evidence_ids'] == ['P1E2R1']

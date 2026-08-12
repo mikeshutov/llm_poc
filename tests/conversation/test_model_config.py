@@ -57,10 +57,10 @@ class DummyAgentResult:
     def to_payload_for_update_roundtrip(self) -> dict:
         return {
             'response': self.raw_response,
+            'result': [{'content': chunk, 'evidence_ids': []} for chunk in self.answer],
             'roundtrip_summary': self.roundtrip_summary,
             'cards': [],
-            'follow_up': '',
-            'clarifying_question': '',
+            'next_question': '',
             'tool_summary': {},
             'agent_logs': {},
         }

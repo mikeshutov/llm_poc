@@ -69,10 +69,8 @@ def test_run_executor_parallelizes_pending_steps() -> None:
     ):
         run_executor(state)
 
-    assert state.iteration_trace[-1].results == {
-        "E1": {"tool": "tool_a", "value": "a"},
-        "E2": {"tool": "tool_b", "value": "b"},
-    }
+    assert state.iteration_trace[-1].results["P1E1"] == {"tool": "tool_a", "value": "a"}
+    assert state.iteration_trace[-1].results["P1E2"] == {"tool": "tool_b", "value": "b"}
     assert started_steps[:2] == ["tool_a", "tool_b"]
     assert len(state.agent_log.entries) == 2
     assert all(isinstance(entry.data.get("latency_ms"), int) for entry in state.agent_log.entries)

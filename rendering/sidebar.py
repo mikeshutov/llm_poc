@@ -10,6 +10,7 @@ from personalization.profile.repository.repo_factory import get_user_profile_rep
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 from rendering.feedback import clear_feedback_state
 from rendering.replay import clear_replay_state
+from rendering.sources import clear_sources_panel
 
 MODEL_CONFIG_DIALOG_KEY = "conversation_model_config_dialog"
 PENDING_REPLAY_PREPARE_KEY = "pending_replay_prepare"
@@ -74,6 +75,7 @@ def _switch_user(conversation_repository, user_id: str) -> None:
     latest = conversation_repository.get_latest_conversation(user_id)
     clear_feedback_state()
     clear_replay_state()
+    clear_sources_panel()
     clear_conversation_model_config_dialog()
     st.session_state.selected_user_id = user_id
     if latest:
@@ -99,6 +101,7 @@ def _delete_conversation(conversation_repository, conversation_id: str) -> None:
     latest = conversation_repository.get_latest_conversation(selected_user_id)
     clear_feedback_state()
     clear_replay_state()
+    clear_sources_panel()
     clear_conversation_model_config_dialog()
     if latest:
         st.session_state.conversation_id = str(latest.id)
@@ -216,10 +219,10 @@ def render_conversation_model_config_dialog(
         st.caption(f"Configure model overrides for `{title}`. Unset stages fall back to defaults.")
 
     current_section: str | None = None
-    for row in rows:
+    for index, row in enumerate(rows):
         if row["agent"] != current_section:
             current_section = row["agent"]
-            if rows.index(row) > 0:
+            if index > 0:
                 st.divider()
             st.subheader(MODEL_CONFIG_SECTION_TITLES.get(current_section, str(current_section)))
 
@@ -459,6 +462,7 @@ def render_sidebar(conversation_repository) -> None:
         if st.button(":material/add: New chat", use_container_width=True):
             clear_feedback_state()
             clear_replay_state()
+            clear_sources_panel()
             clear_conversation_model_config_dialog()
             st.session_state.conversation_id = str(
                 conversation_repository.create_conversation(
@@ -500,6 +504,7 @@ def render_sidebar(conversation_repository) -> None:
                 if st.button(title, key=f"conv_{cid}", use_container_width=True):
                     clear_feedback_state()
                     clear_replay_state()
+                    clear_sources_panel()
                     clear_conversation_model_config_dialog()
                     st.session_state.conversation_id = cid
                     st.query_params["uid"] = selected_user_id

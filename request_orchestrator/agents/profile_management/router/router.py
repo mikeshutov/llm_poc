@@ -4,6 +4,7 @@ from langgraph.graph import END
 
 from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE
 from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.models.plan_step_ids import format_plan_step_id
 
 
 def router(state: AgentState) -> str:
@@ -19,7 +20,11 @@ def router(state: AgentState) -> str:
     if plan is None or len(plan.steps) == 0:
         return END
 
-    has_pending_steps = any(step.id not in last_iteration.results for step in plan.steps)
+    iteration_number = len(state.iteration_trace)
+    has_pending_steps = any(
+        format_plan_step_id(iteration_number, step.id) not in last_iteration.results
+        for step in plan.steps
+    )
     if has_pending_steps:
         return EXECUTE_TOOLS_EDGE
 

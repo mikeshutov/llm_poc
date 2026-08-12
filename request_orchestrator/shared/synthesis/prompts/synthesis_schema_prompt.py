@@ -6,18 +6,28 @@ Ensure the `roundtrip_summary` field is a detailed plain-language diagnostic sum
 The `roundtrip_summary` should usually be around 80 to 120 tokens and should be meaningfully richer than the top-level rolling conversation summary.
 The `roundtrip_summary` should capture the user's request, the approach taken, the main evidence or tool findings used, important constraints or entities, and the final outcome.
 Ensure the `tool_summary` object captures the tools actually used, what they produced, any key entities involved, and freshness if relevant.
-Set exactly one of `follow_up` or `clarifying_question` to a non-empty string. Never set both. Never leave both empty. Leave the unused one as an empty string.
+Set `next_question` to one non-empty question or follow up statement.
+Use `evidence_ids` only as structured attribution metadata. Do not mention evidence IDs, citation labels, or internal references inside `content`.
+Every entry in `result` must be an object with exactly `content` and `evidence_ids`. Do not output `result` as an array of strings.
 
 The `result` field MUST NOT contain:
-- follow-up questions
-- invitations to continue
-- offers to provide more detail
+- follow-up questions, invitations to continue or offers to provide more detail
 - conversational closers (e.g., "let me know", "I can help", "if you'd like")
 
+Expected Result Schema:
+
 {
-  "follow_up": "<one follow up question to drive engagement>",
-  "result": ["<answer to the users question>", "<additional paragraph if needed>"],
-  "clarifying_question": "<a question to clarify the users desire for vague requests>",
+  "next_question": "<one follow up or clarifying question>",
+  "result": [
+    {
+      "content": "<answer to the users question>",
+      "evidence_ids": ["P1E1R1"]
+    },
+    {
+      "content": "<additional paragraph if needed>",
+      "evidence_ids": ["P1E2R1", "P1E3R1"]
+    }
+  ],
   "roundtrip_summary": "<detailed 80-120 token summary of what the user asked, what was done, what evidence or tools mattered, and what outcome was reached>",
   "tool_summary": {
     "used_tools": ["get_current_weather"],

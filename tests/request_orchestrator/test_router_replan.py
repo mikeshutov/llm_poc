@@ -33,7 +33,7 @@ def _state_with_completed_iteration(*, needs_replan: bool) -> AgentState:
                     ]
                 }
             ),
-            results={"E1": {"ok": True}},
+            results={"P1E1": {"ok": True}},
             needs_replan=needs_replan,
         )
     ]

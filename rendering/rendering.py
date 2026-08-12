@@ -1,5 +1,7 @@
 import os
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 import streamlit as st
 
@@ -8,6 +10,25 @@ from rendering.cards import render_cards
 from rendering.feedback import render_feedback_controls
 from rendering.replay import render_replay_control
 from common.config import CONTENT_KEY, FILES_DIR, IMAGE_MIME_PREFIX, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
+from request_orchestrator.models.evidence import EvidenceUrl, HydratedEvidence
+from request_orchestrator.models.synthesized_result import SynthesisResultBlock
+
+
+@dataclass(frozen=True)
+class InlineEvidenceReference:
+    evidence_id: str
+    title: str
+    source: str
+
+
+@dataclass(frozen=True)
+class EvidenceCard:
+    id: str
+    name: str
+    description: str
+    url: str
+    image_url: str
+    source: str
 
 
 def format_timestamp(ts) -> str | None:
@@ -73,41 +94,173 @@ def _render_roundtrip_llm_usage(llm_usage: dict | None) -> None:
             st.json(calls, expanded=False)
 
 
+def _get_hydrated_evidence_by_id(payload: dict | None) -> dict[str, HydratedEvidence]:
+    if not isinstance(payload, dict):
+        return {}
+    raw_hydrated_evidence_by_id = payload.get("hydrated_evidence_by_id")
+    if not isinstance(raw_hydrated_evidence_by_id, dict):
+        return {}
+    hydrated_evidence_by_id: dict[str, HydratedEvidence] = {}
+    for evidence_id, evidence in raw_hydrated_evidence_by_id.items():
+        if not isinstance(evidence_id, str) or not isinstance(evidence, dict):
+            continue
+        try:
+            hydrated_evidence_by_id[evidence_id] = HydratedEvidence.model_validate(evidence)
+        except Exception:
+            continue
+    return hydrated_evidence_by_id
+
+
+def get_renderable_result_blocks(content: str, payload: dict | None) -> list[SynthesisResultBlock]:
+    if isinstance(payload, dict):
+        raw_blocks = payload.get("result")
+        if isinstance(raw_blocks, list):
+            blocks: list[SynthesisResultBlock] = []
+            for raw_block in raw_blocks:
+                if not isinstance(raw_block, dict):
+                    continue
+                block_content = raw_block.get("content")
+                if not isinstance(block_content, str):
+                    continue
+                content_text = block_content.strip()
+                if not content_text:
+                    continue
+                raw_evidence_ids = raw_block.get("evidence_ids", [])
+                evidence_ids = []
+                if isinstance(raw_evidence_ids, list):
+                    evidence_ids = [
+                        evidence_id.strip()
+                        for evidence_id in raw_evidence_ids
+                        if isinstance(evidence_id, str) and evidence_id.strip()
+                    ]
+                blocks.append(
+                    SynthesisResultBlock(
+                        content=content_text,
+                        evidence_ids=evidence_ids,
+                    )
+                )
+            if blocks:
+                return blocks
+    trimmed_content = content.strip()
+    if not trimmed_content:
+        return []
+    return [SynthesisResultBlock(content=trimmed_content, evidence_ids=[])]
+
+
+def _build_inline_evidence(
+    block: SynthesisResultBlock,
+    hydrated_evidence_by_id: dict[str, HydratedEvidence],
+) -> list[InlineEvidenceReference]:
+    inline_evidence: list[InlineEvidenceReference] = []
+    for evidence_id in block.evidence_ids:
+        hydrated = hydrated_evidence_by_id.get(evidence_id)
+        if hydrated is None:
+            continue
+        url = hydrated.url.strip()
+        image_url = hydrated.image_url.strip()
+        if url or image_url:
+            continue
+        inline_evidence.append(
+            InlineEvidenceReference(
+                evidence_id=evidence_id,
+                title=hydrated.title,
+                source=hydrated.source,
+            )
+        )
+    return inline_evidence
+
+
+def _build_block_cards(
+    block: SynthesisResultBlock,
+    hydrated_evidence_by_id: dict[str, HydratedEvidence],
+) -> list[EvidenceCard]:
+    cards: list[EvidenceCard] = []
+    for evidence_id in block.evidence_ids:
+        hydrated = hydrated_evidence_by_id.get(evidence_id)
+        if hydrated is None:
+            continue
+        url = _primary_card_url(hydrated.urls, fallback=hydrated.url)
+        image_url = hydrated.image_url.strip()
+        title = hydrated.title.strip()
+        summary = hydrated.summary.strip()
+        if not title or not (url or image_url):
+            continue
+        cards.append(
+            EvidenceCard(
+                id=evidence_id,
+                name=title,
+                description=summary,
+                url=url,
+                image_url=image_url,
+                source=hydrated.source.strip(),
+            )
+        )
+    return cards
+
+
+def _primary_card_url(urls: list[EvidenceUrl], *, fallback: str) -> str:
+    for preferred_type in ("website", "youtube"):
+        for entry in urls:
+            cleaned_url = entry.url.strip()
+            if entry.url_type == preferred_type and cleaned_url:
+                return cleaned_url
+    return fallback.strip()
+
+
+def _render_result_block(
+    block: SynthesisResultBlock,
+    hydrated_evidence_by_id: dict[str, HydratedEvidence],
+) -> list[EvidenceCard]:
+    st.markdown(block.content)
+    block_cards = _build_block_cards(block, hydrated_evidence_by_id)
+    inline_evidence = _build_inline_evidence(block, hydrated_evidence_by_id)
+    if inline_evidence:
+        parts: list[str] = []
+        for evidence in inline_evidence:
+            title = (evidence.title or evidence.evidence_id).strip()
+            source = evidence.source.strip()
+            if source:
+                parts.append(f"{title} ({source})")
+            else:
+                parts.append(title)
+        if parts:
+            st.caption(f"Evidence: {' | '.join(parts)}")
+    return block_cards
+
+
 def render_assistant_content(content: str, payload: dict | None) -> None:
-    cards = None
     next_question = None
     agent_logs = None
     llm_usage = None
     if isinstance(payload, dict):
-        cards = payload.get("cards")
-        if cards is None:
-            cards = payload.get("products")
-        follow_up = payload.get("follow_up")
-        clarifying_question = payload.get("clarifying_question")
+        next_question = payload.get("next_question")
         agent_logs = payload.get("agent_logs")
         llm_usage = payload.get("llm_usage")
-        if isinstance(clarifying_question, str) and clarifying_question:
-            next_question = clarifying_question
-        elif isinstance(follow_up, str) and follow_up:
-            next_question = follow_up
-    has_cards = isinstance(cards, list) and bool(cards)
+    hydrated_evidence_by_id = _get_hydrated_evidence_by_id(payload)
+    result_blocks = get_renderable_result_blocks(content, payload)
     has_next_question = isinstance(next_question, str) and bool(next_question)
+    all_block_cards: list[EvidenceCard] = []
 
-    if has_next_question and not has_cards:
-        st.markdown(f"{content}\n\n{next_question}")
-    else:
-        st.markdown(content)
+    for block in result_blocks:
+        all_block_cards.extend(_render_result_block(block, hydrated_evidence_by_id))
 
-    if has_cards:
+    if all_block_cards:
+        deduped_cards: list[EvidenceCard] = []
+        seen_card_ids: set[str] = set()
+        for card in all_block_cards:
+            if card.id in seen_card_ids:
+                continue
+            seen_card_ids.add(card.id)
+            deduped_cards.append(card)
         render_cards(
-            cards,
+            [card.__dict__ for card in deduped_cards],
             heading_key="name",
             description_key="description",
             image_key="image_url",
             link_key="url",
         )
 
-    if has_next_question and has_cards:
+    if has_next_question:
         st.markdown(next_question)
 
     _render_roundtrip_llm_usage(llm_usage)
@@ -148,6 +301,7 @@ def render_message(msg: dict) -> None:
                 render_feedback_controls(
                     roundtrip_id=msg.get("roundtrip_id"),
                     model=msg.get("model"),
+                    sources_payload=payload,
                     feedback_id=msg.get("feedback_id"),
                     timestamp=footer_timestamp,
                     usage_summary=_format_roundtrip_usage_summary(

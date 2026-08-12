@@ -1,10 +1,7 @@
-import json
-
 import streamlit as st
 from pydantic import BaseModel, Field
 
 from common.config import CONTENT_KEY, ROLE_DEBUG, ROLE_KEY
-from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 
 
@@ -43,8 +40,7 @@ class PlanLogPayload(BaseModel):
 class SynthesisLogPayload(BaseModel):
     title: str = "Synthesis"
     answer_preview: list[str] = Field(default_factory=list)
-    follow_up: str = ""
-    clarifying_question: str = ""
+    next_question: str = ""
     relevant_evidence_ids: list[str] = Field(default_factory=list)
     llm_usage: object | None = None
 
@@ -96,15 +92,6 @@ def emit_debug_message(content, content_title: str) -> None:
     except Exception:
         pass
 
-
-def _serialize_value(value) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return json.dumps(value, indent=2, sort_keys=True, default=str)
-
-
 def _build_request_analysis_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
     return RequestAnalysisLogPayload(
@@ -139,8 +126,7 @@ def _build_synthesis_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
     return SynthesisLogPayload(
         answer_preview=data.get("answer_preview") or [],
-        follow_up=data.get("follow_up") or "",
-        clarifying_question=data.get("clarifying_question") or "",
+        next_question=data.get("next_question") or "",
         relevant_evidence_ids=data.get("relevant_evidence_ids") or [],
         llm_usage=data.get("llm_usage"),
     ).model_dump()

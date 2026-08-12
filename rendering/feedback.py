@@ -7,6 +7,7 @@ import streamlit as st
 
 from conversation.models.conversation_models import RoundtripFeedback
 from conversation.repository.conversation_repository import ConversationRepository
+from rendering.sources import render_sources_button
 
 FEEDBACK_TARGET_KEY = "feedback_target"
 FEEDBACK_DIALOG_INIT_KEY = "feedback_dialog_initialized_for"
@@ -68,6 +69,7 @@ def render_feedback_controls(
     *,
     roundtrip_id: UUID | str | None,
     model: str | None,
+    sources_payload: dict | None = None,
     feedback_id: UUID | None = None,
     timestamp: str | None = None,
     usage_summary: str | None = None,
@@ -76,31 +78,36 @@ def render_feedback_controls(
         return
 
     rid = str(roundtrip_id)
-    col_caption, col_status, col_up, col_down = st.columns([8, 3, 1, 1], vertical_alignment="center")
-    with col_caption:
+    col_meta, col_actions = st.columns([8, 4], vertical_alignment="center")
+    with col_meta:
         if usage_summary:
             _render_footer_text(usage_summary)
         if timestamp:
             _render_footer_text(timestamp)
-    with col_status:
         if feedback_id is not None:
             st.caption("Feedback saved")
-    with col_up:
-        st.button(
-            ":material/thumb_up:",
-            key=f"feedback_up_{rid}",
-            help="Thumbs up",
-            on_click=request_feedback_dialog,
-            args=(rid, True, model),
-        )
-    with col_down:
-        st.button(
-            ":material/thumb_down:",
-            key=f"feedback_down_{rid}",
-            help="Thumbs down",
-            on_click=request_feedback_dialog,
-            args=(rid, False, model),
-        )
+    with col_actions:
+        action_spacer, action_wrapper = st.columns([1, 5], vertical_alignment="center")
+        with action_wrapper:
+            col_sources, col_up, col_down = st.columns([2, 1, 1], vertical_alignment="center")
+            with col_sources:
+                render_sources_button(rid, sources_payload)
+            with col_up:
+                st.button(
+                    ":material/thumb_up:",
+                    key=f"feedback_up_{rid}",
+                    help="Thumbs up",
+                    on_click=request_feedback_dialog,
+                    args=(rid, True, model),
+                )
+            with col_down:
+                st.button(
+                    ":material/thumb_down:",
+                    key=f"feedback_down_{rid}",
+                    help="Thumbs down",
+                    on_click=request_feedback_dialog,
+                    args=(rid, False, model),
+                )
 
 
 @st.dialog("Message feedback")

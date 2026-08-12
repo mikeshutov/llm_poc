@@ -12,6 +12,7 @@ from common.config import CHUNK_ENCODING
 from common.data import is_meaningful_prompt_value, prune_empty_prompt_values
 from personalization.profile.models import UserProfile
 from conversation.models.conversation_models import ConversationContext
+from request_orchestrator.models.evidence import EvidenceView
 
 
 class PreviousIterationStep(BaseModel):
@@ -28,12 +29,9 @@ class PreviousIteration(BaseModel):
     steps: list[PreviousIterationStep] = Field(default_factory=list)
 
 
-class PlanEvidenceStep(BaseModel):
-    step_id: str
-    plan: str
-    tool: str
-    args: dict[str, Any]
-    evidence: Any = None
+class EvidenceStep(BaseModel):
+    type: str
+    evidence: list[EvidenceView] = Field(default_factory=list)
 
 
 class PromptSectionKeys:
@@ -43,7 +41,7 @@ class PromptSectionKeys:
     AVAILABLE_TOOLS = "available_tools"
     RULES = "rules"
     PREVIOUS_ITERATIONS = "previous_iterations"
-    PLAN_WITH_EVIDENCE = "plan_with_evidence"
+    EVIDENCE = "evidence"
     LATEST_USER_PROMPT = "latest_user_prompt"
     TASK = "task"
     SCHEMA = "schema"
@@ -96,7 +94,7 @@ class AgentPrompt:
     available_tool_categories: str = ""
     available_tools: str = ""
     previous_iterations: list[PreviousIteration] | None = None
-    plan_with_evidence: list[PlanEvidenceStep] | None = None
+    evidence: list[EvidenceStep] | None = None
     _sections: dict[str, PromptSection] = field(default_factory=dict, init=False, repr=False)
 
     def _append_section(
@@ -179,13 +177,13 @@ class AgentPrompt:
             key=key,
         )
 
-    def include_plan_with_evidence(self, heading: str = "Plan with Evidence (JSON):", *, key: str = PromptSectionKeys.PLAN_WITH_EVIDENCE) -> AgentPrompt:
-        if not self.plan_with_evidence:
+    def include_evidence(self, heading: str = "Evidence (JSON):", *, key: str = PromptSectionKeys.EVIDENCE) -> AgentPrompt:
+        if not self.evidence:
             return self
         return self._append_section(
             heading,
             self._serialize_json(prune_empty_prompt_values([
-                step.model_dump() for step in self.plan_with_evidence
+                step.model_dump() for step in self.evidence
             ])),
             key=key,
         )
@@ -290,9 +288,9 @@ class AgentPrompt:
             data[PromptSectionKeys.PREVIOUS_ITERATIONS] = prune_empty_prompt_values([
                 iteration.model_dump() for iteration in self.previous_iterations
             ])
-        if self.plan_with_evidence is not None:
-            data[PromptSectionKeys.PLAN_WITH_EVIDENCE] = prune_empty_prompt_values([
-                step.model_dump() for step in self.plan_with_evidence
+        if self.evidence is not None:
+            data[PromptSectionKeys.EVIDENCE] = prune_empty_prompt_values([
+                step.model_dump() for step in self.evidence
             ])
         return prune_empty_prompt_values(data)
 

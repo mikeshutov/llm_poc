@@ -26,8 +26,9 @@ from request_orchestrator.agents.main_agent.agent import run_agent
 from request_orchestrator.agents.main_agent.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
 from request_orchestrator.agents.profile_management.agent import _prepare_subagent_state
 from request_orchestrator.constants import SYNTHESIS_PROMPT_KIND
-from request_orchestrator.models.agent_prompt import AgentPrompt, PlanEvidenceStep
+from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep
 from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.models.evidence import EvidenceView
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from request_orchestrator.shared.evaluator.prompts.evaluator_prompt import build_evaluator_prompt
 from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_solver_prompt
@@ -138,13 +139,17 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         planner_prompt = build_planner_prompt(state).prompt_text()
         synthesis_prompt = build_solver_prompt(
-            plan_with_evidence=[
-                PlanEvidenceStep(
-                    step_id='E1',
-                    plan='Use known evidence.',
-                    tool='generic_web_search',
-                    args={},
-                    evidence={'items': ['result']},
+            evidence=[
+                EvidenceStep(
+                    type='web_search_results',
+                    evidence=[
+                        EvidenceView(
+                            evidence_id="P1E1R1",
+                            item_id="known-result",
+                            title='Known Result',
+                            summary='Known evidence result.',
+                        )
+                    ],
                 )
             ],
             state=state,
@@ -152,13 +157,17 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         request_analysis_prompt = build_request_analysis_prompt(state).prompt_text()
         evaluator_prompt = build_evaluator_prompt(
             state=state,
-            plan_with_evidence=[
-                PlanEvidenceStep(
-                    step_id='E1',
-                    plan='Use known evidence.',
-                    tool='generic_web_search',
-                    args={},
-                    evidence={'items': ['result']},
+            evidence=[
+                EvidenceStep(
+                    type='web_search_results',
+                    evidence=[
+                        EvidenceView(
+                            evidence_id="P1E1R1",
+                            item_id="known-result",
+                            title='Known Result',
+                            summary='Known evidence result.',
+                        )
+                    ],
                 )
             ],
         ).prompt_text()
@@ -212,54 +221,33 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             prompt_kind=SYNTHESIS_PROMPT_KIND,
             instruction='Synthesize the answer.',
             user_profile=UserProfile(),
-            plan_with_evidence=[
-                PlanEvidenceStep(
-                    step_id='E1',
-                    plan='Review product search evidence.',
-                    tool='find_products',
-                    args={'query_text': 'soba noodles'},
-                    evidence={
-                        'internal_results': [],
-                        'external_results': [
-                            {
-                                'id': 'https://example.com/soba',
-                                'name': 'Soba Noodles',
-                                'description': 'Authentic soba noodles',
-                                'category': None,
-                                'color': None,
-                                'style': None,
-                                'gender': None,
-                                'season': None,
-                                'year': None,
-                                'price': None,
-                                'url': 'https://example.com/soba',
-                                'image_url': 'https://example.com/soba.png',
-                                'score': None,
-                                'source': 'web',
-                            }
-                        ],
-                    },
+            evidence=[
+                EvidenceStep(
+                    type='generic',
+                    evidence=[
+                        EvidenceView(
+                            evidence_id="P1E1R1",
+                            item_id='https://example.com/soba',
+                            title='Soba Noodles',
+                            summary='Authentic soba noodles',
+                        )
+                    ],
                 )
             ],
             schema='{}',
         )
         prompt.include_user_profile()
-        prompt.include_plan_with_evidence()
+        prompt.include_evidence()
         prompt.include_schema_raw()
 
         prompt_text = prompt.prompt_text()
 
-        self.assertIn('"external_results"', prompt_text)
-        self.assertIn('"name": "Soba Noodles"', prompt_text)
-        self.assertIn('"image_url": "https://example.com/soba.png"', prompt_text)
-        self.assertNotIn('"category": null', prompt_text)
-        self.assertNotIn('"color": null', prompt_text)
-        self.assertNotIn('"style": null', prompt_text)
-        self.assertNotIn('"gender": null', prompt_text)
-        self.assertNotIn('"season": null', prompt_text)
-        self.assertNotIn('"year": null', prompt_text)
-        self.assertNotIn('"price": null', prompt_text)
-        self.assertNotIn('"score": null', prompt_text)
+        self.assertIn('"title": "Soba Noodles"', prompt_text)
+        self.assertIn('"evidence_id": "P1E1R1"', prompt_text)
+        self.assertIn('"item_id": "https://example.com/soba"', prompt_text)
+        self.assertIn('"summary": "Authentic soba noodles"', prompt_text)
+        self.assertNotIn('image_url', prompt_text)
+        self.assertNotIn('category', prompt_text)
 
     def test_synthesis_prompt_excludes_recent_roundtrips(self) -> None:
         state = AgentState.new(
@@ -282,13 +270,17 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         )
 
         prompt = build_solver_prompt(
-            plan_with_evidence=[
-                PlanEvidenceStep(
-                    step_id='E1',
-                    plan='Review evidence.',
-                    tool='generic_web_search',
-                    args={},
-                    evidence={'items': ['result']},
+            evidence=[
+                EvidenceStep(
+                    type='web_search_results',
+                    evidence=[
+                        EvidenceView(
+                            evidence_id="P1E1R1",
+                            item_id="result-1",
+                            title='Result',
+                            summary='Evidence result.',
+                        )
+                    ],
                 )
             ],
             state=state,
@@ -315,13 +307,17 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         )
 
         prompt = build_solver_prompt(
-            plan_with_evidence=[
-                PlanEvidenceStep(
-                    step_id='E1',
-                    plan='Review evidence.',
-                    tool='generic_web_search',
-                    args={},
-                    evidence={'items': ['result']},
+            evidence=[
+                EvidenceStep(
+                    type='web_search_results',
+                    evidence=[
+                        EvidenceView(
+                            evidence_id="P1E1R1",
+                            item_id="result-1",
+                            title='Result',
+                            summary='Evidence result.',
+                        )
+                    ],
                 )
             ],
             state=state,
@@ -381,9 +377,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         synthesis_response = """
         {
-          "result": ["Stored your food likes as a user attribute."],
-          "follow_up": "Do you want me to remember any other food preferences?",
-          "clarifying_question": "",
+          "result": [{"content": "Stored your food likes as a user attribute.", "evidence_ids": []}],
+          "next_question": "Do you want me to remember any other food preferences?",
           "roundtrip_summary": "Stored the user's stated food likes as a persistent user attribute and confirmed the profile state.",
           "tool_summary": {
             "used_tools": ["get_user_attributes"],
@@ -502,9 +497,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         synthesis_response = """
         {
-          "result": ["I used your stored food preferences while looking up a meal idea."],
-          "follow_up": "Do you want a few more options based on those preferences?",
-          "clarifying_question": "",
+          "result": [{"content": "I used your stored food preferences while looking up a meal idea.", "evidence_ids": []}],
+          "next_question": "Do you want a few more options based on those preferences?",
           "roundtrip_summary": "Loaded the user's stored food likes and used them while planning a meal-related response.",
           "tool_summary": {
             "used_tools": ["search_meals"],
@@ -603,9 +597,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         synthesis_response = """
         {
-          "result": ["The result is 47.0."],
-          "follow_up": "Do you want me to show the calculation steps too?",
-          "clarifying_question": "",
+          "result": [{"content": "The result is 47.0.", "evidence_ids": []}],
+          "next_question": "Do you want me to show the calculation steps too?",
           "roundtrip_summary": "Calculated the requested expression using the math tool and returned the numeric result.",
           "tool_summary": {
             "used_tools": ["calculate"],
@@ -689,9 +682,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         synthesis_response = """
         {
-          "result": ["The current time in Tokyo is 2026-08-04T21:30:00+09:00."],
-          "follow_up": "Do you want the current date there as well?",
-          "clarifying_question": "",
+          "result": [{"content": "The current time in Tokyo is 2026-08-04T21:30:00+09:00.", "evidence_ids": []}],
+          "next_question": "Do you want the current date there as well?",
           "roundtrip_summary": "Looked up the current time in Tokyo using the world time tool and returned the reported local datetime.",
           "tool_summary": {
             "used_tools": ["get_world_time"],
@@ -738,7 +730,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertEqual(result.tool_summary.get('used_tools'), ['get_world_time'])
         self.assertEqual(len(llm.invocations), 6)
 
-    def test_clarifying_question_wins_over_follow_up(self) -> None:
+    def test_next_question_is_preserved(self) -> None:
         fake_repo = FakeUserAttributeRepository()
 
         request_analysis_response = """
@@ -761,9 +753,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         synthesis_response = """
         {
-          "result": ["I can help with that."],
-          "follow_up": "Do you want a short or detailed answer?",
-          "clarifying_question": "Which product category do you want to focus on?",
+          "result": [{"content": "I can help with that.", "evidence_ids": []}],
+          "next_question": "Which product category do you want to focus on?",
           "roundtrip_summary": "The request was underspecified, so the response preserved the clarifying question and dropped the follow-up variant.",
           "tool_summary": {
             "used_tools": [],
@@ -789,8 +780,6 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 )],
         )
 
-        self.assertEqual(result.follow_up, '')
-        self.assertEqual(result.clarifying_question, 'Which product category do you want to focus on?')
         self.assertEqual(result.next_question, 'Which product category do you want to focus on?')
 
 

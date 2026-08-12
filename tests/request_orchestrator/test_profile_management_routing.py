@@ -71,7 +71,7 @@ def test_profile_router_routes_completed_results_to_evaluator() -> None:
                         "tool": "get_user_attributes",
                         "args": {"limit": 10, "is_active": True}}
                 ]}),
-            results={"E1": {"items": []}},
+            results={"P1E1": {"items": []}},
         )
     ]
 

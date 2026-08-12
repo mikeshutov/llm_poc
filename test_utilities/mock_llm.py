@@ -42,7 +42,8 @@ class MockLLM:
 
     def _is_synthesis_prompt(self, prompt: str) -> bool:
         return (
-            'Plan with Evidence (JSON):' in prompt
+            'Evidence (JSON):' in prompt
+            or '  "next_question": ' in prompt
             or prompt.startswith('Solve the following task or problem.')
         )
 

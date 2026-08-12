@@ -4,6 +4,7 @@ from request_orchestrator.agents.models.agent_profile import PROFILE_MANAGEMENT_
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PreviousIteration, PreviousIterationStep
 from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.models.plan_step_ids import format_plan_step_id
 from request_orchestrator.shared.planner.models.compiled_planner_context import CompiledPlannerContext
 from request_orchestrator.shared.planner.prompts.planner_rules import build_planner_rules
 from request_orchestrator.shared.planner.prompts.planner_schema_prompt import PLANNER_SCHEMA
@@ -106,11 +107,11 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
             for step in it.plan.steps:
                 steps.append(
                     PreviousIterationStep(
-                        step_id=step.id,
+                        step_id=format_plan_step_id(i, step.id),
                         plan=step.plan,
                         tool=step.tool,
                         args=step.args,
-                        result=it.results.get(step.id),
+                        result=it.results.get(format_plan_step_id(i, step.id)),
                     )
                 )
 

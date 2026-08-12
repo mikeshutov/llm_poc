@@ -5,6 +5,8 @@ from types import ModuleType, SimpleNamespace
 from dataclasses import dataclass
 from uuid import uuid4
 
+import pytest
+
 
 if 'yfinance' not in sys.modules:
     sys.modules['yfinance'] = ModuleType('yfinance')
@@ -20,7 +22,7 @@ from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
-from request_orchestrator.models.synthesized_result import DEFAULT_SYNTHESIS_FOLLOW_UP, SynthesisResult
+from request_orchestrator.models.synthesized_result import DEFAULT_SYNTHESIS_NEXT_QUESTION, SynthesisResult
 from common.data import repair_common_json_issues
 
 
@@ -296,10 +298,38 @@ def test_repair_common_json_issues_replaces_semicolon_between_fields() -> None:
     assert repaired == '{"result":["a"], "clarifying_question":"","follow_up":""}'
 
 
-def test_synthesis_result_requires_exactly_one_question_field() -> None:
+def test_synthesis_result_accepts_next_question_and_result_blocks() -> None:
     result = SynthesisResult.model_validate(
         {
-            "result": ["done"],
+            "result": [{"content": "done", "evidence_ids": ["P1E1R1"]}],
+            "next_question": "Do you want more detail?",
+            "roundtrip_summary": "summary",
+            "tool_summary": {},
+        }
+    )
+
+    assert result.next_question == "Do you want more detail?"
+    assert result.result[0].content == "done"
+    assert result.result[0].evidence_ids == ["P1E1R1"]
+
+
+def test_synthesis_result_falls_back_when_next_question_is_empty() -> None:
+    result = SynthesisResult.model_validate(
+        {
+            "result": [{"content": "done", "evidence_ids": []}],
+            "next_question": "",
+            "roundtrip_summary": "summary",
+            "tool_summary": {},
+        }
+    )
+
+    assert result.next_question == DEFAULT_SYNTHESIS_NEXT_QUESTION
+
+
+def test_synthesis_result_accepts_legacy_question_fields() -> None:
+    result = SynthesisResult.model_validate(
+        {
+            "result": [{"content": "done", "evidence_ids": []}],
             "follow_up": "Do you want more detail?",
             "clarifying_question": "",
             "roundtrip_summary": "summary",
@@ -307,29 +337,13 @@ def test_synthesis_result_requires_exactly_one_question_field() -> None:
         }
     )
 
-    assert result.follow_up == "Do you want more detail?"
-    assert result.clarifying_question == ""
+    assert result.next_question == "Do you want more detail?"
 
 
-def test_synthesis_result_falls_back_when_both_question_fields_are_empty() -> None:
+def test_synthesis_result_prefers_legacy_clarifying_question_when_both_legacy_fields_are_set() -> None:
     result = SynthesisResult.model_validate(
         {
-            "result": ["done"],
-            "follow_up": "",
-            "clarifying_question": "",
-            "roundtrip_summary": "summary",
-            "tool_summary": {},
-        }
-    )
-
-    assert result.follow_up == DEFAULT_SYNTHESIS_FOLLOW_UP
-    assert result.clarifying_question == ""
-
-
-def test_synthesis_result_prefers_clarifying_question_when_both_question_fields_are_set() -> None:
-    result = SynthesisResult.model_validate(
-        {
-            "result": ["done"],
+            "result": [{"content": "done", "evidence_ids": []}],
             "follow_up": "Do you want more detail?",
             "clarifying_question": "Which option do you mean?",
             "roundtrip_summary": "summary",
@@ -337,8 +351,19 @@ def test_synthesis_result_prefers_clarifying_question_when_both_question_fields_
         }
     )
 
-    assert result.follow_up == ""
-    assert result.clarifying_question == "Which option do you mean?"
+    assert result.next_question == "Which option do you mean?"
+
+
+def test_synthesis_result_rejects_legacy_string_result_entries() -> None:
+    with pytest.raises(ValueError):
+        SynthesisResult.model_validate(
+            {
+                "result": ["done"],
+                "next_question": "Do you want more detail?",
+                "roundtrip_summary": "summary",
+                "tool_summary": {},
+            }
+        )
 
 
 def test_hydrate_user_profile_core_loads_persisted_tone() -> None:
