@@ -38,20 +38,23 @@ flowchart TD
     A[User Prompt] --> B[Build Conversation Context]
     B --> C[Request Analysis]
     C --> D[Load Requested Profile Attributes]
-    D --> E[Fanout]
-
-    E --> PM[Profile Management Agent]
-    E --> P1[Initial Planner]
-    PM --> K[Collect]
-    P1 --> K
+    D --> E[Main Agent]
+    E --> P1[Planner]
+    E --> PMP[Profile Management Planner]
+    PMP --> PMX[Profile Management Executor]
+    PMX --> PMV{Profile Management Validator}
+    PMV -->|Needs another pass| PMP
+    PMV -->|Done| K[Collect]
+    P1 --> V
 
     K --> V{Validator}
-    V -->|No executable plan or goal reached| S[Synthesis]
-    V -->|Execute current plan| X[Execute Tools in Parallel]
+    V -->|Need planning update| P2[Planner]
+    V -->|Ready to execute| X[Execute Tools in Parallel]
+    V -->|Goal reached or no useful plan| S[Synthesis]
 
     X --> R{Post-Execution Router}
     R -->|goal reached or max turns| S
-    R -->|planner set needs_replan| P2[Planner]
+    R -->|planner set needs_replan| P2
     R -->|results ready for evaluation| EV[Evaluator]
 
     EV --> ER{Evaluator Router}
