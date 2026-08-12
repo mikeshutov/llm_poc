@@ -1,5 +1,4 @@
 from common.config import (
-    AVAILABLE_CHAT_MODELS,
     CHUNK_ENCODING,
     CONTENT_KEY,
     EMBEDDING_MODEL,
@@ -28,7 +27,6 @@ from common.data import (
 from common.utils import normalize_text, now_ms
 
 __all__ = [
-    "AVAILABLE_CHAT_MODELS",
     "CHUNK_ENCODING",
     "CONTENT_KEY",
     "EMBEDDING_MODEL",

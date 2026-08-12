@@ -10,10 +10,9 @@ from common.config.message_constants import (
     SUMMARY_BATCH_SIZE,
     SUMMARY_TRIGGER_SIZE,
 )
-from common.config.model_constants import AVAILABLE_CHAT_MODELS, CHUNK_ENCODING, EMBEDDING_MODEL
+from common.config.model_constants import CHUNK_ENCODING, EMBEDDING_MODEL
 
 __all__ = [
-    "AVAILABLE_CHAT_MODELS",
     "CHUNK_ENCODING",
     "CONTENT_KEY",
     "EMBEDDING_MODEL",

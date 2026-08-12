@@ -5,7 +5,6 @@ from uuid import UUID, uuid4
 
 import streamlit as st
 
-from common.config import AVAILABLE_CHAT_MODELS
 from conversation.models.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
