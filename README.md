@@ -1,5 +1,5 @@
 # Chat powered by an agentic harness
-This project was created with the idea of exploring how to build things that utilize LLMs. Over time it has grown from just a simple chatbot that looks at a local product catalog to what it is today. It is now a chat powered by a simple harness with new capabilities being added.
+This project was created with the idea of exploring how to build things that utilize LLMs. Over time it has grown from just a simple chatbot that looks at a local product catalog to what it is today. It is now a chat powered by an agentic harness with new capabilities constantly being added as experimenting goes on.
 
 This is not meant to be a production piece of code. It is mostly a place to explore the topic and keep iterating on ideas.
 
@@ -7,6 +7,7 @@ This is not meant to be a production piece of code. It is mostly a place to expl
 - [Project Summary](#project-summary)
 - [Main App Flow](#main-app-flow)
 - [Documentation](#documentation)
+- [Observability](docs/observability.md)
 - [Setup](#setup)
 - [Notes](#notes)
 
@@ -28,9 +29,8 @@ Rough breakdown of the current agent loop flow.
 6. After profile loading, the main flow fans out into separate agent paths.
 7. The main agent path handles planning, execution, replanning, and synthesis, while the profile-management agent path can work on durable attribute maintenance separately.
 8. The executor executes the tool calls in the plan in parallel and stores the results in state.
-9. `Load Requested Profile Attributes` fans into the main-agent path and the profile-management path.
-10. After execution, the loop can either replan immediately when the planner marked `needs_replan`, run the evaluator to decide whether another useful step remains, or synthesize if the goal is reached or limits are hit.
-11. Synthesis generates the final response, roundtrip summary, and tool summary. It works from explicit evidence plus narrowed conversation context rather than planner history payloads.
+9. After execution, the loop can either replan immediately when the planner marked `needs_replan`, run the evaluator to decide whether another useful step remains, or synthesize if the goal is reached or limits are hit.
+10. Synthesis generates the final response, roundtrip summary, and tool summary. It works from explicit evidence plus narrowed conversation context rather than planner history payloads.
 
 We also store conversations, roundtrips, prompt rows, summaries, and tool calls for future prompts.
 
@@ -44,8 +44,8 @@ flowchart TD
     PMP --> PMX[Profile Management Executor]
     PMX --> PMV{Profile Management Evaluator}
     PMV -->|Needs another pass| PMP
-    PMV -->|Done| S[Synthesis]
-    P1 --> X[Execute Tools in Parallel]
+    PMV -->|satisfied or terminal| S[Synthesis]
+    P1 --> X[Main Agent Executor]
     X --> EV[Main Agent Evaluator]
     EV -->|satisfied or terminal| S
     EV -->|retryable| P1
@@ -58,6 +58,8 @@ The more detailed documentation now lives in the [`docs/`](docs/) folder.
 - [Context Assembly](docs/context-assembly.md)
 - [File Searching](docs/file-searching.md)
 - [Memories](docs/memories.md)
+- [Model Selection](docs/model-selection.md)
+- [Observability](docs/observability.md)
 - [Request Analysis](docs/request-analysis.md)
 - [Reranking](docs/reranking.md)
 
