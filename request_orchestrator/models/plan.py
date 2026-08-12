@@ -45,3 +45,4 @@ class PlanningResult(BaseModel):
     steps: list[PlanStep]
     status: PlanningResultStatus = PlanningResultStatus.READY
     reason: str = ""
+    needs_replan: bool = False

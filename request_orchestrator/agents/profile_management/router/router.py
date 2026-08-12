@@ -23,6 +23,10 @@ def router(state: AgentState) -> str:
     if has_pending_steps:
         return EXECUTE_TOOLS_EDGE
 
+    # if there were tool results and a replan was needed by the planner retrn to planning
+    if last_iteration.results and last_iteration.needs_replan:
+        return PLAN_EDGE
+
     if last_iteration.results:
         return EVALUATE_EDGE
 

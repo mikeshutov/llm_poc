@@ -46,6 +46,17 @@ def _format_roundtrip_usage_summary(llm_usage: dict | None) -> str | None:
     return " | ".join(parts) if parts else None
 
 
+def _format_roundtrip_duration(payload: dict | None) -> str | None:
+    if isinstance(payload, dict):
+        latency_ms = payload.get("roundtrip_latency_ms")
+        if latency_ms is not None:
+            try:
+                return f"{float(latency_ms) / 1000:.1f}s"
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
 def _render_roundtrip_llm_usage(llm_usage: dict | None) -> None:
     if not isinstance(llm_usage, dict):
         return
@@ -121,7 +132,10 @@ def render_message(msg: dict) -> None:
     role = msg[ROLE_KEY]
     content = msg[CONTENT_KEY]
     content_title = msg.get("title", "Debug")
+    payload = msg.get("payload") if isinstance(msg.get("payload"), dict) else None
     timestamp = format_timestamp(msg.get("timestamp"))
+    duration = _format_roundtrip_duration(payload)
+    footer_timestamp = " | ".join(part for part in [duration, timestamp] if part) or None
     if msg.get("status"):
         with st.chat_message("assistant", avatar=":material/more_horiz:"):
             st.markdown(content)
@@ -135,8 +149,10 @@ def render_message(msg: dict) -> None:
                     roundtrip_id=msg.get("roundtrip_id"),
                     model=msg.get("model"),
                     feedback_id=msg.get("feedback_id"),
-                    timestamp=timestamp,
-                    usage_summary=_format_roundtrip_usage_summary(msg.get("payload", {}).get("llm_usage") if isinstance(msg.get("payload"), dict) else None),
+                    timestamp=footer_timestamp,
+                    usage_summary=_format_roundtrip_usage_summary(
+                        payload.get("llm_usage") if isinstance(payload, dict) else None
+                    ),
                 )
             else:
                 st.write(content)

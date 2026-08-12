@@ -1,4 +1,5 @@
 import threading
+from time import perf_counter
 from uuid import UUID
 
 from integrations.ip_api import IpApiClient
@@ -45,6 +46,7 @@ def run_request_orchestrator_for_query(
     context_limit: int = 5,
     geometadata: GeoMetadata | None = None,
 ) -> tuple[AgentResult, ConversationRoundtrip]:
+    started_at = perf_counter()
     repo = get_conversation_repo()
     conversation = repo.get_conversation(UUID(conversation_id))
     if conversation is None:
@@ -97,6 +99,7 @@ def run_request_orchestrator_for_query(
     llm_calls = repo.list_llm_calls_for_roundtrip(roundtrip.id)
     payload = result.to_payload_for_update_roundtrip()
     payload["llm_usage"] = build_llm_usage_payload(llm_calls)
+    payload["roundtrip_latency_ms"] = int((perf_counter() - started_at) * 1000)
 
     roundtrip_summary_embedding = embed_text(result.roundtrip_summary) if result.roundtrip_summary else None
     roundtrip = repo.update_roundtrip(

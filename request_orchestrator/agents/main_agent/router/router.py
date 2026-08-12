@@ -12,6 +12,8 @@ def router(state: AgentState) -> str:
         return SYNTHESIZE_EDGE
 
     last_iteration = state.iteration_trace[-1] if state.iteration_trace else None
+    if last_iteration and last_iteration.results and last_iteration.needs_replan:
+        return PLAN_EDGE
     if last_iteration and last_iteration.results:
         return EVALUATE_EDGE
 
