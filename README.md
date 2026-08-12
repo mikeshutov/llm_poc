@@ -27,7 +27,7 @@ Rough breakdown of the current agent loop flow.
 6. After profile loading, the main flow fans out into separate agent paths.
 7. The main agent path handles planning, execution, replanning, and synthesis, while the profile-management agent path can work on durable attribute maintenance separately.
 8. The executor executes the tool calls in the plan in parallel and stores the results in state.
-9. After the initial fanout, a collect/barrier step brings the active paths back together before the validator decides whether we should execute or synthesize.
+9. `Load Requested Profile Attributes` fans into the main-agent path and the profile-management path.
 10. After execution, the loop can either replan immediately when the planner marked `needs_replan`, run the evaluator to decide whether another useful step remains, or synthesize if the goal is reached or limits are hit.
 11. Synthesis generates the final response, roundtrip summary, and tool summary. It works from explicit evidence plus narrowed conversation context rather than planner history payloads.
 
@@ -38,30 +38,24 @@ flowchart TD
     A[User Prompt] --> B[Build Conversation Context]
     B --> C[Request Analysis]
     C --> D[Load Requested Profile Attributes]
-    D --> E[Main Agent]
-    E --> P1[Planner]
-    E --> PMP[Profile Management Planner]
+    D --> P1[Main Planner]
+    D --> PMP[Profile Management Planner]
     PMP --> PMX[Profile Management Executor]
     PMX --> PMV{Profile Management Validator}
     PMV -->|Needs another pass| PMP
     PMV -->|Done| K[Collect]
-    P1 --> V
-
-    K --> V{Validator}
-    V -->|Need planning update| P2[Planner]
-    V -->|Ready to execute| X[Execute Tools in Parallel]
-    V -->|Goal reached or no useful plan| S[Synthesis]
+    P1 --> X[Execute Tools in Parallel]
+    P1 --> K
 
     X --> R{Post-Execution Router}
     R -->|goal reached or max turns| S
-    R -->|planner set needs_replan| P2
-    R -->|results ready for evaluation| EV[Evaluator]
+    R -->|planner set needs_replan| P1
+    R -->|results ready for evaluation| EV[Main Agent Evaluator]
 
     EV --> ER{Evaluator Router}
     ER -->|satisfied or terminal| S
-    ER -->|retryable| P2
-
-    P2 --> K
+    ER -->|retryable| P1
+    P1 --> K
     S --> L[Response]
 ```
 
