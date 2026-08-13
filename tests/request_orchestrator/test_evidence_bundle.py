@@ -14,6 +14,8 @@ if 'pycountry' not in sys.modules:
 from integrations.brave.models import NewsSearchResponse, WebSearchResponse
 from integrations.meal_db.models import MealSearchResult
 from integrations.wikidata.models import SparqlResult
+from request_orchestrator.shared.tool_adapter.search.wikipedia_search import WikipediaSearchResponse
+from integrations.wikipedia.models import WikipediaPageSummary, WikipediaSearchResult
 from request_orchestrator.models.agent_state import IterationState
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.evidence import build_evidence_bundle
@@ -73,7 +75,7 @@ def test_build_evidence_bundle_creates_canonical_news_records() -> None:
     assert first.summary == "Sunny conditions continue."
     assert first.image_url == ""
     assert first.source == "news_search"
-    assert first.entity_type == "generic_result"
+    assert first.entity_type == "news_results"
 
 
 def test_build_evidence_bundle_preserves_item_id_separately_from_evidence_id() -> None:
@@ -200,7 +202,7 @@ def test_build_evidence_bundle_normalizes_weather_to_single_record() -> None:
     assert record.title == "Get Current Weather"
     assert record.item_id == "Toronto"
     assert record.location_name == "Toronto"
-    assert record.url == ""
+    assert record.url == "https://open-meteo.com/"
     assert record.source == "get_current_weather"
     assert record.summary == "21.2 C in Toronto, Canada, wind 4.3 km/h, at 2026-08-12T11:15"
 
@@ -251,7 +253,7 @@ def test_build_evidence_bundle_normalizes_generic_lists_and_singletons() -> None
     assert web_record.summary == "Popular local ramen shop."
     assert web_record.image_url == "https://example.com/ramen.jpg"
     assert web_record.source == "generic_web_search"
-    assert web_record.entity_type == "generic_result"
+    assert web_record.entity_type == "web_search_results"
 
     fallback_record = bundle.hydrated_evidence_by_id["P1E2R1"]
     assert fallback_record.item_id == "fallback-1"
@@ -323,3 +325,111 @@ def test_build_evidence_bundle_uses_meal_entry_description_instead_of_wrapper_me
             {"name": "Sugar", "measure": "1 cup"},
         ]
     }
+
+
+def test_build_evidence_bundle_normalizes_wikipedia_results_per_page() -> None:
+    iteration = IterationState(
+        plan=Plan.model_validate(
+            {
+                "steps": [
+                    {
+                        "id": "E2",
+                        "plan": "Search Wikipedia.",
+                        "tool": "wikipedia_search",
+                        "args": {"query": "staple foods of the United Kingdom"},
+                    }
+                ]
+            }
+        ),
+        results={
+            "P1E2": WikipediaSearchResponse(
+                query="staple foods of the United Kingdom",
+                results=[
+                    WikipediaSearchResult(
+                        title="British cuisine",
+                        description="Overview of British cooking traditions",
+                        url="https://en.wikipedia.org/wiki/British_cuisine",
+                    )
+                ],
+                top_result_summary=WikipediaPageSummary(
+                    title="British cuisine",
+                    summary="British cuisine covers the cooking traditions of the United Kingdom.",
+                    url="https://en.wikipedia.org/wiki/British_cuisine",
+                    page_id=123,
+                ),
+            )
+        },
+    )
+
+    bundle = build_evidence_bundle([iteration])
+
+    record = bundle.hydrated_evidence_by_id["P1E2R1"]
+    assert record.item_id == "https://en.wikipedia.org/wiki/British_cuisine"
+    assert record.title == "British cuisine"
+    assert record.summary == "Overview of British cooking traditions"
+    assert record.url == "https://en.wikipedia.org/wiki/British_cuisine"
+
+
+def test_build_evidence_bundle_uses_wikipedia_top_result_summary_when_results_are_empty() -> None:
+    iteration = IterationState(
+        plan=Plan.model_validate(
+            {
+                "steps": [
+                    {
+                        "id": "E2",
+                        "plan": "Search Wikipedia.",
+                        "tool": "wikipedia_search",
+                        "args": {"query": "staple foods of the United Kingdom"},
+                    }
+                ]
+            }
+        ),
+        results={
+            "P1E2": WikipediaSearchResponse(
+                query="staple foods of the United Kingdom",
+                results=[],
+                top_result_summary=WikipediaPageSummary(
+                    title="British cuisine",
+                    summary="British cuisine covers the cooking traditions of the United Kingdom.",
+                    url="https://en.wikipedia.org/wiki/British_cuisine",
+                    page_id=123,
+                ),
+            )
+        },
+    )
+
+    bundle = build_evidence_bundle([iteration])
+
+    record = bundle.hydrated_evidence_by_id["P1E2R1"]
+    assert record.title == "British cuisine"
+    assert record.summary == "British cuisine covers the cooking traditions of the United Kingdom."
+    assert record.url == "https://en.wikipedia.org/wiki/British_cuisine"
+
+
+def test_build_evidence_bundle_skips_empty_wikipedia_wrapper_without_results() -> None:
+    iteration = IterationState(
+        plan=Plan.model_validate(
+            {
+                "steps": [
+                    {
+                        "id": "E2",
+                        "plan": "Search Wikipedia.",
+                        "tool": "wikipedia_search",
+                        "args": {"query": "British cuisine staple foods"},
+                    }
+                ]
+            }
+        ),
+        results={
+            "P1E2": WikipediaSearchResponse(
+                query="British cuisine staple foods",
+                results=[],
+                top_result_summary=None,
+            )
+        },
+    )
+
+    bundle = build_evidence_bundle([iteration])
+
+    assert bundle.hydrated_evidence_by_id == {}
+    assert bundle.evidence_views_by_step_id == {}

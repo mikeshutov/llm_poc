@@ -28,7 +28,6 @@ def build_solver_prompt(evidence: list[EvidenceStep], state: AgentState) -> Agen
     prompt.include_rules_section()
     prompt.include_conversation_context()
     prompt.include_evidence()
-    prompt.include_text("Now solve the question or task using the evidence above.")
     prompt.include_latest_user_prompt()
     prompt.include_schema_raw()
     return prompt

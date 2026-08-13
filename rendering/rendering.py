@@ -1,4 +1,5 @@
 import os
+import html
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -12,6 +13,9 @@ from rendering.replay import render_replay_control
 from common.config import CONTENT_KEY, FILES_DIR, IMAGE_MIME_PREFIX, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
 from request_orchestrator.models.evidence import EvidenceUrl, HydratedEvidence
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
+from tool.constants import TOOL_NAME_STRUCTURED_FACTS_LOOKUP
+from tool.constants import TOOL_NAME_WIKIPEDIA_SEARCH
+from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
 
 @dataclass(frozen=True)
@@ -29,6 +33,23 @@ class EvidenceCard:
     url: str
     image_url: str
     source: str
+
+
+INLINE_EVIDENCE_TYPES: set[str] = {
+    TOOL_RESULT_TYPE_WEATHER,
+}
+
+INLINE_EVIDENCE_TOOL_NAMES: set[str] = {
+    TOOL_NAME_WIKIPEDIA_SEARCH,
+    TOOL_NAME_STRUCTURED_FACTS_LOOKUP,
+}
+
+
+def _is_inline_evidence(hydrated: HydratedEvidence) -> bool:
+    return (
+        hydrated.entity_type.strip() in INLINE_EVIDENCE_TYPES
+        or hydrated.tool_name.strip() in INLINE_EVIDENCE_TOOL_NAMES
+    )
 
 
 def format_timestamp(ts) -> str | None:
@@ -156,9 +177,7 @@ def _build_inline_evidence(
         hydrated = hydrated_evidence_by_id.get(evidence_id)
         if hydrated is None:
             continue
-        url = hydrated.url.strip()
-        image_url = hydrated.image_url.strip()
-        if url or image_url:
+        if not _is_inline_evidence(hydrated):
             continue
         inline_evidence.append(
             InlineEvidenceReference(
@@ -178,6 +197,8 @@ def _build_block_cards(
     for evidence_id in block.evidence_ids:
         hydrated = hydrated_evidence_by_id.get(evidence_id)
         if hydrated is None:
+            continue
+        if _is_inline_evidence(hydrated):
             continue
         url = _primary_card_url(hydrated.urls, fallback=hydrated.url)
         image_url = hydrated.image_url.strip()
@@ -211,20 +232,43 @@ def _render_result_block(
     block: SynthesisResultBlock,
     hydrated_evidence_by_id: dict[str, HydratedEvidence],
 ) -> list[EvidenceCard]:
-    st.markdown(block.content)
-    block_cards = _build_block_cards(block, hydrated_evidence_by_id)
     inline_evidence = _build_inline_evidence(block, hydrated_evidence_by_id)
-    if inline_evidence:
-        parts: list[str] = []
-        for evidence in inline_evidence:
-            title = (evidence.title or evidence.evidence_id).strip()
-            source = evidence.source.strip()
-            if source:
-                parts.append(f"{title} ({source})")
-            else:
-                parts.append(title)
-        if parts:
-            st.caption(f"Evidence: {' | '.join(parts)}")
+    inline_urls: list[str] = []
+    inline_labels: list[str] = []
+    for evidence in inline_evidence:
+        hydrated = hydrated_evidence_by_id.get(evidence.evidence_id)
+        hydrated_url = "" if hydrated is None else hydrated.url.strip()
+        if hydrated_url:
+            inline_urls.append(hydrated_url)
+            continue
+        title = (evidence.title or evidence.evidence_id).strip()
+        source = evidence.source.strip()
+        inline_labels.append(f"{title} ({source})" if source else title)
+
+    if inline_urls:
+        inline_buttons = " ".join(
+            (
+                "<a "
+                f'href="{html.escape(url, quote=True)}" '
+                'target="_blank" rel="noopener noreferrer" '
+                "style=\"display:inline-block;vertical-align:middle;margin-left:0.35rem;"
+                "padding:0.14rem 0.5rem;border:1px solid rgba(49,51,63,0.2);"
+                "border-radius:999px;text-decoration:none;font-size:0.82rem;"
+                "line-height:1.4;color:inherit;background:rgba(255,255,255,0.65);\">"
+                f"↗ {html.escape(url)}</a>"
+            )
+            for url in inline_urls
+        )
+        st.markdown(
+            f"<p>{html.escape(block.content)} {inline_buttons}</p>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.write(block.content)
+
+    block_cards = _build_block_cards(block, hydrated_evidence_by_id)
+    for label in inline_labels:
+        st.caption(label)
     return block_cards
 
 

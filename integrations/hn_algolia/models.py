@@ -24,3 +24,5 @@ class HnSearchResult(BaseModel):
     nb_hits: int = Field(default=0, alias="nbHits")
     page: int = 0
     nb_pages: int = Field(default=0, alias="nbPages")
+    retrieved_count: int = 0
+    reranked: bool = False

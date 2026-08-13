@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
 from integrations.cocktail_db import CocktailDbClient, CocktailSearchResult
+from request_orchestrator.shared.tool_adapter.food.candidate_mapper import rerank_cocktail_search_result
+from request_orchestrator.shared.tool_adapter.food.constants import DEFAULT_MEAL_RERANK_LIMIT
 
 _cocktail_client = CocktailDbClient()
 
@@ -35,6 +37,7 @@ Example valid call:
 )
 def search_cocktails(query: str) -> CocktailSearchResult | str:
     try:
-        return _cocktail_client.search(query)
+        response = _cocktail_client.search(query)
+        return rerank_cocktail_search_result(response, goal=query, limit=DEFAULT_MEAL_RERANK_LIMIT)
     except RequestException as e:
         return f"CocktailDB service unavailable: {e}"

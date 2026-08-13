@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from common.http import HttpClient, HttpClientError, DEFAULT_TTL
 from integrations.hn_algolia.models import HnSearchResult
+from request_orchestrator.shared.tool_adapter.news.constants import DEFAULT_HN_SEARCH_LIMIT
 
 
 class HnAlgoliaClientError(RuntimeError):
@@ -33,7 +34,7 @@ class HnAlgoliaClient:
         query: str,
         sort_by: HnSortBy = "relevance",
         tags: str | None = None,
-        hits_per_page: int = 10,
+        hits_per_page: int = DEFAULT_HN_SEARCH_LIMIT,
         page: int = 0,
     ) -> HnSearchResult:
         q = (query or "").strip()
