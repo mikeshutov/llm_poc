@@ -7,7 +7,15 @@ from request_orchestrator.models.agent_prompt import EvidenceStep
 from request_orchestrator.models.agent_state import IterationState
 from request_orchestrator.models.evidence import EvidenceBundle, EvidenceUrl, EvidenceView, HydratedEvidence
 from request_orchestrator.models.plan_step_ids import format_plan_step_id
+from tool.constants import TOOL_NAME_GET_CURRENT_WEATHER
+from tool.constants import TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER
+from tool.constants import TOOL_NAME_WIKIPEDIA_SEARCH
 from tool.tools import get_tool_result_type
+
+WEATHER_TOOL_SOURCE_URLS: dict[str, str] = {
+    TOOL_NAME_GET_CURRENT_WEATHER: "https://open-meteo.com/",
+    TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER: "https://open-meteo.com/",
+}
 
 
 def build_evidence_bundle(iteration_trace: list[IterationState]) -> EvidenceBundle:
@@ -94,6 +102,19 @@ def build_hydrated_evidence_for_output(
         return []
 
     payload = prune_empty_prompt_values(sanitize_for_json_storage(raw_output))
+    if isinstance(payload, dict) and tool_name == TOOL_NAME_WIKIPEDIA_SEARCH:
+        wikipedia_items = _extract_wikipedia_evidence_items(payload)
+        if wikipedia_items:
+            return [
+                _build_generic_hydrated_evidence(
+                    item,
+                    step_id=step_id,
+                    tool_name=tool_name,
+                    reference_id=index,
+                )
+                for index, item in enumerate(wikipedia_items, start=1)
+            ]
+        return []
     items = _extract_evidence_items(payload)
     if items is not None:
         return [
@@ -134,10 +155,11 @@ def _build_generic_hydrated_evidence(
     reference_id: int,
 ) -> HydratedEvidence:
     payload = prune_empty_prompt_values(sanitize_for_json_storage(raw_output))
+    result_type = get_tool_result_type(tool_name)
     item_id = _item_id_from_value(payload, fallback=reference_id)
     title = _generic_title(payload, tool_name=tool_name)
     summary = _generic_summary(payload, tool_name=tool_name)
-    urls = _build_evidence_urls(payload)
+    urls = _build_evidence_urls(payload, tool_name=tool_name)
     return HydratedEvidence(
         evidence_id=_format_evidence_id(step_id, reference_id),
         step_id=step_id,
@@ -150,7 +172,7 @@ def _build_generic_hydrated_evidence(
         image_url=_first_non_empty(payload, "image_url", "image", "thumbnail") if isinstance(payload, dict) else "",
         published_at=_first_non_empty(payload, "published_at", "date", "time") if isinstance(payload, dict) else "",
         source=tool_name,
-        entity_type="generic_result",
+        entity_type=result_type,
         location_name=_location_name_for_value(payload),
         metadata=_build_evidence_metadata(payload),
         raw_payload=payload,
@@ -226,6 +248,35 @@ def _extract_evidence_items(value: Any) -> list[Any] | None:
     return None
 
 
+def _extract_wikipedia_evidence_items(value: dict[str, Any]) -> list[dict[str, Any]]:
+    results = value.get("results")
+    top_result_summary = value.get("top_result_summary")
+
+    normalized_summary = top_result_summary if isinstance(top_result_summary, dict) else {}
+    normalized_results = [item for item in results if isinstance(item, dict)] if isinstance(results, list) else []
+
+    if normalized_results:
+        merged_items: list[dict[str, Any]] = []
+        for index, item in enumerate(normalized_results):
+            merged = dict(item)
+            if (
+                index == 0
+                and normalized_summary
+                and not _first_non_empty(merged, "description", "summary", "snippet")
+            ):
+                if _first_non_empty(normalized_summary, "summary"):
+                    merged["summary"] = _first_non_empty(normalized_summary, "summary")
+                if not _first_non_empty(merged, "url") and _first_non_empty(normalized_summary, "url"):
+                    merged["url"] = _first_non_empty(normalized_summary, "url")
+            merged_items.append(merged)
+        return merged_items
+
+    if normalized_summary:
+        return [normalized_summary]
+
+    return []
+
+
 def _flat_field_summary(value: dict[str, Any]) -> str:
     parts = [
         f"{key}={_stringify_scalar(item)}"
@@ -291,14 +342,19 @@ def _build_evidence_metadata(value: Any) -> dict[str, Any]:
     return {}
 
 
-def _build_evidence_urls(value: Any) -> list[EvidenceUrl]:
+def _build_evidence_urls(value: Any, *, tool_name: str) -> list[EvidenceUrl]:
     if not isinstance(value, dict):
-        return []
+        fallback_url = WEATHER_TOOL_SOURCE_URLS.get(tool_name, "").strip()
+        return [EvidenceUrl(url=fallback_url, url_type="website")] if fallback_url else []
 
     candidates = [
         ("website", _first_non_empty(value, "url", "link", "source")),
         ("youtube", _first_non_empty(value, "youtube")),
     ]
+
+    fallback_url = WEATHER_TOOL_SOURCE_URLS.get(tool_name, "").strip()
+    if fallback_url:
+        candidates.append(("website", fallback_url))
 
     seen_urls: set[str] = set()
     urls: list[EvidenceUrl] = []

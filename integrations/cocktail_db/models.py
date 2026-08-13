@@ -40,3 +40,5 @@ class Cocktail(BaseModel):
 
 class CocktailSearchResult(BaseModel):
     drinks: list[Cocktail] = []
+    retrieved_count: int = 0
+    reranked: bool = False

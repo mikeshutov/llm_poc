@@ -18,6 +18,7 @@ from request_orchestrator.agents.models.agent_profile import AgentProfile
 from request_orchestrator.models.agent_state import AgentState, IterationState
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.executor.executor import run_executor
+from request_orchestrator.shared.runtime_context import get_current_conversation_id, get_current_roundtrip_id, get_current_user_id
 
 
 def test_run_executor_parallelizes_pending_steps() -> None:
@@ -119,3 +120,52 @@ def test_run_executor_leaves_unresolved_refs_unchanged_with_parallel_execution()
 
     assert seen_inputs["tool_a"] == {"value": "#E2"}
     assert seen_inputs["tool_b"] == {"value": "b"}
+
+
+def test_run_executor_propagates_runtime_context_to_worker_threads() -> None:
+    profile = AgentProfile(
+        name="test_agent",
+        extra_tools=[SimpleNamespace(name="tool_a")],
+        persist_tool_calls=False,
+    )
+    state = AgentState.new(
+        task="Run tools",
+        max_turns=5,
+        llm=object(),
+        agent_profile=profile,
+        conversation_id="conversation-123",
+    )
+    state.roundtrip_id = "roundtrip-456"  # type: ignore[assignment]
+    state.user_profile.user_id = "user-789"
+    state.iteration_trace = [
+        IterationState(
+            plan=Plan.model_validate(
+                {
+                    "steps": [
+                        {"id": "E1", "plan": "Run tool A", "tool": "tool_a", "args": {"value": "a"}},
+                    ]
+                }
+            ),
+            results={},
+        )
+    ]
+
+    seen_context: dict[str, str | None] = {}
+
+    def fake_call_tool(name: str, tool_input=None, allowed_tool_names=None):
+        seen_context["conversation_id"] = get_current_conversation_id()
+        seen_context["roundtrip_id"] = get_current_roundtrip_id()
+        seen_context["user_id"] = get_current_user_id()
+        return {"tool": str(name), **(tool_input or {})}
+
+    with patch(
+        "request_orchestrator.shared.executor.executor.call_tool",
+        side_effect=fake_call_tool,
+    ):
+        run_executor(state)
+
+    assert seen_context == {
+        "conversation_id": "conversation-123",
+        "roundtrip_id": "roundtrip-456",
+        "user_id": "user-789",
+    }

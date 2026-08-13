@@ -24,3 +24,5 @@ class BookSearchResult(BaseModel):
     num_found: int = Field(alias="numFound")
     start: int = 0
     docs: list[BookDoc] = []
+    retrieved_count: int = 0
+    reranked: bool = False

@@ -40,6 +40,35 @@ from request_orchestrator.shared.tool_adapter.search.wikipedia_search import wik
 from request_orchestrator.shared.tool_adapter.weather.get_current_weather import get_current_weather
 from request_orchestrator.shared.tool_adapter.weather.get_historical_month_weather import get_historical_month_weather
 from request_orchestrator.shared.tool_adapter.weather.resolve_city_location import resolve_city_location
+from tool.constants import TOOL_RESULT_TYPE_ADVICE
+from tool.constants import TOOL_RESULT_TYPE_ASTRONOMY_PICTURE
+from tool.constants import TOOL_RESULT_TYPE_BOOK_RESULTS
+from tool.constants import TOOL_RESULT_TYPE_CALCULATION
+from tool.constants import TOOL_RESULT_TYPE_CALENDAR
+from tool.constants import TOOL_RESULT_TYPE_COCKTAIL_RESULTS
+from tool.constants import TOOL_RESULT_TYPE_COUNTRY
+from tool.constants import TOOL_RESULT_TYPE_CRYPTO_MARKET
+from tool.constants import TOOL_RESULT_TYPE_DEFINITION
+from tool.constants import TOOL_RESULT_TYPE_FILE
+from tool.constants import TOOL_RESULT_TYPE_FILE_DETAILS
+from tool.constants import TOOL_RESULT_TYPE_FILE_RESULTS
+from tool.constants import TOOL_RESULT_TYPE_FINANCE
+from tool.constants import TOOL_RESULT_TYPE_GENERIC
+from tool.constants import TOOL_RESULT_TYPE_KNOWLEDGE
+from tool.constants import TOOL_RESULT_TYPE_LOCATION
+from tool.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
+from tool.constants import TOOL_RESULT_TYPE_MEMORY_RESULTS
+from tool.constants import TOOL_RESULT_TYPE_NEWS_RESULTS
+from tool.constants import TOOL_RESULT_TYPE_PRODUCT_CATEGORIES
+from tool.constants import TOOL_RESULT_TYPE_PRODUCT_RESULTS
+from tool.constants import TOOL_RESULT_TYPE_PROFILE
+from tool.constants import TOOL_RESULT_TYPE_QUOTE
+from tool.constants import TOOL_RESULT_TYPE_STRUCTURED_FACTS
+from tool.constants import TOOL_RESULT_TYPE_TIME
+from tool.constants import TOOL_RESULT_TYPE_TONE
+from tool.constants import TOOL_RESULT_TYPE_USER_ATTRIBUTE
+from tool.constants import TOOL_RESULT_TYPE_WEATHER
+from tool.constants import TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS
 from tool.models import RateLimitPolicy, RetryPolicy, Tool, ToolCategory
 
 # Rate limiter and retry policy
@@ -56,41 +85,41 @@ BRAVE_RETRY_POLICY = RetryPolicy(
 )
 
 # Tool Definitions
-PRODUCT_TOOLS = [Tool(find_products, result_type="product_results"), Tool(list_product_categories, result_type="product_categories")]
-PRODUCT_WEB_TOOLS = [Tool(find_products_web, result_type="product_results")]
+PRODUCT_TOOLS = [Tool(find_products, result_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS), Tool(list_product_categories, result_type=TOOL_RESULT_TYPE_PRODUCT_CATEGORIES)]
+PRODUCT_WEB_TOOLS = [Tool(find_products_web, result_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS)]
 WEATHER_TOOLS = [
-    Tool(resolve_city_location, result_type="location"),
-    Tool(get_current_weather, result_type="weather"),
-    Tool(get_historical_month_weather, result_type="weather"),
+    Tool(resolve_city_location, result_type=TOOL_RESULT_TYPE_LOCATION),
+    Tool(get_current_weather, result_type=TOOL_RESULT_TYPE_WEATHER),
+    Tool(get_historical_month_weather, result_type=TOOL_RESULT_TYPE_WEATHER),
 ]
 FINANCE_TOOLS = [
-    Tool(exchange_rates_lookup, result_type="finance"),
-    Tool(exchange_rates_time_series, result_type="finance"),
-    Tool(get_latest_exchange_rates, result_type="finance"),
-    Tool(get_stock_price, result_type="finance"),
+    Tool(exchange_rates_lookup, result_type=TOOL_RESULT_TYPE_FINANCE),
+    Tool(exchange_rates_time_series, result_type=TOOL_RESULT_TYPE_FINANCE),
+    Tool(get_latest_exchange_rates, result_type=TOOL_RESULT_TYPE_FINANCE),
+    Tool(get_stock_price, result_type=TOOL_RESULT_TYPE_FINANCE),
 ]
-CRYPTO_TOOLS = [Tool(get_crypto_markets, result_type="crypto_market")]
+CRYPTO_TOOLS = [Tool(get_crypto_markets, result_type=TOOL_RESULT_TYPE_CRYPTO_MARKET)]
 WEB_SEARCH_TOOLS = [
-    Tool(generic_web_search, result_type="web_search_results", rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
-    Tool(news_search, result_type="news_results", rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
+    Tool(generic_web_search, result_type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS, rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
+    Tool(news_search, result_type=TOOL_RESULT_TYPE_NEWS_RESULTS, rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
 ]
 KNOWLEDGE_TOOLS = [
-    Tool(wikipedia_search, result_type="knowledge"),
-    Tool(structured_facts_lookup, result_type="structured_facts"),
-    Tool(hn_search, result_type="news_results"),
-    Tool(country_lookup, result_type="country"),
+    Tool(wikipedia_search, result_type=TOOL_RESULT_TYPE_KNOWLEDGE),
+    Tool(structured_facts_lookup, result_type=TOOL_RESULT_TYPE_STRUCTURED_FACTS),
+    Tool(hn_search, result_type=TOOL_RESULT_TYPE_NEWS_RESULTS),
+    Tool(country_lookup, result_type=TOOL_RESULT_TYPE_COUNTRY),
 ]
-CALENDAR_TOOLS = [Tool(public_holidays_lookup, result_type="calendar"), Tool(get_world_time, result_type="time")]
-LOCATION_TOOLS = [Tool(get_caller_location, result_type="location")]
-BOOKS_TOOLS = [Tool(search_books, result_type="book_results")]
-LANGUAGE_TOOLS = [Tool(define_word, result_type="definition")]
-FOOD_TOOLS = [Tool(search_meals, result_type="meal_results"), Tool(search_cocktails, result_type="cocktail_results")]
-FUN_TOOLS = [Tool(get_advice, result_type="advice"), Tool(get_quote, result_type="quote"), Tool(get_astronomy_picture, result_type="astronomy_picture")]
-MATH_TOOLS = [Tool(calculate, result_type="calculation")]
-MEMORY_TOOLS = [Tool(search_memories, result_type="memory_results"), Tool(search_roundtrip_memories, result_type="memory_results")]
-USER_ATTRIBUTE_TOOLS = [Tool(create_user_attribute, result_type="user_attribute"), Tool(update_user_attribute, result_type="user_attribute"), Tool(get_user_attributes, result_type="user_attribute"), Tool(search_user_attributes, result_type="user_attribute")]
-FILE_TOOLS = [Tool(search_files, result_type="file_results"), Tool(search_file_for_details, result_type="file_details"), Tool(get_file_by_id, result_type="file")]
-PROFILE_TOOLS = [Tool(set_user_display_name, result_type="profile"), Tool(set_user_first_name, result_type="profile"), Tool(set_user_last_name, result_type="profile"), Tool(update_user_tone, result_type="tone")]
+CALENDAR_TOOLS = [Tool(public_holidays_lookup, result_type=TOOL_RESULT_TYPE_CALENDAR), Tool(get_world_time, result_type=TOOL_RESULT_TYPE_TIME)]
+LOCATION_TOOLS = [Tool(get_caller_location, result_type=TOOL_RESULT_TYPE_LOCATION)]
+BOOKS_TOOLS = [Tool(search_books, result_type=TOOL_RESULT_TYPE_BOOK_RESULTS)]
+LANGUAGE_TOOLS = [Tool(define_word, result_type=TOOL_RESULT_TYPE_DEFINITION)]
+FOOD_TOOLS = [Tool(search_meals, result_type=TOOL_RESULT_TYPE_MEAL_RESULTS), Tool(search_cocktails, result_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS)]
+FUN_TOOLS = [Tool(get_advice, result_type=TOOL_RESULT_TYPE_ADVICE), Tool(get_quote, result_type=TOOL_RESULT_TYPE_QUOTE), Tool(get_astronomy_picture, result_type=TOOL_RESULT_TYPE_ASTRONOMY_PICTURE)]
+MATH_TOOLS = [Tool(calculate, result_type=TOOL_RESULT_TYPE_CALCULATION)]
+MEMORY_TOOLS = [Tool(search_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS), Tool(search_roundtrip_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS)]
+USER_ATTRIBUTE_TOOLS = [Tool(create_user_attribute, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(update_user_attribute, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(get_user_attributes, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(search_user_attributes, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE)]
+FILE_TOOLS = [Tool(search_files, result_type=TOOL_RESULT_TYPE_FILE_RESULTS), Tool(search_file_for_details, result_type=TOOL_RESULT_TYPE_FILE_DETAILS), Tool(get_file_by_id, result_type=TOOL_RESULT_TYPE_FILE)]
+PROFILE_TOOLS = [Tool(set_user_display_name, result_type=TOOL_RESULT_TYPE_PROFILE), Tool(set_user_first_name, result_type=TOOL_RESULT_TYPE_PROFILE), Tool(set_user_last_name, result_type=TOOL_RESULT_TYPE_PROFILE), Tool(update_user_tone, result_type=TOOL_RESULT_TYPE_TONE)]
 
 # if this were to grow much larger I would probably create sub categories or a tree structure of tools
 TOOL_CATEGORIES: dict[str, ToolCategory] = {
@@ -206,6 +235,6 @@ TOOLS_BY_NAME = {tool.name: tool for tool in tools}
 def get_tool_result_type(name: str) -> str:
     tool = TOOLS_BY_NAME.get(name)
     if tool is None:
-        return "generic"
-    return tool.result_type or "generic"
+        return TOOL_RESULT_TYPE_GENERIC
+    return tool.result_type or TOOL_RESULT_TYPE_GENERIC
 

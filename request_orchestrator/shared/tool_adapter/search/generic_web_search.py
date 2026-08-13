@@ -9,7 +9,10 @@ from integrations.brave import BraveSearchClient
 from integrations.brave.models import NewsSearchResponse, WebSearchResponse
 from integrations.brave.search_type import SearchType
 from integrations.brave.web_search_params import WebSearchParams
-from request_orchestrator.shared.tool_adapter.search.candidate_mapper import rerank_web_search_response
+from request_orchestrator.shared.tool_adapter.search.candidate_mapper import (
+    rerank_news_search_response,
+    rerank_web_search_response,
+)
 from request_orchestrator.shared.tool_adapter.search.constants import DEFAULT_WEB_SEARCH_CANDIDATE_LIMIT
 from reranker import DEFAULT_TOP_K
 
@@ -76,7 +79,8 @@ def generic_web_search(
     brave_client = BraveSearchClient()
     match _coerce_search_type(search_type):
         case SearchType.NEWS_SEARCH:
-            return brave_client.news_search(normalized_query)
+            response = brave_client.news_search(normalized_query)
+            return rerank_news_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K)
         #case SearchType.SUGGESTION_SEARCH:
         #    return brave_client.suggest(query_text)
         case _:

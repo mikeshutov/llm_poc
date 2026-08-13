@@ -7,6 +7,8 @@ from rendering.rendering import (
 )
 from request_orchestrator.models.evidence import HydratedEvidence
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
+from tool.constants import TOOL_NAME_GET_CURRENT_WEATHER
+from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
 
 def test_get_renderable_result_blocks_prefers_structured_result_payload() -> None:
@@ -83,7 +85,8 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
                 summary="25.9 C in Toronto",
                 url="",
                 image_url="",
-                source="get_current_weather",
+                source=TOOL_NAME_GET_CURRENT_WEATHER,
+                entity_type=TOOL_RESULT_TYPE_WEATHER,
             ),
         },
     )
@@ -92,6 +95,6 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
         InlineEvidenceReference(
             evidence_id="P1E2R1",
             title="Weather Result",
-            source="get_current_weather",
+            source=TOOL_NAME_GET_CURRENT_WEATHER,
         ),
     ]

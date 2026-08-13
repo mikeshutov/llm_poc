@@ -117,8 +117,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertIn('Goal:', prompt_text)
         self.assertIn('Search the web for frozen or dry okonomiyaki kits for sale, since the user clarified they want okonomiyaki and wants a broader web check.', prompt_text)
-        self.assertIn('Latest User Prompt:', prompt_text)
-        self.assertIn('Can you find frozen or dry okonomiyaki kits for sale online?', prompt_text)
+        self.assertNotIn('Latest User Prompt:', prompt_text)
+        self.assertNotIn('Can you find frozen or dry okonomiyaki kits for sale online?', prompt_text)
 
     def test_tone_is_included_only_for_planner_and_synthesis_prompts(self) -> None:
         profile = UserProfile(

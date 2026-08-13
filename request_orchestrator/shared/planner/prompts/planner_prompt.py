@@ -132,7 +132,7 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         instruction=state.agent_profile.planner_instruction,
         user_profile=state.user_profile,
         task=_build_planner_task(state),
-        latest_user_prompt=state.task,
+        latest_user_prompt=state.task if _is_profile_management_agent(state) else None,
         available_tools=context.compiled_tools,
         rules=compiled_rules,
         previous_iterations=previous_iterations,
@@ -146,7 +146,8 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
     prompt.include_available_tools()
     prompt.include_rules_raw()
     prompt.include_previous_iterations()
-    prompt.include_latest_user_prompt()
+    if _is_profile_management_agent(state):
+        prompt.include_latest_user_prompt()
     prompt.include_schema_raw()
     prompt.include_task(heading="Task:" if _is_profile_management_agent(state) else "Goal:")
     return prompt

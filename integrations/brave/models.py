@@ -103,6 +103,8 @@ class NewsSearchResponse(BaseModel):
     type: str = "news"
     query: NewsSearchQuery = NewsSearchQuery()
     results: list[NewsResult] = []
+    retrieved_count: int = 0
+    reranked: bool = False
 
     @model_validator(mode="before")
     @classmethod

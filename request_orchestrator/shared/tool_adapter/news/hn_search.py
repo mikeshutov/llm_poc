@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Literal
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
 from integrations.hn_algolia import HnAlgoliaClient, HnSearchResult
+from request_orchestrator.shared.tool_adapter.news.candidate_mapper import rerank_hn_search_result
+from request_orchestrator.shared.tool_adapter.news.constants import DEFAULT_HN_SEARCH_LIMIT
 
 _hn_client = HnAlgoliaClient()
 
@@ -16,13 +18,9 @@ class HnSearchArgs(BaseModel):
         ...,
         description="Search query for Hacker News stories, comments, or discussions.",
     )
-    sort_by: Optional[Literal["relevance", "date"]] = Field(
+    sort_by: Literal["relevance", "date"] = Field(
         default="relevance",
         description="Sort results by 'relevance' (default) or 'date' for most recent first.",
-    )
-    limit: Optional[int] = Field(
-        default=10,
-        description="Number of results to return (1–50). Defaults to 10.",
     )
 
 
@@ -37,7 +35,6 @@ Required fields:
 
 Optional fields:
 - sort_by: 'relevance' (default) or 'date'
-- limit (integer, default 10)
 
 Returns story titles, URLs, authors, points, comment counts, and timestamps.
 
@@ -48,8 +45,9 @@ Example valid call:
 }
 """,
 )
-def hn_search(query: str, sort_by: str = "relevance", limit: int = 10) -> HnSearchResult | str:
+def hn_search(query: str, sort_by: str = "relevance") -> HnSearchResult | str:
     try:
-        return _hn_client.search(query, sort_by=sort_by, hits_per_page=limit)
+        response = _hn_client.search(query, sort_by=sort_by, hits_per_page=DEFAULT_HN_SEARCH_LIMIT)
+        return rerank_hn_search_result(response, goal=query)
     except RequestException as e:
         return f"Hacker News search unavailable: {e}"

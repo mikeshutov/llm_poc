@@ -5,6 +5,7 @@ from typing import Any
 
 from common.http import HttpClient, HttpClientError, DEFAULT_TTL
 from integrations.open_library.models import BookSearchResult
+from request_orchestrator.shared.tool_adapter.books.constants import DEFAULT_BOOK_SEARCH_LIMIT
 
 
 class OpenLibraryClientError(RuntimeError):
@@ -27,7 +28,7 @@ class OpenLibraryClient:
     def search(
         self,
         query: str,
-        limit: int = 10,
+        limit: int = DEFAULT_BOOK_SEARCH_LIMIT,
         page: int = 1,
     ) -> BookSearchResult:
         q = (query or "").strip()
