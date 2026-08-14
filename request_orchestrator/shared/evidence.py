@@ -6,8 +6,6 @@ from request_orchestrator.models.evidence import EvidenceBundle, EvidenceView, H
 from request_orchestrator.models.plan_step_ids import format_plan_step_id
 from tool.tools import get_tool_result_type
 
-MERGED_EVIDENCE_STEP_TYPES = {"decks"}
-
 
 def build_evidence_bundle(iteration_trace: list[IterationState]) -> EvidenceBundle:
     hydrated_evidence_by_id: dict[str, HydratedEvidence] = {}
@@ -43,7 +41,6 @@ def build_evidence_steps(
     evidence_views_by_step_id: dict[str, list[EvidenceView]],
 ) -> list[EvidenceStep]:
     evidence_steps: list[EvidenceStep] = []
-    evidence_steps_by_type: dict[str, EvidenceStep] = {}
     for iteration_number, iteration in enumerate(iteration_trace, start=1):
         if iteration.plan is None:
             continue
@@ -56,15 +53,6 @@ def build_evidence_steps(
                 metadata=dict(tool_result.metadata) if isinstance(tool_result, ToolResult) else {},
                 evidence=list(evidence_views_by_step_id.get(step_id, [])),
             )
-            if step_type in MERGED_EVIDENCE_STEP_TYPES:
-                existing = evidence_steps_by_type.get(step_type)
-                if existing is None:
-                    evidence_steps.append(evidence_step)
-                    evidence_steps_by_type[step_type] = evidence_step
-                else:
-                    existing.metadata = _merge_step_metadata(existing.metadata, evidence_step.metadata)
-                    existing.evidence.extend(evidence_step.evidence)
-                continue
             evidence_steps.append(evidence_step)
     return evidence_steps
 
@@ -92,7 +80,7 @@ def filter_evidence_steps(
                 evidence=matching_evidence,
             )
         )
-    return _merge_evidence_steps(filtered_steps)
+    return filtered_steps
 
 
 def _rehydrate_tool_result_records(
@@ -197,25 +185,6 @@ def _build_hydrated_evidence_from_view(
         metadata=dict(evidence_view.metadata),
         evidence_object=evidence_view.evidence_object,
     )
-
-
-def _merge_evidence_steps(evidence_steps: list[EvidenceStep]) -> list[EvidenceStep]:
-    merged_steps: list[EvidenceStep] = []
-    merged_steps_by_type: dict[str, EvidenceStep] = {}
-    for step in evidence_steps:
-        if step.type not in MERGED_EVIDENCE_STEP_TYPES:
-            merged_steps.append(step)
-            continue
-        existing = merged_steps_by_type.get(step.type)
-        if existing is None:
-            clone = step.model_copy(deep=True)
-            merged_steps.append(clone)
-            merged_steps_by_type[step.type] = clone
-            continue
-        existing.metadata = _merge_step_metadata(existing.metadata, step.metadata)
-        existing.evidence.extend(step.evidence)
-    return merged_steps
-
 
 def _merge_step_metadata(left: dict[str, object], right: dict[str, object]) -> dict[str, object]:
     if not left:

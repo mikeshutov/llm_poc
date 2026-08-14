@@ -4,9 +4,10 @@ from time import perf_counter
 
 from langsmith import traceable
 
+from common.data import sanitize_for_json_storage
+from common.logging import create_conversation_event, log_roundtrip_prompt
 from request_orchestrator.models.agent_state import AgentState, IterationState
 from request_orchestrator.models import AgentResult, Plan, PlanningResult
-from common.logging import log_roundtrip_prompt
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from request_orchestrator.constants import PLANNER_PROMPT_STEP
 from common.data import repair_common_json_issues, strip_code_fences
@@ -101,17 +102,25 @@ def run_planner(agent_state: AgentState) -> AgentState:
     if len(plan.steps) == 0:
         agent_state.goal_reached = True
 
-    agent_state.log_status(
-        agent_name=agent_state.agent_profile.name,
-        kind=PLAN_KIND,
-        status=planning_result.status,
-        data={
+    payload = {
+        "agent_name": agent_state.agent_profile.name,
+        "kind": PLAN_KIND,
+        "status": planning_result.status,
+        "data": sanitize_for_json_storage({
             "step_plans": [step.plan for step in plan.steps],
             "planner_status": planning_result.status,
             "planner_reason": planning_result.reason,
             "needs_replan": planning_result.needs_replan,
             "llm_usage": llm_calls,
-        },
+        }),
+    }
+    create_conversation_event(
+        conversation_id=agent_state.conversation_id,
+        roundtrip_id=agent_state.roundtrip_id,
+        event_type=PLAN_KIND,
+        source=agent_state.agent_profile.name,
+        agent_name=agent_state.agent_profile.name,
+        payload=payload,
     )
 
     if agent_state.roundtrip_id:

@@ -7,7 +7,7 @@ from uuid import UUID
 from conversation.models.conversation_model_config import ConversationModelConfig
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import UserProfile
-from request_orchestrator.agents.models.agent_profile import AgentProfile
+from request_orchestrator.models.agent_profile import AgentProfile
 from request_orchestrator.models.agent_state import AgentState, RequestAnalysis, RequestAnalysisGoal
 
 

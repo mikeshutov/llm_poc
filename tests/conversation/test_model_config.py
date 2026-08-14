@@ -32,6 +32,7 @@ from conversation.models.conversation_models import Conversation
 from integrations.ip_api.models import IpLocation
 from personalization.profile.models import UserProfile
 from rendering.sidebar import build_model_config_rows
+from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.service import run_request_orchestrator_for_query
 from request_orchestrator.shared.runtime_context import bind_runtime_context
@@ -252,6 +253,7 @@ def test_agent_state_build_llm_for_stage_uses_conversation_model_config() -> Non
             max_turns=5,
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
+            agent_profile=MAIN_AGENT_PROFILE,
             llm=TrackingChatOpenAI(model='gpt-5.4-mini'),
             conversation_model_config=config,
         )

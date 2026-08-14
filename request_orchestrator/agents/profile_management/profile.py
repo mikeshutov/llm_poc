@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from conversation.models.conversation_model_config import DEFAULT_PROFILE_AGENT_PLANNER_MODEL
+from conversation.models.conversation_model_config import DEFAULT_PROFILE_AGENT_PLANNER_MODEL, PROFILE_AGENT_MODEL_SCOPE
 from personalization.profile.models import UserProfile
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_CATEGORIES, ATTRIBUTE_QUALIFIERS
-from request_orchestrator.agents.models.agent_profile import AgentProfile, PROFILE_MANAGEMENT_AGENT_NAME
+from request_orchestrator.models.agent_profile import AgentProfile, PROFILE_MANAGEMENT_AGENT_NAME
 from request_orchestrator.shared.tool_adapter.profile.set_user_display_name import set_user_display_name
 from request_orchestrator.shared.tool_adapter.profile.set_user_first_name import set_user_first_name
 from request_orchestrator.shared.tool_adapter.profile.set_user_last_name import set_user_last_name
@@ -22,12 +22,13 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
 
     return AgentProfile(
         name=PROFILE_MANAGEMENT_AGENT_NAME,
+        scope=PROFILE_AGENT_MODEL_SCOPE,
         allowed_categories={'user_attributes'},
         extra_tools=extra_tools,
         default_stage_models={
             "planner": DEFAULT_PROFILE_AGENT_PLANNER_MODEL,
         },
-        request_analysis_selectable=False,
+        request_analysis_selectable=True,
         max_turns=5,
         request_analysis_goal=(
             "Review this turn for durable user profile field and user attribute maintenance needs. "
@@ -38,7 +39,6 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
             'Do not answer the user. '
             'If no profile mutation is needed, return no steps.'
         ),
-        persist_tool_calls=False,
         planner_rules=(
             'Profile field policy:\n'
             '- `display_name` is the user\'s nickname or preferred short way of being addressed.\n'

@@ -11,6 +11,7 @@ if "pycountry" not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules["pycountry"] = pycountry_module
 
+from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.models.agent_prompt import PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState, IterationState
 from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
@@ -19,7 +20,7 @@ from request_orchestrator.shared.planner.prompts.planner_prompt import build_pla
 
 
 def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> None:
-    state = AgentState.new(task="Find a good answer", max_turns=3, llm=object())
+    state = AgentState.new(task="Find a good answer", max_turns=3, llm=object(), agent_profile=MAIN_AGENT_PROFILE)
     state.iteration_trace = [
         IterationState(
             plan=Plan.model_validate(

@@ -7,22 +7,10 @@ from uuid import UUID
 from conversation.models.conversation_model_config import ConversationModelConfig
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import UserProfile
+from request_orchestrator.models.agent_profile import AgentProfile, DEFAULT_SYNTHESIS_INSTRUCTION
 from request_orchestrator.models.agent_result import AgentResult
-from request_orchestrator.models.agent_state import AgentState, AgentStateLog, IterationState, RequestAnalysis, RequestAnalysisGoal
+from request_orchestrator.models.agent_state import AgentState, IterationState, RequestAnalysis, RequestAnalysisGoal
 from request_orchestrator.models.plan_step_ids import format_plan_step_id
-
-
-def _get_main_agent_profile():
-    from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
-
-    return MAIN_AGENT_PROFILE
-
-
-def _build_profile_management_profile(user_profile: UserProfile | None):
-    from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
-
-    return build_profile_management_profile(user_profile)
-
 
 @dataclass
 class MainState:
@@ -30,11 +18,12 @@ class MainState:
     max_turns: int
     conversation_context: ConversationContext = field(default_factory=ConversationContext)
     user_profile: UserProfile = field(default_factory=UserProfile)
+    synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION
+    agent_profiles: list[AgentProfile] = field(default_factory=list)
     conversation_id: str | None = None
     roundtrip_id: UUID | None = None
     request_analysis: RequestAnalysis = field(default_factory=RequestAnalysis)
     agent_states: list[AgentState] = field(default_factory=list)
-    agent_log: AgentStateLog = field(default_factory=AgentStateLog)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
     llm: Any = None
     conversation_model_config: ConversationModelConfig = field(default_factory=ConversationModelConfig.build_default)
@@ -51,13 +40,18 @@ class MainState:
         roundtrip_id: UUID | None = None,
         llm: Any | None = None,
         conversation_model_config: ConversationModelConfig | None = None,
+        synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION,
+        agent_profiles: list[AgentProfile],
         initialize_agent_states: bool = True,
     ) -> "MainState":
+        resolved_user_profile = UserProfile() if user_profile is None else user_profile
         state = cls(
             task=task,
             max_turns=max_turns,
             conversation_context=ConversationContext() if conversation_context is None else conversation_context,
-            user_profile=UserProfile() if user_profile is None else user_profile,
+            user_profile=resolved_user_profile,
+            synthesis_instruction=synthesis_instruction,
+            agent_profiles=list(agent_profiles),
             conversation_id=conversation_id,
             roundtrip_id=roundtrip_id,
             llm=llm,
@@ -71,31 +65,20 @@ class MainState:
         if self.agent_states:
             return
 
-        self.upsert_agent_state(
-            AgentState.new(
-                task=self.task,
-                max_turns=self.max_turns,
-                conversation_context=self.conversation_context,
-                user_profile=self.user_profile,
-                agent_profile=_build_profile_management_profile(self.user_profile),
-                conversation_id=self.conversation_id,
-                roundtrip_id=self.roundtrip_id,
-                llm=self.llm,
-                conversation_model_config=self.conversation_model_config,
-            )
-        )
-        self.upsert_agent_state(
-            AgentState.new(
-                task=self.task,
-                max_turns=self.max_turns,
-                conversation_context=self.conversation_context,
-                user_profile=self.user_profile,
-                agent_profile=_get_main_agent_profile(),
-                conversation_id=self.conversation_id,
-                roundtrip_id=self.roundtrip_id,
-                llm=self.llm,
-                conversation_model_config=self.conversation_model_config,
-            )
+        for agent_profile in self.agent_profiles:
+            self.upsert_agent_state(self.new_agent_state(agent_profile))
+
+    def new_agent_state(self, agent_profile: AgentProfile) -> AgentState:
+        return AgentState.new(
+            task=self.task,
+            max_turns=self.max_turns,
+            conversation_context=self.conversation_context,
+            user_profile=self.user_profile,
+            agent_profile=agent_profile,
+            conversation_id=self.conversation_id,
+            roundtrip_id=self.roundtrip_id,
+            llm=self.llm,
+            conversation_model_config=self.conversation_model_config,
         )
 
     def agent_state_map(self) -> dict[str, AgentState]:
@@ -115,81 +98,21 @@ class MainState:
         updated_map[updated_state.agent_profile.name] = updated_state
         self.agent_states = list(updated_map.values())
 
-    def routable_agent_states(self) -> list[AgentState]:
-        return [
-            agent_state
-            for agent_state in self.agent_states
-            if agent_state.agent_profile.request_analysis_selectable
-        ]
-
-    def request_analysis_agent_state(self) -> AgentState:
-        routable_agent_states = self.routable_agent_states()
-        if routable_agent_states:
-            return routable_agent_states[0]
-        if self.agent_states:
-            return self.agent_states[0]
-        raise KeyError("No agent states available")
-
-    def synthesis_agent_state(self) -> AgentState:
-        routable_agent_states = self.routable_agent_states()
-        if routable_agent_states:
-            return routable_agent_states[-1]
-        if self.agent_states:
-            return self.agent_states[-1]
-        raise KeyError("No agent states available")
-
-    def available_request_analysis_agents_payload(self) -> list[dict[str, Any]]:
-        available_agents: list[dict[str, Any]] = []
-        for agent_state in self.routable_agent_states():
-            available_agents.append(
-                {
-                    "agent": agent_state.agent_profile.name,
-                    "tool_categories": [
-                        {
-                            "name": name,
-                            "description": category.description,
-                        }
-                        for name, category in sorted(agent_state.agent_profile.allowed_tool_categories().items())
-                    ],
-                }
-            )
-        return available_agents
-
-    def resolve_synthesis_instruction(self) -> str:
-        instruction = self.synthesis_agent_state().agent_profile.synthesis_instruction.strip()
-        if instruction:
-            return instruction
-        return _get_main_agent_profile().synthesis_instruction
-
-    def fan_out_shared_state(self) -> None:
-        for agent_state in self.agent_states:
-            agent_state.task = self.task
-            agent_state.max_turns = self.max_turns
-            agent_state.conversation_context = self.conversation_context
-            agent_state.user_profile = self.user_profile
-            agent_state.conversation_id = self.conversation_id
-            agent_state.roundtrip_id = self.roundtrip_id
-            if self.llm is not None:
-                agent_state.llm = self.llm
-            agent_state.conversation_model_config = self.conversation_model_config
-
-    def build_agent_request_analysis(self, agent_name: str) -> RequestAnalysis:
-        normalized_agent_name = agent_name.strip()
-        matching_goals: list[RequestAnalysisGoal] = []
-
-        for goal in self.request_analysis.goals:
-            if goal.agent.strip() != normalized_agent_name:
-                continue
-            matching_goals.append(goal.model_copy(deep=True))
-
-        return RequestAnalysis(
-            goals=matching_goals,
-            requested_user_attribute_types=list(self.request_analysis.requested_user_attribute_types),
-        )
-
     def distribute_goals_to_agent_states(self) -> None:
+        goals_by_agent: dict[str, list[RequestAnalysisGoal]] = {}
+        for goal in self.request_analysis.goals:
+            normalized_agent_name = goal.agent.strip()
+            if not normalized_agent_name:
+                continue
+            goals_by_agent.setdefault(normalized_agent_name, []).append(
+                goal.model_copy(deep=True)
+            )
+
         for agent_state in self.agent_states:
-            agent_state.request_analysis = self.build_agent_request_analysis(agent_state.agent_profile.name)
+            agent_state.request_analysis = RequestAnalysis(
+                goals=goals_by_agent.get(agent_state.agent_profile.name, []),
+                requested_user_attribute_types=list(self.request_analysis.requested_user_attribute_types),
+            )
 
     def collect_agent_outputs(self) -> None:
         if not self.agent_states:
@@ -207,39 +130,12 @@ class MainState:
                 continue
             seen.add(normalized)
             deduped_evidence_ids.append(normalized)
-        self.result = AgentResult(
-            answer=list(self.result.answer),
-            answer_blocks=list(self.result.answer_blocks),
-            next_question=self.result.next_question,
-            roundtrip_summary=self.result.roundtrip_summary,
-            roundtrip_latency_ms=self.result.roundtrip_latency_ms,
-            tool_summary=dict(self.result.tool_summary),
-            agent_logs=self.build_agent_logs(),
-            used_evidence_ids=deduped_evidence_ids,
-            hydrated_evidence_by_id=dict(self.result.hydrated_evidence_by_id),
-        )
+        self.result = self.result.copy(used_evidence_ids=deduped_evidence_ids)
 
     def build_final_result(self) -> AgentResult:
-        return AgentResult(
-            answer=list(self.result.answer),
-            answer_blocks=list(self.result.answer_blocks),
-            next_question=self.result.next_question,
-            roundtrip_summary=self.result.roundtrip_summary,
-            roundtrip_latency_ms=self.result.roundtrip_latency_ms,
-            tool_summary=dict(self.result.tool_summary),
-            agent_logs=self.build_agent_logs(),
-            used_evidence_ids=list(self.result.used_evidence_ids),
-            hydrated_evidence_by_id=dict(self.result.hydrated_evidence_by_id),
-        )
+        return self.result.copy()
 
-    def build_agent_logs(self) -> dict[str, list[dict[str, Any]]]:
-        logs = self.agent_log.to_grouped_dict()
-        for agent_state in self.agent_states:
-            for agent_name, entries in agent_state.build_agent_logs().items():
-                logs.setdefault(agent_name, []).extend(entries)
-        return logs
-
-    def _build_synthesis_step_id_map(self) -> dict[str, str]:
+    def _build_synthesis_view(self) -> tuple[list[IterationState], list[str]]:
         step_id_map: dict[str, str] = {}
         global_iteration_number = 1
 
@@ -252,25 +148,22 @@ class MainState:
                         ] = format_plan_step_id(global_iteration_number, step.id)
                 global_iteration_number += 1
 
-        return step_id_map
+        def remap_evidence_id(evidence_id: str) -> str:
+            normalized = evidence_id.strip()
+            if not normalized:
+                return ""
 
-    @staticmethod
-    def _remap_evidence_id(evidence_id: str, step_id_map: dict[str, str]) -> str:
-        normalized = evidence_id.strip()
-        if not normalized:
-            return ""
+            for old_step_id, new_step_id in step_id_map.items():
+                if normalized == old_step_id:
+                    return new_step_id
+                if normalized.startswith(f"{old_step_id}R"):
+                    return f"{new_step_id}{normalized[len(old_step_id):]}"
 
-        for old_step_id, new_step_id in step_id_map.items():
-            if normalized == old_step_id:
-                return new_step_id
-            if normalized.startswith(f"{old_step_id}R"):
-                return f"{new_step_id}{normalized[len(old_step_id):]}"
+            return normalized
 
-        return normalized
-
-    def gather_iteration_trace(self) -> list[IterationState]:
-        step_id_map = self._build_synthesis_step_id_map()
         iterations: list[IterationState] = []
+        relevant_evidence_ids: list[str] = []
+        seen_evidence_ids: set[str] = set()
         global_iteration_number = 1
 
         for agent_state in self.agent_states:
@@ -279,9 +172,7 @@ class MainState:
                 remapped_results: dict[str, Any] = {}
 
                 for result_step_id, result_value in cloned_iteration.results.items():
-                    remapped_results[
-                        self._remap_evidence_id(result_step_id, step_id_map)
-                    ] = result_value
+                    remapped_results[remap_evidence_id(result_step_id)] = result_value
 
                 if cloned_iteration.plan is not None:
                     for step in cloned_iteration.plan.steps:
@@ -294,17 +185,19 @@ class MainState:
                 iterations.append(cloned_iteration)
                 global_iteration_number += 1
 
+            for evidence_id in agent_state.relevant_evidence_ids:
+                normalized = remap_evidence_id(evidence_id)
+                if not normalized or normalized in seen_evidence_ids:
+                    continue
+                seen_evidence_ids.add(normalized)
+                relevant_evidence_ids.append(normalized)
+
+        return iterations, relevant_evidence_ids
+
+    def gather_iteration_trace(self) -> list[IterationState]:
+        iterations, _ = self._build_synthesis_view()
         return iterations
 
     def gather_relevant_evidence_ids(self) -> list[str]:
-        step_id_map = self._build_synthesis_step_id_map()
-        evidence_ids: list[str] = []
-        seen: set[str] = set()
-        for agent_state in self.agent_states:
-            for evidence_id in agent_state.relevant_evidence_ids:
-                normalized = self._remap_evidence_id(evidence_id, step_id_map)
-                if not normalized or normalized in seen:
-                    continue
-                seen.add(normalized)
-                evidence_ids.append(normalized)
-        return evidence_ids
+        _, relevant_evidence_ids = self._build_synthesis_view()
+        return relevant_evidence_ids
