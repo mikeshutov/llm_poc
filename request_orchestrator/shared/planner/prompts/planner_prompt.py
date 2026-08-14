@@ -54,8 +54,10 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     tools = []
     rules = {}
 
-    if state.request_analysis.applicable_tool_categories:
-        for category_name in state.request_analysis.applicable_tool_categories:
+    agent_tool_categories = state.request_analysis.tool_categories_for_agent(state.agent_profile.name)
+
+    if agent_tool_categories:
+        for category_name in agent_tool_categories:
             category = allowed_categories.get(category_name)
             if category is None:
                 continue
@@ -84,7 +86,7 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
 
 
 def _build_planner_task(state: AgentState) -> str:
-    goal = state.request_analysis.goal.strip()
+    goal = state.request_analysis.goal_for_agent(state.agent_profile.name).strip()
     return goal or state.task
 
 

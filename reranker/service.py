@@ -9,7 +9,13 @@ from common.data import strip_code_fences
 from conversation.models.conversation_model_config import ConversationModelConfig, RERANKER_STAGE, SHARED_MODEL_SCOPE
 from llm.usage import record_llm_call
 from personalization.profile.models import UserProfile
-from request_orchestrator.shared.runtime_context import get_current_conversation_model_config, get_current_conversation_id, get_current_roundtrip_id, get_current_user_id
+from request_orchestrator.shared.runtime_context import (
+    get_current_agent_name,
+    get_current_conversation_model_config,
+    get_current_conversation_id,
+    get_current_roundtrip_id,
+    get_current_user_id,
+)
 from reranker.constants import DEFAULT_TOP_K
 from reranker.models import Candidate, RerankerPrompt, RerankerResult
 
@@ -58,8 +64,13 @@ class CandidateReranker:
             agent=SHARED_MODEL_SCOPE,
             stage=RERANKER_STAGE,
             callsite="reranker.candidate_reranker",
-            metadata={"candidate_count": len(candidates), "limit": resolved_limit},
+            metadata={
+                "candidate_count": len(candidates),
+                "limit": resolved_limit,
+                "caller_agent_name": get_current_agent_name(),
+            },
             latency_ms=latency_ms,
+            owner_agent_name=get_current_agent_name(),
             input_object={
                 "prompt": prompt,
                 "goal": resolved_goal,

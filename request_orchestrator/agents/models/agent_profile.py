@@ -21,12 +21,17 @@ class AgentProfile:
     name: str
     allowed_categories: set[str] = field(default_factory=set)
     extra_tools: list[Any] = field(default_factory=list)
+    default_stage_models: dict[str, str] = field(default_factory=dict)
+    request_analysis_selectable: bool = True
     max_turns: int = DEFAULT_MAX_TURNS
     request_analysis_goal: str = DEFAULT_REQUEST_ANALYSIS_GOAL
     planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
     planner_rules: str = DEFAULT_PLANNER_RULES
     synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION
     persist_tool_calls: bool = True
+
+    def default_model_for_stage(self, stage: str) -> str:
+        return self.default_stage_models.get(stage, "").strip()
 
     def allowed_category_names(self) -> set[str]:
         if self.allowed_categories:

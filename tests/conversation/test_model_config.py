@@ -32,6 +32,7 @@ from conversation.models.conversation_models import Conversation
 from integrations.ip_api.models import IpLocation
 from personalization.profile.models import UserProfile
 from rendering.sidebar import build_model_config_rows
+from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.service import run_request_orchestrator_for_query
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from reranker.service import CandidateReranker
@@ -45,25 +46,8 @@ class TrackingChatOpenAI:
         raise AssertionError(f'Unexpected invoke for prompt: {prompt[:80]}')
 
 
-class DummyAgentResult:
-    def __init__(self, answer: list[str], roundtrip_summary: str = ''):
-        self.answer = answer
-        self.roundtrip_summary = roundtrip_summary
-
-    @property
-    def raw_response(self) -> str:
-        return '\n\n'.join(self.answer)
-
-    def to_payload_for_update_roundtrip(self) -> dict:
-        return {
-            'response': self.raw_response,
-            'result': [{'content': chunk, 'evidence_ids': []} for chunk in self.answer],
-            'roundtrip_summary': self.roundtrip_summary,
-            'cards': [],
-            'next_question': '',
-            'tool_summary': {},
-            'agent_logs': {},
-        }
+class DummyAgentResult(AgentResult):
+    pass
 
 
 class FakeConversationRepository:
@@ -71,7 +55,6 @@ class FakeConversationRepository:
         self.config = config
         self.pending_calls: list[dict] = []
         self.update_calls: list[dict] = []
-        self.list_llm_calls_requests: list[object] = []
         self.conversation_id = uuid4()
         self.roundtrip_id = uuid4()
 
@@ -115,11 +98,6 @@ class FakeConversationRepository:
             metadata=metadata or {},
             model=model,
         )
-
-    def list_llm_calls_for_roundtrip(self, roundtrip_id):
-        self.list_llm_calls_requests.append(roundtrip_id)
-        return []
-
 
     def update_roundtrip(self, roundtrip_id, response, payload, roundtrip_summary=None, roundtrip_summary_embedding=None):
         self.update_calls.append(
@@ -349,21 +327,8 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
         'conversation_id': str(conversation_id),
         'limit': 5,
     }
-    assert fake_repo.list_llm_calls_requests == [fake_repo.roundtrip_id]
-    assert fake_repo.update_calls[0]['payload']['llm_usage'] == {
-        'retrieved_call_count': 0,
-        'summary': {
-            'input_tokens': 0,
-            'cached_input_tokens': 0,
-            'output_tokens': 0,
-            'total_tokens': 0,
-            'total_latency_ms': 0,
-            'computed_input_cost': '0',
-            'computed_output_cost': '0',
-            'computed_total_cost': '0',
-        },
-        'calls': [],
-    }
+    assert 'llm_usage' not in fake_repo.update_calls[0]['payload']
+    assert 'agent_logs' not in fake_repo.update_calls[0]['payload']
     assert isinstance(fake_repo.update_calls[0]['payload']['roundtrip_latency_ms'], int)
     assert fake_repo.update_calls[0]['payload']['roundtrip_latency_ms'] >= 0
 

@@ -10,7 +10,7 @@ if 'pycountry' not in sys.modules:
     sys.modules['pycountry'] = pycountry_module
 
 from request_orchestrator.shared.synthesis.prompts.synthesis_schema_prompt import SYNTHESIS_SCHEMA
-from request_orchestrator.shared.synthesis.prompts.solver_rules import BASE_RULES
+from request_orchestrator.shared.synthesis.prompts.synthesis_rules import BASE_RULES
 
 
 def test_synthesis_schema_forbids_displaying_evidence_ids_in_content() -> None:
@@ -19,5 +19,5 @@ def test_synthesis_schema_forbids_displaying_evidence_ids_in_content() -> None:
     assert "P1E1R1" in SYNTHESIS_SCHEMA
 
 
-def test_solver_rules_do_not_include_legacy_file_path_rendering_rule() -> None:
+def test_synthesis_rules_do_not_include_legacy_file_path_rendering_rule() -> None:
     assert not any("file_path" in rule for rule in BASE_RULES)

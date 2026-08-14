@@ -1,23 +1,26 @@
 from __future__ import annotations
 from time import perf_counter
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from langsmith import traceable
 
 from common.data import repair_common_json_issues, strip_code_fences
+from common.logging import log_roundtrip_prompt
 from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, SYNTHESIS_STAGE
-from conversation.repository.repo_factory import get_conversation_repo
 from llm.usage import record_llm_call, serialize_llm_call_record
 from request_orchestrator.constants import SYNTHESIS_PROMPT_STEP
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.main_state import MainState
+from request_orchestrator.models.plan_step_ids import format_plan_step_id
 from request_orchestrator.models.synthesized_result import SynthesisResult
 from request_orchestrator.shared.evidence import (
     build_evidence_bundle,
     build_evidence_steps,
     filter_evidence_steps,
 )
-from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_solver_prompt
+from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
 from rendering.debug import SYNTHESIS_KIND
 
 
@@ -40,6 +43,39 @@ def _resolve_agent_name(state: AgentState | MainState) -> str:
     if isinstance(state, MainState):
         return "request_orchestrator"
     return state.agent_profile.name
+
+
+def _resolve_tool_summary_freshness(state: AgentState | MainState) -> str:
+    timezone = "America/Toronto"
+    geometadata = getattr(state.user_profile, "geometadata", None)
+    if geometadata is not None and isinstance(geometadata.timezone, str) and geometadata.timezone.strip():
+        timezone = geometadata.timezone.strip()
+    current_date = datetime.now(ZoneInfo(timezone)).date().isoformat()
+    return f"current as of {current_date}"
+
+
+def _resolve_tool_summary_iteration_trace(state: AgentState | MainState):
+    if isinstance(state, MainState):
+        return state.synthesis_agent_state().iteration_trace
+    return state.iteration_trace
+
+
+def _resolve_used_tools(iteration_trace) -> list[str]:
+    used_tools: list[str] = []
+    seen: set[str] = set()
+    for iteration_number, iteration in enumerate(iteration_trace, start=1):
+        if iteration.plan is None:
+            continue
+        for step in iteration.plan.steps:
+            step_id = format_plan_step_id(iteration_number, step.id)
+            if step_id not in iteration.results:
+                continue
+            tool_name = step.tool.strip()
+            if not tool_name or tool_name in seen:
+                continue
+            seen.add(tool_name)
+            used_tools.append(tool_name)
+    return used_tools
 
 
 @traceable(name="Synthesis Node")
@@ -79,11 +115,12 @@ def run_synthesis(state: AgentState | MainState) -> AgentState | MainState:
     if not evidence_steps:
         evidence_steps = all_evidence_steps
 
-    prompt = build_solver_prompt(evidence=evidence_steps, state=state)
+    prompt = build_synthesis_prompt(evidence=evidence_steps, state=state)
     prompt_text = prompt.prompt_text()
     prompt_input_object = prompt.to_log_input_object()
     if isinstance(state, MainState):
-        llm = state.get_agent_state("main_agent").build_llm_for_stage(
+        synthesis_agent_state = state.synthesis_agent_state()
+        llm = synthesis_agent_state.build_llm_for_stage(
             agent=MAIN_AGENT_MODEL_SCOPE,
             stage=SYNTHESIS_STAGE,
         )
@@ -100,7 +137,7 @@ def run_synthesis(state: AgentState | MainState) -> AgentState | MainState:
         model_name=(
             state.resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=SYNTHESIS_STAGE)
             if isinstance(state, AgentState)
-            else state.get_agent_state("main_agent").resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=SYNTHESIS_STAGE)
+            else state.synthesis_agent_state().resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=SYNTHESIS_STAGE)
         ),
         conversation_id=state.conversation_id,
         roundtrip_id=state.roundtrip_id,
@@ -109,6 +146,7 @@ def run_synthesis(state: AgentState | MainState) -> AgentState | MainState:
         stage=SYNTHESIS_STAGE,
         callsite="shared_synthesis.run_synthesis",
         latency_ms=latency_ms,
+        owner_agent_name=_resolve_agent_name(state),
         input_object=prompt_input_object,
         output_object={
             "raw_content": response.content,
@@ -128,6 +166,9 @@ def run_synthesis(state: AgentState | MainState) -> AgentState | MainState:
 
     had_tool_results = any(bool(iteration.results) for iteration in iteration_trace)
     tool_summary = synthesis_result.tool_summary.model_dump() if had_tool_results else {}
+    if had_tool_results:
+        tool_summary["used_tools"] = _resolve_used_tools(_resolve_tool_summary_iteration_trace(state))
+        tool_summary["freshness"] = _resolve_tool_summary_freshness(state)
     used_evidence_ids = [
         evidence_id
         for block in synthesis_result.result
@@ -165,8 +206,8 @@ def run_synthesis(state: AgentState | MainState) -> AgentState | MainState:
         state.goal_reached = True
 
     if state.roundtrip_id:
-        get_conversation_repo().create_roundtrip_prompt(
-            state.roundtrip_id,
+        log_roundtrip_prompt(
+            roundtrip_id=state.roundtrip_id,
             agent=_resolve_agent_name(state),
             prompt_step=SYNTHESIS_PROMPT_STEP,
             prompt=prompt_text,

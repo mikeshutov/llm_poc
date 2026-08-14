@@ -5,8 +5,8 @@ from time import perf_counter
 from langsmith import traceable
 
 from common.data import repair_common_json_issues, strip_code_fences
+from common.logging import log_roundtrip_prompt
 from conversation.models.conversation_model_config import EVALUATOR_STAGE, SHARED_MODEL_SCOPE
-from conversation.repository.repo_factory import get_conversation_repo
 from llm.usage import record_llm_call, serialize_llm_call_record
 from request_orchestrator.constants import EVALUATOR_PROMPT_STEP
 from request_orchestrator.models.agent_state import AgentState
@@ -58,6 +58,7 @@ def run_evaluator(state: AgentState) -> AgentState:
         callsite="shared_evaluator.run_evaluator",
         metadata={"evidence_count": len(evidence_steps)},
         latency_ms=latency_ms,
+        owner_agent_name=state.agent_profile.name,
         input_object=prompt_input_object,
         output_object={
             "raw_content": response.content,
@@ -95,7 +96,7 @@ def run_evaluator(state: AgentState) -> AgentState:
     else:
         refined_goal = evaluation.refined_goal.strip()
         if refined_goal:
-            state.request_analysis.goal = refined_goal
+            state.request_analysis.set_goal_for_agent(state.agent_profile.name, refined_goal)
         state.goal_reached = False
 
     state.log_status(
@@ -112,8 +113,8 @@ def run_evaluator(state: AgentState) -> AgentState:
     )
 
     if state.roundtrip_id:
-        get_conversation_repo().create_roundtrip_prompt(
-            state.roundtrip_id,
+        log_roundtrip_prompt(
+            roundtrip_id=state.roundtrip_id,
             agent=state.agent_profile.name,
             prompt_step=EVALUATOR_PROMPT_STEP,
             prompt=prompt_text,

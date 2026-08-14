@@ -1,3 +1,3 @@
-from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_solver_prompt
+from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
 
-__all__ = ["build_solver_prompt"]
+__all__ = ["build_synthesis_prompt"]

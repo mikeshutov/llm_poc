@@ -28,7 +28,7 @@ from request_orchestrator.agents.profile_management.profile import PROFILE_MANAG
 from request_orchestrator.orchestrator import run_agent
 from request_orchestrator.constants import SYNTHESIS_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep
-from request_orchestrator.models.agent_state import AgentState, IterationState
+from request_orchestrator.models.agent_state import AgentState, IterationState, RequestAnalysis, RequestAnalysisGoal
 from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.plan import Plan
@@ -36,7 +36,7 @@ from request_orchestrator.shared.planner.prompts.planner_prompt import build_pla
 from request_orchestrator.shared.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
 from request_orchestrator.shared.evidence import build_evidence_bundle, build_evidence_steps
 from request_orchestrator.shared.evaluator.prompts.evaluator_prompt import build_evaluator_prompt
-from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_solver_prompt
+from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
 from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
 
 
@@ -81,14 +81,19 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             llm=parent_state.llm,
             agent_profile=build_profile_management_profile(parent_state.user_profile),
         )
-        profile_state.request_analysis.goal = PROFILE_MANAGEMENT_PROFILE.request_analysis_goal
-        profile_state.request_analysis.applicable_tool_categories = sorted(profile_state.agent_profile.allowed_categories)
+        profile_state.request_analysis.goals = [
+            RequestAnalysisGoal(
+                agent=PROFILE_MANAGEMENT_PROFILE.name,
+                goal=PROFILE_MANAGEMENT_PROFILE.request_analysis_goal,
+                tool_categories=sorted(profile_state.agent_profile.allowed_categories),
+            )
+        ]
         prompt = build_planner_prompt(profile_state)
         prompt_text = prompt.prompt_text()
 
         self.assertEqual(profile_state.task, 'Please remember that I like pizza and eggs.')
         self.assertEqual(
-            profile_state.request_analysis.goal,
+            profile_state.request_analysis.goal_for_agent(PROFILE_MANAGEMENT_PROFILE.name),
             PROFILE_MANAGEMENT_PROFILE.request_analysis_goal,
         )
         self.assertEqual(profile_state.agent_profile.max_turns, 5)
@@ -124,7 +129,10 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             user_profile=UserProfile(),
             llm=MockLLM([]),
         )
-        state.request_analysis.goal = 'Search the web for frozen or dry okonomiyaki kits for sale, since the user clarified they want okonomiyaki and wants a broader web check.'
+        state.request_analysis.set_goal_for_agent(
+            state.agent_profile.name,
+            'Search the web for frozen or dry okonomiyaki kits for sale, since the user clarified they want okonomiyaki and wants a broader web check.',
+        )
 
         prompt = build_planner_prompt(state)
         prompt_text = prompt.prompt_text()
@@ -149,10 +157,13 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             user_profile=profile,
             llm=MockLLM([]),
         )
-        state.request_analysis.goal = 'Use the available evidence to answer the request.'
+        state.request_analysis.set_goal_for_agent(
+            state.agent_profile.name,
+            'Use the available evidence to answer the request.',
+        )
 
         planner_prompt = build_planner_prompt(state).prompt_text()
-        synthesis_prompt = build_solver_prompt(
+        synthesis_prompt = build_synthesis_prompt(
             evidence=[
                 EvidenceStep(
                     type='web_search_results',
@@ -222,10 +233,13 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         prompt = build_request_analysis_prompt(state)
         prompt_text = prompt.prompt_text()
 
-        self.assertIn('Make the goal self-contained for downstream steps because the full conversation context will not be passed through later.', prompt_text)
-        self.assertIn('Include any relevant conversation-derived constraints, continuity, entities, or references needed by downstream planning and synthesis because the full conversation context will not be passed through later.', prompt_text)
-        self.assertIn('Name the concrete topic, subject, entity, or item in the goal instead of using vague placeholders like topic, subject, it, them, or the above.', prompt_text)
+        self.assertIn('Make every goal self-contained for downstream steps because the full conversation context will not be passed through later.', prompt_text)
+        self.assertIn('Each goal should capture the actual objective plus any relevant conversation-derived constraints, references, or continuity needed for planning and synthesis.', prompt_text)
+        self.assertIn('Name the concrete topic, subject, entity, or item in each goal instead of using vague placeholders like topic, subject, it, them, or the above.', prompt_text)
         self.assertIn('For lookup or search requests, explicitly state what should be searched for so downstream steps do not need the original conversation to know the target.', prompt_text)
+        self.assertIn('Only choose from the provided available agents.', prompt_text)
+        self.assertIn('"agent": "main_agent"', prompt_text)
+        self.assertNotIn('"agent": "profile_management"', prompt_text)
 
     def test_main_state_rebases_child_iteration_ids_for_synthesis_evidence(self) -> None:
         main_state = MainState.new(
@@ -324,6 +338,52 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertEqual(evidence_steps[0].evidence[0].title, 'Weather Result')
         self.assertEqual(evidence_steps[1].evidence[0].title, 'Ramen Result')
 
+    def test_main_state_distributes_goals_to_matching_child_agents(self) -> None:
+        main_state = MainState.new(
+            task='Handle a routed request.',
+            max_turns=10,
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            llm=MockLLM([]),
+        )
+        main_state.request_analysis = RequestAnalysis(
+            goals=[
+                RequestAnalysisGoal(
+                    agent='main_agent',
+                    goal='Find current transit details for Toronto.',
+                    tool_categories=['calendar', 'web_search'],
+                ),
+                RequestAnalysisGoal(
+                    agent='future_agent',
+                    goal='Perform a future specialized task.',
+                    tool_categories=['knowledge'],
+                ),
+            ],
+            requested_user_attribute_types=['projects.goals'],
+        )
+
+        main_state.fan_out_shared_state()
+        main_state.distribute_goals_to_agent_states()
+
+        profile_state = main_state.get_agent_state('profile_management')
+        routed_main_state = main_state.get_agent_state('main_agent')
+
+        self.assertEqual(profile_state.request_analysis.goals, [])
+        self.assertEqual(
+            profile_state.request_analysis.requested_user_attribute_types,
+            ['projects.goals'],
+        )
+        self.assertEqual(len(routed_main_state.request_analysis.goals), 1)
+        self.assertEqual(
+            routed_main_state.request_analysis.goal_for_agent('main_agent'),
+            'Find current transit details for Toronto.',
+        )
+        self.assertEqual(
+            routed_main_state.request_analysis.tool_categories_for_agent('main_agent'),
+            ['calendar', 'web_search'],
+        )
+        self.assertEqual(len(main_state.request_analysis.goals), 2)
+
     def test_build_llm_for_stage_reuses_existing_non_chat_llm(self) -> None:
         parent_state = AgentState.new(
             task='Please remember that I like pizza.',
@@ -388,7 +448,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             llm=MockLLM([]),
         )
 
-        prompt = build_solver_prompt(
+        prompt = build_synthesis_prompt(
             evidence=[
                 EvidenceStep(
                     type='web_search_results',
@@ -425,7 +485,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             llm=MockLLM([]),
         )
 
-        prompt = build_solver_prompt(
+        prompt = build_synthesis_prompt(
             evidence=[
                 EvidenceStep(
                     type='decks',
@@ -462,7 +522,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             llm=MockLLM([]),
         )
 
-        prompt = build_solver_prompt(
+        prompt = build_synthesis_prompt(
             evidence=[
                 EvidenceStep(
                     type='web_search_results',
@@ -489,8 +549,13 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         request_analysis_response = """
         {
-          "goal": "Store the user's food preferences.",
-          "applicable_tool_categories": ["user_attributes"],
+          "goals": [
+            {
+              "agent": "main_agent",
+              "goal": "Store the user's food preferences.",
+              "tool_categories": ["user_attributes"]
+            }
+          ],
           "requested_user_attribute_types": []
         }
         """
@@ -537,10 +602,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
           "next_question": "Do you want me to remember any other food preferences?",
           "roundtrip_summary": "Stored the user's stated food likes as a persistent user attribute and confirmed the profile state.",
           "tool_summary": {
-            "used_tools": ["get_user_attributes"],
             "produced": ["current user attribute list"],
-            "entities": ["pizza", "eggs"],
-            "freshness": ""
+            "entities": ["pizza", "eggs"]
           }
         }
         """
@@ -626,8 +689,13 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         request_analysis_response = """
         {
-          "goal": "Use the user's food preferences to help with the request.",
-          "applicable_tool_categories": ["food"],
+          "goals": [
+            {
+              "agent": "main_agent",
+              "goal": "Use the user's food preferences to help with the request.",
+              "tool_categories": ["food"]
+            }
+          ],
           "requested_user_attribute_types": ["food.likes"]
         }
         """
@@ -657,10 +725,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
           "next_question": "Do you want a few more options based on those preferences?",
           "roundtrip_summary": "Loaded the user's stored food likes and used them while planning a meal-related response.",
           "tool_summary": {
-            "used_tools": ["search_meals"],
             "produced": ["meal ideas"],
-            "entities": ["pizza"],
-            "freshness": ""
+            "entities": ["pizza"]
           }
         }
         """
@@ -720,8 +786,13 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         request_analysis_response = """
         {
-          "goal": "Calculate the result of the math expression.",
-          "applicable_tool_categories": ["math"],
+          "goals": [
+            {
+              "agent": "main_agent",
+              "goal": "Calculate the result of the math expression.",
+              "tool_categories": ["math"]
+            }
+          ],
           "requested_user_attribute_types": []
         }
         """
@@ -766,10 +837,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
           "next_question": "Do you want me to show the calculation steps too?",
           "roundtrip_summary": "Calculated the requested expression using the math tool and returned the numeric result.",
           "tool_summary": {
-            "used_tools": ["calculate"],
             "produced": ["numeric result"],
-            "entities": ["(15 * 8) / 3 + 7"],
-            "freshness": ""
+            "entities": ["(15 * 8) / 3 + 7"]
           }
         }
         """
@@ -805,8 +874,13 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         request_analysis_response = """
         {
-          "goal": "Find the current time in Tokyo.",
-          "applicable_tool_categories": ["calendar"],
+          "goals": [
+            {
+              "agent": "main_agent",
+              "goal": "Find the current time in Tokyo.",
+              "tool_categories": ["calendar"]
+            }
+          ],
           "requested_user_attribute_types": []
         }
         """
@@ -851,10 +925,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
           "next_question": "Do you want the current date there as well?",
           "roundtrip_summary": "Looked up the current time in Tokyo using the world time tool and returned the reported local datetime.",
           "tool_summary": {
-            "used_tools": ["get_world_time"],
             "produced": ["local datetime", "UTC offset"],
-            "entities": ["Asia/Tokyo"],
-            "freshness": "current as of 2026-08-04T21:30:00+09:00"
+            "entities": ["Asia/Tokyo"]
           }
         }
         """
@@ -900,8 +972,13 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         request_analysis_response = """
         {
-          "goal": "Clarify an underspecified request.",
-          "applicable_tool_categories": [],
+          "goals": [
+            {
+              "agent": "main_agent",
+              "goal": "Clarify an underspecified request.",
+              "tool_categories": []
+            }
+          ],
           "requested_user_attribute_types": []
         }
         """
@@ -922,10 +999,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
           "next_question": "Which product category do you want to focus on?",
           "roundtrip_summary": "The request was underspecified, so the response preserved the clarifying question and dropped the follow-up variant.",
           "tool_summary": {
-            "used_tools": [],
             "produced": [],
-            "entities": [],
-            "freshness": ""
+            "entities": []
           }
         }
         """

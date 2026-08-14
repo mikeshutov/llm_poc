@@ -8,10 +8,8 @@ DEFAULT_SYNTHESIS_NEXT_QUESTION = "What would you like to do next?"
 
 
 class SynthesisToolSummary(BaseModel):
-    used_tools: list[str] = Field(default_factory=list)
     produced: list[str] = Field(default_factory=list)
     entities: list[str] = Field(default_factory=list)
-    freshness: str = ""
 
 
 class SynthesisResultBlock(BaseModel):

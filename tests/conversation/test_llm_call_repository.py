@@ -69,6 +69,7 @@ def test_create_llm_call_round_trips_decimal_and_nullable_ids() -> None:
     record = repo.create_llm_call(
         conversation_id=None,
         roundtrip_id=None,
+        user_id=None,
         agent='utility',
         stage='image_caption',
         callsite='llm_client.generate_caption_from_image_file',

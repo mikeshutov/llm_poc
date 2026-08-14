@@ -1,5 +1,4 @@
 import threading
-from dataclasses import replace
 from time import perf_counter
 from uuid import UUID
 
@@ -10,7 +9,6 @@ from request_orchestrator.models.main_state import MainState
 from request_orchestrator.orchestrator import run_agent
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from llm.clients.embeddings import embed_text
-from llm.usage import build_llm_usage_payload
 from tool.summarize_tool_call import summarize_tool_calls
 from conversation.context_builder import build_roundtrip_context
 from personalization.profile.service import build_user_profile
@@ -100,13 +98,10 @@ def run_request_orchestrator_for_query(
     ):
         result = run_agent(main_state)
 
-    llm_calls = repo.list_llm_calls_for_roundtrip(roundtrip.id)
     roundtrip_latency_ms = int((perf_counter() - started_at) * 1000)
     if isinstance(result, AgentResult):
-        result = replace(result, roundtrip_latency_ms=roundtrip_latency_ms)
-    payload = result.to_payload_for_update_roundtrip()
-    payload["llm_usage"] = build_llm_usage_payload(llm_calls)
-    payload["roundtrip_latency_ms"] = roundtrip_latency_ms
+        result = result.with_roundtrip_latency(roundtrip_latency_ms)
+    payload = result.to_payload()
 
     roundtrip_summary_embedding = embed_text(result.roundtrip_summary) if result.roundtrip_summary else None
     roundtrip = repo.update_roundtrip(

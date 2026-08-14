@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conversation.models.conversation_model_config import DEFAULT_PROFILE_AGENT_PLANNER_MODEL
 from personalization.profile.models import UserProfile
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_CATEGORIES, ATTRIBUTE_QUALIFIERS
 from request_orchestrator.agents.models.agent_profile import AgentProfile, PROFILE_MANAGEMENT_AGENT_NAME
@@ -23,6 +24,10 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
         name=PROFILE_MANAGEMENT_AGENT_NAME,
         allowed_categories={'user_attributes'},
         extra_tools=extra_tools,
+        default_stage_models={
+            "planner": DEFAULT_PROFILE_AGENT_PLANNER_MODEL,
+        },
+        request_analysis_selectable=False,
         max_turns=5,
         request_analysis_goal=(
             "Review this turn for durable user profile field and user attribute maintenance needs. "

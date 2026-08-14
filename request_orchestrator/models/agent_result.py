@@ -27,9 +27,21 @@ class AgentResult:
     def raw_response(self) -> str:
         return "\n\n".join(p for p in self.answer if p)
 
-    def to_payload_for_update_roundtrip(self) -> dict[str, Any]:
+    def with_roundtrip_latency(self, roundtrip_latency_ms: int | None) -> "AgentResult":
+        return AgentResult(
+            answer=list(self.answer),
+            answer_blocks=list(self.answer_blocks),
+            next_question=self.next_question,
+            roundtrip_summary=self.roundtrip_summary,
+            roundtrip_latency_ms=roundtrip_latency_ms,
+            tool_summary=dict(self.tool_summary),
+            agent_logs={agent_name: list(entries) for agent_name, entries in self.agent_logs.items()},
+            used_evidence_ids=list(self.used_evidence_ids),
+            hydrated_evidence_by_id=dict(self.hydrated_evidence_by_id),
+        )
+
+    def to_payload(self) -> dict[str, Any]:
         payload = {
-            "response": self.raw_response,
             "result": [block.model_dump() for block in self.answer_blocks],
             "used_evidence_ids": list(self.used_evidence_ids),
             "hydrated_evidence_by_id": {
@@ -39,7 +51,6 @@ class AgentResult:
             "next_question": self.next_question,
             "roundtrip_summary": self.roundtrip_summary,
             "tool_summary": self.tool_summary,
-            "agent_logs": self.agent_logs,
         }
         if self.roundtrip_latency_ms is not None:
             payload["roundtrip_latency_ms"] = self.roundtrip_latency_ms
