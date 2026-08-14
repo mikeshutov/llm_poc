@@ -4,6 +4,9 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.world_time import WorldTimeClient, WorldTime
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from tool.constants import TOOL_NAME_GET_WORLD_TIME
+from tool.constants import TOOL_RESULT_TYPE_TIME
 
 _client = WorldTimeClient()
 
@@ -15,8 +18,40 @@ class GetWorldTimeArgs(BaseModel):
     )
 
 
+def _tool_result(result: WorldTime) -> ToolResult:
+    hydrated = HydratedEvidence(
+        item_id=result.timezone,
+        tool_name=TOOL_NAME_GET_WORLD_TIME,
+        title=result.timezone,
+        summary=f"{result.datetime} ({result.utc_offset}, {result.abbreviation})",
+        published_at=result.datetime,
+        source=TOOL_NAME_GET_WORLD_TIME,
+        entity_type=TOOL_RESULT_TYPE_TIME,
+        metadata={
+            "utc_offset": result.utc_offset,
+            "day_of_week": result.day_of_week,
+            "abbreviation": result.abbreviation,
+        },
+        raw_payload=result,
+    )
+    return ToolResult(
+        result=result,
+        evidence_views=[
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        ],
+        hydrated_evidence=[hydrated],
+    )
+
+
+
+
 @tool(
-    "get_world_time",
+    TOOL_NAME_GET_WORLD_TIME,
     args_schema=GetWorldTimeArgs,
     description="""
 Get the current date and time for a given timezone.
@@ -33,8 +68,8 @@ Example valid calls:
 {"timezone": "Australia/Sydney"}
 """,
 )
-def get_world_time(timezone: str) -> WorldTime | str:
+def get_world_time(timezone: str) -> ToolResult:
     try:
-        return _client.get_time(timezone)
+        return _tool_result(_client.get_time(timezone))
     except Exception as e:
-        return f"World Time API error: {e}"
+        return ToolResult.error(f"World Time API error: {e}")

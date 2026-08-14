@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
@@ -9,12 +9,16 @@ from integrations.brave import BraveSearchClient
 from integrations.brave.models import NewsSearchResponse, WebSearchResponse
 from integrations.brave.search_type import SearchType
 from integrations.brave.web_search_params import WebSearchParams
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.search.candidate_mapper import (
     rerank_news_search_response,
     rerank_web_search_response,
 )
 from request_orchestrator.shared.tool_adapter.search.constants import DEFAULT_WEB_SEARCH_CANDIDATE_LIMIT
 from reranker import DEFAULT_TOP_K
+from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
+from tool.constants import TOOL_RESULT_TYPE_NEWS_RESULTS
+from tool.constants import TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS
 
 
 class GenericWebSearchArgs(BaseModel):
@@ -45,8 +49,77 @@ def _coerce_search_type(search_type: str) -> SearchType:
         raise ValueError(f"Invalid search_type '{search_type}'. Allowed values: {allowed}.") from exc
 
 
+def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+    for item in result.results:
+        url = (item.url or "").strip()
+        hydrated = HydratedEvidence(
+            item_id=url or item.title.strip(),
+            tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
+            title=item.title.strip(),
+            summary=item.description.strip() or "Web search result.",
+            urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+            image_url=(item.image_url or "").strip(),
+            source=TOOL_NAME_GENERIC_WEB_SEARCH,
+            entity_type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS,
+            metadata={
+                "query": result.query,
+                "retrieved_count": result.retrieved_count,
+                "reranked": result.reranked,
+                "search_type": SearchType.WEB_SEARCH.value,
+            },
+            raw_payload=item,
+        )
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        )
+    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+
+
+def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+    for item in result.results:
+        url = (item.url or "").strip()
+        hydrated = HydratedEvidence(
+            item_id=url or item.title.strip(),
+            tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
+            title=item.title.strip(),
+            summary=item.description.strip() or (item.age or "").strip() or "News search result.",
+            urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+            image_url=(item.thumbnail_url or "").strip(),
+            source=TOOL_NAME_GENERIC_WEB_SEARCH,
+            entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
+            metadata={
+                "query": result.query.model_dump(),
+                "retrieved_count": result.retrieved_count,
+                "reranked": result.reranked,
+                "search_type": SearchType.NEWS_SEARCH.value,
+                "age": item.age,
+            },
+            raw_payload=item,
+        )
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        )
+    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+
+
 @tool(
-    "generic_web_search",
+    TOOL_NAME_GENERIC_WEB_SEARCH,
     args_schema=GenericWebSearchArgs,
     description=f"""
 Run a general web or news search. `suggestion_search` is treated the same as `web_search`.
@@ -71,7 +144,7 @@ def generic_web_search(
     search_type: str = "web_search",
     country: str = "CA",
     params: dict[str, Any] | None = None,
-) -> Union[WebSearchResponse, NewsSearchResponse]:
+) -> ToolResult:
     normalized_query = query_text.strip()
     if not normalized_query:
         raise ValueError("query_text is required and cannot be blank.")
@@ -80,7 +153,7 @@ def generic_web_search(
     match _coerce_search_type(search_type):
         case SearchType.NEWS_SEARCH:
             response = brave_client.news_search(normalized_query)
-            return rerank_news_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K)
+            return _news_search_tool_result(rerank_news_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K))
         #case SearchType.SUGGESTION_SEARCH:
         #    return brave_client.suggest(query_text)
         case _:
@@ -92,4 +165,4 @@ def generic_web_search(
                     extra_params=params or {},
                 )
             )
-            return rerank_web_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K)
+            return _web_search_tool_result(rerank_web_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K))

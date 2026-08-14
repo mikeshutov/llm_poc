@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from request_orchestrator.agents.models.agent_profile import AgentProfile
+from request_orchestrator.shared.tool_adapter.memories.get_memory_detail import get_memory_detail
 from request_orchestrator.shared.tool_adapter.memories.search_memories import search_memories
 from request_orchestrator.shared.tool_adapter.memories.search_roundtrip_memories import search_roundtrip_memories
 from request_orchestrator.shared.tool_adapter.user_attributes.get_user_attributes import get_user_attributes
@@ -8,6 +9,7 @@ from request_orchestrator.shared.tool_adapter.user_attributes.search_user_attrib
 from tool.tools import TOOL_CATEGORIES
 
 READ_ONLY_PROFILE_AND_MEMORY_TOOLS = [
+    get_memory_detail,
     search_memories,
     search_roundtrip_memories,
 ]

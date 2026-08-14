@@ -6,7 +6,11 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
-from integrations.advice_slip import AdviceSlipClient, AdviceSlip
+from integrations.advice_slip import AdviceSlipClient
+from integrations.advice_slip.models import AdviceSlip
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from tool.constants import TOOL_NAME_GET_ADVICE
+from tool.constants import TOOL_RESULT_TYPE_ADVICE
 
 _advice_client = AdviceSlipClient()
 
@@ -18,8 +22,40 @@ class GetAdviceArgs(BaseModel):
     )
 
 
+def _normalize_advice(result: AdviceSlip | list[AdviceSlip]) -> list[AdviceSlip]:
+    return result if isinstance(result, list) else [result]
+
+
+def _tool_result(result: AdviceSlip | list[AdviceSlip]) -> ToolResult:
+    advice_items = _normalize_advice(result)
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+    for advice in advice_items:
+        hydrated = HydratedEvidence(
+            item_id=str(advice.id),
+            tool_name=TOOL_NAME_GET_ADVICE,
+            title="Advice Slip",
+            summary=advice.advice,
+            source=TOOL_NAME_GET_ADVICE,
+            entity_type=TOOL_RESULT_TYPE_ADVICE,
+            raw_payload=advice,
+        )
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata={},
+            )
+        )
+    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+
+
+
+
 @tool(
-    "get_advice",
+    TOOL_NAME_GET_ADVICE,
     args_schema=GetAdviceArgs,
     description="""
 Get a random piece of advice, or search for advice on a specific topic.
@@ -32,10 +68,10 @@ Example valid calls:
 {"query": "money"}
 """,
 )
-def get_advice(query: str | None = None) -> AdviceSlip | list[AdviceSlip] | str:
+def get_advice(query: str | None = None) -> ToolResult:
     try:
         if query:
-            return _advice_client.search(query)
-        return _advice_client.random()
+            return _tool_result(_advice_client.search(query))
+        return _tool_result(_advice_client.random())
     except RequestException as e:
-        return f"Advice Slip API unavailable: {e}"
+        return ToolResult.error(f"Advice Slip API unavailable: {e}")

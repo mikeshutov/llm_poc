@@ -14,6 +14,7 @@ from common.config import CONTENT_KEY, FILES_DIR, IMAGE_MIME_PREFIX, ROLE_ASSIST
 from request_orchestrator.models.evidence import EvidenceUrl, HydratedEvidence
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from tool.constants import TOOL_NAME_STRUCTURED_FACTS_LOOKUP
+from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
 from tool.constants import TOOL_NAME_WIKIPEDIA_SEARCH
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
@@ -40,6 +41,7 @@ INLINE_EVIDENCE_TYPES: set[str] = {
 }
 
 INLINE_EVIDENCE_TOOL_NAMES: set[str] = {
+    TOOL_NAME_GENERIC_WEB_SEARCH,
     TOOL_NAME_WIKIPEDIA_SEARCH,
     TOOL_NAME_STRUCTURED_FACTS_LOOKUP,
 }
@@ -200,7 +202,7 @@ def _build_block_cards(
             continue
         if _is_inline_evidence(hydrated):
             continue
-        url = _primary_card_url(hydrated.urls, fallback=hydrated.url)
+        url = _primary_card_url(hydrated.urls)
         image_url = hydrated.image_url.strip()
         title = hydrated.title.strip()
         summary = hydrated.summary.strip()
@@ -219,13 +221,13 @@ def _build_block_cards(
     return cards
 
 
-def _primary_card_url(urls: list[EvidenceUrl], *, fallback: str) -> str:
+def _primary_card_url(urls: list[EvidenceUrl]) -> str:
     for preferred_type in ("website", "youtube"):
         for entry in urls:
             cleaned_url = entry.url.strip()
             if entry.url_type == preferred_type and cleaned_url:
                 return cleaned_url
-    return fallback.strip()
+    return ""
 
 
 def _render_result_block(
@@ -237,7 +239,7 @@ def _render_result_block(
     inline_labels: list[str] = []
     for evidence in inline_evidence:
         hydrated = hydrated_evidence_by_id.get(evidence.evidence_id)
-        hydrated_url = "" if hydrated is None else hydrated.url.strip()
+        hydrated_url = "" if hydrated is None else _primary_card_url(hydrated.urls)
         if hydrated_url:
             inline_urls.append(hydrated_url)
             continue

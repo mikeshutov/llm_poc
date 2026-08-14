@@ -3,8 +3,46 @@ from pydantic import BaseModel, Field
 
 from integrations.open_meteo import OpenMeteoClient
 from integrations.open_meteo.models import GeocodedLocation
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from tool.constants import TOOL_NAME_RESOLVE_CITY_LOCATION
+from tool.constants import TOOL_RESULT_TYPE_LOCATION
 
 _weather_client = OpenMeteoClient()
+
+
+def _tool_result(result: GeocodedLocation | None) -> ToolResult:
+    if result is None:
+        return ToolResult(result=None, evidence_views=[], hydrated_evidence=[])
+
+    metadata = {
+        "country": result.country,
+        "latitude": result.latitude,
+        "longitude": result.longitude,
+        "timezone": result.timezone,
+    }
+    hydrated = HydratedEvidence(
+        item_id=(result.name or "").strip(),
+        tool_name=TOOL_NAME_RESOLVE_CITY_LOCATION,
+        title=(result.name or "").strip() or "Resolved City",
+        summary=f"{(result.name or '').strip()}, {(result.country or '').strip()}",
+        location_name=(result.name or "").strip(),
+        source=TOOL_NAME_RESOLVE_CITY_LOCATION,
+        entity_type=TOOL_RESULT_TYPE_LOCATION,
+        metadata=metadata,
+        raw_payload=result,
+    )
+    return ToolResult(
+        result=result,
+        evidence_views=[
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        ],
+        hydrated_evidence=[hydrated],
+    )
 
 
 class ResolveCityLocationArgs(BaseModel):
@@ -15,7 +53,7 @@ class ResolveCityLocationArgs(BaseModel):
 
 
 @tool(
-    "resolve_city_location",
+    TOOL_NAME_RESOLVE_CITY_LOCATION,
     args_schema=ResolveCityLocationArgs,
     description="""
 Resolve a city into normalized location metadata for weather-aware shopping decisions.
@@ -29,5 +67,5 @@ Example valid call:
 }
 """,
 )
-def resolve_city_location(city: str) -> GeocodedLocation:
-    return _weather_client.geocode_city(city)
+def resolve_city_location(city: str) -> ToolResult:
+    return _tool_result(_weather_client.geocode_city(city))

@@ -20,7 +20,6 @@ class PreviousIterationStep(BaseModel):
     plan: str
     tool: str
     args: dict[str, Any]
-    result: Any = None
 
 
 class PreviousIteration(BaseModel):
@@ -31,6 +30,7 @@ class PreviousIteration(BaseModel):
 
 class EvidenceStep(BaseModel):
     type: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
     evidence: list[EvidenceView] = Field(default_factory=list)
 
 
@@ -166,7 +166,7 @@ class AgentPrompt:
     def include_rules_raw(self, *, key: str = PromptSectionKeys.RULES) -> AgentPrompt:
         return self.include_text(self.rules, key=key)
 
-    def include_previous_iterations(self, heading: str = "Previous Iterations (JSON):", *, key: str = PromptSectionKeys.PREVIOUS_ITERATIONS) -> AgentPrompt:
+    def include_previous_iterations(self, heading: str = "Evidence From Previous Plans (JSON):", *, key: str = PromptSectionKeys.PREVIOUS_ITERATIONS) -> AgentPrompt:
         if not self.previous_iterations:
             return self
         return self._append_section(
@@ -177,14 +177,17 @@ class AgentPrompt:
             key=key,
         )
 
-    def include_evidence(self, heading: str = "Evidence (JSON):", *, key: str = PromptSectionKeys.EVIDENCE) -> AgentPrompt:
+    def include_evidence(
+        self,
+        heading: str = "Evidence (JSON):",
+        *,
+        key: str = PromptSectionKeys.EVIDENCE,
+    ) -> AgentPrompt:
         if not self.evidence:
             return self
         return self._append_section(
             heading,
-            self._serialize_json(prune_empty_prompt_values([
-                step.model_dump() for step in self.evidence
-            ])),
+            self._serialize_json(self._serialize_evidence_steps()),
             key=key,
         )
 
@@ -266,6 +269,21 @@ class AgentPrompt:
     def _serialize_json(value: Any, default: Any = str) -> str:
         return json.dumps(value, indent=2, ensure_ascii=True, default=default)
 
+    def _serialize_evidence_steps(self) -> list[dict[str, Any]]:
+        if not self.evidence:
+            return []
+        serialized_steps: list[dict[str, Any]] = []
+        for step in self.evidence:
+            serialized_steps.append(
+                prune_empty_prompt_values(
+                    {
+                        "type": step.type,
+                        "evidence": [evidence.model_dump() for evidence in step.evidence],
+                    }
+                )
+            )
+        return prune_empty_prompt_values(serialized_steps)
+
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data.pop("_sections", None)
@@ -289,9 +307,7 @@ class AgentPrompt:
                 iteration.model_dump() for iteration in self.previous_iterations
             ])
         if self.evidence is not None:
-            data[PromptSectionKeys.EVIDENCE] = prune_empty_prompt_values([
-                step.model_dump() for step in self.evidence
-            ])
+            data[PromptSectionKeys.EVIDENCE] = self._serialize_evidence_steps()
         return prune_empty_prompt_values(data)
 
     def to_json(self) -> str:

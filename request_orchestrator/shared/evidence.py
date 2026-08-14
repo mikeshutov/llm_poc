@@ -1,21 +1,12 @@
 from __future__ import annotations
 
-from typing import Any
-
-from common.data import prune_empty_prompt_values, sanitize_for_json_storage
 from request_orchestrator.models.agent_prompt import EvidenceStep
 from request_orchestrator.models.agent_state import IterationState
-from request_orchestrator.models.evidence import EvidenceBundle, EvidenceUrl, EvidenceView, HydratedEvidence
+from request_orchestrator.models.evidence import EvidenceBundle, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.models.plan_step_ids import format_plan_step_id
-from tool.constants import TOOL_NAME_GET_CURRENT_WEATHER
-from tool.constants import TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER
-from tool.constants import TOOL_NAME_WIKIPEDIA_SEARCH
 from tool.tools import get_tool_result_type
 
-WEATHER_TOOL_SOURCE_URLS: dict[str, str] = {
-    TOOL_NAME_GET_CURRENT_WEATHER: "https://open-meteo.com/",
-    TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER: "https://open-meteo.com/",
-}
+MERGED_EVIDENCE_STEP_TYPES = {"decks"}
 
 
 def build_evidence_bundle(iteration_trace: list[IterationState]) -> EvidenceBundle:
@@ -27,18 +18,17 @@ def build_evidence_bundle(iteration_trace: list[IterationState]) -> EvidenceBund
             continue
         for step in iteration.plan.steps:
             step_id = format_plan_step_id(iteration_number, step.id)
-            raw_output = iteration.results.get(step_id)
-            hydrated_evidence = build_hydrated_evidence_for_output(
-                raw_output,
+            tool_result = iteration.results.get(step_id)
+            if not isinstance(tool_result, ToolResult):
+                continue
+            hydrated_evidence, evidence_views = _rehydrate_tool_result_records(
+                tool_result,
                 step_id=step_id,
                 tool_name=step.tool,
             )
             if not hydrated_evidence:
                 continue
-            evidence_views_by_step_id[step_id] = [
-                build_evidence_view(evidence)
-                for evidence in hydrated_evidence
-            ]
+            evidence_views_by_step_id[step_id] = evidence_views
             for evidence in hydrated_evidence:
                 hydrated_evidence_by_id[evidence.evidence_id] = evidence
 
@@ -53,17 +43,29 @@ def build_evidence_steps(
     evidence_views_by_step_id: dict[str, list[EvidenceView]],
 ) -> list[EvidenceStep]:
     evidence_steps: list[EvidenceStep] = []
+    evidence_steps_by_type: dict[str, EvidenceStep] = {}
     for iteration_number, iteration in enumerate(iteration_trace, start=1):
         if iteration.plan is None:
             continue
         for step in iteration.plan.steps:
             step_id = format_plan_step_id(iteration_number, step.id)
-            evidence_steps.append(
-                EvidenceStep(
-                    type=get_tool_result_type(step.tool),
-                    evidence=list(evidence_views_by_step_id.get(step_id, [])),
-                )
+            tool_result = iteration.results.get(step_id)
+            step_type = get_tool_result_type(step.tool)
+            evidence_step = EvidenceStep(
+                type=step_type,
+                metadata=dict(tool_result.metadata) if isinstance(tool_result, ToolResult) else {},
+                evidence=list(evidence_views_by_step_id.get(step_id, [])),
             )
+            if step_type in MERGED_EVIDENCE_STEP_TYPES:
+                existing = evidence_steps_by_type.get(step_type)
+                if existing is None:
+                    evidence_steps.append(evidence_step)
+                    evidence_steps_by_type[step_type] = evidence_step
+                else:
+                    existing.metadata = _merge_step_metadata(existing.metadata, evidence_step.metadata)
+                    existing.evidence.extend(evidence_step.evidence)
+                continue
+            evidence_steps.append(evidence_step)
     return evidence_steps
 
 
@@ -86,55 +88,77 @@ def filter_evidence_steps(
         filtered_steps.append(
             EvidenceStep(
                 type=step.type,
+                metadata=dict(step.metadata),
                 evidence=matching_evidence,
             )
         )
-    return filtered_steps
+    return _merge_evidence_steps(filtered_steps)
 
 
-def build_hydrated_evidence_for_output(
-    raw_output: Any,
+def _rehydrate_tool_result_records(
+    tool_result: ToolResult,
     *,
     step_id: str,
     tool_name: str,
-) -> list[HydratedEvidence]:
-    if raw_output is None:
-        return []
+) -> tuple[list[HydratedEvidence], list[EvidenceView]]:
+    if not tool_result.hydrated_evidence:
+        return [], []
 
-    payload = prune_empty_prompt_values(sanitize_for_json_storage(raw_output))
-    if isinstance(payload, dict) and tool_name == TOOL_NAME_WIKIPEDIA_SEARCH:
-        wikipedia_items = _extract_wikipedia_evidence_items(payload)
-        if wikipedia_items:
-            return [
-                _build_generic_hydrated_evidence(
-                    item,
-                    step_id=step_id,
-                    tool_name=tool_name,
-                    reference_id=index,
-                )
-                for index, item in enumerate(wikipedia_items, start=1)
-            ]
-        return []
-    items = _extract_evidence_items(payload)
-    if items is not None:
-        return [
-            _build_generic_hydrated_evidence(
-                item,
-                step_id=step_id,
-                tool_name=tool_name,
-                reference_id=index,
-            )
-            for index, item in enumerate(items, start=1)
-        ]
-
-    return [
-        _build_generic_hydrated_evidence(
-            payload,
+    hydrated_evidence = [
+        _rehydrate_evidence_item(
+            evidence,
             step_id=step_id,
             tool_name=tool_name,
-            reference_id=1,
+            reference_id=index,
         )
+        for index, evidence in enumerate(tool_result.hydrated_evidence, start=1)
     ]
+    if tool_result.evidence_views:
+        evidence_views = [
+            _rehydrate_evidence_view_item(
+                evidence_view,
+                hydrated_evidence_item=hydrated_evidence[index] if index < len(hydrated_evidence) else None,
+                step_id=step_id,
+                reference_id=index + 1,
+            )
+            for index, evidence_view in enumerate(tool_result.evidence_views)
+        ]
+    else:
+        evidence_views = [build_evidence_view(evidence) for evidence in hydrated_evidence]
+    return hydrated_evidence, evidence_views
+
+
+def _rehydrate_evidence_item(
+    evidence: HydratedEvidence,
+    *,
+    step_id: str,
+    tool_name: str,
+    reference_id: int,
+) -> HydratedEvidence:
+    merged = evidence.model_copy(deep=True)
+    merged.step_id = step_id
+    merged.evidence_id = _format_evidence_id(step_id, reference_id)
+    if not merged.tool_name:
+        merged.tool_name = tool_name
+    if not merged.source:
+        merged.source = tool_name
+    if not merged.entity_type:
+        merged.entity_type = get_tool_result_type(tool_name)
+    return merged
+
+
+def _rehydrate_evidence_view_item(
+    evidence_view: EvidenceView,
+    *,
+    hydrated_evidence_item: HydratedEvidence | None,
+    step_id: str,
+    reference_id: int,
+) -> EvidenceView:
+    merged = evidence_view.model_copy(deep=True)
+    merged.evidence_id = _format_evidence_id(step_id, reference_id)
+    if not merged.item_id and hydrated_evidence_item is not None:
+        merged.item_id = hydrated_evidence_item.item_id
+    return merged
 
 
 def build_evidence_view(evidence: HydratedEvidence) -> EvidenceView:
@@ -147,278 +171,51 @@ def build_evidence_view(evidence: HydratedEvidence) -> EvidenceView:
     )
 
 
-def _build_generic_hydrated_evidence(
-    raw_output: Any,
-    *,
-    step_id: str,
-    tool_name: str,
-    reference_id: int,
-) -> HydratedEvidence:
-    payload = prune_empty_prompt_values(sanitize_for_json_storage(raw_output))
-    result_type = get_tool_result_type(tool_name)
-    item_id = _item_id_from_value(payload, fallback=reference_id)
-    title = _generic_title(payload, tool_name=tool_name)
-    summary = _generic_summary(payload, tool_name=tool_name)
-    urls = _build_evidence_urls(payload, tool_name=tool_name)
-    return HydratedEvidence(
-        evidence_id=_format_evidence_id(step_id, reference_id),
-        step_id=step_id,
-        item_id=item_id,
-        tool_name=tool_name,
-        title=title,
-        summary=summary,
-        url=urls[0].url if urls else "",
-        urls=urls,
-        image_url=_first_non_empty(payload, "image_url", "image", "thumbnail") if isinstance(payload, dict) else "",
-        published_at=_first_non_empty(payload, "published_at", "date", "time") if isinstance(payload, dict) else "",
-        source=tool_name,
-        entity_type=result_type,
-        location_name=_location_name_for_value(payload),
-        metadata=_build_evidence_metadata(payload),
-        raw_payload=payload,
-    )
+def _merge_evidence_steps(evidence_steps: list[EvidenceStep]) -> list[EvidenceStep]:
+    merged_steps: list[EvidenceStep] = []
+    merged_steps_by_type: dict[str, EvidenceStep] = {}
+    for step in evidence_steps:
+        if step.type not in MERGED_EVIDENCE_STEP_TYPES:
+            merged_steps.append(step)
+            continue
+        existing = merged_steps_by_type.get(step.type)
+        if existing is None:
+            clone = step.model_copy(deep=True)
+            merged_steps.append(clone)
+            merged_steps_by_type[step.type] = clone
+            continue
+        existing.metadata = _merge_step_metadata(existing.metadata, step.metadata)
+        existing.evidence.extend(step.evidence)
+    return merged_steps
+
+
+def _merge_step_metadata(left: dict[str, object], right: dict[str, object]) -> dict[str, object]:
+    if not left:
+        return dict(right)
+    if not right:
+        return dict(left)
+
+    merged = dict(left)
+    for key, value in right.items():
+        if key not in merged:
+            merged[key] = value
+            continue
+        if merged[key] == value:
+            continue
+        merged[key] = _merge_metadata_values(merged[key], value)
+    return merged
+
+
+def _merge_metadata_values(left: object, right: object) -> object:
+    left_values = left if isinstance(left, list) else [left]
+    right_values = right if isinstance(right, list) else [right]
+    merged_values: list[object] = []
+    for value in [*left_values, *right_values]:
+        if value in merged_values:
+            continue
+        merged_values.append(value)
+    return merged_values
 
 
 def _format_evidence_id(step_id: str, reference_id: int) -> str:
     return f"{step_id}R{reference_id}"
-
-
-def _item_id_from_value(value: Any, *, fallback: int) -> str:
-    if isinstance(value, dict):
-        for text in (
-            _first_non_empty(value, "id", "item_id", "entity_id", "qid", "url", "name", "title", "label", "itemLabel", "entityLabel"),
-            _first_non_empty_nested(value, ("location", "name")),
-        ):
-            if text:
-                return text
-    if isinstance(value, (str, int, float)):
-        text = str(value).strip()
-        if text:
-            return text
-    return str(fallback)
-
-def _generic_title(value: Any, *, tool_name: str) -> str:
-    if isinstance(value, dict):
-        text = _first_non_empty(value, "title", "name", "label", "itemLabel", "entityLabel")
-        if text:
-            return text
-    return tool_name.replace("_", " ").strip().title() or "Tool Result"
-
-
-def _generic_summary(value: Any, *, tool_name: str) -> str:
-    if isinstance(value, dict):
-        structured_weather_summary = _structured_weather_summary(value)
-        if structured_weather_summary:
-            return structured_weather_summary
-        text = _first_non_empty(
-            value,
-            "summary",
-            "description",
-            "snippet",
-            "instructions",
-            "content",
-            "text",
-        )
-        if text:
-            return text
-        binding_summary = _flat_field_summary(value)
-        if binding_summary:
-            return binding_summary
-        return (
-            f"{tool_name} returned structured data with "
-            f"{len(value)} top-level field{'s' if len(value) != 1 else ''}."
-        )
-    if isinstance(value, list):
-        return f"{tool_name} returned {len(value)} item{'s' if len(value) != 1 else ''}."
-    if isinstance(value, str):
-        return value.strip()
-    if value is None:
-        return f"{tool_name} returned no result."
-    return f"{tool_name} returned a result."
-
-
-def _extract_evidence_items(value: Any) -> list[Any] | None:
-    if isinstance(value, list):
-        return value
-    if isinstance(value, dict):
-        for key in ("results", "bindings", "items", "meals", "internal_results", "external_results"):
-            candidate = value.get(key)
-            if isinstance(candidate, list):
-                return candidate
-    return None
-
-
-def _extract_wikipedia_evidence_items(value: dict[str, Any]) -> list[dict[str, Any]]:
-    results = value.get("results")
-    top_result_summary = value.get("top_result_summary")
-
-    normalized_summary = top_result_summary if isinstance(top_result_summary, dict) else {}
-    normalized_results = [item for item in results if isinstance(item, dict)] if isinstance(results, list) else []
-
-    if normalized_results:
-        merged_items: list[dict[str, Any]] = []
-        for index, item in enumerate(normalized_results):
-            merged = dict(item)
-            if (
-                index == 0
-                and normalized_summary
-                and not _first_non_empty(merged, "description", "summary", "snippet")
-            ):
-                if _first_non_empty(normalized_summary, "summary"):
-                    merged["summary"] = _first_non_empty(normalized_summary, "summary")
-                if not _first_non_empty(merged, "url") and _first_non_empty(normalized_summary, "url"):
-                    merged["url"] = _first_non_empty(normalized_summary, "url")
-            merged_items.append(merged)
-        return merged_items
-
-    if normalized_summary:
-        return [normalized_summary]
-
-    return []
-
-
-def _flat_field_summary(value: dict[str, Any]) -> str:
-    parts = [
-        f"{key}={_stringify_scalar(item)}"
-        for key, item in value.items()
-        if item not in (None, "", [], {})
-        and not isinstance(item, list)
-        and _stringify_scalar(item)
-    ]
-    return ", ".join(parts)
-
-
-def _structured_weather_summary(value: dict[str, Any]) -> str:
-    location = value.get("location")
-    weather = value.get("weather")
-    if not isinstance(location, dict) or not isinstance(weather, dict):
-        return ""
-
-    location_name = _first_non_empty(location, "name", "city")
-    country = _first_non_empty(location, "country")
-    temperature = _first_non_empty(weather, "temperature")
-    windspeed = _first_non_empty(weather, "windspeed")
-    timestamp = _first_non_empty(weather, "time")
-
-    parts: list[str] = []
-    if temperature and location_name:
-        location_text = location_name if not country else f"{location_name}, {country}"
-        parts.append(f"{temperature} C in {location_text}")
-    if windspeed:
-        parts.append(f"wind {windspeed} km/h")
-    if timestamp:
-        parts.append(f"at {timestamp}")
-    return ", ".join(parts)
-
-
-def _location_name_for_value(value: Any) -> str:
-    if not isinstance(value, dict):
-        return ""
-    return _first_non_empty(
-        value,
-        "location_name",
-        "city",
-        "name",
-    ) or _first_non_empty_nested(value, ("location", "name"))
-
-
-def _build_evidence_metadata(value: Any) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        return {}
-
-    ingredients = value.get("ingredients")
-    if isinstance(ingredients, list):
-        normalized_ingredients = [
-            item
-            for item in (
-                _normalize_ingredient_entry(ingredient)
-                for ingredient in ingredients
-            )
-            if item is not None
-        ]
-        if normalized_ingredients:
-            return {"ingredients": normalized_ingredients}
-
-    return {}
-
-
-def _build_evidence_urls(value: Any, *, tool_name: str) -> list[EvidenceUrl]:
-    if not isinstance(value, dict):
-        fallback_url = WEATHER_TOOL_SOURCE_URLS.get(tool_name, "").strip()
-        return [EvidenceUrl(url=fallback_url, url_type="website")] if fallback_url else []
-
-    candidates = [
-        ("website", _first_non_empty(value, "url", "link", "source")),
-        ("youtube", _first_non_empty(value, "youtube")),
-    ]
-
-    fallback_url = WEATHER_TOOL_SOURCE_URLS.get(tool_name, "").strip()
-    if fallback_url:
-        candidates.append(("website", fallback_url))
-
-    seen_urls: set[str] = set()
-    urls: list[EvidenceUrl] = []
-    for url_type, url in candidates:
-        cleaned_url = url.strip()
-        if not cleaned_url or cleaned_url in seen_urls:
-            continue
-        seen_urls.add(cleaned_url)
-        urls.append(EvidenceUrl(url=cleaned_url, url_type=url_type))
-    return urls
-
-
-def _first_non_empty(value: dict[str, Any], *keys: str) -> str:
-    for key in keys:
-        candidate = value.get(key)
-        if candidate is None:
-            continue
-        text = _stringify_scalar(candidate)
-        if text:
-            return text
-    return ""
-
-
-def _first_non_empty_nested(value: dict[str, Any], *paths: tuple[str, ...]) -> str:
-    for path in paths:
-        current: Any = value
-        for key in path:
-            if not isinstance(current, dict):
-                current = None
-                break
-            current = current.get(key)
-        if current is None:
-            continue
-        text = _stringify_scalar(current)
-        if text:
-            return text
-    return ""
-
-
-def _stringify_scalar(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, dict):
-        nested_value = value.get("value")
-        if nested_value is not None:
-            return _stringify_scalar(nested_value)
-        return ""
-    if isinstance(value, list):
-        return ""
-    return str(value).strip()
-
-
-def _normalize_ingredient_entry(value: Any) -> dict[str, str] | None:
-    if not isinstance(value, dict):
-        return None
-
-    name = _first_non_empty(value, "name")
-    measure = _first_non_empty(value, "measure")
-    if not name and not measure:
-        return None
-
-    entry: dict[str, str] = {}
-    if name:
-        entry["name"] = name
-    if measure:
-        entry["measure"] = measure
-    return entry

@@ -3,6 +3,9 @@ from pydantic import BaseModel, Field
 
 from integrations.frankfurter import FrankfurterClient
 from integrations.frankfurter.models import ExchangeRatesSnapshot
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from tool.constants import TOOL_NAME_EXCHANGE_RATES_LOOKUP
+from tool.constants import TOOL_RESULT_TYPE_FINANCE
 
 _exchange_rates_client = FrankfurterClient()
 
@@ -24,8 +27,40 @@ class ExchangeRatesLookupArgs(BaseModel):
     )
 
 
+def _tool_result(result: ExchangeRatesSnapshot) -> ToolResult:
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+    for currency_code, rate in result.rates.items():
+        hydrated = HydratedEvidence(
+            item_id=currency_code,
+            tool_name=TOOL_NAME_EXCHANGE_RATES_LOOKUP,
+            title=f"{result.base} to {currency_code}",
+            summary=f"Exchange rate on {result.date}: 1 {result.base} = {rate} {currency_code}.",
+            published_at=result.date,
+            source=TOOL_NAME_EXCHANGE_RATES_LOOKUP,
+            entity_type=TOOL_RESULT_TYPE_FINANCE,
+            metadata={
+                "base": result.base,
+                "currency": currency_code,
+                "rate": rate,
+                "date": result.date,
+            },
+            raw_payload={"currency": currency_code, "rate": rate, "snapshot": result},
+        )
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        )
+    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+
+
 @tool(
-    "exchange_rates_lookup",
+    TOOL_NAME_EXCHANGE_RATES_LOOKUP,
     args_schema=ExchangeRatesLookupArgs,
     description="""
 Look up currency exchange rates from Frankfurter.
@@ -52,7 +87,7 @@ def exchange_rates_lookup(
     base: str = "EUR",
     symbols: list[str] | None = None,
     date: str | None = None,
-) -> ExchangeRatesSnapshot:
+) -> ToolResult:
     if date:
-        return _exchange_rates_client.get_historical_rates(date=date, base=base, symbols=symbols)
-    return _exchange_rates_client.get_latest_rates(base=base, symbols=symbols)
+        return _tool_result(_exchange_rates_client.get_historical_rates(date=date, base=base, symbols=symbols))
+    return _tool_result(_exchange_rates_client.get_latest_rates(base=base, symbols=symbols))

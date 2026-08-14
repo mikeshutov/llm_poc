@@ -5,8 +5,11 @@ from pydantic import BaseModel, Field
 
 from integrations.brave import BraveSearchClient
 from integrations.brave.models import NewsSearchResponse
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.search.candidate_mapper import rerank_news_search_response
 from reranker import DEFAULT_TOP_K
+from tool.constants import TOOL_NAME_NEWS_SEARCH
+from tool.constants import TOOL_RESULT_TYPE_NEWS_RESULTS
 
 
 class NewsSearchArgs(BaseModel):
@@ -16,8 +19,45 @@ class NewsSearchArgs(BaseModel):
     )
 
 
+def _tool_result(result: NewsSearchResponse) -> ToolResult:
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+
+    for news_item in result.results:
+        url = (news_item.url or "").strip()
+        hydrated = HydratedEvidence(
+            item_id=url or (news_item.title or "").strip(),
+            tool_name=TOOL_NAME_NEWS_SEARCH,
+            title=(news_item.title or "").strip(),
+            summary=(news_item.description or "").strip() or (news_item.age or "").strip(),
+            urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+            image_url=(news_item.thumbnail_url or "").strip(),
+            source=TOOL_NAME_NEWS_SEARCH,
+            entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
+            metadata={
+                "age": news_item.age,
+            },
+            raw_payload=news_item,
+        )
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        )
+
+    return ToolResult(
+        result=result,
+        evidence_views=evidence_views,
+        hydrated_evidence=hydrated_evidence,
+    )
+
+
 @tool(
-    "news_search",
+    TOOL_NAME_NEWS_SEARCH,
     args_schema=NewsSearchArgs,
     description="""
 Search for current news results using Brave News Search.
@@ -31,6 +71,6 @@ Example valid call:
 }
 """,
 )
-def news_search(q: str) -> NewsSearchResponse:
+def news_search(q: str) -> ToolResult:
     response = BraveSearchClient().news_search(q)
-    return rerank_news_search_response(response, goal=q, limit=DEFAULT_TOP_K)
+    return _tool_result(rerank_news_search_response(response, goal=q, limit=DEFAULT_TOP_K))

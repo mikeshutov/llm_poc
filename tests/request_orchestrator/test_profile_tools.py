@@ -14,6 +14,7 @@ if 'pycountry' not in sys.modules:
 
 from personalization.profile.models import UserProfile
 from personalization.tone.models import TonePreferences
+from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from request_orchestrator.shared.tool_adapter.profile.set_user_display_name import set_user_display_name
@@ -60,7 +61,8 @@ def test_set_user_display_name_returns_typed_result() -> None:
     finally:
         module.get_user_profile_repo = original_repo_getter
 
-    assert result.model_dump() == {
+    assert isinstance(result, ToolResult)
+    assert result.result.model_dump() == {
         "user_id": "user-123",
         "first_name": "Mike",
         "last_name": "Shutov",
@@ -106,7 +108,8 @@ def test_set_user_first_name_returns_typed_result() -> None:
     finally:
         module.get_user_profile_repo = original_repo_getter
 
-    assert result.model_dump() == {
+    assert isinstance(result, ToolResult)
+    assert result.result.model_dump() == {
         "user_id": "user-123",
         "first_name": "Mike",
         "last_name": "Shutov",
@@ -152,7 +155,8 @@ def test_set_user_last_name_returns_typed_result() -> None:
     finally:
         module.get_user_profile_repo = original_repo_getter
 
-    assert result.model_dump() == {
+    assert isinstance(result, ToolResult)
+    assert result.result.model_dump() == {
         "user_id": "user-123",
         "first_name": "Mike",
         "last_name": "Shutov",
@@ -215,7 +219,8 @@ def test_update_user_tone_merges_with_existing_preferences() -> None:
     assert fake_repo.updated_tone.humor == "light"
     assert fake_repo.updated_tone.directness == "high"
     assert fake_repo.updated_tone.technical_depth == "high"
-    assert result.model_dump() == {
+    assert isinstance(result, ToolResult)
+    assert result.result.model_dump() == {
         "user_id": "user-123",
         "applied": True,
         "status": "updated",
@@ -279,7 +284,8 @@ def test_update_user_tone_rejects_low_confidence_updates() -> None:
         tone_tool_module.get_user_profile_repo = original_repo_getter
 
     assert fake_repo.update_called is False
-    assert result.model_dump() == {
+    assert isinstance(result, ToolResult)
+    assert result.result.model_dump() == {
         "user_id": "user-123",
         "applied": False,
         "status": "rejected",
@@ -344,7 +350,8 @@ def test_update_user_tone_skips_unchanged_updates() -> None:
         tone_tool_module.get_user_profile_repo = original_repo_getter
 
     assert fake_repo.update_called is False
-    assert result.model_dump() == {
+    assert isinstance(result, ToolResult)
+    assert result.result.model_dump() == {
         "user_id": "user-123",
         "applied": False,
         "status": "unchanged",

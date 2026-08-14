@@ -14,13 +14,59 @@ if 'pycountry' not in sys.modules:
 from integrations.brave.models import NewsSearchResponse, WebSearchResponse
 from integrations.meal_db.models import MealSearchResult
 from integrations.wikidata.models import SparqlResult
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence
 from request_orchestrator.shared.tool_adapter.search.wikipedia_search import WikipediaSearchResponse
 from integrations.wikipedia.models import WikipediaPageSummary, WikipediaSearchResult
 from request_orchestrator.models.agent_state import IterationState
+from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
-from request_orchestrator.shared.evidence import build_evidence_bundle
+from request_orchestrator.shared.evidence import build_evidence_bundle, build_evidence_steps
+from request_orchestrator.shared.tool_adapter.food.search_meals import _tool_result as meal_tool_result
+from request_orchestrator.shared.tool_adapter.news.hn_search import _tool_result as hn_tool_result
+from request_orchestrator.shared.tool_adapter.search.generic_web_search import _web_search_tool_result
+from request_orchestrator.shared.tool_adapter.search.structured_facts_lookup import _tool_result as structured_facts_tool_result
+from request_orchestrator.shared.tool_adapter.search.wikipedia_search import _tool_result as wikipedia_tool_result
 from integrations.open_meteo.models import CurrentWeather, GeocodedLocation
-from request_orchestrator.shared.tool_adapter.weather.get_current_weather import CurrentWeatherResult
+from request_orchestrator.shared.tool_adapter.search.brave_news_search import _tool_result as news_tool_result
+from request_orchestrator.shared.tool_adapter.weather.get_current_weather import CurrentWeatherResult, _tool_result as current_weather_tool_result
+
+
+def _tool_result(result, tool_name: str) -> ToolResult:
+    if tool_name == "news_search":
+        return news_tool_result(result)
+    if tool_name == "structured_facts_lookup":
+        return structured_facts_tool_result(result)
+    if tool_name == "get_current_weather":
+        return current_weather_tool_result(result)
+    if tool_name == "generic_web_search":
+        return _web_search_tool_result(result)
+    if tool_name == "search_meals":
+        return meal_tool_result(result)
+    if tool_name == "wikipedia_search":
+        return wikipedia_tool_result(result)
+    if tool_name == "custom_lookup":
+        hydrated = HydratedEvidence(
+            item_id="fallback-1",
+            tool_name="custom_lookup",
+            title="Custom Lookup",
+            summary="A generic fallback record.",
+            source="custom_lookup",
+            entity_type="generic",
+            raw_payload=result,
+        )
+        return ToolResult(
+            result=result,
+            evidence_views=[
+                EvidenceView(
+                    item_id=hydrated.item_id,
+                    title=hydrated.title,
+                    summary=hydrated.summary,
+                    metadata={},
+                )
+            ],
+            hydrated_evidence=[hydrated],
+        )
+    raise AssertionError(f"Unsupported test tool_name {tool_name}")
 
 
 def test_build_evidence_bundle_creates_canonical_news_records() -> None:
@@ -38,7 +84,8 @@ def test_build_evidence_bundle_creates_canonical_news_records() -> None:
             }
         ),
         results={
-            "P1E1": NewsSearchResponse.model_validate(
+            "P1E1": _tool_result(
+                NewsSearchResponse.model_validate(
                 {
                     "query": {"original": "toronto weather"},
                     "results": [
@@ -55,6 +102,8 @@ def test_build_evidence_bundle_creates_canonical_news_records() -> None:
                         },
                     ],
                 }
+                ),
+                "news_search",
             )
         },
     )
@@ -73,7 +122,7 @@ def test_build_evidence_bundle_creates_canonical_news_records() -> None:
     ]
     assert first.title == "Toronto sees clear skies"
     assert first.summary == "Sunny conditions continue."
-    assert first.image_url == ""
+    assert first.image_url == "https://example.com/news-1.jpg"
     assert first.source == "news_search"
     assert first.entity_type == "news_results"
 
@@ -93,16 +142,19 @@ def test_build_evidence_bundle_preserves_item_id_separately_from_evidence_id() -
             }
         ),
         results={
-            "P1E1": SparqlResult(
-                sparql="SELECT * WHERE {}",
-                vars=["qid", "itemLabel", "url"],
-                bindings=[
-                    {
-                        "qid": "Q172",
-                        "itemLabel": "Toronto",
-                        "url": "https://www.wikidata.org/wiki/Q172",
-                    }
-                ],
+            "P1E1": _tool_result(
+                SparqlResult(
+                    sparql="SELECT * WHERE {}",
+                    vars=["qid", "itemLabel", "url"],
+                    bindings=[
+                        {
+                            "qid": {"value": "Q172"},
+                            "itemLabel": {"value": "Toronto"},
+                            "url": {"value": "https://www.wikidata.org/wiki/Q172"},
+                        }
+                    ],
+                ),
+                "structured_facts_lookup",
             )
         },
     )
@@ -136,15 +188,18 @@ def test_build_evidence_bundle_unwraps_nested_structured_fact_values() -> None:
             }
         ),
         results={
-            "P1E3": SparqlResult(
-                sparql="SELECT ?item ?itemLabel WHERE {}",
-                vars=["item", "itemLabel"],
-                bindings=[
-                    {
-                        "item": {"type": "uri", "value": "http://www.wikidata.org/entity/Q172"},
-                        "itemLabel": {"xml:lang": "en", "type": "literal", "value": "Toronto"},
-                    }
-                ],
+            "P1E3": _tool_result(
+                SparqlResult(
+                    sparql="SELECT ?item ?itemLabel WHERE {}",
+                    vars=["item", "itemLabel"],
+                    bindings=[
+                        {
+                            "item": {"type": "uri", "value": "http://www.wikidata.org/entity/Q172"},
+                            "itemLabel": {"xml:lang": "en", "type": "literal", "value": "Toronto"},
+                        }
+                    ],
+                ),
+                "structured_facts_lookup",
             )
         },
     )
@@ -172,26 +227,29 @@ def test_build_evidence_bundle_normalizes_weather_to_single_record() -> None:
             }
         ),
         results={
-            "P1E1": CurrentWeatherResult(
-                location=GeocodedLocation(
-                    name="Toronto",
-                    country="Canada",
-                    latitude=43.7,
-                    longitude=-79.4,
-                    timezone="America/Toronto",
+            "P1E1": _tool_result(
+                CurrentWeatherResult(
+                    location=GeocodedLocation(
+                        name="Toronto",
+                        country="Canada",
+                        latitude=43.7,
+                        longitude=-79.4,
+                        timezone="America/Toronto",
+                    ),
+                    weather=CurrentWeather(
+                        latitude=43.7,
+                        longitude=-79.4,
+                        timezone="America/Toronto",
+                        elevation=100.0,
+                        time="2026-08-12T11:15",
+                        temperature=21.2,
+                        windspeed=4.3,
+                        winddirection=180.0,
+                        weathercode=0,
+                        is_day=True,
+                    ),
                 ),
-                weather=CurrentWeather(
-                    latitude=43.7,
-                    longitude=-79.4,
-                    timezone="America/Toronto",
-                    elevation=100.0,
-                    time="2026-08-12T11:15",
-                    temperature=21.2,
-                    windspeed=4.3,
-                    winddirection=180.0,
-                    weathercode=0,
-                    is_day=True,
-                ),
+                "get_current_weather",
             )
         },
     )
@@ -228,20 +286,23 @@ def test_build_evidence_bundle_normalizes_generic_lists_and_singletons() -> None
             }
         ),
         results={
-            "P1E1": WebSearchResponse.model_validate(
-                {
-                    "query": "best ramen toronto",
-                    "results": [
-                        {
-                            "title": "Ramen spot",
-                            "url": "https://example.com/ramen",
-                            "description": "Popular local ramen shop.",
-                            "image_url": "https://example.com/ramen.jpg",
-                        }
-                    ],
-                }
+            "P1E1": _tool_result(
+                WebSearchResponse.model_validate(
+                    {
+                        "query": "best ramen toronto",
+                        "results": [
+                            {
+                                "title": "Ramen spot",
+                                "url": "https://example.com/ramen",
+                                "description": "Popular local ramen shop.",
+                                "image_url": "https://example.com/ramen.jpg",
+                            }
+                        ],
+                    }
+                ),
+                "generic_web_search",
             ),
-            "P1E2": {"id": "fallback-1", "description": "A generic fallback record."},
+            "P1E2": _tool_result({"id": "fallback-1", "description": "A generic fallback record."}, "custom_lookup"),
         },
     )
 
@@ -263,6 +324,70 @@ def test_build_evidence_bundle_normalizes_generic_lists_and_singletons() -> None
     assert fallback_record.urls == []
 
 
+def test_build_evidence_bundle_uses_pre_normalized_tool_evidence_when_present() -> None:
+    iteration = IterationState(
+        plan=Plan.model_validate(
+            {
+                "steps": [
+                    {
+                        "id": "E1",
+                        "plan": "Search the web.",
+                        "tool": "generic_web_search",
+                        "args": {"query_text": "best ramen toronto"},
+                    }
+                ]
+            }
+        ),
+        results={
+            "P1E1": ToolResult.model_validate(
+                {
+                    "result": {
+                        "results": [
+                            {
+                                "title": "Ramen spot",
+                                "url": "https://example.com/ramen",
+                                "description": "Popular local ramen shop.",
+                            }
+                        ]
+                    },
+                    "evidence_views": [
+                        {
+                            "item_id": "ramen-1",
+                            "title": "Pre-normalized Ramen Spot",
+                            "summary": "Normalized by the tool layer.",
+                            "metadata": {"quality": "high"},
+                        }
+                    ],
+                    "hydrated_evidence": [
+                        {
+                            "item_id": "ramen-1",
+                            "tool_name": "generic_web_search",
+                            "title": "Pre-normalized Ramen Spot",
+                            "summary": "Normalized by the tool layer.",
+                            "url": "https://example.com/ramen",
+                            "urls": [{"url": "https://example.com/ramen", "url_type": "website"}],
+                            "source": "generic_web_search",
+                            "entity_type": "web_search_results",
+                            "metadata": {"quality": "high"},
+                        }
+                    ],
+                }
+            )
+        },
+    )
+
+    bundle = build_evidence_bundle([iteration])
+
+    record = bundle.hydrated_evidence_by_id["P1E1R1"]
+    assert record.evidence_id == "P1E1R1"
+    assert record.step_id == "P1E1"
+    assert record.item_id == "ramen-1"
+    assert record.title == "Pre-normalized Ramen Spot"
+    assert record.summary == "Normalized by the tool layer."
+    assert record.url == "https://example.com/ramen"
+    assert record.metadata == {"quality": "high"}
+
+
 def test_build_evidence_bundle_uses_meal_entry_description_instead_of_wrapper_metadata() -> None:
     iteration = IterationState(
         plan=Plan.model_validate(
@@ -278,25 +403,28 @@ def test_build_evidence_bundle_uses_meal_entry_description_instead_of_wrapper_me
             }
         ),
         results={
-            "P1E4": MealSearchResult.model_validate(
-                {
-                    "meals": [
-                        {
-                            "idMeal": "meal-1",
-                            "strMeal": "Butter Tart",
-                            "strInstructions": "Bake the tart shells, fill with butter tart filling, and bake until set.",
-                            "strMealThumb": "https://example.com/butter-tart.jpg",
-                            "strSource": "https://example.com/butter-tart-recipe",
-                            "strYoutube": "https://youtube.com/watch?v=butter-tart",
-                            "strIngredient1": "Butter",
-                            "strMeasure1": "1/2 cup",
-                            "strIngredient2": "Sugar",
-                            "strMeasure2": "1 cup",
-                        }
-                    ],
-                    "retrieved_count": 1,
-                    "reranked": True,
-                }
+            "P1E4": _tool_result(
+                MealSearchResult.model_validate(
+                    {
+                        "meals": [
+                            {
+                                "idMeal": "meal-1",
+                                "strMeal": "Butter Tart",
+                                "strInstructions": "Bake the tart shells, fill with butter tart filling, and bake until set.",
+                                "strMealThumb": "https://example.com/butter-tart.jpg",
+                                "strSource": "https://example.com/butter-tart-recipe",
+                                "strYoutube": "https://youtube.com/watch?v=butter-tart",
+                                "strIngredient1": "Butter",
+                                "strMeasure1": "1/2 cup",
+                                "strIngredient2": "Sugar",
+                                "strMeasure2": "1 cup",
+                            }
+                        ],
+                        "retrieved_count": 1,
+                        "reranked": True,
+                    }
+                ),
+                "search_meals",
             )
         },
     )
@@ -314,17 +442,17 @@ def test_build_evidence_bundle_uses_meal_entry_description_instead_of_wrapper_me
     ]
     assert record.image_url == "https://example.com/butter-tart.jpg"
     assert record.metadata == {
+        "category": None,
+        "area": None,
+        "tags": None,
         "ingredients": [
             {"name": "Butter", "measure": "1/2 cup"},
             {"name": "Sugar", "measure": "1 cup"},
-        ]
+        ],
+        "retrieved_count": 1,
+        "reranked": True,
     }
-    assert bundle.evidence_views_by_step_id["P1E4"][0].metadata == {
-        "ingredients": [
-            {"name": "Butter", "measure": "1/2 cup"},
-            {"name": "Sugar", "measure": "1 cup"},
-        ]
-    }
+    assert bundle.evidence_views_by_step_id["P1E4"][0].metadata == record.metadata
 
 
 def test_build_evidence_bundle_normalizes_wikipedia_results_per_page() -> None:
@@ -342,21 +470,24 @@ def test_build_evidence_bundle_normalizes_wikipedia_results_per_page() -> None:
             }
         ),
         results={
-            "P1E2": WikipediaSearchResponse(
-                query="staple foods of the United Kingdom",
-                results=[
-                    WikipediaSearchResult(
+            "P1E2": _tool_result(
+                WikipediaSearchResponse(
+                    query="staple foods of the United Kingdom",
+                    results=[
+                        WikipediaSearchResult(
+                            title="British cuisine",
+                            description="Overview of British cooking traditions",
+                            url="https://en.wikipedia.org/wiki/British_cuisine",
+                        )
+                    ],
+                    top_result_summary=WikipediaPageSummary(
                         title="British cuisine",
-                        description="Overview of British cooking traditions",
+                        summary="British cuisine covers the cooking traditions of the United Kingdom.",
                         url="https://en.wikipedia.org/wiki/British_cuisine",
-                    )
-                ],
-                top_result_summary=WikipediaPageSummary(
-                    title="British cuisine",
-                    summary="British cuisine covers the cooking traditions of the United Kingdom.",
-                    url="https://en.wikipedia.org/wiki/British_cuisine",
-                    page_id=123,
+                        page_id=123,
+                    ),
                 ),
+                "wikipedia_search",
             )
         },
     )
@@ -366,7 +497,7 @@ def test_build_evidence_bundle_normalizes_wikipedia_results_per_page() -> None:
     record = bundle.hydrated_evidence_by_id["P1E2R1"]
     assert record.item_id == "https://en.wikipedia.org/wiki/British_cuisine"
     assert record.title == "British cuisine"
-    assert record.summary == "Overview of British cooking traditions"
+    assert record.summary == "British cuisine covers the cooking traditions of the United Kingdom."
     assert record.url == "https://en.wikipedia.org/wiki/British_cuisine"
 
 
@@ -385,15 +516,18 @@ def test_build_evidence_bundle_uses_wikipedia_top_result_summary_when_results_ar
             }
         ),
         results={
-            "P1E2": WikipediaSearchResponse(
-                query="staple foods of the United Kingdom",
-                results=[],
-                top_result_summary=WikipediaPageSummary(
-                    title="British cuisine",
-                    summary="British cuisine covers the cooking traditions of the United Kingdom.",
-                    url="https://en.wikipedia.org/wiki/British_cuisine",
-                    page_id=123,
+            "P1E2": _tool_result(
+                WikipediaSearchResponse(
+                    query="staple foods of the United Kingdom",
+                    results=[],
+                    top_result_summary=WikipediaPageSummary(
+                        title="British cuisine",
+                        summary="British cuisine covers the cooking traditions of the United Kingdom.",
+                        url="https://en.wikipedia.org/wiki/British_cuisine",
+                        page_id=123,
+                    ),
                 ),
+                "wikipedia_search",
             )
         },
     )
@@ -421,10 +555,13 @@ def test_build_evidence_bundle_skips_empty_wikipedia_wrapper_without_results() -
             }
         ),
         results={
-            "P1E2": WikipediaSearchResponse(
-                query="British cuisine staple foods",
-                results=[],
-                top_result_summary=None,
+            "P1E2": _tool_result(
+                WikipediaSearchResponse(
+                    query="British cuisine staple foods",
+                    results=[],
+                    top_result_summary=None,
+                ),
+                "wikipedia_search",
             )
         },
     )
@@ -433,3 +570,103 @@ def test_build_evidence_bundle_skips_empty_wikipedia_wrapper_without_results() -
 
     assert bundle.hydrated_evidence_by_id == {}
     assert bundle.evidence_views_by_step_id == {}
+
+
+def test_build_evidence_steps_merges_deck_results_into_one_group() -> None:
+    iteration_trace = [
+        IterationState(
+            plan=Plan.model_validate(
+                {
+                    "steps": [
+                        {
+                            "id": "E1",
+                            "plan": "Look up one commander.",
+                            "tool": "get_commander_details",
+                            "args": {"commander_name": "Uril, the Miststalker"},
+                        }
+                    ]
+                }
+            ),
+            results={
+                "P1E1": ToolResult.model_validate(
+                    {
+                        "result": {"commander_name": "Uril, the Miststalker"},
+                        "metadata": {"commander_slug": "uril-the-miststalker"},
+                        "evidence_views": [
+                            {
+                                "item_id": "uril-the-miststalker",
+                                "title": "Uril, the Miststalker (Commander)",
+                                "summary": "Aura-focused Naya Voltron commander.",
+                                "metadata": {"top_themes": "Auras, Voltron"},
+                            }
+                        ],
+                        "hydrated_evidence": [
+                            {
+                                "item_id": "uril-the-miststalker",
+                                "tool_name": "get_commander_details",
+                                "title": "Uril, the Miststalker (Commander)",
+                                "summary": "Aura-focused Naya Voltron commander.",
+                                "source": "get_commander_details",
+                                "entity_type": "decks",
+                                "metadata": {"top_themes": "Auras, Voltron"},
+                            }
+                        ],
+                    }
+                )
+            },
+        ),
+        IterationState(
+            plan=Plan.model_validate(
+                {
+                    "steps": [
+                        {
+                            "id": "E1",
+                            "plan": "Look up another commander.",
+                            "tool": "get_commander_details",
+                            "args": {"commander_name": "Sigarda, Host of Herons"},
+                        }
+                    ]
+                }
+            ),
+            results={
+                "P2E1": ToolResult.model_validate(
+                    {
+                        "result": {"commander_name": "Sigarda, Host of Herons"},
+                        "metadata": {"commander_slug": "sigarda-host-of-herons"},
+                        "evidence_views": [
+                            {
+                                "item_id": "sigarda-host-of-herons",
+                                "title": "Sigarda, Host of Herons (Commander)",
+                                "summary": "Hexproof Selesnya aura commander.",
+                                "metadata": {"top_themes": "Auras, Enchantress"},
+                            }
+                        ],
+                        "hydrated_evidence": [
+                            {
+                                "item_id": "sigarda-host-of-herons",
+                                "tool_name": "get_commander_details",
+                                "title": "Sigarda, Host of Herons (Commander)",
+                                "summary": "Hexproof Selesnya aura commander.",
+                                "source": "get_commander_details",
+                                "entity_type": "decks",
+                                "metadata": {"top_themes": "Auras, Enchantress"},
+                            }
+                        ],
+                    }
+                )
+            },
+        ),
+    ]
+
+    bundle = build_evidence_bundle(iteration_trace)
+    evidence_steps = build_evidence_steps(iteration_trace, bundle.evidence_views_by_step_id)
+
+    assert len(evidence_steps) == 1
+    assert evidence_steps[0].type == "decks"
+    assert evidence_steps[0].metadata == {
+        "commander_slug": ["uril-the-miststalker", "sigarda-host-of-herons"],
+    }
+    assert [evidence.item_id for evidence in evidence_steps[0].evidence] == [
+        "uril-the-miststalker",
+        "sigarda-host-of-herons",
+    ]

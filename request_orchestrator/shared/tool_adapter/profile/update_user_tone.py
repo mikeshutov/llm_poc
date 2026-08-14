@@ -13,7 +13,10 @@ from personalization.tone.models import (
     ToneTechnicalDepth,
     ToneVerbosity,
 )
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
+from tool.constants import TOOL_NAME_UPDATE_USER_TONE
+from tool.constants import TOOL_RESULT_TYPE_TONE
 
 MIN_TONE_UPDATE_CONFIDENCE = 0.9
 
@@ -72,6 +75,41 @@ class UpdateUserToneResult(BaseModel):
     tone: TonePreferences | None = None
 
 
+def _tool_result(result: UpdateUserToneResult) -> ToolResult:
+    status_text = result.status.replace("_", " ").strip() or "updated"
+    tone_metadata = {} if result.tone is None else result.tone.model_dump(exclude_none=True)
+    summary = result.reason.strip() or f"Tone preferences {status_text}."
+    hydrated = HydratedEvidence(
+        item_id=(result.user_id or "").strip() or "current-user",
+        tool_name=TOOL_NAME_UPDATE_USER_TONE,
+        title="User Tone Preferences",
+        summary=summary,
+        source=TOOL_NAME_UPDATE_USER_TONE,
+        entity_type=TOOL_RESULT_TYPE_TONE,
+        metadata={
+            "user_id": result.user_id,
+            "applied": result.applied,
+            "status": result.status,
+            "confidence": result.confidence,
+            "minimum_confidence": result.minimum_confidence,
+            "tone": tone_metadata,
+        },
+        raw_payload=result,
+    )
+    return ToolResult(
+        result=result,
+        evidence_views=[
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        ],
+        hydrated_evidence=[hydrated],
+    )
+
+
 def _merge_tone_preferences(
     profile: UserProfile,
     *,
@@ -100,7 +138,7 @@ def _tone_preferences_equal(left: TonePreferences | None, right: TonePreferences
 
 
 @tool(
-    "update_user_tone",
+    TOOL_NAME_UPDATE_USER_TONE,
     args_schema=UpdateUserToneArgs,
     description="Update durable user tone preferences when the user clearly expresses how they want responses to sound.",
 )
@@ -111,7 +149,7 @@ def update_user_tone(
     directness: ToneDirectness | None = None,
     humor: ToneHumor | None = None,
     technical_depth: ToneTechnicalDepth | None = None,
-) -> UpdateUserToneResult:
+) -> ToolResult:
     user_id = get_current_user_id()
     if user_id is None or not user_id.strip():
         raise ValueError("A current user_id is required to update the user profile.")
@@ -122,17 +160,19 @@ def update_user_tone(
         profile = profile_repo.ensure_profile(user_id)
 
     if confidence < MIN_TONE_UPDATE_CONFIDENCE:
-        return UpdateUserToneResult(
-            user_id=profile.user_id,
-            applied=False,
-            status="rejected",
-            reason=(
-                f"Tone update rejected because confidence {confidence:.2f} is below "
-                f"the minimum threshold of {MIN_TONE_UPDATE_CONFIDENCE:.2f}."
+        return _tool_result(
+            UpdateUserToneResult(
+                user_id=profile.user_id,
+                applied=False,
+                status="rejected",
+                reason=(
+                    f"Tone update rejected because confidence {confidence:.2f} is below "
+                    f"the minimum threshold of {MIN_TONE_UPDATE_CONFIDENCE:.2f}."
+                ),
+                confidence=confidence,
+                minimum_confidence=MIN_TONE_UPDATE_CONFIDENCE,
+                tone=profile.tone,
             ),
-            confidence=confidence,
-            minimum_confidence=MIN_TONE_UPDATE_CONFIDENCE,
-            tone=profile.tone,
         )
 
     merged_tone = _merge_tone_preferences(
@@ -144,14 +184,16 @@ def update_user_tone(
         technical_depth=technical_depth,
     )
     if _tone_preferences_equal(profile.tone, merged_tone):
-        return UpdateUserToneResult(
-            user_id=profile.user_id,
-            applied=False,
-            status="unchanged",
-            reason="Tone update skipped because the requested values do not change the stored tone preference.",
-            confidence=confidence,
-            minimum_confidence=MIN_TONE_UPDATE_CONFIDENCE,
-            tone=profile.tone,
+        return _tool_result(
+            UpdateUserToneResult(
+                user_id=profile.user_id,
+                applied=False,
+                status="unchanged",
+                reason="Tone update skipped because the requested values do not change the stored tone preference.",
+                confidence=confidence,
+                minimum_confidence=MIN_TONE_UPDATE_CONFIDENCE,
+                tone=profile.tone,
+            ),
         )
 
     updated_profile = profile_repo.update_profile(
@@ -165,11 +207,13 @@ def update_user_tone(
     if updated_profile is None:
         raise ValueError(f"Could not update profile for user_id={user_id}")
 
-    return UpdateUserToneResult(
-        user_id=updated_profile.user_id,
-        applied=True,
-        status="updated",
-        confidence=confidence,
-        minimum_confidence=MIN_TONE_UPDATE_CONFIDENCE,
-        tone=updated_profile.tone,
+    return _tool_result(
+        UpdateUserToneResult(
+            user_id=updated_profile.user_id,
+            applied=True,
+            status="updated",
+            confidence=confidence,
+            minimum_confidence=MIN_TONE_UPDATE_CONFIDENCE,
+            tone=updated_profile.tone,
+        ),
     )
