@@ -7,7 +7,9 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
+from common.logging import fetch_agent_logs_for_roundtrip
 from conversation.models.conversation_models import ConversationContext
+from conversation.models.conversation_models import ConversationEvent
 from conversation.models.conversation_models import RecentRoundtrip
 from integrations.world_time.models import WorldTime
 from personalization.profile.models import UserProfile
@@ -33,11 +35,53 @@ from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence,
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
+from request_orchestrator.shared.runtime_context import bind_runtime_context
 from request_orchestrator.shared.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
 from request_orchestrator.shared.evidence import build_evidence_bundle, build_evidence_steps
 from request_orchestrator.shared.evaluator.prompts.evaluator_prompt import build_evaluator_prompt
 from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
 from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
+
+
+class InMemoryConversationEventRepo:
+    def __init__(self) -> None:
+        self.events: list[ConversationEvent] = []
+        self._next_id = 1
+
+    def create_conversation_event(self, **kwargs):
+        event = ConversationEvent(
+            id=self._next_id,
+            conversation_id=kwargs["conversation_id"],
+            roundtrip_id=kwargs.get("roundtrip_id"),
+            event_type=kwargs["event_type"],
+            source=kwargs["source"],
+            agent_name=kwargs.get("agent_name", ""),
+            node_name=kwargs.get("node_name", ""),
+            step_id=kwargs.get("step_id", ""),
+            iteration=kwargs.get("iteration"),
+            payload=kwargs.get("payload", {}),
+            created_at="2026-08-14T12:00:00Z",
+        )
+        self._next_id += 1
+        self.events.append(event)
+        return event
+
+    def list_conversation_events_for_roundtrip(self, roundtrip_id):
+        return [
+            event
+            for event in self.events
+            if event.roundtrip_id == roundtrip_id
+        ]
+
+    def create_roundtrip_prompt(self, *args, **kwargs):
+        return None
+
+
+def _agent_profiles_for(user_profile: UserProfile) -> list:
+    return [
+        build_profile_management_profile(user_profile),
+        MAIN_AGENT_PROFILE,
+    ]
 
 
 class MainAgentOrchestrationTest(unittest.TestCase):
@@ -50,20 +94,37 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         user_profile: UserProfile | None = None,
     ):
         llm = MockLLM(llm_responses)
+        repo = InMemoryConversationEventRepo()
+        conversation_id = str(uuid4())
+        roundtrip_id = str(uuid4())
+        resolved_user_profile = UserProfile() if user_profile is None else user_profile
+        if not resolved_user_profile.user_id:
+            resolved_user_profile.user_id = "test-user"
 
         with ExitStack() as stack:
+            stack.enter_context(patch('common.logging.conversation_event_logger.get_conversation_repo', return_value=repo))
+            stack.enter_context(patch('common.logging.conversation_event_view.get_conversation_repo', return_value=repo))
             for patcher in patchers:
                 stack.enter_context(patcher)
-            result = run_agent(MainState.new(
+            main_state = MainState.new(
                 task=user_query,
                 max_turns=10,
                 conversation_context=ConversationContext(),
-                conversation_id='test-thread',
-                user_profile=UserProfile() if user_profile is None else user_profile,
+                conversation_id=conversation_id,
+                roundtrip_id=None,
+                user_profile=resolved_user_profile,
                 llm=llm,
-            ))
+                agent_profiles=_agent_profiles_for(resolved_user_profile),
+            )
+            with bind_runtime_context(
+                conversation_id=conversation_id,
+                conversation_model_config=main_state.conversation_model_config,
+                roundtrip_id=roundtrip_id,
+                user_id=resolved_user_profile.user_id,
+            ):
+                result = run_agent(main_state)
 
-        return result, llm
+        return result, llm, repo, roundtrip_id
 
     def test_profile_management_subagent_uses_profile_goal_and_raw_user_prompt(self) -> None:
         parent_state = AgentState.new(
@@ -72,6 +133,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             llm=MockLLM([]),
+            agent_profile=MAIN_AGENT_PROFILE,
         )
         profile_state = AgentState.new(
             task=parent_state.task,
@@ -128,6 +190,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             llm=MockLLM([]),
+            agent_profile=MAIN_AGENT_PROFILE,
         )
         state.request_analysis.set_goal_for_agent(
             state.agent_profile.name,
@@ -156,6 +219,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             conversation_context=ConversationContext(),
             user_profile=profile,
             llm=MockLLM([]),
+            agent_profile=MAIN_AGENT_PROFILE,
         )
         state.request_analysis.set_goal_for_agent(
             state.agent_profile.name,
@@ -186,6 +250,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 conversation_context=state.conversation_context,
                 user_profile=state.user_profile,
                 llm=state.llm,
+                agent_profiles=_agent_profiles_for(state.user_profile),
             )
         ).prompt_text()
         evaluator_prompt = build_evaluator_prompt(
@@ -228,6 +293,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             llm=MockLLM([]),
+            agent_profiles=_agent_profiles_for(UserProfile()),
         )
 
         prompt = build_request_analysis_prompt(state)
@@ -239,7 +305,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertIn('For lookup or search requests, explicitly state what should be searched for so downstream steps do not need the original conversation to know the target.', prompt_text)
         self.assertIn('Only choose from the provided available agents.', prompt_text)
         self.assertIn('"agent": "main_agent"', prompt_text)
-        self.assertNotIn('"agent": "profile_management"', prompt_text)
+        self.assertIn('"agent": "profile_management"', prompt_text)
 
     def test_main_state_rebases_child_iteration_ids_for_synthesis_evidence(self) -> None:
         main_state = MainState.new(
@@ -248,6 +314,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             llm=MockLLM([]),
+            agent_profiles=_agent_profiles_for(UserProfile()),
         )
 
         profile_state = main_state.get_agent_state('profile_management')
@@ -345,6 +412,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             llm=MockLLM([]),
+            agent_profiles=_agent_profiles_for(UserProfile()),
         )
         main_state.request_analysis = RequestAnalysis(
             goals=[
@@ -362,7 +430,6 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             requested_user_attribute_types=['projects.goals'],
         )
 
-        main_state.fan_out_shared_state()
         main_state.distribute_goals_to_agent_states()
 
         profile_state = main_state.get_agent_state('profile_management')
@@ -391,6 +458,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             llm=MockLLM([]),
+            agent_profile=MAIN_AGENT_PROFILE,
         )
 
         self.assertIs(parent_state.build_llm_for_stage(stage='planner'), parent_state.llm)
@@ -446,6 +514,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             ),
             user_profile=UserProfile(),
             llm=MockLLM([]),
+            agent_profile=MAIN_AGENT_PROFILE,
         )
 
         prompt = build_synthesis_prompt(
@@ -483,6 +552,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             llm=MockLLM([]),
+            agent_profile=MAIN_AGENT_PROFILE,
         )
 
         prompt = build_synthesis_prompt(
@@ -520,6 +590,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             llm=MockLLM([]),
+            agent_profile=MAIN_AGENT_PROFILE,
         )
 
         prompt = build_synthesis_prompt(
@@ -550,6 +621,11 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         request_analysis_response = """
         {
           "goals": [
+            {
+              "agent": "profile_management",
+              "goal": "Store the user's stated food preferences as durable profile data.",
+              "tool_categories": ["user_attributes"]
+            },
             {
               "agent": "main_agent",
               "goal": "Store the user's food preferences.",
@@ -608,7 +684,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         }
         """
 
-        result, llm = self._run_case(
+        result, llm, _, _ = self._run_case(
             user_query='Please remember that I like pizza and eggs.',
             llm_responses=MockLLMScenario(
                 request_analysis=request_analysis_response,
@@ -647,7 +723,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(len(llm.invocations), 6)
         self.assertIn('Latest User Prompt:', llm.prompts[0] or '')
-        self.assertNotIn('User Profile (JSON):', llm.prompts[0] or '')
+        self.assertIn('User Profile (JSON):', llm.prompts[0] or '')
         self.assertNotIn('Conversation Context (JSON):', llm.prompts[3] or '')
         self.assertNotIn('recent_roundtrip_tool_summaries', llm.prompts[-1] or '')
         self.assertNotIn('conversation_summary', llm.prompts[-1] or '')
@@ -658,7 +734,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             created_attributes=[
                 UserAttribute(
                     id=uuid4(),
-                    user_id='user-123',
+                    user_id='test-user',
                     value=['pizza'],
                     attribute_embedding=None,
                     attribute_type='food.likes',
@@ -672,7 +748,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 ),
                 UserAttribute(
                     id=uuid4(),
-                    user_id='user-123',
+                    user_id='test-user',
                     value=['eggs'],
                     attribute_embedding=None,
                     attribute_type='food.likes',
@@ -731,11 +807,11 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         }
         """
 
-        result, llm = self._run_case(
+        result, llm, repo, roundtrip_id = self._run_case(
             user_query='Use what you know about my food preferences to suggest something.',
             llm_responses=MockLLMScenario(
                 request_analysis=request_analysis_response,
-                profile_planner=[profile_management_planner_response],
+                profile_planner=[],
                 main_planner=[main_planner_response],
                 synthesis=[synthesis_response],
             ),
@@ -751,13 +827,14 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         )
 
         self.assertEqual(result.answer, ['I used your stored food preferences while looking up a meal idea.'])
-        self.assertEqual(len(llm.invocations), 5)
-        self.assertNotIn('User Profile (JSON):', llm.prompts[0] or '')
-        self.assertNotIn('pizza', llm.prompts[0] or '')
+        self.assertEqual(len(llm.invocations), 4)
+        self.assertIn('User Profile (JSON):', llm.prompts[0] or '')
 
-        main_agent_logs = result.agent_logs.get('main_agent', [])
-        profile_agent_logs = result.agent_logs.get('profile_management', [])
-        orchestrator_logs = result.agent_logs.get('request_orchestrator', [])
+        with patch('common.logging.conversation_event_view.get_conversation_repo', return_value=repo):
+            fetched_logs = fetch_agent_logs_for_roundtrip(roundtrip_id)
+
+        main_agent_logs = fetched_logs.get('main_agent', [])
+        orchestrator_logs = fetched_logs.get('request_orchestrator', [])
         request_analysis_log = next(log for log in orchestrator_logs if log.get('kind') == 'request_analysis')
         profile_load_log = next(log for log in orchestrator_logs if log.get('kind') == 'profile_load')
         synthesis_log = next(log for log in orchestrator_logs if log.get('kind') == 'synthesis')
@@ -774,8 +851,6 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     'value': ['pizza', 'eggs']}
             ],
         )
-        self.assertTrue(profile_agent_logs)
-        self.assertTrue(any(log.get('kind') == 'plan' for log in profile_agent_logs))
         self.assertEqual(
             synthesis_log.get('data', {}).get('answer_preview'),
             ['I used your stored food preferences while looking up a meal idea.'],
@@ -843,13 +918,11 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         }
         """
 
-        result, llm = self._run_case(
+        result, llm, _, _ = self._run_case(
             user_query='What is (15 * 8) / 3 + 7?',
             llm_responses=MockLLMScenario(
                 request_analysis=request_analysis_response,
-                profile_planner=[
-                    profile_management_planner_response,
-                    profile_management_completion_response],
+                profile_planner=[],
                 main_planner=[main_planner_response],
                 synthesis=[synthesis_response],
             ),
@@ -867,7 +940,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(result.answer, ['The result is 47.0.'])
         self.assertEqual(result.tool_summary.get('used_tools'), ['calculate'])
-        self.assertEqual(len(llm.invocations), 6)
+        self.assertEqual(len(llm.invocations), 4)
 
     def test_world_time_tool_orchestration(self) -> None:
         fake_repo = FakeUserAttributeRepository()
@@ -931,13 +1004,11 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         }
         """
 
-        result, llm = self._run_case(
+        result, llm, _, _ = self._run_case(
             user_query='What time is it in Tokyo right now?',
             llm_responses=MockLLMScenario(
                 request_analysis=request_analysis_response,
-                profile_planner=[
-                    profile_management_planner_response,
-                    profile_management_completion_response],
+                profile_planner=[],
                 main_planner=[main_planner_response],
                 synthesis=[synthesis_response],
             ),
@@ -965,7 +1036,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(result.answer, ['The current time in Tokyo is 2026-08-04T21:30:00+09:00.'])
         self.assertEqual(result.tool_summary.get('used_tools'), ['get_world_time'])
-        self.assertEqual(len(llm.invocations), 6)
+        self.assertEqual(len(llm.invocations), 4)
 
     def test_next_question_is_preserved(self) -> None:
         fake_repo = FakeUserAttributeRepository()
@@ -1005,11 +1076,11 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         }
         """
 
-        result, _ = self._run_case(
+        result, _, _, _ = self._run_case(
             user_query='Help me pick something.',
             llm_responses=MockLLMScenario(
                 request_analysis=request_analysis_response,
-                profile_planner=[profile_management_planner_response],
+                profile_planner=[],
                 main_planner=[main_planner_response],
                 synthesis=[synthesis_response],
             ),

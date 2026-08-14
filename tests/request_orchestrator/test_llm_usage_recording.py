@@ -17,6 +17,9 @@ from conversation.models.conversation_models import ConversationContext
 from integrations.brave.models import NewsResult
 from llm.clients.llm_client import LlmClient
 from personalization.profile.models import UserProfile
+from common.logging import create_conversation_event
+from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
+from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
 from request_orchestrator.shared.request_analysis.analyze_request import analyze_request
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from request_orchestrator.models.agent_prompt import PromptSectionKeys
@@ -51,6 +54,21 @@ class RecordingRepo:
         return None
 
 
+def _latest_event_payload(
+    repo: RecordingRepo,
+    *,
+    event_type: str,
+    agent_name: str,
+) -> dict:
+    for event in reversed(repo.conversation_events):
+        if event.get('event_type') != event_type:
+            continue
+        if event.get('agent_name') != agent_name:
+            continue
+        return event['payload']
+    raise AssertionError(f'No event found for type={event_type} agent={agent_name}')
+
+
 class FakeLangChainResponse:
     def __init__(self, content: str, model_name: str = 'gpt-5.4-mini') -> None:
         self.content = content
@@ -79,22 +97,37 @@ class FakeOpenAIClient:
         return self.responses.pop(0)
 
 
+def _agent_profiles_for(user_profile: UserProfile) -> list:
+    return [
+        build_profile_management_profile(user_profile),
+        MAIN_AGENT_PROFILE,
+    ]
+
+
 def test_request_analysis_records_llm_usage() -> None:
+    user_profile = UserProfile()
     repo = RecordingRepo()
     state = MainState.new(
         task='Find me boots.',
         max_turns=5,
         conversation_context=ConversationContext(),
-        user_profile=UserProfile(),
+        user_profile=user_profile,
         conversation_id=str(uuid4()),
         llm=FakeInvokeLLM('{"goals":[{"agent":"main_agent","goal":"Find boots","tool_categories":[]}],"requested_user_attribute_types":[]}'),
+        agent_profiles=_agent_profiles_for(user_profile),
     )
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',
         return_value=repo,
     ):
-        analyze_request(state)
+        with bind_runtime_context(
+            conversation_id=state.conversation_id or str(uuid4()),
+            conversation_model_config=state.conversation_model_config,
+            roundtrip_id=str(uuid4()),
+            user_id=state.user_profile.user_id,
+        ):
+            analyze_request(state)
 
     assert len(repo.llm_calls) == 1
     assert repo.llm_calls[0]['agent'] == 'main_agent'
@@ -104,8 +137,9 @@ def test_request_analysis_records_llm_usage() -> None:
     assert any(section['key'] == PromptSectionKeys.LATEST_USER_PROMPT for section in input_object['prompt_sections'])
     assert all(section['key'] != PromptSectionKeys.USER_PROFILE for section in input_object['prompt_sections'])
     assert all(section['token_count'] >= 0 for section in input_object['prompt_sections'])
-    assert state.agent_log.entries[-1].data['llm_usage']['total_tokens'] == 120
-    assert isinstance(state.agent_log.entries[-1].data['llm_usage']['latency_ms'], int)
+    payload = _latest_event_payload(repo, event_type='request_analysis', agent_name='request_orchestrator')
+    assert payload['data']['llm_usage']['total_tokens'] == 120
+    assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
 
 
 def test_run_planner_records_main_and_profile_scopes() -> None:
@@ -117,6 +151,7 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
         llm=FakeInvokeLLM('{"steps": [], "needs_replan": false}'),
+        agent_profile=MAIN_AGENT_PROFILE,
     )
     main_state.request_analysis = RequestAnalysis(
         goals=[RequestAnalysisGoal(agent='main_agent', goal='Find boots')]
@@ -139,15 +174,22 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
         'common.logging.conversation_event_logger.get_conversation_repo',
         return_value=repo,
     ):
-        run_planner(main_state)
-        run_planner(profile_state)
+        with bind_runtime_context(
+            conversation_id=main_state.conversation_id or str(uuid4()),
+            conversation_model_config=main_state.conversation_model_config,
+            roundtrip_id=str(uuid4()),
+            user_id=main_state.user_profile.user_id,
+        ):
+            run_planner(main_state)
+            run_planner(profile_state)
 
     assert [call['agent'] for call in repo.llm_calls] == ['main_agent', 'profile_agent']
     assert all(call['stage'] == 'planner' for call in repo.llm_calls)
     assert any(section['key'] == PromptSectionKeys.AVAILABLE_TOOLS for section in repo.llm_calls[0]['metadata']['input_object']['prompt_sections'])
-    assert len(main_state.agent_log.entries[-1].data['llm_usage']) == 1
-    assert main_state.agent_log.entries[-1].data['llm_usage'][0]['total_tokens'] == 120
-    assert isinstance(main_state.agent_log.entries[-1].data['llm_usage'][0]['latency_ms'], int)
+    payload = _latest_event_payload(repo, event_type='plan', agent_name='main_agent')
+    assert len(payload['data']['llm_usage']) == 1
+    assert payload['data']['llm_usage'][0]['total_tokens'] == 120
+    assert isinstance(payload['data']['llm_usage'][0]['latency_ms'], int)
 
 
 def test_agent_log_persists_conversation_event_immediately() -> None:
@@ -161,6 +203,7 @@ def test_agent_log_persists_conversation_event_immediately() -> None:
         user_profile=UserProfile(),
         conversation_id=str(conversation_id),
         llm=FakeInvokeLLM('{"steps": [], "needs_replan": false}'),
+        agent_profile=MAIN_AGENT_PROFILE,
     )
 
     with patch('common.logging.conversation_event_logger.get_conversation_repo', return_value=repo):
@@ -169,13 +212,23 @@ def test_agent_log_persists_conversation_event_immediately() -> None:
             conversation_model_config=None,
             roundtrip_id=str(roundtrip_id),
         ):
-            state.log_status(
+            create_conversation_event(
+                conversation_id=state.conversation_id,
+                roundtrip_id=state.roundtrip_id,
+                event_type='planner',
+                source='main_agent',
                 agent_name='main_agent',
-                kind='planner',
                 node_name='plan',
                 step_id='P1E1',
                 iteration=1,
-                data={'step_plans': ['Find boots']},
+                payload={
+                    'agent_name': 'main_agent',
+                    'kind': 'planner',
+                    'node_name': 'plan',
+                    'step_id': 'P1E1',
+                    'iteration': 1,
+                    'data': {'step_plans': ['Find boots']},
+                },
             )
 
     assert len(repo.conversation_events) == 1
@@ -202,6 +255,7 @@ def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_retu
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
         llm=FakeInvokeLLM('{"steps": [], "status": "blocked", "reason": "required capability unavailable.", "needs_replan": false}'),
+        agent_profile=MAIN_AGENT_PROFILE,
     )
     state.request_analysis = RequestAnalysis(
         goals=[RequestAnalysisGoal(agent='main_agent', goal='Find boots')]
@@ -211,16 +265,23 @@ def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_retu
         'common.logging.conversation_event_logger.get_conversation_repo',
         return_value=repo,
     ):
-        run_planner(state)
+        with bind_runtime_context(
+            conversation_id=state.conversation_id or str(uuid4()),
+            conversation_model_config=state.conversation_model_config,
+            roundtrip_id=str(uuid4()),
+            user_id=state.user_profile.user_id,
+        ):
+            run_planner(state)
 
     assert len(repo.llm_calls) == 1
     assert state.goal_reached is True
     assert state.iteration_trace[-1].plan is not None
     assert state.iteration_trace[-1].plan.steps == []
-    assert state.agent_log.entries[-1].status == 'blocked'
-    assert state.agent_log.entries[-1].data['planner_status'] == 'blocked'
-    assert state.agent_log.entries[-1].data['planner_reason'] == REQUIRED_CAPABILITY_UNAVAILABLE_REASON
-    assert state.agent_log.entries[-1].data['needs_replan'] is False
+    payload = _latest_event_payload(repo, event_type='plan', agent_name='main_agent')
+    assert payload['status'] == 'blocked'
+    assert payload['data']['planner_status'] == 'blocked'
+    assert payload['data']['planner_reason'] == REQUIRED_CAPABILITY_UNAVAILABLE_REASON
+    assert payload['data']['needs_replan'] is False
 
 
 def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
@@ -232,6 +293,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
         llm=FakeInvokeLLM('{"result": [{"content": "done", "evidence_ids": []}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.4'),
+        agent_profile=MAIN_AGENT_PROFILE,
     )
     state.iteration_trace = [IterationState(plan=Plan.model_validate({'steps': []}), results={})]
 
@@ -239,15 +301,22 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
         'common.logging.conversation_event_logger.get_conversation_repo',
         return_value=repo,
     ):
-        run_synthesis(state)
+        with bind_runtime_context(
+            conversation_id=state.conversation_id or str(uuid4()),
+            conversation_model_config=state.conversation_model_config,
+            roundtrip_id=str(uuid4()),
+            user_id=state.user_profile.user_id,
+        ):
+            run_synthesis(state)
 
     assert len(repo.llm_calls) == 1
     assert repo.llm_calls[0]['stage'] == 'synthesis'
     assert repo.llm_calls[0]['model'] == 'gpt-5.4'
     assert repo.llm_calls[0]['metadata']['input_object']['prompt_token_count'] > 0
     assert any(section['key'] == PromptSectionKeys.LATEST_USER_PROMPT for section in repo.llm_calls[0]['metadata']['input_object']['prompt_sections'])
-    assert state.agent_log.entries[-1].data['llm_usage']['model'] == 'gpt-5.4'
-    assert isinstance(state.agent_log.entries[-1].data['llm_usage']['latency_ms'], int)
+    payload = _latest_event_payload(repo, event_type='synthesis', agent_name='main_agent')
+    assert payload['data']['llm_usage']['model'] == 'gpt-5.4'
+    assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
 
 
 def test_reranker_records_llm_usage_when_it_runs() -> None:
@@ -314,6 +383,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
         llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["P1E1R1"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.4'),
+        agent_profile=MAIN_AGENT_PROFILE,
     )
     state.request_analysis = RequestAnalysis(
         goals=[
@@ -342,7 +412,13 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
         'common.logging.conversation_event_logger.get_conversation_repo',
         return_value=repo,
     ):
-        run_evaluator(state)
+        with bind_runtime_context(
+            conversation_id=state.conversation_id or str(uuid4()),
+            conversation_model_config=state.conversation_model_config,
+            roundtrip_id=str(uuid4()),
+            user_id=state.user_profile.user_id,
+        ):
+            run_evaluator(state)
 
     assert len(repo.llm_calls) == 1
     assert repo.llm_calls[0]['agent'] == 'shared'
@@ -351,10 +427,11 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     assert any(section['key'] == PromptSectionKeys.EVIDENCE for section in repo.llm_calls[0]['metadata']['input_object']['prompt_sections'])
     assert state.evaluation_status == EVALUATION_STATUS_RETRYABLE
     assert state.request_analysis.goal_for_agent('main_agent') == 'Find current Canadian pricing and availability for the two shortlisted products.'
-    assert state.agent_log.entries[-1].data['llm_usage']['model'] == 'gpt-5.4'
-    assert isinstance(state.agent_log.entries[-1].data['llm_usage']['latency_ms'], int)
-    assert state.agent_log.entries[-1].data['relevant_evidence'] == ['P1E1R1']
-    assert state.agent_log.entries[-1].data['missing_information'] == [
+    payload = _latest_event_payload(repo, event_type='evaluator', agent_name='main_agent')
+    assert payload['data']['llm_usage']['model'] == 'gpt-5.4'
+    assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
+    assert payload['data']['relevant_evidence'] == ['P1E1R1']
+    assert payload['data']['missing_information'] == [
         'Need current pricing for the top two products',
         'Need shipping availability in Canada']
 
@@ -392,6 +469,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
         user_profile=UserProfile(),
         conversation_id=str(uuid4()),
         llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["P1E2R1"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.4'),
+        agent_profile=MAIN_AGENT_PROFILE,
     )
     state.relevant_evidence_ids = ['P1E2R1']
     state.iteration_trace = [
@@ -446,9 +524,16 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
         'common.logging.conversation_event_logger.get_conversation_repo',
         return_value=repo,
     ):
-        run_synthesis(state)
+        with bind_runtime_context(
+            conversation_id=state.conversation_id or str(uuid4()),
+            conversation_model_config=state.conversation_model_config,
+            roundtrip_id=str(uuid4()),
+            user_id=state.user_profile.user_id,
+        ):
+            run_synthesis(state)
 
     prompt_text = str(captured_prompt['text'])
     assert '"evidence_id": "P1E2R1"' in prompt_text
     assert '"evidence_id": "P1E1R1"' not in prompt_text
-    assert state.agent_log.entries[-1].data['relevant_evidence_ids'] == ['P1E2R1']
+    payload = _latest_event_payload(repo, event_type='synthesis', agent_name='main_agent')
+    assert payload['data']['relevant_evidence_ids'] == ['P1E2R1']

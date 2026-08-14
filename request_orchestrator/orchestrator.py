@@ -17,7 +17,6 @@ from request_orchestrator.shared.synthesis.synthesis import run_synthesis
 PROFILE_MANAGEMENT_EDGE = "profile_management"
 MAIN_AGENT_EDGE = "main_agent"
 COLLECT_EDGE = "collect"
-FANOUT_EDGE = "fanout"
 PROFILE_LOADING_EDGE = "load_user_profile"
 DISTRIBUTE_GOALS_EDGE = "distribute_goals"
 AGENT_RUNNERS: dict[str, Callable] = {
@@ -30,9 +29,8 @@ AGENT_EXECUTION_ORDER = [
 ]
 
 
-def _fanout_node(state: MainState) -> MainState:
-    state.fan_out_shared_state()
-    return state
+def _should_run_agent(state: MainState, agent_name: str) -> bool:
+    return bool(state.request_analysis.goal_for_agent(agent_name))
 
 
 def _distribute_goals_node(state: MainState) -> MainState:
@@ -42,6 +40,8 @@ def _distribute_goals_node(state: MainState) -> MainState:
 
 def _build_run_agent_node(agent_name: str, runner: Callable) -> Callable[[MainState], MainState]:
     def _run_agent_update(state: MainState) -> MainState:
+        if not _should_run_agent(state, agent_name):
+            return state
         agent_state = state.get_agent_state(agent_name).clone_for_parallel()
         updated_state = runner(agent_state)
         state.upsert_agent_state(updated_state)
@@ -59,7 +59,6 @@ def _compile_graph():
     builder = StateGraph(MainState)
     builder.add_node(REQUEST_ANALYSIS_EDGE, analyze_request)
     builder.add_node(PROFILE_LOADING_EDGE, load_user_profile)
-    builder.add_node(FANOUT_EDGE, _fanout_node)
     builder.add_node(DISTRIBUTE_GOALS_EDGE, _distribute_goals_node)
     for agent_name in AGENT_EXECUTION_ORDER:
         builder.add_node(agent_name, _build_run_agent_node(agent_name, AGENT_RUNNERS[agent_name]))
@@ -68,8 +67,7 @@ def _compile_graph():
     builder.set_entry_point(REQUEST_ANALYSIS_EDGE)
 
     builder.add_edge(REQUEST_ANALYSIS_EDGE, PROFILE_LOADING_EDGE)
-    builder.add_edge(PROFILE_LOADING_EDGE, FANOUT_EDGE)
-    builder.add_edge(FANOUT_EDGE, DISTRIBUTE_GOALS_EDGE)
+    builder.add_edge(PROFILE_LOADING_EDGE, DISTRIBUTE_GOALS_EDGE)
     previous_edge = DISTRIBUTE_GOALS_EDGE
     for agent_name in AGENT_EXECUTION_ORDER:
         builder.add_edge(previous_edge, agent_name)

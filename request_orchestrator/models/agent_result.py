@@ -11,6 +11,9 @@ if TYPE_CHECKING:
     from .agent_state import AgentState
 
 
+_UNSET = object()
+
+
 @dataclass(frozen=True)
 class AgentResult:
     answer: list[str]
@@ -19,7 +22,6 @@ class AgentResult:
     roundtrip_summary: str = ""
     roundtrip_latency_ms: int | None = None
     tool_summary: dict[str, Any] = field(default_factory=dict)
-    agent_logs: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     used_evidence_ids: list[str] = field(default_factory=list)
     hydrated_evidence_by_id: dict[str, HydratedEvidence] = field(default_factory=dict)
 
@@ -27,18 +29,33 @@ class AgentResult:
     def raw_response(self) -> str:
         return "\n\n".join(p for p in self.answer if p)
 
-    def with_roundtrip_latency(self, roundtrip_latency_ms: int | None) -> "AgentResult":
+    def copy(
+        self,
+        *,
+        roundtrip_latency_ms: int | None | object = _UNSET,
+        used_evidence_ids: list[str] | object = _UNSET,
+    ) -> "AgentResult":
         return AgentResult(
             answer=list(self.answer),
             answer_blocks=list(self.answer_blocks),
             next_question=self.next_question,
             roundtrip_summary=self.roundtrip_summary,
-            roundtrip_latency_ms=roundtrip_latency_ms,
+            roundtrip_latency_ms=(
+                self.roundtrip_latency_ms
+                if roundtrip_latency_ms is _UNSET
+                else roundtrip_latency_ms
+            ),
             tool_summary=dict(self.tool_summary),
-            agent_logs={agent_name: list(entries) for agent_name, entries in self.agent_logs.items()},
-            used_evidence_ids=list(self.used_evidence_ids),
+            used_evidence_ids=(
+                list(self.used_evidence_ids)
+                if used_evidence_ids is _UNSET
+                else list(used_evidence_ids)
+            ),
             hydrated_evidence_by_id=dict(self.hydrated_evidence_by_id),
         )
+
+    def with_roundtrip_latency(self, roundtrip_latency_ms: int | None) -> "AgentResult":
+        return self.copy(roundtrip_latency_ms=roundtrip_latency_ms)
 
     def to_payload(self) -> dict[str, Any]:
         payload = {
@@ -83,7 +100,6 @@ class AgentResult:
             next_question=(next_question or "").strip(),
             roundtrip_summary=roundtrip_summary or "",
             tool_summary=tool_summary or {},
-            agent_logs=state.build_agent_logs(),
             used_evidence_ids=[] if used_evidence_ids is None else list(used_evidence_ids),
             hydrated_evidence_by_id={} if hydrated_evidence_by_id is None else dict(hydrated_evidence_by_id),
         )

@@ -16,7 +16,7 @@ if 'pycountry' not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules['pycountry'] = pycountry_module
 
-from personalization.profile.models import GeoLocation, GeoMetadata, UserAttributesSection, UserProfile
+from personalization.profile.models import GeoLocation, GeoMetadata, UserAttributesSection, UserProfile, build_geometadata
 from personalization.profile.service import build_user_profile, hydrate_user_profile_core, load_user_profile_attributes
 from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
@@ -254,6 +254,20 @@ def test_prompt_profile_excludes_geometadata_latitude_and_longitude() -> None:
             "country": "Canada",
         },
     }
+
+
+def test_build_geometadata_uses_location_timezone_when_timezone_missing() -> None:
+    geometadata = build_geometadata(
+        timezone="",
+        location=GeoLocation(
+            city="Toronto",
+            timezone="America/Toronto",
+        ),
+    )
+
+    assert geometadata.timezone == "America/Toronto"
+    assert geometadata.location is not None
+    assert geometadata.location.city == "Toronto"
 
 
 def test_prompt_profile_excludes_tone_by_default() -> None:

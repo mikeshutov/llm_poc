@@ -19,7 +19,7 @@ def build_synthesis_prompt(evidence: list[EvidenceStep], state: AgentState | Mai
     prompt = AgentPrompt(
         prompt_kind=SYNTHESIS_PROMPT_KIND,
         instruction=(
-            state.resolve_synthesis_instruction()
+            state.synthesis_instruction
             if isinstance(state, MainState)
             else state.agent_profile.synthesis_instruction
         ),

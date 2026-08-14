@@ -16,11 +16,14 @@ DEFAULT_REQUEST_ANALYSIS_GOAL = ""
 DEFAULT_MAX_TURNS = 10
 
 
-@dataclass(frozen=True)
+@dataclass
 class AgentProfile:
     name: str
+    scope: str
     allowed_categories: set[str] = field(default_factory=set)
     extra_tools: list[Any] = field(default_factory=list)
+    tools_by_name: dict[str, Any] = field(init=False, default_factory=dict)
+    tool_categories: dict[str, Any] = field(init=False, default_factory=dict)
     default_stage_models: dict[str, str] = field(default_factory=dict)
     request_analysis_selectable: bool = True
     max_turns: int = DEFAULT_MAX_TURNS
@@ -28,7 +31,22 @@ class AgentProfile:
     planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
     planner_rules: str = DEFAULT_PLANNER_RULES
     synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION
-    persist_tool_calls: bool = True
+
+    def __post_init__(self) -> None:
+        resolved_categories = {
+            name: TOOL_CATEGORIES[name]
+            for name in self.allowed_category_names()
+            if name in TOOL_CATEGORIES
+        }
+        tools_by_name: dict[str, Any] = {}
+        for category in resolved_categories.values():
+            for tool in category.tools:
+                tools_by_name[tool.name] = tool
+        for tool in self.extra_tools:
+            tools_by_name[tool.name] = tool
+
+        self.tool_categories = resolved_categories
+        self.tools_by_name = tools_by_name
 
     def default_model_for_stage(self, stage: str) -> str:
         return self.default_stage_models.get(stage, "").strip()
@@ -38,24 +56,10 @@ class AgentProfile:
             return set(self.allowed_categories)
         return set(TOOL_CATEGORIES.keys())
 
-    def allowed_tools(self) -> list[Any]:
-        tools_by_name: dict[str, Any] = {}
-        for category_name in self.allowed_category_names():
-            category = TOOL_CATEGORIES.get(category_name)
-            if category is None:
-                continue
-            for tool in category.tools:
-                tools_by_name[getattr(tool, 'name')] = tool
-        for tool in self.extra_tools:
-            tools_by_name[getattr(tool, 'name')] = tool
-        return list(tools_by_name.values())
+    @property
+    def tools(self) -> list[Any]:
+        return list(self.tools_by_name.values())
 
-    def allowed_tool_names(self) -> set[str]:
-        return {getattr(tool, 'name') for tool in self.allowed_tools()}
-
-    def allowed_tool_categories(self) -> dict[str, Any]:
-        return {
-            name: TOOL_CATEGORIES[name]
-            for name in self.allowed_category_names()
-            if name in TOOL_CATEGORIES
-        }
+    @property
+    def tool_names(self) -> set[str]:
+        return set(self.tools_by_name.keys())

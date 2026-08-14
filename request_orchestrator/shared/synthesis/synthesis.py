@@ -4,9 +4,10 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from langsmith import traceable
+from langchain_openai import ChatOpenAI
 
 from common.data import repair_common_json_issues, strip_code_fences
-from common.logging import log_roundtrip_prompt
+from common.logging import create_conversation_event, log_roundtrip_prompt
 from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, SYNTHESIS_STAGE
 from llm.usage import record_llm_call, serialize_llm_call_record
 from request_orchestrator.constants import SYNTHESIS_PROMPT_STEP
@@ -54,12 +55,6 @@ def _resolve_tool_summary_freshness(state: AgentState | MainState) -> str:
     return f"current as of {current_date}"
 
 
-def _resolve_tool_summary_iteration_trace(state: AgentState | MainState):
-    if isinstance(state, MainState):
-        return state.synthesis_agent_state().iteration_trace
-    return state.iteration_trace
-
-
 def _resolve_used_tools(iteration_trace) -> list[str]:
     used_tools: list[str] = []
     seen: set[str] = set()
@@ -76,6 +71,37 @@ def _resolve_used_tools(iteration_trace) -> list[str]:
             seen.add(tool_name)
             used_tools.append(tool_name)
     return used_tools
+
+
+def _resolve_tool_summary_used_tools(state: AgentState | MainState) -> list[str]:
+    if isinstance(state, MainState):
+        if state.agent_states:
+            return _resolve_used_tools(state.agent_states[-1].iteration_trace)
+        return []
+    return _resolve_used_tools(state.iteration_trace)
+
+
+def _resolve_synthesis_model_name(state: AgentState | MainState) -> str:
+    if isinstance(state, MainState):
+        return state.conversation_model_config.resolve(
+            agent=MAIN_AGENT_MODEL_SCOPE,
+            stage=SYNTHESIS_STAGE,
+        )
+    return state.resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=SYNTHESIS_STAGE)
+
+
+def _build_synthesis_llm(state: AgentState | MainState):
+    if isinstance(state, MainState):
+        model_name = _resolve_synthesis_model_name(state)
+        if state.llm is None:
+            return ChatOpenAI(model=model_name)
+        if not isinstance(state.llm, ChatOpenAI):
+            return state.llm
+        return ChatOpenAI(model=model_name)
+    return state.build_llm_for_stage(
+        agent=MAIN_AGENT_MODEL_SCOPE,
+        stage=SYNTHESIS_STAGE,
+    )
 
 
 @traceable(name="Synthesis Node")
@@ -96,7 +122,6 @@ def run_synthesis(state: AgentState | MainState) -> AgentState | MainState:
         if child_failures:
             state.result = AgentResult(
                 answer=child_failures,
-                agent_logs=state.build_agent_logs(),
             )
             return state
     if not iteration_trace and not getattr(state, "goal_reached", False):
@@ -118,27 +143,13 @@ def run_synthesis(state: AgentState | MainState) -> AgentState | MainState:
     prompt = build_synthesis_prompt(evidence=evidence_steps, state=state)
     prompt_text = prompt.prompt_text()
     prompt_input_object = prompt.to_log_input_object()
-    if isinstance(state, MainState):
-        synthesis_agent_state = state.synthesis_agent_state()
-        llm = synthesis_agent_state.build_llm_for_stage(
-            agent=MAIN_AGENT_MODEL_SCOPE,
-            stage=SYNTHESIS_STAGE,
-        )
-    else:
-        llm = state.build_llm_for_stage(
-            agent=MAIN_AGENT_MODEL_SCOPE,
-            stage=SYNTHESIS_STAGE,
-        )
+    llm = _build_synthesis_llm(state)
     started_at = perf_counter()
     response = llm.invoke(prompt_text)
     latency_ms = int((perf_counter() - started_at) * 1000)
     llm_call = record_llm_call(
         raw_response=response,
-        model_name=(
-            state.resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=SYNTHESIS_STAGE)
-            if isinstance(state, AgentState)
-            else state.synthesis_agent_state().resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=SYNTHESIS_STAGE)
-        ),
+        model_name=_resolve_synthesis_model_name(state),
         conversation_id=state.conversation_id,
         roundtrip_id=state.roundtrip_id,
         user_id=state.user_profile.user_id,
@@ -167,7 +178,7 @@ def run_synthesis(state: AgentState | MainState) -> AgentState | MainState:
     had_tool_results = any(bool(iteration.results) for iteration in iteration_trace)
     tool_summary = synthesis_result.tool_summary.model_dump() if had_tool_results else {}
     if had_tool_results:
-        tool_summary["used_tools"] = _resolve_used_tools(_resolve_tool_summary_iteration_trace(state))
+        tool_summary["used_tools"] = _resolve_tool_summary_used_tools(state)
         tool_summary["freshness"] = _resolve_tool_summary_freshness(state)
     used_evidence_ids = [
         evidence_id
@@ -189,9 +200,31 @@ def run_synthesis(state: AgentState | MainState) -> AgentState | MainState:
         "llm_usage": None if llm_call is None else serialize_llm_call_record(llm_call),
     }
     if isinstance(state, MainState):
-        state.agent_log.add(agent_name=_resolve_agent_name(state), kind=SYNTHESIS_KIND, data=log_data)
+        create_conversation_event(
+            conversation_id=state.conversation_id,
+            roundtrip_id=state.roundtrip_id,
+            event_type=SYNTHESIS_KIND,
+            source=_resolve_agent_name(state),
+            agent_name=_resolve_agent_name(state),
+            payload={
+                "agent_name": _resolve_agent_name(state),
+                "kind": SYNTHESIS_KIND,
+                "data": log_data,
+            },
+        )
     else:
-        state.log_status(agent_name=state.agent_profile.name, kind=SYNTHESIS_KIND, data=log_data)
+        create_conversation_event(
+            conversation_id=state.conversation_id,
+            roundtrip_id=state.roundtrip_id,
+            event_type=SYNTHESIS_KIND,
+            source=state.agent_profile.name,
+            agent_name=state.agent_profile.name,
+            payload={
+                "agent_name": state.agent_profile.name,
+                "kind": SYNTHESIS_KIND,
+                "data": log_data,
+            },
+        )
 
     state.result = AgentResult.from_state(
         state=state,

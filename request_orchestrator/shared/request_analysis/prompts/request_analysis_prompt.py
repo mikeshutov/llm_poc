@@ -5,8 +5,26 @@ from request_orchestrator.models.main_state import MainState
 from request_orchestrator.shared.request_analysis.prompts.request_analysis_schema_prompt import REQUEST_ANALYSIS_SCHEMA
 
 
+def _build_available_agents_payload(main_state: MainState) -> list[dict[str, object]]:
+    available_agents: list[dict[str, object]] = []
+    for agent_state in main_state.agent_states:
+        available_agents.append(
+            {
+                "agent": agent_state.agent_profile.name,
+                "tool_categories": [
+                    {
+                        "name": name,
+                        "description": category.description,
+                    }
+                    for name, category in sorted(agent_state.agent_profile.tool_categories.items())
+                ],
+            }
+        )
+    return available_agents
+
+
 def build_request_analysis_prompt(main_state: MainState) -> AgentPrompt:
-    available_agents = main_state.available_request_analysis_agents_payload()
+    available_agents = _build_available_agents_payload(main_state)
     attribute_prefixes = ", ".join(ATTRIBUTE_CATEGORIES)
     attribute_suffixes = ", ".join(ATTRIBUTE_QUALIFIERS)
 

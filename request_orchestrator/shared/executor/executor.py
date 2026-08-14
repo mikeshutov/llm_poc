@@ -5,11 +5,15 @@ from contextvars import copy_context
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any
+from uuid import UUID
 
 from langsmith import traceable
 from pydantic import ValidationError
 
+from common.data import sanitize_for_json_storage
+from common.logging import create_conversation_event
 from request_orchestrator.models.agent_state import AgentState, IterationState
+from request_orchestrator.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import PlanStep
 from request_orchestrator.models.plan_step_ids import format_plan_step_id
@@ -94,19 +98,31 @@ def _record_step_result(
     qualified_step_id = format_plan_step_id(iteration_number, step.id)
     iteration.results[qualified_step_id] = execution_result.output
 
-    agent_state.log_status(
-        agent_name=agent_state.agent_profile.name,
-        kind=TOOL_CALL_KIND,
-        tool_name=step.tool,
-        step_id=qualified_step_id,
-        iteration=iteration_number,
-        request=execution_result.args,
-        response=execution_result.output,
-        error=execution_result.error_text,
-        data={
+    payload = {
+        "agent_name": agent_state.agent_profile.name,
+        "kind": TOOL_CALL_KIND,
+        "tool_name": step.tool,
+        "step_id": qualified_step_id,
+        "iteration": iteration_number,
+        "request": sanitize_for_json_storage(execution_result.args),
+        "response": sanitize_for_json_storage(execution_result.output),
+        "data": sanitize_for_json_storage({
             "step_plan": step.plan,
             "latency_ms": execution_result.latency_ms,
-        },
+        }),
+    }
+    if execution_result.error_text:
+        payload["error"] = execution_result.error_text
+    create_conversation_event(
+        conversation_id=agent_state.conversation_id,
+        roundtrip_id=agent_state.roundtrip_id,
+        event_type=TOOL_CALL_KIND,
+        source=agent_state.agent_profile.name,
+        agent_name=agent_state.agent_profile.name,
+        node_name="tool_call",
+        step_id=qualified_step_id,
+        iteration=iteration_number,
+        payload=payload,
     )
 
     if tool_repo and agent_state.roundtrip_id:
@@ -124,8 +140,12 @@ def _record_step_result(
 @traceable(name="Executor Node")
 def run_executor(agent_state: AgentState) -> AgentState:
     iteration = agent_state.iteration_trace[-1]
-    tool_repo = ToolCallRepository() if agent_state.roundtrip_id and agent_state.agent_profile.persist_tool_calls else None
-    allowed_tool_names = agent_state.agent_profile.allowed_tool_names()
+    tool_repo = (
+        ToolCallRepository()
+        if isinstance(agent_state.roundtrip_id, UUID) and agent_state.agent_profile.name != PROFILE_MANAGEMENT_AGENT_NAME
+        else None
+    )
+    allowed_tool_names = set(agent_state.agent_profile.tool_names)
     iteration_number = len(agent_state.iteration_trace)
 
     with bind_runtime_context(

@@ -2,6 +2,7 @@ from importlib import import_module
 
 
 __all__ = [
+    "AgentProfile",
     "AgentPrompt",
     "AgentResult",
     "AgentState",
@@ -14,11 +15,11 @@ __all__ = [
     "PreviousIteration",
     "PreviousIterationStep",
     "RequestAnalysis",
-    "build_geometadata",
 ]
 
 
 _EXPORTS = {
+    "AgentProfile": ("request_orchestrator.models.agent_profile", "AgentProfile"),
     "AgentPrompt": ("request_orchestrator.models.agent_prompt", "AgentPrompt"),
     "EvidenceStep": ("request_orchestrator.models.agent_prompt", "EvidenceStep"),
     "PreviousIteration": ("request_orchestrator.models.agent_prompt", "PreviousIteration"),
@@ -27,7 +28,6 @@ _EXPORTS = {
     "AgentState": ("request_orchestrator.models.agent_state", "AgentState"),
     "IterationState": ("request_orchestrator.models.agent_state", "IterationState"),
     "RequestAnalysis": ("request_orchestrator.models.agent_state", "RequestAnalysis"),
-    "build_geometadata": ("request_orchestrator.models.agent_state", "build_geometadata"),
     "MainState": ("request_orchestrator.models.main_state", "MainState"),
     "Plan": ("request_orchestrator.models.plan", "Plan"),
     "PlanStep": ("request_orchestrator.models.plan", "PlanStep"),

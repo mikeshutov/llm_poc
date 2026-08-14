@@ -3,7 +3,10 @@ from time import perf_counter
 from uuid import UUID
 
 from integrations.ip_api import IpApiClient
-from request_orchestrator.models.agent_state import GeoLocation, GeoMetadata, build_geometadata
+from personalization.profile.models import GeoLocation, GeoMetadata, build_geometadata
+from personalization.profile.service import build_user_profile
+from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
+from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.orchestrator import run_agent
@@ -11,7 +14,6 @@ from request_orchestrator.shared.runtime_context import bind_runtime_context
 from llm.clients.embeddings import embed_text
 from tool.summarize_tool_call import summarize_tool_calls
 from conversation.context_builder import build_roundtrip_context
-from personalization.profile.service import build_user_profile
 from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo
 
@@ -88,6 +90,10 @@ def run_request_orchestrator_for_query(
         conversation_id=conversation_id,
         roundtrip_id=roundtrip.id,
         conversation_model_config=resolved_model_config,
+        agent_profiles=[
+            build_profile_management_profile(user_profile),
+            MAIN_AGENT_PROFILE,
+        ],
     )
 
     with bind_runtime_context(

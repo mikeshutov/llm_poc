@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -72,6 +74,26 @@ class GeoMetadata(BaseModel):
             timezone=self.timezone,
             location=None if self.location is None else self.location.to_prompt_model(),
         )
+
+
+def build_geometadata(
+    *,
+    timezone: str | None = "America/Toronto",
+    location: GeoLocation | None = None,
+) -> GeoMetadata:
+    resolved_timezone = (timezone or "").strip()
+    if not resolved_timezone and location is not None:
+        resolved_timezone = (location.timezone or "").strip()
+    if not resolved_timezone:
+        resolved_timezone = "America/Toronto"
+
+    now = datetime.now(ZoneInfo(resolved_timezone))
+    return GeoMetadata(
+        current_datetime=now.isoformat(),
+        current_weekday=now.strftime("%A"),
+        timezone=resolved_timezone,
+        location=location,
+    )
 
 
 class UserAttributesSection(BaseModel):

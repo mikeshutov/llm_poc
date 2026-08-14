@@ -661,7 +661,7 @@ def test_build_evidence_steps_merges_deck_results_into_one_group() -> None:
                                 "title": "Uril, the Miststalker (Commander)",
                                 "summary": "Aura-focused Naya Voltron commander.",
                                 "source": "get_commander_details",
-                                "entity_type": "decks",
+                                "entity_type": ",
                                 "metadata": {"top_themes": "Auras, Voltron"},
                             }
                         ],

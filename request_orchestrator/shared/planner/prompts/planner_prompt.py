@@ -1,6 +1,6 @@
 import json
 
-from request_orchestrator.agents.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
+from request_orchestrator.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PreviousIteration, PreviousIterationStep
 from request_orchestrator.models.agent_state import AgentState
@@ -50,7 +50,7 @@ def _format_minimal_tool_schema(tool) -> str:
 
 
 def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext:
-    allowed_categories = state.agent_profile.allowed_tool_categories()
+    allowed_categories = state.agent_profile.tool_categories
     tools = []
     rules = {}
 
