@@ -23,6 +23,11 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
         name=PROFILE_MANAGEMENT_AGENT_NAME,
         allowed_categories={'user_attributes'},
         extra_tools=extra_tools,
+        max_turns=5,
+        request_analysis_goal=(
+            "Review this turn for durable user profile field and user attribute maintenance needs. "
+            "If profile work is needed, plan the minimal retrieval and/or update step combination required."
+        ),
         planner_instruction=(
             'Maintain durable user profile fields and durable user attributes. '
             'Do not answer the user. '

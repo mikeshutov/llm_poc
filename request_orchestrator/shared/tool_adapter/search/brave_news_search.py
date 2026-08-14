@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from integrations.brave import BraveSearchClient
 from integrations.brave.models import NewsSearchResponse
+from integrations.brave.search_type import SearchType
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.search.candidate_mapper import rerank_news_search_response
 from reranker import DEFAULT_TOP_K
@@ -51,6 +52,12 @@ def _tool_result(result: NewsSearchResponse) -> ToolResult:
 
     return ToolResult(
         result=result,
+        metadata={
+            "query": result.query.model_dump(),
+            "retrieved_count": result.retrieved_count,
+            "reranked": result.reranked,
+            "search_type": SearchType.NEWS_SEARCH.value,
+        },
         evidence_views=evidence_views,
         hydrated_evidence=hydrated_evidence,
     )

@@ -48,8 +48,6 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
                 "area": meal.area,
                 "tags": meal.tags,
                 "ingredients": [ingredient.model_dump(exclude_none=True) for ingredient in meal.ingredients],
-                "retrieved_count": result.retrieved_count,
-                "reranked": result.reranked,
             },
             raw_payload=meal,
         )
@@ -62,7 +60,15 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
                 metadata=dict(hydrated.metadata),
             )
         )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+    return ToolResult(
+        result=result,
+        metadata={
+            "retrieved_count": result.retrieved_count,
+            "reranked": result.reranked,
+        },
+        evidence_views=evidence_views,
+        hydrated_evidence=hydrated_evidence,
+    )
 
 
 

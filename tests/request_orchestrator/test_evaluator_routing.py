@@ -22,6 +22,7 @@ from request_orchestrator.models.evaluation_result import (
     EVALUATION_STATUS_TERMINAL,
 )
 from request_orchestrator.models.plan import Plan
+from request_orchestrator.models.plan import PlanStep
 from request_orchestrator.shared.evaluator import evaluator_router
 
 
@@ -126,3 +127,51 @@ def test_evaluator_router_returns_plan_when_status_is_retryable() -> None:
     state.goal_reached = False
 
     assert evaluator_router(state) == PLAN_EDGE
+
+
+def test_main_agent_graph_executes_plan_after_planner(monkeypatch) -> None:
+    from request_orchestrator.agents.main_agent import agent as main_agent_module
+    from request_orchestrator.agent_stratagies.planner_executor_evaluator import graph as strategy_module
+
+    planner_called = False
+    executor_called = False
+
+    def fake_planner(state: AgentState) -> AgentState:
+        nonlocal planner_called
+        planner_called = True
+        state.iteration_trace = [
+            IterationState(
+                plan=Plan(
+                    steps=[
+                        PlanStep(
+                            id="E1",
+                            plan="Look it up",
+                            tool="generic_web_search",
+                            args={"query_text": "okonomiyaki kit"},
+                        )
+                    ]
+                ),
+                results={},
+            )
+        ]
+        return state
+
+    def fake_executor(state: AgentState) -> AgentState:
+        nonlocal executor_called
+        executor_called = True
+        state.goal_reached = True
+        state.iteration_trace[-1].results["P1E1"] = {"items": []}
+        return state
+
+    monkeypatch.setattr(strategy_module, "run_planner", fake_planner)
+    monkeypatch.setattr(strategy_module, "run_executor", fake_executor)
+
+    final_state = main_agent_module.run_agent(
+        conversation_context=[],
+        user_query="Find something",
+        llm=object(),
+    )
+
+    assert planner_called is True
+    assert executor_called is True
+    assert final_state.iteration_trace[-1].results["P1E1"] == {"items": []}

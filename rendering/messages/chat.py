@@ -25,6 +25,55 @@ from common.config import (
 MESSAGE_HISTORY_LIMIT = 10
 
 
+def _build_answer_payload(answer: AgentResult) -> dict:
+    payload = {
+        "response": answer.raw_response,
+        "result": [block.model_dump() for block in answer.answer_blocks],
+        "used_evidence_ids": list(answer.used_evidence_ids),
+        "hydrated_evidence_by_id": {
+            evidence_id: evidence.model_dump()
+            for evidence_id, evidence in answer.hydrated_evidence_by_id.items()
+        },
+        "next_question": answer.next_question,
+        "roundtrip_summary": answer.roundtrip_summary,
+        "tool_summary": answer.tool_summary,
+        "agent_logs": answer.agent_logs,
+    }
+    roundtrip_latency_ms = getattr(answer, "roundtrip_latency_ms", None)
+    if roundtrip_latency_ms is not None:
+        payload["roundtrip_latency_ms"] = roundtrip_latency_ms
+    return payload
+
+
+def _merge_response_payload(roundtrip: ConversationRoundtrip, answer: AgentResult) -> dict:
+    stored_payload = roundtrip.response_payload if isinstance(roundtrip.response_payload, dict) else {}
+    answer_payload = _build_answer_payload(answer)
+    merged = dict(stored_payload)
+
+    for key, value in answer_payload.items():
+        if key == "response":
+            merged[key] = value or merged.get(key) or roundtrip.generated_response or ""
+            continue
+        if key == "agent_logs":
+            merged[key] = value or merged.get(key) or {}
+            continue
+        if key == "result":
+            merged[key] = value or merged.get(key) or []
+            continue
+        if key == "hydrated_evidence_by_id":
+            merged[key] = value or merged.get(key) or {}
+            continue
+        if key == "used_evidence_ids":
+            merged[key] = value or merged.get(key) or []
+            continue
+        if key == "tool_summary":
+            merged[key] = value or merged.get(key) or {}
+            continue
+        merged[key] = value if value not in ("", None) else merged.get(key)
+
+    return merged
+
+
 def ensure_messages_loaded(conversation_repository, conversation_id: str, limit: int = MESSAGE_HISTORY_LIMIT) -> None:
     if "messages" not in st.session_state or st.session_state.get("loaded_cid") != conversation_id:
         roundtrips = conversation_repository.list_roundtrips(
@@ -77,22 +126,13 @@ def append_assistant_response(
 ) -> None:
     conversation_repository = get_conversation_repo()
 
-    payload = roundtrip.response_payload if isinstance(roundtrip.response_payload, dict) else {
-        "response": answer.raw_response,
-        "result": [block.model_dump() for block in answer.answer_blocks],
-        "used_evidence_ids": list(answer.used_evidence_ids),
-        "hydrated_evidence_by_id": {
-            evidence_id: evidence.model_dump()
-            for evidence_id, evidence in answer.hydrated_evidence_by_id.items()
-        },
-        "next_question": answer.next_question,
-        "agent_logs": answer.agent_logs,
-    }
+    payload = _merge_response_payload(roundtrip, answer)
+    rendered_response = str(payload.get("response") or answer.raw_response or roundtrip.generated_response or "")
 
     now = datetime.now(timezone.utc)
     assistant_message = {
         ROLE_KEY: ROLE_ASSISTANT,
-        CONTENT_KEY: answer.raw_response,
+        CONTENT_KEY: rendered_response,
         "payload": payload,
         "timestamp": now,
         "roundtrip_id": str(roundtrip.id),
@@ -101,7 +141,7 @@ def append_assistant_response(
     }
     st.session_state.messages.append(assistant_message)
     with st.chat_message(ROLE_ASSISTANT):
-        render_assistant_content(answer.raw_response, payload)
+        render_assistant_content(rendered_response, payload)
         render_feedback_controls(
             roundtrip_id=roundtrip.id,
             model=roundtrip.model,

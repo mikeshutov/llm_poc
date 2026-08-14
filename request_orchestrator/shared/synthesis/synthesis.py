@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from time import perf_counter
 
 from langsmith import traceable
@@ -11,6 +10,7 @@ from llm.usage import record_llm_call, serialize_llm_call_record
 from request_orchestrator.constants import SYNTHESIS_PROMPT_STEP
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.synthesized_result import SynthesisResult
 from request_orchestrator.shared.evidence import (
     build_evidence_bundle,
@@ -21,25 +21,58 @@ from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_so
 from rendering.debug import SYNTHESIS_KIND
 
 
-def _resolve_relevant_evidence_ids(state: AgentState) -> set[str]:
+def _resolve_iteration_trace(state: AgentState | MainState):
+    if isinstance(state, MainState):
+        return state.gather_iteration_trace()
+    return state.iteration_trace
+
+
+def _resolve_relevant_evidence_ids(state: AgentState | MainState) -> set[str]:
+    values = state.gather_relevant_evidence_ids() if isinstance(state, MainState) else state.relevant_evidence_ids
     return {
         evidence_id
-        for evidence_id in state.relevant_evidence_ids
+        for evidence_id in values
         if isinstance(evidence_id, str) and evidence_id.strip()
     }
 
 
+def _resolve_agent_name(state: AgentState | MainState) -> str:
+    if isinstance(state, MainState):
+        return "request_orchestrator"
+    return state.agent_profile.name
+
+
 @traceable(name="Synthesis Node")
-def run_synthesis(state: AgentState) -> AgentState:
-    if not state.iteration_trace and not state.goal_reached:
+def run_synthesis(state: AgentState | MainState) -> AgentState | MainState:
+    iteration_trace = _resolve_iteration_trace(state)
+    if isinstance(state, MainState):
+        child_failures = []
+        for agent_state in state.agent_states:
+            if agent_state.iteration_trace:
+                continue
+            if not agent_state.result.answer:
+                continue
+            child_failures.extend(
+                entry
+                for entry in agent_state.result.answer
+                if isinstance(entry, str) and entry.strip()
+            )
+        if child_failures:
+            state.result = AgentResult(
+                answer=child_failures,
+                agent_logs=state.build_agent_logs(),
+            )
+            return state
+    if not iteration_trace and not getattr(state, "goal_reached", False):
         state.result = AgentResult(answer=[])
-        state.goal_reached = True
+        if isinstance(state, AgentState):
+            state.goal_reached = True
         return state
 
     relevant_evidence_ids = _resolve_relevant_evidence_ids(state)
-    evidence_bundle = build_evidence_bundle(state.iteration_trace)
+    evidence_bundle = build_evidence_bundle(iteration_trace)
     all_evidence_steps = build_evidence_steps(
-        state.iteration_trace,
+        iteration_trace,
         evidence_bundle.evidence_views_by_step_id,
     )
     evidence_steps = filter_evidence_steps(all_evidence_steps, relevant_evidence_ids)
@@ -49,16 +82,26 @@ def run_synthesis(state: AgentState) -> AgentState:
     prompt = build_solver_prompt(evidence=evidence_steps, state=state)
     prompt_text = prompt.prompt_text()
     prompt_input_object = prompt.to_log_input_object()
-    llm = state.build_llm_for_stage(
-        agent=MAIN_AGENT_MODEL_SCOPE,
-        stage=SYNTHESIS_STAGE,
-    )
+    if isinstance(state, MainState):
+        llm = state.get_agent_state("main_agent").build_llm_for_stage(
+            agent=MAIN_AGENT_MODEL_SCOPE,
+            stage=SYNTHESIS_STAGE,
+        )
+    else:
+        llm = state.build_llm_for_stage(
+            agent=MAIN_AGENT_MODEL_SCOPE,
+            stage=SYNTHESIS_STAGE,
+        )
     started_at = perf_counter()
     response = llm.invoke(prompt_text)
     latency_ms = int((perf_counter() - started_at) * 1000)
     llm_call = record_llm_call(
         raw_response=response,
-        model_name=state.resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=SYNTHESIS_STAGE),
+        model_name=(
+            state.resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=SYNTHESIS_STAGE)
+            if isinstance(state, AgentState)
+            else state.get_agent_state("main_agent").resolve_model_for_stage(agent=MAIN_AGENT_MODEL_SCOPE, stage=SYNTHESIS_STAGE)
+        ),
         conversation_id=state.conversation_id,
         roundtrip_id=state.roundtrip_id,
         user_id=state.user_profile.user_id,
@@ -79,10 +122,11 @@ def run_synthesis(state: AgentState) -> AgentState:
         state.result = AgentResult(
             answer=[f"Synthesis produced invalid JSON result: {e}\nRaw:\n{raw}"]
         )
-        state.goal_reached = True
+        if isinstance(state, AgentState):
+            state.goal_reached = True
         return state
 
-    had_tool_results = any(bool(iteration.results) for iteration in state.iteration_trace)
+    had_tool_results = any(bool(iteration.results) for iteration in iteration_trace)
     tool_summary = synthesis_result.tool_summary.model_dump() if had_tool_results else {}
     used_evidence_ids = [
         evidence_id
@@ -97,16 +141,16 @@ def run_synthesis(state: AgentState) -> AgentState:
             for evidence in step.evidence
         ]
 
-    state.log_status(
-        agent_name=state.agent_profile.name,
-        kind=SYNTHESIS_KIND,
-        data={
-            "answer_preview": [block.content for block in synthesis_result.result[:3]],
-            "next_question": synthesis_result.next_question,
-            "relevant_evidence_ids": used_evidence_ids,
-            "llm_usage": None if llm_call is None else serialize_llm_call_record(llm_call),
-        },
-    )
+    log_data = {
+        "answer_preview": [block.content for block in synthesis_result.result[:3]],
+        "next_question": synthesis_result.next_question,
+        "relevant_evidence_ids": used_evidence_ids,
+        "llm_usage": None if llm_call is None else serialize_llm_call_record(llm_call),
+    }
+    if isinstance(state, MainState):
+        state.agent_log.add(agent_name=_resolve_agent_name(state), kind=SYNTHESIS_KIND, data=log_data)
+    else:
+        state.log_status(agent_name=state.agent_profile.name, kind=SYNTHESIS_KIND, data=log_data)
 
     state.result = AgentResult.from_state(
         state=state,
@@ -117,12 +161,13 @@ def run_synthesis(state: AgentState) -> AgentState:
         used_evidence_ids=used_evidence_ids,
         hydrated_evidence_by_id=evidence_bundle.hydrated_evidence_by_id,
     )
-    state.goal_reached = True
+    if isinstance(state, AgentState):
+        state.goal_reached = True
 
     if state.roundtrip_id:
         get_conversation_repo().create_roundtrip_prompt(
             state.roundtrip_id,
-            agent=state.agent_profile.name,
+            agent=_resolve_agent_name(state),
             prompt_step=SYNTHESIS_PROMPT_STEP,
             prompt=prompt_text,
         )

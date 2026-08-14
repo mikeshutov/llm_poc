@@ -72,6 +72,7 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
     assert '"result"' not in previous_iterations_section
 
     assert '"type": "web_search_results"' in evidence_section
+    assert '"metadata": {' in evidence_section
     assert '"title": "Example Result"' in evidence_section
     assert '"summary": "Short evidence summary."' in evidence_section
     assert '"evidence_object"' in evidence_section

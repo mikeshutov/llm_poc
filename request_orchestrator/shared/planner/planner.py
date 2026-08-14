@@ -76,7 +76,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
     except Exception as e:
         agent_state.goal_reached = True
         agent_state.result = AgentResult(
-            answer=f"Planner produced invalid JSON plan: {e}"
+            answer=[f"Planner produced invalid JSON plan: {e}"]
         )
         return agent_state
 

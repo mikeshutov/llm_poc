@@ -1,11 +1,13 @@
 import threading
+from dataclasses import replace
 from time import perf_counter
 from uuid import UUID
 
 from integrations.ip_api import IpApiClient
-from request_orchestrator.agents.main_agent.agent import run_agent
 from request_orchestrator.models.agent_state import GeoLocation, GeoMetadata, build_geometadata
 from request_orchestrator.models.agent_result import AgentResult
+from request_orchestrator.models.main_state import MainState
+from request_orchestrator.orchestrator import run_agent
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from llm.clients.embeddings import embed_text
 from llm.usage import build_llm_usage_payload
@@ -80,6 +82,15 @@ def run_request_orchestrator_for_query(
         user_id=resolved_user_id,
         geometadata=resolved_geometadata,
     )
+    main_state = MainState.new(
+        task=user_query,
+        max_turns=10,
+        conversation_context=conversation_context,
+        user_profile=user_profile,
+        conversation_id=conversation_id,
+        roundtrip_id=roundtrip.id,
+        conversation_model_config=resolved_model_config,
+    )
 
     with bind_runtime_context(
         conversation_id=conversation_id,
@@ -87,19 +98,15 @@ def run_request_orchestrator_for_query(
         roundtrip_id=str(roundtrip.id),
         user_id=user_profile.user_id,
     ):
-        result = run_agent(
-            conversation_context=conversation_context,
-            user_query=user_query,
-            conversation_id=conversation_id,
-            roundtrip_id=str(roundtrip.id),
-            user_profile=user_profile,
-            conversation_model_config=resolved_model_config,
-        )
+        result = run_agent(main_state)
 
     llm_calls = repo.list_llm_calls_for_roundtrip(roundtrip.id)
+    roundtrip_latency_ms = int((perf_counter() - started_at) * 1000)
+    if isinstance(result, AgentResult):
+        result = replace(result, roundtrip_latency_ms=roundtrip_latency_ms)
     payload = result.to_payload_for_update_roundtrip()
     payload["llm_usage"] = build_llm_usage_payload(llm_calls)
-    payload["roundtrip_latency_ms"] = int((perf_counter() - started_at) * 1000)
+    payload["roundtrip_latency_ms"] = roundtrip_latency_ms
 
     roundtrip_summary_embedding = embed_text(result.roundtrip_summary) if result.roundtrip_summary else None
     roundtrip = repo.update_roundtrip(

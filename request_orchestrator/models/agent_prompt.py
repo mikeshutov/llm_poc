@@ -278,6 +278,7 @@ class AgentPrompt:
                 prune_empty_prompt_values(
                     {
                         "type": step.type,
+                        "metadata": dict(step.metadata),
                         "evidence": [evidence.model_dump() for evidence in step.evidence],
                     }
                 )

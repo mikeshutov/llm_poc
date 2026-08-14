@@ -101,9 +101,6 @@ def _rehydrate_tool_result_records(
     step_id: str,
     tool_name: str,
 ) -> tuple[list[HydratedEvidence], list[EvidenceView]]:
-    if not tool_result.hydrated_evidence:
-        return [], []
-
     hydrated_evidence = [
         _rehydrate_evidence_item(
             evidence,
@@ -123,6 +120,16 @@ def _rehydrate_tool_result_records(
             )
             for index, evidence_view in enumerate(tool_result.evidence_views)
         ]
+        if not hydrated_evidence:
+            hydrated_evidence = [
+                _build_hydrated_evidence_from_view(
+                    evidence_view,
+                    step_id=step_id,
+                    tool_name=tool_name,
+                    reference_id=index,
+                )
+                for index, evidence_view in enumerate(evidence_views, start=1)
+            ]
     else:
         evidence_views = [build_evidence_view(evidence) for evidence in hydrated_evidence]
     return hydrated_evidence, evidence_views
@@ -168,6 +175,27 @@ def build_evidence_view(evidence: HydratedEvidence) -> EvidenceView:
         title=evidence.title,
         summary=evidence.summary,
         metadata=dict(evidence.metadata),
+    )
+
+
+def _build_hydrated_evidence_from_view(
+    evidence_view: EvidenceView,
+    *,
+    step_id: str,
+    tool_name: str,
+    reference_id: int,
+) -> HydratedEvidence:
+    return HydratedEvidence(
+        evidence_id=evidence_view.evidence_id or _format_evidence_id(step_id, reference_id),
+        step_id=step_id,
+        item_id=evidence_view.item_id,
+        tool_name=tool_name,
+        title=evidence_view.title,
+        summary=evidence_view.summary,
+        source=tool_name,
+        entity_type=get_tool_result_type(tool_name),
+        metadata=dict(evidence_view.metadata),
+        evidence_object=evidence_view.evidence_object,
     )
 
 

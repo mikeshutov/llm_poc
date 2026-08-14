@@ -63,12 +63,7 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
             image_url=(item.image_url or "").strip(),
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
             entity_type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS,
-            metadata={
-                "query": result.query,
-                "retrieved_count": result.retrieved_count,
-                "reranked": result.reranked,
-                "search_type": SearchType.WEB_SEARCH.value,
-            },
+            metadata={},
             raw_payload=item,
         )
         hydrated_evidence.append(hydrated)
@@ -80,7 +75,17 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
                 metadata=dict(hydrated.metadata),
             )
         )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+    return ToolResult(
+        result=result,
+        metadata={
+            "query": result.query,
+            "retrieved_count": result.retrieved_count,
+            "reranked": result.reranked,
+            "search_type": SearchType.WEB_SEARCH.value,
+        },
+        evidence_views=evidence_views,
+        hydrated_evidence=hydrated_evidence,
+    )
 
 
 def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
@@ -98,10 +103,6 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
             entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
             metadata={
-                "query": result.query.model_dump(),
-                "retrieved_count": result.retrieved_count,
-                "reranked": result.reranked,
-                "search_type": SearchType.NEWS_SEARCH.value,
                 "age": item.age,
             },
             raw_payload=item,
@@ -115,7 +116,17 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
                 metadata=dict(hydrated.metadata),
             )
         )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+    return ToolResult(
+        result=result,
+        metadata={
+            "query": result.query.model_dump(),
+            "retrieved_count": result.retrieved_count,
+            "reranked": result.reranked,
+            "search_type": SearchType.NEWS_SEARCH.value,
+        },
+        evidence_views=evidence_views,
+        hydrated_evidence=hydrated_evidence,
+    )
 
 
 @tool(
