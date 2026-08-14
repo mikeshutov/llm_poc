@@ -315,6 +315,7 @@ def test_build_evidence_bundle_normalizes_generic_lists_and_singletons() -> None
     assert web_record.image_url == "https://example.com/ramen.jpg"
     assert web_record.source == "generic_web_search"
     assert web_record.entity_type == "web_search_results"
+    assert web_record.metadata == {}
 
     fallback_record = bundle.hydrated_evidence_by_id["P1E2R1"]
     assert fallback_record.item_id == "fallback-1"
@@ -388,6 +389,56 @@ def test_build_evidence_bundle_uses_pre_normalized_tool_evidence_when_present() 
     assert record.metadata == {"quality": "high"}
 
 
+def test_build_evidence_bundle_falls_back_to_evidence_views_when_hydrated_records_are_missing() -> None:
+    iteration = IterationState(
+        plan=Plan.model_validate(
+            {
+                "steps": [
+                    {
+                        "id": "E1",
+                        "plan": "Search the web.",
+                        "tool": "generic_web_search",
+                        "args": {"query_text": "best ramen toronto"},
+                    }
+                ]
+            }
+        ),
+        results={
+            "P1E1": ToolResult.model_validate(
+                {
+                    "result": {"results": [{"title": "Ramen spot"}]},
+                    "evidence_views": [
+                        {
+                            "item_id": "ramen-1",
+                            "title": "View-only Ramen Spot",
+                            "summary": "Evidence survived as a view only.",
+                            "metadata": {"quality": "high"},
+                            "evidence_object": {"source_kind": "view_only"},
+                        }
+                    ],
+                    "hydrated_evidence": [],
+                }
+            )
+        },
+    )
+
+    bundle = build_evidence_bundle([iteration])
+    evidence_steps = build_evidence_steps([iteration], bundle.evidence_views_by_step_id)
+
+    assert [view.evidence_id for view in bundle.evidence_views_by_step_id["P1E1"]] == ["P1E1R1"]
+    record = bundle.hydrated_evidence_by_id["P1E1R1"]
+    assert record.item_id == "ramen-1"
+    assert record.title == "View-only Ramen Spot"
+    assert record.summary == "Evidence survived as a view only."
+    assert record.source == "generic_web_search"
+    assert record.entity_type == "web_search_results"
+    assert record.metadata == {"quality": "high"}
+    assert record.evidence_object == {"source_kind": "view_only"}
+    assert len(evidence_steps) == 1
+    assert evidence_steps[0].type == "web_search_results"
+    assert [evidence.title for evidence in evidence_steps[0].evidence] == ["View-only Ramen Spot"]
+
+
 def test_build_evidence_bundle_uses_meal_entry_description_instead_of_wrapper_metadata() -> None:
     iteration = IterationState(
         plan=Plan.model_validate(
@@ -430,6 +481,7 @@ def test_build_evidence_bundle_uses_meal_entry_description_instead_of_wrapper_me
     )
 
     bundle = build_evidence_bundle([iteration])
+    evidence_steps = build_evidence_steps([iteration], bundle.evidence_views_by_step_id)
 
     record = bundle.hydrated_evidence_by_id["P1E4R1"]
     assert record.item_id == "meal-1"
@@ -449,10 +501,12 @@ def test_build_evidence_bundle_uses_meal_entry_description_instead_of_wrapper_me
             {"name": "Butter", "measure": "1/2 cup"},
             {"name": "Sugar", "measure": "1 cup"},
         ],
+    }
+    assert bundle.evidence_views_by_step_id["P1E4"][0].metadata == record.metadata
+    assert evidence_steps[0].metadata == {
         "retrieved_count": 1,
         "reranked": True,
     }
-    assert bundle.evidence_views_by_step_id["P1E4"][0].metadata == record.metadata
 
 
 def test_build_evidence_bundle_normalizes_wikipedia_results_per_page() -> None:
@@ -670,3 +724,53 @@ def test_build_evidence_steps_merges_deck_results_into_one_group() -> None:
         "uril-the-miststalker",
         "sigarda-host-of-herons",
     ]
+
+
+def test_build_evidence_steps_puts_wrapper_search_metadata_on_parent_step() -> None:
+    iteration_trace = [
+        IterationState(
+            plan=Plan.model_validate(
+                {
+                    "steps": [
+                        {
+                            "id": "E1",
+                            "plan": "Search the web.",
+                            "tool": "generic_web_search",
+                            "args": {"query_text": "Toronto transit fares"},
+                        }
+                    ]
+                }
+            ),
+            results={
+                "P1E1": _tool_result(
+                    WebSearchResponse.model_validate(
+                        {
+                            "query": "Toronto transit fares service major routes status TTC GO Transit Toronto",
+                            "results": [
+                                {
+                                    "title": "TTC fares",
+                                    "url": "https://example.com/ttc-fares",
+                                    "description": "Fare details.",
+                                }
+                            ],
+                            "retrieved_count": 20,
+                            "reranked": True,
+                        }
+                    ),
+                    "generic_web_search",
+                )
+            },
+        )
+    ]
+
+    bundle = build_evidence_bundle(iteration_trace)
+    evidence_steps = build_evidence_steps(iteration_trace, bundle.evidence_views_by_step_id)
+
+    assert len(evidence_steps) == 1
+    assert evidence_steps[0].metadata == {
+        "query": "Toronto transit fares service major routes status TTC GO Transit Toronto",
+        "retrieved_count": 20,
+        "reranked": True,
+        "search_type": "web_search",
+    }
+    assert evidence_steps[0].evidence[0].metadata == {}

@@ -17,10 +17,12 @@ from conversation.models.conversation_models import ConversationContext
 from integrations.brave.models import NewsResult
 from llm.clients.llm_client import LlmClient
 from personalization.profile.models import UserProfile
-from request_orchestrator.agents.main_agent.request_analysis.analyze_request import analyze_request
+from request_orchestrator.shared.request_analysis.analyze_request import analyze_request
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from request_orchestrator.models.agent_prompt import PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState, IterationState, RequestAnalysis
+from request_orchestrator.models.main_state import MainState
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 from request_orchestrator.models.plan import Plan
@@ -74,7 +76,7 @@ class FakeOpenAIClient:
 
 def test_request_analysis_records_llm_usage() -> None:
     repo = RecordingRepo()
-    state = AgentState.new(
+    state = MainState.new(
         task='Find me boots.',
         max_turns=5,
         conversation_context=ConversationContext(),
@@ -84,7 +86,7 @@ def test_request_analysis_records_llm_usage() -> None:
     )
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
-        'request_orchestrator.agents.main_agent.request_analysis.analyze_request.get_conversation_repo',
+        'request_orchestrator.shared.request_analysis.analyze_request.get_conversation_repo',
         return_value=repo,
     ):
         analyze_request(state)
@@ -325,10 +327,47 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
         IterationState(
             plan=Plan.model_validate({
                 'steps': [
-                    {'id': 'E1', 'plan': 'First step', 'tool': 'tool_a', 'args': {}},
-                    {'id': 'E2', 'plan': 'Second step', 'tool': 'tool_b', 'args': {}}]
+                    {'id': 'E1', 'plan': 'First step', 'tool': 'generic_web_search', 'args': {}},
+                    {'id': 'E2', 'plan': 'Second step', 'tool': 'generic_web_search', 'args': {}}]
             }),
-            results={'P1E1': {'value': 'a'}, 'P1E2': {'value': 'b'}},
+            results={
+                'P1E1': ToolResult(
+                    result={'value': 'a'},
+                    evidence_views=[
+                        EvidenceView(
+                            evidence_id='',
+                            item_id='item-a',
+                            title='Item A',
+                            summary='First item',
+                        )
+                    ],
+                    hydrated_evidence=[
+                        HydratedEvidence(
+                            item_id='item-a',
+                            title='Item A',
+                            summary='First item',
+                        )
+                    ],
+                ),
+                'P1E2': ToolResult(
+                    result={'value': 'b'},
+                    evidence_views=[
+                        EvidenceView(
+                            evidence_id='',
+                            item_id='item-b',
+                            title='Item B',
+                            summary='Second item',
+                        )
+                    ],
+                    hydrated_evidence=[
+                        HydratedEvidence(
+                            item_id='item-b',
+                            title='Item B',
+                            summary='Second item',
+                        )
+                    ],
+                ),
+            },
         )
     ]
 

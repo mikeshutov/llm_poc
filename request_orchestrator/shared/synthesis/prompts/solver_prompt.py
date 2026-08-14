@@ -1,11 +1,13 @@
 from conversation.models.conversation_models import ConversationContext
+from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.models.main_state import MainState
 from request_orchestrator.constants import SYNTHESIS_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep
 from request_orchestrator.shared.synthesis.prompts.solver_rules import build_solver_rules
 from request_orchestrator.shared.synthesis.prompts.synthesis_schema_prompt import SYNTHESIS_SCHEMA
 
-def _build_synthesis_context(state: AgentState) -> ConversationContext:
+def _build_synthesis_context(state: AgentState | MainState) -> ConversationContext:
     return ConversationContext(
         conversation_summary=state.conversation_context.conversation_summary,
         latest_conversation_summary=state.conversation_context.latest_conversation_summary,
@@ -13,10 +15,10 @@ def _build_synthesis_context(state: AgentState) -> ConversationContext:
     )
 
 
-def build_solver_prompt(evidence: list[EvidenceStep], state: AgentState) -> AgentPrompt:
+def build_solver_prompt(evidence: list[EvidenceStep], state: AgentState | MainState) -> AgentPrompt:
     prompt = AgentPrompt(
         prompt_kind=SYNTHESIS_PROMPT_KIND,
-        instruction=state.agent_profile.synthesis_instruction,
+        instruction=getattr(getattr(state, "agent_profile", None), "synthesis_instruction", MAIN_AGENT_PROFILE.synthesis_instruction),
         conversation_context=_build_synthesis_context(state),
         user_profile=state.user_profile,
         rules=build_solver_rules(state.request_analysis),

@@ -12,6 +12,8 @@ PROFILE_MANAGEMENT_AGENT_NAME = "profile_management"
 DEFAULT_SYNTHESIS_INSTRUCTION = (
     "Solve the following task or problem using the provided evidence. "
 )
+DEFAULT_REQUEST_ANALYSIS_GOAL = ""
+DEFAULT_MAX_TURNS = 10
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,8 @@ class AgentProfile:
     name: str
     allowed_categories: set[str] = field(default_factory=set)
     extra_tools: list[Any] = field(default_factory=list)
+    max_turns: int = DEFAULT_MAX_TURNS
+    request_analysis_goal: str = DEFAULT_REQUEST_ANALYSIS_GOAL
     planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
     planner_rules: str = DEFAULT_PLANNER_RULES
     synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION

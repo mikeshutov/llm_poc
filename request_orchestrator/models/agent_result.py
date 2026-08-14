@@ -17,6 +17,7 @@ class AgentResult:
     answer_blocks: list[SynthesisResultBlock] = field(default_factory=list)
     next_question: str = ""
     roundtrip_summary: str = ""
+    roundtrip_latency_ms: int | None = None
     tool_summary: dict[str, Any] = field(default_factory=dict)
     agent_logs: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     used_evidence_ids: list[str] = field(default_factory=list)
@@ -27,21 +28,22 @@ class AgentResult:
         return "\n\n".join(p for p in self.answer if p)
 
     def to_payload_for_update_roundtrip(self) -> dict[str, Any]:
-        return sanitize_for_json_storage(
-            {
-                "response": self.raw_response,
-                "result": [block.model_dump() for block in self.answer_blocks],
-                "used_evidence_ids": list(self.used_evidence_ids),
-                "hydrated_evidence_by_id": {
-                    evidence_id: evidence.model_dump()
-                    for evidence_id, evidence in self.hydrated_evidence_by_id.items()
-                },
-                "next_question": self.next_question,
-                "roundtrip_summary": self.roundtrip_summary,
-                "tool_summary": self.tool_summary,
-                "agent_logs": self.agent_logs,
-            }
-        )
+        payload = {
+            "response": self.raw_response,
+            "result": [block.model_dump() for block in self.answer_blocks],
+            "used_evidence_ids": list(self.used_evidence_ids),
+            "hydrated_evidence_by_id": {
+                evidence_id: evidence.model_dump()
+                for evidence_id, evidence in self.hydrated_evidence_by_id.items()
+            },
+            "next_question": self.next_question,
+            "roundtrip_summary": self.roundtrip_summary,
+            "tool_summary": self.tool_summary,
+            "agent_logs": self.agent_logs,
+        }
+        if self.roundtrip_latency_ms is not None:
+            payload["roundtrip_latency_ms"] = self.roundtrip_latency_ms
+        return sanitize_for_json_storage(payload)
 
     @classmethod
     def from_state(

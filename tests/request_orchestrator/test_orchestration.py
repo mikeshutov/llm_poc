@@ -22,14 +22,19 @@ if 'pycountry' not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules['pycountry'] = pycountry_module
 
-from request_orchestrator.agents.main_agent.agent import run_agent
-from request_orchestrator.agents.main_agent.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
-from request_orchestrator.agents.profile_management.agent import _prepare_subagent_state
+from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
+from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
+from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
+from request_orchestrator.orchestrator import run_agent
 from request_orchestrator.constants import SYNTHESIS_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep
-from request_orchestrator.models.agent_state import AgentState
-from request_orchestrator.models.evidence import EvidenceView
+from request_orchestrator.models.agent_state import AgentState, IterationState
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.main_state import MainState
+from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
+from request_orchestrator.shared.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
+from request_orchestrator.shared.evidence import build_evidence_bundle, build_evidence_steps
 from request_orchestrator.shared.evaluator.prompts.evaluator_prompt import build_evaluator_prompt
 from request_orchestrator.shared.synthesis.prompts.solver_prompt import build_solver_prompt
 from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
@@ -49,13 +54,14 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         with ExitStack() as stack:
             for patcher in patchers:
                 stack.enter_context(patcher)
-            result = run_agent(
+            result = run_agent(MainState.new(
+                task=user_query,
+                max_turns=10,
                 conversation_context=ConversationContext(),
-                user_query=user_query,
                 conversation_id='test-thread',
                 user_profile=UserProfile() if user_profile is None else user_profile,
                 llm=llm,
-            )
+            ))
 
         return result, llm
 
@@ -67,17 +73,25 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             user_profile=UserProfile(),
             llm=MockLLM([]),
         )
-        parent_state.request_analysis.goal = "Store the user's food preferences."
-
-        subagent_state = _prepare_subagent_state(parent_state)
-        prompt = build_planner_prompt(subagent_state.to_runtime_state(parent_state))
+        profile_state = AgentState.new(
+            task=parent_state.task,
+            max_turns=5,
+            conversation_context=parent_state.conversation_context,
+            user_profile=parent_state.user_profile,
+            llm=parent_state.llm,
+            agent_profile=build_profile_management_profile(parent_state.user_profile),
+        )
+        profile_state.request_analysis.goal = PROFILE_MANAGEMENT_PROFILE.request_analysis_goal
+        profile_state.request_analysis.applicable_tool_categories = sorted(profile_state.agent_profile.allowed_categories)
+        prompt = build_planner_prompt(profile_state)
         prompt_text = prompt.prompt_text()
 
-        self.assertEqual(subagent_state.task, 'Please remember that I like pizza and eggs.')
+        self.assertEqual(profile_state.task, 'Please remember that I like pizza and eggs.')
         self.assertEqual(
-            subagent_state.request_analysis.goal,
-            'Review this turn for durable user profile field and user attribute maintenance needs. If profile work is needed, plan the minimal retrieval and/or update step combination required.',
+            profile_state.request_analysis.goal,
+            PROFILE_MANAGEMENT_PROFILE.request_analysis_goal,
         )
+        self.assertEqual(profile_state.agent_profile.max_turns, 5)
         self.assertIn('Latest User Prompt:', prompt_text)
         self.assertIn('Please remember that I like pizza and eggs.', prompt_text)
         self.assertNotIn('Use recent_roundtrip_tool_summaries', prompt_text)
@@ -94,7 +108,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertEqual(prompt.latest_user_prompt, 'Please remember that I like pizza and eggs.')
         self.assertIn('Task:', prompt_text)
         self.assertNotIn('Goal:', prompt_text)
-        self.assertIn('Review this turn for durable user profile field and user attribute maintenance needs. If profile work is needed, plan the minimal retrieval and/or update step combination required.', prompt_text)
+        self.assertIn(PROFILE_MANAGEMENT_PROFILE.request_analysis_goal, prompt_text)
         self.assertIn('attribute_type (required): Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.', prompt_text)
         self.assertIn('Available attribute prefixes:', prompt_text)
         self.assertIn('Available attribute suffixes:', prompt_text)
@@ -154,7 +168,15 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             ],
             state=state,
         ).prompt_text()
-        request_analysis_prompt = build_request_analysis_prompt(state).prompt_text()
+        request_analysis_prompt = build_request_analysis_prompt(
+            MainState.new(
+                task=state.task,
+                max_turns=state.max_turns,
+                conversation_context=state.conversation_context,
+                user_profile=state.user_profile,
+                llm=state.llm,
+            )
+        ).prompt_text()
         evaluator_prompt = build_evaluator_prompt(
             state=state,
             evidence=[
@@ -189,7 +211,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertNotIn('"directness": "high"', evaluator_prompt)
 
     def test_request_analysis_prompt_requires_self_contained_goal_for_downstream_steps(self) -> None:
-        state = AgentState.new(
+        state = MainState.new(
             task='Can you use the jackets you suggested earlier and narrow them to waterproof options under $200?',
             max_turns=10,
             conversation_context=ConversationContext(),
@@ -204,6 +226,103 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertIn('Include any relevant conversation-derived constraints, continuity, entities, or references needed by downstream planning and synthesis because the full conversation context will not be passed through later.', prompt_text)
         self.assertIn('Name the concrete topic, subject, entity, or item in the goal instead of using vague placeholders like topic, subject, it, them, or the above.', prompt_text)
         self.assertIn('For lookup or search requests, explicitly state what should be searched for so downstream steps do not need the original conversation to know the target.', prompt_text)
+
+    def test_main_state_rebases_child_iteration_ids_for_synthesis_evidence(self) -> None:
+        main_state = MainState.new(
+            task='Combine child agent evidence.',
+            max_turns=10,
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            llm=MockLLM([]),
+        )
+
+        profile_state = main_state.get_agent_state('profile_management')
+        profile_state.iteration_trace = [
+            IterationState(
+                plan=Plan.model_validate(
+                    {
+                        'steps': [
+                            {
+                                'id': 'E1',
+                                'plan': 'Load weather context.',
+                                'tool': 'get_current_weather',
+                                'args': {'location': 'Toronto'},
+                            }
+                        ]
+                    }
+                ),
+                results={
+                    'P1E1': ToolResult(
+                        result={'temperature': 21.2},
+                        evidence_views=[
+                            EvidenceView(
+                                item_id='Toronto',
+                                title='Weather Result',
+                                summary='21.2 C in Toronto.',
+                            )
+                        ],
+                        hydrated_evidence=[
+                            HydratedEvidence(
+                                item_id='Toronto',
+                                title='Weather Result',
+                                summary='21.2 C in Toronto.',
+                                source='get_current_weather',
+                                entity_type='weather',
+                            )
+                        ],
+                    )
+                },
+            )
+        ]
+
+        main_agent_state = main_state.get_agent_state('main_agent')
+        main_agent_state.iteration_trace = [
+            IterationState(
+                plan=Plan.model_validate(
+                    {
+                        'steps': [
+                            {
+                                'id': 'E1',
+                                'plan': 'Search the web.',
+                                'tool': 'generic_web_search',
+                                'args': {'query_text': 'best ramen toronto'},
+                            }
+                        ]
+                    }
+                ),
+                results={
+                    'P1E1': ToolResult(
+                        result={'items': ['ramen']},
+                        evidence_views=[
+                            EvidenceView(
+                                item_id='ramen-1',
+                                title='Ramen Result',
+                                summary='Popular ramen shop.',
+                            )
+                        ],
+                        hydrated_evidence=[
+                            HydratedEvidence(
+                                item_id='ramen-1',
+                                title='Ramen Result',
+                                summary='Popular ramen shop.',
+                                source='generic_web_search',
+                                entity_type='web_search_results',
+                            )
+                        ],
+                    )
+                },
+            )
+        ]
+        main_agent_state.relevant_evidence_ids = ['P1E1R1']
+
+        iteration_trace = main_state.gather_iteration_trace()
+        evidence_bundle = build_evidence_bundle(iteration_trace)
+        evidence_steps = build_evidence_steps(iteration_trace, evidence_bundle.evidence_views_by_step_id)
+
+        self.assertEqual(sorted(evidence_bundle.hydrated_evidence_by_id.keys()), ['P1E1R1', 'P2E1R1'])
+        self.assertEqual(main_state.gather_relevant_evidence_ids(), ['P2E1R1'])
+        self.assertEqual(evidence_steps[0].evidence[0].title, 'Weather Result')
+        self.assertEqual(evidence_steps[1].evidence[0].title, 'Ramen Result')
 
     def test_build_llm_for_stage_reuses_existing_non_chat_llm(self) -> None:
         parent_state = AgentState.new(
@@ -467,9 +586,9 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertIn('Latest User Prompt:', llm.prompts[0] or '')
         self.assertNotIn('User Profile (JSON):', llm.prompts[0] or '')
         self.assertNotIn('Conversation Context (JSON):', llm.prompts[3] or '')
-        self.assertNotIn('recent_roundtrip_tool_summaries', llm.prompts[4] or '')
-        self.assertNotIn('conversation_summary', llm.prompts[4] or '')
-        self.assertLessEqual((llm.prompts[4] or '').count('message_index'), 3)
+        self.assertNotIn('recent_roundtrip_tool_summaries', llm.prompts[-1] or '')
+        self.assertNotIn('conversation_summary', llm.prompts[-1] or '')
+        self.assertLessEqual((llm.prompts[-1] or '').count('message_index'), 3)
 
     def test_requested_user_attributes_are_loaded_after_request_analysis(self) -> None:
         fake_repo = FakeUserAttributeRepository(
@@ -571,8 +690,11 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertNotIn('pizza', llm.prompts[0] or '')
 
         main_agent_logs = result.agent_logs.get('main_agent', [])
-        request_analysis_log = next(log for log in main_agent_logs if log.get('kind') == 'request_analysis')
-        profile_load_log = next(log for log in main_agent_logs if log.get('kind') == 'profile_load')
+        profile_agent_logs = result.agent_logs.get('profile_management', [])
+        orchestrator_logs = result.agent_logs.get('request_orchestrator', [])
+        request_analysis_log = next(log for log in orchestrator_logs if log.get('kind') == 'request_analysis')
+        profile_load_log = next(log for log in orchestrator_logs if log.get('kind') == 'profile_load')
+        synthesis_log = next(log for log in orchestrator_logs if log.get('kind') == 'synthesis')
 
         self.assertEqual(request_analysis_log.get('data', {}).get('requested_user_attribute_types'), ['food.likes'])
         self.assertEqual(profile_load_log.get('data', {}).get('loaded_attribute_count'), 1)
@@ -585,6 +707,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     'group_key': None,
                     'value': ['pizza', 'eggs']}
             ],
+        )
+        self.assertTrue(profile_agent_logs)
+        self.assertTrue(any(log.get('kind') == 'plan' for log in profile_agent_logs))
+        self.assertEqual(
+            synthesis_log.get('data', {}).get('answer_preview'),
+            ['I used your stored food preferences while looking up a meal idea.'],
         )
 
     def test_calculate_tool_orchestration(self) -> None:

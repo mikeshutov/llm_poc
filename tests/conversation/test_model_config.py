@@ -330,6 +330,9 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
         'request_orchestrator.service.build_user_profile',
         return_value=UserProfile(),
     ), patch(
+        'request_orchestrator.service.MainState.initialize_agent_states',
+        return_value=None,
+    ), patch(
         'request_orchestrator.service.run_agent',
         return_value=DummyAgentResult(answer=['done'], roundtrip_summary='summary'),
     ), patch(
@@ -397,6 +400,9 @@ def test_run_request_orchestrator_populates_geometadata_location_when_available(
     ), patch(
         'request_orchestrator.service.build_user_profile',
         side_effect=fake_build_user_profile,
+    ), patch(
+        'request_orchestrator.service.MainState.initialize_agent_states',
+        return_value=None,
     ), patch(
         'request_orchestrator.service.run_agent',
         return_value=DummyAgentResult(answer=['done'], roundtrip_summary='summary'),

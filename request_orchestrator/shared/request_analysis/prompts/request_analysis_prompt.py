@@ -1,14 +1,15 @@
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_CATEGORIES, ATTRIBUTE_QUALIFIERS
-from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.constants import REQUEST_ANALYSIS_PROMPT_KIND
-from request_orchestrator.agents.main_agent.request_analysis.prompts.request_analysis_schema_prompt import REQUEST_ANALYSIS_SCHEMA
 from request_orchestrator.models.agent_prompt import AgentPrompt
+from request_orchestrator.models.main_state import MainState
+from request_orchestrator.shared.request_analysis.prompts.request_analysis_schema_prompt import REQUEST_ANALYSIS_SCHEMA
 
 
-def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
+def build_request_analysis_prompt(main_state: MainState) -> AgentPrompt:
     category_lines = "\n".join(
         f"- Category: {name} | Category Description: {category.description}"
-        for name, category in agent_state.agent_profile.allowed_tool_categories().items()
+        for name, category in MAIN_AGENT_PROFILE.allowed_tool_categories().items()
     )
     attribute_prefixes = ", ".join(ATTRIBUTE_CATEGORIES)
     attribute_suffixes = ", ".join(ATTRIBUTE_QUALIFIERS)
@@ -32,11 +33,11 @@ def build_request_analysis_prompt(agent_state: AgentState) -> AgentPrompt:
             "Requested attribute types must use the format prefix.suffix such as food.likes or projects.goals. "
             "Only request user attribute types that would materially help with the current request. "
         ),
-        conversation_context=agent_state.conversation_context,
-        user_profile=agent_state.user_profile,
+        conversation_context=main_state.conversation_context,
+        user_profile=main_state.user_profile,
         available_tool_categories=category_lines,
         schema=REQUEST_ANALYSIS_SCHEMA,
-        task=agent_state.task,
+        task=main_state.task,
     )
     prompt.include_user_profile()
     prompt.include_conversation_context(heading="Conversation context (JSON):")

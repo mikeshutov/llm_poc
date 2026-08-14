@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+
+from langgraph.graph import END, StateGraph
+
+from request_orchestrator.agent_stratagies.planner_executor_evaluator.validator import validator
+from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
+from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.shared.evaluator import evaluator_router, run_evaluator
+from request_orchestrator.shared.executor.executor import run_executor
+from request_orchestrator.shared.planner.planner import run_planner
+
+
+AgentRouter = Callable[[AgentState], str]
+
+
+def _compile_graph(*, execute_router: AgentRouter):
+    builder = StateGraph(AgentState)
+    builder.add_node(PLAN_EDGE, run_planner)
+    builder.add_node(EVALUATE_EDGE, run_evaluator)
+    builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
+    builder.set_entry_point(PLAN_EDGE)
+
+    builder.add_conditional_edges(
+        PLAN_EDGE,
+        validator,
+        {
+            EXECUTE_TOOLS_EDGE: EXECUTE_TOOLS_EDGE,
+            SYNTHESIZE_EDGE: END,
+        },
+    )
+
+    builder.add_conditional_edges(
+        EVALUATE_EDGE,
+        evaluator_router,
+        {
+            PLAN_EDGE: PLAN_EDGE,
+            SYNTHESIZE_EDGE: END,
+        },
+    )
+
+    builder.add_conditional_edges(
+        EXECUTE_TOOLS_EDGE,
+        execute_router,
+        {
+            PLAN_EDGE: PLAN_EDGE,
+            EVALUATE_EDGE: EVALUATE_EDGE,
+            SYNTHESIZE_EDGE: END,
+            END: END,
+        },
+    )
+
+    return builder.compile()
+
+
+def run_graph(
+    agent_state: AgentState,
+    *,
+    execute_router: AgentRouter,
+    thread_id: str,
+) -> AgentState:
+    graph = _compile_graph(execute_router=execute_router)
+    final_state = graph.invoke(
+        agent_state,
+        config={"configurable": {"thread_id": thread_id}},
+    )
+    return final_state if isinstance(final_state, AgentState) else AgentState(**final_state)

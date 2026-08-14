@@ -205,67 +205,6 @@ class IterationState:
 
 
 @dataclass
-class SubagentState:
-    task: str
-    max_turns: int
-    agent_profile: AgentProfile
-    request_analysis: RequestAnalysis = field(default_factory=RequestAnalysis)
-    iteration_trace: list[IterationState] = field(default_factory=list)
-    agent_log: AgentStateLog = field(default_factory=AgentStateLog)
-    result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
-    relevant_evidence_ids: list[str] = field(default_factory=list)
-    evaluation_status: EvaluationStatus = EVALUATION_STATUS_RETRYABLE
-    goal_reached: bool = False
-
-    def to_runtime_state(self, parent_state: AgentState) -> AgentState:
-        return AgentState(
-            task=self.task,
-            max_turns=self.max_turns,
-            conversation_context=parent_state.conversation_context,
-            user_profile=parent_state.user_profile,
-            agent_profile=self.agent_profile,
-            conversation_id=parent_state.conversation_id,
-            roundtrip_id=parent_state.roundtrip_id,
-            request_analysis=self.request_analysis.model_copy(deep=True),
-            iteration_trace=[iteration.clone() for iteration in self.iteration_trace],
-            agent_log=self.agent_log.clone(),
-            result=self.result,
-            relevant_evidence_ids=list(self.relevant_evidence_ids),
-            evaluation_status=self.evaluation_status,
-            goal_reached=self.goal_reached,
-            llm=parent_state.llm,
-            conversation_model_config=parent_state.conversation_model_config.model_copy(deep=True),
-        )
-
-    def update_from_runtime_state(self, runtime_state: AgentState) -> SubagentState:
-        self.task = runtime_state.task
-        self.max_turns = runtime_state.max_turns
-        self.agent_profile = runtime_state.agent_profile
-        self.request_analysis = runtime_state.request_analysis.model_copy(deep=True)
-        self.iteration_trace = [iteration.clone() for iteration in runtime_state.iteration_trace]
-        self.agent_log = runtime_state.agent_log.clone()
-        self.result = runtime_state.result
-        self.relevant_evidence_ids = list(runtime_state.relevant_evidence_ids)
-        self.evaluation_status = runtime_state.evaluation_status
-        self.goal_reached = runtime_state.goal_reached
-        return self
-
-    def clone(self) -> SubagentState:
-        return SubagentState(
-            task=self.task,
-            max_turns=self.max_turns,
-            agent_profile=self.agent_profile,
-            request_analysis=self.request_analysis.model_copy(deep=True),
-            iteration_trace=[iteration.clone() for iteration in self.iteration_trace],
-            agent_log=self.agent_log.clone(),
-            result=self.result,
-            relevant_evidence_ids=list(self.relevant_evidence_ids),
-            evaluation_status=self.evaluation_status,
-            goal_reached=self.goal_reached,
-        )
-
-
-@dataclass
 class AgentState:
     task: str
     max_turns: int
@@ -276,7 +215,6 @@ class AgentState:
     roundtrip_id: UUID | None = None
     request_analysis: RequestAnalysis = field(default_factory=RequestAnalysis)
     iteration_trace: list[IterationState] = field(default_factory=list)
-    subagent_states: dict[str, SubagentState] = field(default_factory=dict)
     agent_log: AgentStateLog = field(default_factory=AgentStateLog)
     result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
     relevant_evidence_ids: list[str] = field(default_factory=list)
@@ -314,30 +252,6 @@ class AgentState:
         self.iteration_trace.append(iteration)
         return iteration
 
-    def get_subagent_state(
-        self,
-        agent_profile: AgentProfile,
-        *,
-        task: str | None = None,
-        max_turns: int | None = None,
-    ) -> SubagentState:
-        existing_state = self.subagent_states.get(agent_profile.name)
-        if existing_state is not None:
-            if task is not None:
-                existing_state.task = task
-            if max_turns is not None:
-                existing_state.max_turns = max_turns
-            existing_state.agent_profile = agent_profile
-            return existing_state
-
-        subagent_state = SubagentState(
-            task=self.task if task is None else task,
-            max_turns=self.max_turns if max_turns is None else max_turns,
-            agent_profile=agent_profile,
-        )
-        self.subagent_states[agent_profile.name] = subagent_state
-        return subagent_state
-
     def clone_for_parallel(self) -> AgentState:
         return AgentState(
             task=self.task,
@@ -349,7 +263,6 @@ class AgentState:
             roundtrip_id=self.roundtrip_id,
             request_analysis=self.request_analysis.model_copy(deep=True),
             iteration_trace=[iteration.clone() for iteration in self.iteration_trace],
-            subagent_states={name: subagent_state.clone() for name, subagent_state in self.subagent_states.items()},
             agent_log=self.agent_log.clone(),
             result=self.result,
             relevant_evidence_ids=list(self.relevant_evidence_ids),
@@ -395,11 +308,7 @@ class AgentState:
         )
 
     def build_agent_logs(self) -> dict[str, list[dict[str, Any]]]:
-        logs = self.agent_log.to_grouped_dict()
-        for subagent_state in self.subagent_states.values():
-            for agent_name, entries in subagent_state.agent_log.to_grouped_dict().items():
-                logs.setdefault(agent_name, []).extend(entries)
-        return logs
+        return self.agent_log.to_grouped_dict()
 
     def resolve_model_for_stage(self, *, agent: str, stage: str) -> str:
         return self.conversation_model_config.resolve(agent, stage)
