@@ -30,7 +30,6 @@ def book_to_candidate(book: BookDoc) -> Candidate:
             "name": normalize_text(book.title),
             "summary": ". ".join(summary_parts) if summary_parts else None,
             "description": ", ".join(subjects) if subjects else None,
-            "text": ", ".join(publishers) if publishers else None,
             "url": f"https://openlibrary.org{book.key}" if book.key else None,
             "image_url": f"https://covers.openlibrary.org/b/id/{book.cover_i}-L.jpg" if book.cover_i is not None else None,
         },
@@ -38,6 +37,7 @@ def book_to_candidate(book: BookDoc) -> Candidate:
             "authors": author_names,
             "subjects": subjects,
             "languages": list(book.language or []),
+            "publishers": ", ".join(publishers) if publishers else None,
         },
         metadata={
             "source": "open_library",

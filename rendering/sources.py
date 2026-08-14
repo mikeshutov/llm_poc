@@ -105,7 +105,7 @@ def _get_hydrated_evidence_by_id(payload: dict[str, Any]) -> dict[str, HydratedE
     return hydrated_evidence_by_id
 
 
-def _render_source_links(urls: list[EvidenceUrl], *, fallback_url: str) -> None:
+def _render_source_links(urls: list[EvidenceUrl]) -> None:
     deduped_links: list[EvidenceUrl] = []
     seen_urls: set[str] = set()
     for entry in urls:
@@ -114,9 +114,6 @@ def _render_source_links(urls: list[EvidenceUrl], *, fallback_url: str) -> None:
             continue
         seen_urls.add(cleaned_url)
         deduped_links.append(entry)
-
-    if not deduped_links and fallback_url.strip():
-        deduped_links.append(EvidenceUrl(url=fallback_url.strip(), url_type="website"))
 
     for entry in deduped_links:
         label = entry.url_type.replace("_", " ").title()

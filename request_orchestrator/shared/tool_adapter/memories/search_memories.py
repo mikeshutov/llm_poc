@@ -6,8 +6,11 @@ from pydantic import BaseModel, Field
 from conversation.models.conversation_models import ConversationMemory
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.clients.embeddings import embed_text
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from request_orchestrator.shared.tool_adapter.memories.constants import DEFAULT_MEMORY_RESULT_LIMIT
+from tool.constants import TOOL_NAME_SEARCH_MEMORIES
+from tool.constants import TOOL_RESULT_TYPE_MEMORY_RESULTS
 
 
 class SearchMemoriesArgs(BaseModel):
@@ -15,7 +18,7 @@ class SearchMemoriesArgs(BaseModel):
 
 
 @tool(
-    "search_memories",
+    TOOL_NAME_SEARCH_MEMORIES,
     args_schema=SearchMemoriesArgs,
     description=f"""
 Search prior conversation memories by semantic similarity over conversation summaries.
@@ -27,10 +30,38 @@ Returns up to {DEFAULT_MEMORY_RESULT_LIMIT} relevant conversation memories for t
 Each result includes conversation_id, summary, last_used_date, and relevance_score.
 """,
 )
-def search_memories(query: str) -> list[ConversationMemory]:
+def search_memories(query: str) -> ToolResult:
     query_embedding = embed_text(query)
-    return get_conversation_repo().search_conversation_memories(
+    memories = get_conversation_repo().search_conversation_memories(
         query_embedding=query_embedding,
         limit=DEFAULT_MEMORY_RESULT_LIMIT,
         user_id=get_current_user_id(),
     )
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+    for memory in memories:
+        hydrated = HydratedEvidence(
+            item_id=str(memory.conversation_id),
+            tool_name=TOOL_NAME_SEARCH_MEMORIES,
+            title="Conversation Memory",
+            summary=memory.summary,
+            published_at=memory.last_used_date,
+            source=TOOL_NAME_SEARCH_MEMORIES,
+            entity_type=TOOL_RESULT_TYPE_MEMORY_RESULTS,
+            metadata={
+                "conversation_id": str(memory.conversation_id),
+                "last_used_date": memory.last_used_date,
+                "relevance_score": memory.relevance_score,
+            },
+            raw_payload=memory,
+        )
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        )
+    return ToolResult(result=memories, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)

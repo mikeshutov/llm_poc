@@ -3,6 +3,9 @@ from pydantic import BaseModel, Field
 
 from integrations.frankfurter import FrankfurterClient
 from integrations.frankfurter.models import ExchangeRatesSeries
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from tool.constants import TOOL_NAME_EXCHANGE_RATES_TIME_SERIES
+from tool.constants import TOOL_RESULT_TYPE_FINANCE
 
 _exchange_rates_client = FrankfurterClient()
 
@@ -28,8 +31,48 @@ class ExchangeRatesTimeSeriesArgs(BaseModel):
     )
 
 
+def _tool_result(result: ExchangeRatesSeries) -> ToolResult:
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+    for date_key, day_rates in result.rates.items():
+        for currency_code, rate in day_rates.items():
+            hydrated = HydratedEvidence(
+                item_id=f"{date_key}:{currency_code}",
+                tool_name=TOOL_NAME_EXCHANGE_RATES_TIME_SERIES,
+                title=f"{result.base} to {currency_code}",
+                summary=f"Exchange rate on {date_key}: 1 {result.base} = {rate} {currency_code}.",
+                published_at=date_key,
+                source=TOOL_NAME_EXCHANGE_RATES_TIME_SERIES,
+                entity_type=TOOL_RESULT_TYPE_FINANCE,
+                metadata={
+                    "base": result.base,
+                    "currency": currency_code,
+                    "rate": rate,
+                    "date": date_key,
+                    "start_date": result.start_date,
+                    "end_date": result.end_date,
+                },
+                raw_payload={
+                    "date": date_key,
+                    "currency": currency_code,
+                    "rate": rate,
+                    "series": result,
+                },
+            )
+            hydrated_evidence.append(hydrated)
+            evidence_views.append(
+                EvidenceView(
+                    item_id=hydrated.item_id,
+                    title=hydrated.title,
+                    summary=hydrated.summary,
+                    metadata=dict(hydrated.metadata),
+                )
+            )
+    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+
+
 @tool(
-    "exchange_rates_time_series",
+    TOOL_NAME_EXCHANGE_RATES_TIME_SERIES,
     args_schema=ExchangeRatesTimeSeriesArgs,
     description="""
 Look up a time series of exchange rates across a date range from Frankfurter.
@@ -58,7 +101,12 @@ def exchange_rates_time_series(
     end_date: str | None = None,
     base: str = "EUR",
     symbols: list[str] | None = None,
-) -> ExchangeRatesSeries:
-    return _exchange_rates_client.get_time_series(
-        start_date=start_date, end_date=end_date, base=base, symbols=symbols
+) -> ToolResult:
+    return _tool_result(
+        _exchange_rates_client.get_time_series(
+            start_date=start_date,
+            end_date=end_date,
+            base=base,
+            symbols=symbols,
+        )
     )

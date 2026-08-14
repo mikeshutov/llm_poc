@@ -6,11 +6,64 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
-from integrations.hn_algolia import HnAlgoliaClient, HnSearchResult
+from integrations.hn_algolia import HnAlgoliaClient
+from integrations.hn_algolia.models import HnHit, HnSearchResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.news.candidate_mapper import rerank_hn_search_result
 from request_orchestrator.shared.tool_adapter.news.constants import DEFAULT_HN_SEARCH_LIMIT
+from tool.constants import TOOL_NAME_HN_SEARCH
+from tool.constants import TOOL_RESULT_TYPE_NEWS_RESULTS
 
 _hn_client = HnAlgoliaClient()
+
+
+def _hit_summary(hit: HnHit) -> str:
+    parts: list[str] = []
+    if hit.author:
+        parts.append(hit.author)
+    if hit.points is not None:
+        parts.append(f"{hit.points} points")
+    if hit.num_comments is not None:
+        parts.append(f"{hit.num_comments} comments")
+    if hit.story_text:
+        parts.append(hit.story_text)
+    return ". ".join(parts) if parts else "Hacker News result."
+
+
+def _tool_result(result: HnSearchResult) -> ToolResult:
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+    for hit in result.hits:
+        url = (hit.url or "").strip()
+        hydrated = HydratedEvidence(
+            item_id=hit.object_id,
+            tool_name=TOOL_NAME_HN_SEARCH,
+            title=(hit.title or hit.url or hit.object_id or "").strip(),
+            summary=_hit_summary(hit),
+            urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+            published_at=(hit.created_at or "").strip(),
+            source=TOOL_NAME_HN_SEARCH,
+            entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
+            metadata={
+                "author": hit.author,
+                "points": hit.points,
+                "num_comments": hit.num_comments,
+                "tags": list(hit.tags or []),
+            },
+            raw_payload=hit,
+        )
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        )
+    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+
+
 
 
 class HnSearchArgs(BaseModel):
@@ -25,7 +78,7 @@ class HnSearchArgs(BaseModel):
 
 
 @tool(
-    "hn_search",
+    TOOL_NAME_HN_SEARCH,
     args_schema=HnSearchArgs,
     description="""
 Search Hacker News stories and discussions via the Algolia API.
@@ -45,9 +98,9 @@ Example valid call:
 }
 """,
 )
-def hn_search(query: str, sort_by: str = "relevance") -> HnSearchResult | str:
+def hn_search(query: str, sort_by: str = "relevance") -> ToolResult:
     try:
         response = _hn_client.search(query, sort_by=sort_by, hits_per_page=DEFAULT_HN_SEARCH_LIMIT)
-        return rerank_hn_search_result(response, goal=query)
+        return _tool_result(rerank_hn_search_result(response, goal=query))
     except RequestException as e:
-        return f"Hacker News search unavailable: {e}"
+        return ToolResult.error(f"Hacker News search unavailable: {e}")

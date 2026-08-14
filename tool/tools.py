@@ -15,9 +15,14 @@ from request_orchestrator.shared.tool_adapter.food.search_meals import search_me
 from request_orchestrator.shared.tool_adapter.fun.astronomy_picture import get_astronomy_picture
 from request_orchestrator.shared.tool_adapter.fun.get_advice import get_advice
 from request_orchestrator.shared.tool_adapter.fun.get_quote import get_quote
+from request_orchestrator.shared.tool_adapter.games.get_commander_cards import get_commander_cards
+from request_orchestrator.shared.tool_adapter.games.get_commander_details import get_commander_details
+from request_orchestrator.shared.tool_adapter.games.get_magic_card_rulings import get_magic_card_rulings
+from request_orchestrator.shared.tool_adapter.games.search_magic_cards import search_magic_cards
 from request_orchestrator.shared.tool_adapter.language.define_word import define_word
 from request_orchestrator.shared.tool_adapter.location.get_caller_location import get_caller_location
 from request_orchestrator.shared.tool_adapter.math.calculate import calculate
+from request_orchestrator.shared.tool_adapter.memories.get_memory_detail import get_memory_detail
 from request_orchestrator.shared.tool_adapter.memories.search_memories import search_memories
 from request_orchestrator.shared.tool_adapter.memories.search_roundtrip_memories import search_roundtrip_memories
 from request_orchestrator.shared.tool_adapter.news.hn_search import hn_search
@@ -45,9 +50,11 @@ from tool.constants import TOOL_RESULT_TYPE_ASTRONOMY_PICTURE
 from tool.constants import TOOL_RESULT_TYPE_BOOK_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_CALCULATION
 from tool.constants import TOOL_RESULT_TYPE_CALENDAR
+from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_COCKTAIL_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_COUNTRY
 from tool.constants import TOOL_RESULT_TYPE_CRYPTO_MARKET
+from tool.constants import TOOL_RESULT_TYPE_DECKS
 from tool.constants import TOOL_RESULT_TYPE_DEFINITION
 from tool.constants import TOOL_RESULT_TYPE_FILE
 from tool.constants import TOOL_RESULT_TYPE_FILE_DETAILS
@@ -57,12 +64,14 @@ from tool.constants import TOOL_RESULT_TYPE_GENERIC
 from tool.constants import TOOL_RESULT_TYPE_KNOWLEDGE
 from tool.constants import TOOL_RESULT_TYPE_LOCATION
 from tool.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
+from tool.constants import TOOL_RESULT_TYPE_MEMORY_DETAIL
 from tool.constants import TOOL_RESULT_TYPE_MEMORY_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_NEWS_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_PRODUCT_CATEGORIES
 from tool.constants import TOOL_RESULT_TYPE_PRODUCT_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_PROFILE
 from tool.constants import TOOL_RESULT_TYPE_QUOTE
+from tool.constants import TOOL_RESULT_TYPE_RULES
 from tool.constants import TOOL_RESULT_TYPE_STRUCTURED_FACTS
 from tool.constants import TOOL_RESULT_TYPE_TIME
 from tool.constants import TOOL_RESULT_TYPE_TONE
@@ -116,7 +125,17 @@ LANGUAGE_TOOLS = [Tool(define_word, result_type=TOOL_RESULT_TYPE_DEFINITION)]
 FOOD_TOOLS = [Tool(search_meals, result_type=TOOL_RESULT_TYPE_MEAL_RESULTS), Tool(search_cocktails, result_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS)]
 FUN_TOOLS = [Tool(get_advice, result_type=TOOL_RESULT_TYPE_ADVICE), Tool(get_quote, result_type=TOOL_RESULT_TYPE_QUOTE), Tool(get_astronomy_picture, result_type=TOOL_RESULT_TYPE_ASTRONOMY_PICTURE)]
 MATH_TOOLS = [Tool(calculate, result_type=TOOL_RESULT_TYPE_CALCULATION)]
-MEMORY_TOOLS = [Tool(search_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS), Tool(search_roundtrip_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS)]
+GAMES_TOOLS = [
+    Tool(get_commander_details, result_type=TOOL_RESULT_TYPE_DECKS),
+    Tool(get_commander_cards, result_type=TOOL_RESULT_TYPE_CARD_RESULTS),
+    Tool(search_magic_cards, result_type=TOOL_RESULT_TYPE_CARD_RESULTS),
+    Tool(get_magic_card_rulings, result_type=TOOL_RESULT_TYPE_RULES),
+]
+MEMORY_TOOLS = [
+    Tool(get_memory_detail, result_type=TOOL_RESULT_TYPE_MEMORY_DETAIL),
+    Tool(search_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS),
+    Tool(search_roundtrip_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS),
+]
 USER_ATTRIBUTE_TOOLS = [Tool(create_user_attribute, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(update_user_attribute, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(get_user_attributes, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(search_user_attributes, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE)]
 FILE_TOOLS = [Tool(search_files, result_type=TOOL_RESULT_TYPE_FILE_RESULTS), Tool(search_file_for_details, result_type=TOOL_RESULT_TYPE_FILE_DETAILS), Tool(get_file_by_id, result_type=TOOL_RESULT_TYPE_FILE)]
 PROFILE_TOOLS = [Tool(set_user_display_name, result_type=TOOL_RESULT_TYPE_PROFILE), Tool(set_user_first_name, result_type=TOOL_RESULT_TYPE_PROFILE), Tool(set_user_last_name, result_type=TOOL_RESULT_TYPE_PROFILE), Tool(update_user_tone, result_type=TOOL_RESULT_TYPE_TONE)]
@@ -186,12 +205,17 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
         tools=MATH_TOOLS,
         description="Evaluate mathematical expressions and perform mathematical calculations.",
     ),
+    "games": ToolCategory(
+        tools=GAMES_TOOLS,
+        description="Look up Magic: The Gathering commander deck context from EDHREC and card information from Scryfall, including reranked commander card recommendations, oracle text, mana cost, type line, legality, pricing, and images.",
+    ),
     "memories": ToolCategory(
         tools=MEMORY_TOOLS,
         description="Search prior conversation summaries for relevant past requests and discussions as memories.",
         rules=[
             "Use search_memories first to locate the most relevant conversations for a topic or prior discussion.",
             "Use search_roundtrip_memories after search_memories when you need specific historical mentions or exchanges inside those conversations.",
+            "Use get_memory_detail after search_roundtrip_memories when you need the exact prior prompt, response, or structured payload for one memory hit.",
             "When the user asks what was previously said, decided, suggested, or discussed about a topic, prefer the two-step memories flow over guessing from current context.",
         ],
     ),
@@ -227,7 +251,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     ),
 }
 
-tools = [*PRODUCT_TOOLS, *PRODUCT_WEB_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *WEB_SEARCH_TOOLS, *KNOWLEDGE_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *FUN_TOOLS, *MATH_TOOLS, *MEMORY_TOOLS, *USER_ATTRIBUTE_TOOLS, *FILE_TOOLS, *PROFILE_TOOLS]
+tools = [*PRODUCT_TOOLS, *PRODUCT_WEB_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *WEB_SEARCH_TOOLS, *KNOWLEDGE_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *FUN_TOOLS, *MATH_TOOLS, *GAMES_TOOLS, *MEMORY_TOOLS, *USER_ATTRIBUTE_TOOLS, *FILE_TOOLS, *PROFILE_TOOLS]
 
 TOOLS_BY_NAME = {tool.name: tool for tool in tools}
 

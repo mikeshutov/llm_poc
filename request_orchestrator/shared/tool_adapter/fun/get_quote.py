@@ -5,7 +5,11 @@ from typing import Optional
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from integrations.quotable import QuotableClient, Quote
+from integrations.quotable import QuotableClient
+from integrations.quotable.models import Quote
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from tool.constants import TOOL_NAME_GET_QUOTE
+from tool.constants import TOOL_RESULT_TYPE_QUOTE
 
 _client = QuotableClient()
 
@@ -17,8 +21,42 @@ class GetQuoteArgs(BaseModel):
     )
 
 
+def _normalize_quotes(result: Quote | list[Quote]) -> list[Quote]:
+    return result if isinstance(result, list) else [result]
+
+
+def _tool_result(result: Quote | list[Quote]) -> ToolResult:
+    quotes = _normalize_quotes(result)
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+    for quote in quotes:
+        summary = f"\"{quote.content}\""
+        hydrated = HydratedEvidence(
+            item_id=f"{quote.author}:{quote.content[:40]}",
+            tool_name=TOOL_NAME_GET_QUOTE,
+            title=quote.author,
+            summary=summary,
+            source=TOOL_NAME_GET_QUOTE,
+            entity_type=TOOL_RESULT_TYPE_QUOTE,
+            metadata={"tags": list(quote.tags)},
+            raw_payload=quote,
+        )
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        )
+    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+
+
+
+
 @tool(
-    "get_quote",
+    TOOL_NAME_GET_QUOTE,
     args_schema=GetQuoteArgs,
     description="""
 Get a random inspirational quote, or search for quotes on a specific topic or by a keyword.
@@ -32,10 +70,10 @@ Example valid calls:
 {"query": "courage"}
 """,
 )
-def get_quote(query: str | None = None) -> Quote | list[Quote] | str:
+def get_quote(query: str | None = None) -> ToolResult:
     try:
         if query:
-            return _client.search(query)
-        return _client.random()
+            return _tool_result(_client.search(query))
+        return _tool_result(_client.random())
     except Exception as e:
-        return f"Quotable API error: {e}"
+        return ToolResult.error(f"Quotable API error: {e}")

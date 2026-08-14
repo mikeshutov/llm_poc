@@ -5,9 +5,10 @@ from rendering.rendering import (
     _build_inline_evidence,
     get_renderable_result_blocks,
 )
-from request_orchestrator.models.evidence import HydratedEvidence
+from request_orchestrator.models.evidence import EvidenceUrl, HydratedEvidence
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from tool.constants import TOOL_NAME_GET_CURRENT_WEATHER
+from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
 
@@ -48,7 +49,7 @@ def test_build_block_cards_uses_hydrated_evidence_with_links() -> None:
                 evidence_id="P1E1R1",
                 title="Article Title",
                 summary="Article summary",
-                url="https://example.com/article",
+                urls=[EvidenceUrl(url="https://example.com/article", url_type="website")],
                 image_url="https://example.com/article.jpg",
                 source="news_search",
             )
@@ -75,7 +76,7 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
                 evidence_id="P1E1R1",
                 title="Article Title",
                 summary="Article summary",
-                url="https://example.com/article",
+                urls=[EvidenceUrl(url="https://example.com/article", url_type="website")],
                 image_url="",
                 source="news_search",
             ),
@@ -83,7 +84,7 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
                 evidence_id="P1E2R1",
                 title="Weather Result",
                 summary="25.9 C in Toronto",
-                url="",
+                urls=[],
                 image_url="",
                 source=TOOL_NAME_GET_CURRENT_WEATHER,
                 entity_type=TOOL_RESULT_TYPE_WEATHER,
@@ -96,5 +97,30 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
             evidence_id="P1E2R1",
             title="Weather Result",
             source=TOOL_NAME_GET_CURRENT_WEATHER,
+        ),
+    ]
+
+
+def test_build_inline_evidence_includes_generic_web_search_results() -> None:
+    evidence = _build_inline_evidence(
+        SynthesisResultBlock(content="Web summary", evidence_ids=["P1E1R1"]),
+        {
+            "P1E1R1": HydratedEvidence(
+                evidence_id="P1E1R1",
+                title="Article Title",
+                summary="Article summary",
+                urls=[EvidenceUrl(url="https://example.com/article", url_type="website")],
+                image_url="https://example.com/article.jpg",
+                source=TOOL_NAME_GENERIC_WEB_SEARCH,
+                tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
+            )
+        },
+    )
+
+    assert evidence == [
+        InlineEvidenceReference(
+            evidence_id="P1E1R1",
+            title="Article Title",
+            source=TOOL_NAME_GENERIC_WEB_SEARCH,
         ),
     ]

@@ -4,7 +4,11 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
-from integrations.free_dictionary import FreeDictionaryClient, DictionaryEntry
+from integrations.free_dictionary import FreeDictionaryClient
+from integrations.free_dictionary.models import DictionaryEntry
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from tool.constants import TOOL_NAME_DEFINE_WORD
+from tool.constants import TOOL_RESULT_TYPE_DEFINITION
 
 _dictionary_client = FreeDictionaryClient()
 
@@ -16,8 +20,47 @@ class DefineWordArgs(BaseModel):
     )
 
 
+def _entry_summary(entry: DictionaryEntry) -> str:
+    if entry.meanings and entry.meanings[0].definitions:
+        return entry.meanings[0].definitions[0].definition
+    return f"Dictionary entry for {entry.word}."
+
+
+def _tool_result(result: list[DictionaryEntry]) -> ToolResult:
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+    for entry in result:
+        source_url = entry.source_urls[0].strip() if entry.source_urls else ""
+        hydrated = HydratedEvidence(
+            item_id=entry.word.strip(),
+            tool_name=TOOL_NAME_DEFINE_WORD,
+            title=entry.word.strip(),
+            summary=_entry_summary(entry),
+            urls=[EvidenceUrl(url=source_url, url_type="website")] if source_url else [],
+            source=TOOL_NAME_DEFINE_WORD,
+            entity_type=TOOL_RESULT_TYPE_DEFINITION,
+            metadata={
+                "phonetic": entry.phonetic,
+                "meaning_count": len(entry.meanings),
+            },
+            raw_payload=entry,
+        )
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        )
+    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+
+
+
+
 @tool(
-    "define_word",
+    TOOL_NAME_DEFINE_WORD,
     args_schema=DefineWordArgs,
     description="""
 Look up the definition of an English word, including meanings, parts of speech, examples, synonyms, and antonyms.
@@ -31,8 +74,8 @@ Example valid call:
 }
 """,
 )
-def define_word(word: str) -> list[DictionaryEntry] | str:
+def define_word(word: str) -> ToolResult:
     try:
-        return _dictionary_client.define(word)
+        return _tool_result(_dictionary_client.define(word))
     except RequestException as e:
-        return f"Dictionary service unavailable: {e}"
+        return ToolResult.error(f"Dictionary service unavailable: {e}")

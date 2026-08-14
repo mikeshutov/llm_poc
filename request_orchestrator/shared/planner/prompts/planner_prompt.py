@@ -5,6 +5,7 @@ from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PreviousIteration, PreviousIterationStep
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.plan_step_ids import format_plan_step_id
+from request_orchestrator.shared.evidence import build_evidence_bundle, build_evidence_steps
 from request_orchestrator.shared.planner.models.compiled_planner_context import CompiledPlannerContext
 from request_orchestrator.shared.planner.prompts.planner_rules import build_planner_rules
 from request_orchestrator.shared.planner.prompts.planner_schema_prompt import PLANNER_SCHEMA
@@ -90,6 +91,11 @@ def _build_planner_task(state: AgentState) -> str:
 def build_planner_prompt(state: AgentState) -> AgentPrompt:
     context = _compile_tools_rules_from_state(state)
     previous_iterations: list[PreviousIteration] = []
+    evidence_bundle = build_evidence_bundle(state.iteration_trace)
+    evidence_steps = build_evidence_steps(
+        state.iteration_trace,
+        evidence_bundle.evidence_views_by_step_id,
+    )
 
     if state.iteration_trace:
         for i, it in enumerate(state.iteration_trace, start=1):
@@ -105,13 +111,13 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
 
             steps: list[PreviousIterationStep] = []
             for step in it.plan.steps:
+                qualified_step_id = format_plan_step_id(i, step.id)
                 steps.append(
                     PreviousIterationStep(
-                        step_id=format_plan_step_id(i, step.id),
+                        step_id=qualified_step_id,
                         plan=step.plan,
                         tool=step.tool,
                         args=step.args,
-                        result=it.results.get(format_plan_step_id(i, step.id)),
                     )
                 )
 
@@ -136,6 +142,7 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         available_tools=context.compiled_tools,
         rules=compiled_rules,
         previous_iterations=previous_iterations,
+        evidence=evidence_steps,
         schema=PLANNER_SCHEMA,
     )
     prompt.include_user_profile(
@@ -146,6 +153,7 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
     prompt.include_available_tools()
     prompt.include_rules_raw()
     prompt.include_previous_iterations()
+    prompt.include_evidence()
     if _is_profile_management_agent(state):
         prompt.include_latest_user_prompt()
     prompt.include_schema_raw()

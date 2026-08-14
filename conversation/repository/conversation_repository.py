@@ -459,6 +459,35 @@ class ConversationRepository:
             row = cur.fetchone()
             return ConversationRoundtrip(**row) if row else None
 
+    def get_roundtrip_for_user(self, roundtrip_id: UUID, user_id: str | None) -> Optional[ConversationRoundtrip]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT
+                    rt.id,
+                    rt.conversation_id,
+                    rt.message_index,
+                    rt.user_prompt,
+                    rt.generated_response,
+                    rt.roundtrip_summary,
+                    rt.roundtrip_summary_embedding,
+                    rt.response_payload,
+                    rt.parsed_query,
+                    rt.created_at,
+                    rt.metadata,
+                    rt.model,
+                    fb.id AS feedback_id
+                FROM conversation_roundtrip rt
+                JOIN conversation c ON c.id = rt.conversation_id
+                LEFT JOIN roundtrip_feedback fb ON fb.roundtrip_id = rt.id
+                WHERE rt.id = %s
+                  AND (CAST(%s AS text) IS NULL OR c.user_id = %s)
+                """,
+                (roundtrip_id, user_id, user_id),
+            )
+            row = cur.fetchone()
+            return ConversationRoundtrip(**row) if row else None
+
     def get_conversation(self, conversation_id: UUID) -> Optional[Conversation]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(

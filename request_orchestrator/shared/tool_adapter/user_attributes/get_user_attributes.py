@@ -3,10 +3,14 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
+from common.data import normalize_string_list
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
+from tool.constants import TOOL_NAME_GET_USER_ATTRIBUTES
+from tool.constants import TOOL_RESULT_TYPE_USER_ATTRIBUTE
 
 
 class GetUserAttributesArgs(BaseModel):
@@ -22,8 +26,47 @@ class GetUserAttributesArgs(BaseModel):
 GET_USER_ATTRIBUTES_DESCRIPTION = "List stored user attributes."
 
 
+def _attribute_summary(attribute: UserAttribute) -> str:
+    return "; ".join(normalize_string_list(attribute.value)).strip() or "Stored user attribute."
+
+
+def _tool_result(result: list[UserAttribute]) -> ToolResult:
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+    for attribute in result:
+        hydrated = HydratedEvidence(
+            item_id=str(attribute.id),
+            tool_name=TOOL_NAME_GET_USER_ATTRIBUTES,
+            title=attribute.attribute_type,
+            summary=_attribute_summary(attribute),
+            published_at=attribute.updated_at,
+            source=TOOL_NAME_GET_USER_ATTRIBUTES,
+            entity_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE,
+            metadata={
+                "group_key": attribute.group_key,
+                "source": attribute.source,
+                "is_active": attribute.is_active,
+                "confidence": attribute.confidence,
+                "importance": attribute.importance,
+                "created_at": attribute.created_at,
+                "updated_at": attribute.updated_at,
+            },
+            raw_payload=attribute,
+        )
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        )
+    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+
+
 @tool(
-    "get_user_attributes",
+    TOOL_NAME_GET_USER_ATTRIBUTES,
     args_schema=GetUserAttributesArgs,
     description=GET_USER_ATTRIBUTES_DESCRIPTION,
 )
@@ -35,14 +78,16 @@ def get_user_attributes(
     attribute_type: UserAttributeType | None = None,
     group_key: str | None = None,
     source: str | None = None,
-) -> list[UserAttribute]:
-    return get_user_attribute_repo().list_attributes(
-        limit=limit,
-        order_by=order_by,
-        descending=descending,
-        user_id=get_current_user_id(),
-        is_active=is_active,
-        attribute_type=attribute_type,
-        group_key=group_key,
-        source=source,
+) -> ToolResult:
+    return _tool_result(
+        get_user_attribute_repo().list_attributes(
+            limit=limit,
+            order_by=order_by,
+            descending=descending,
+            user_id=get_current_user_id(),
+            is_active=is_active,
+            attribute_type=attribute_type,
+            group_key=group_key,
+            source=source,
+        )
     )

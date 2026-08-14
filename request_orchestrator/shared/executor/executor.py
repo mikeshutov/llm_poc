@@ -10,6 +10,7 @@ from langsmith import traceable
 from pydantic import ValidationError
 
 from request_orchestrator.models.agent_state import AgentState, IterationState
+from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import PlanStep
 from request_orchestrator.models.plan_step_ids import format_plan_step_id
 from request_orchestrator.shared.runtime_context import bind_runtime_context
@@ -32,7 +33,10 @@ def _substitute_refs(obj, results: dict, *, iteration_number: int):
         if obj.startswith("#E"):
             raw_step_id = obj[1:]
             qualified_step_id = format_plan_step_id(iteration_number, raw_step_id)
-            return results.get(qualified_step_id, obj)
+            referenced = results.get(qualified_step_id, obj)
+            if isinstance(referenced, ToolResult):
+                return referenced.result
+            return referenced
         return obj
     if isinstance(obj, list):
         return [_substitute_refs(x, results, iteration_number=iteration_number) for x in obj]
@@ -54,11 +58,19 @@ def _execute_step(
         output = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)
         error_text = ""
     except ValidationError as e:
-        output = {"error": f"Invalid arguments for tool '{step.tool}': {e.errors(include_url=False)}"}
-        error_text = str(output["error"])
+        error_text = f"Invalid arguments for tool '{step.tool}': {e.errors(include_url=False)}"
+        output = ToolResult(
+            result={"error": error_text},
+            evidence_views=[],
+            hydrated_evidence=[],
+        )
     except Exception as e:
-        output = {"error": f"Tool '{step.tool}' failed: {e}", "tool": step.tool}
-        error_text = str(output["error"])
+        error_text = f"Tool '{step.tool}' failed: {e}"
+        output = ToolResult(
+            result={"error": error_text, "tool": step.tool},
+            evidence_views=[],
+            hydrated_evidence=[],
+        )
     latency_ms = int((perf_counter() - started_at) * 1000)
 
     return StepExecutionResult(

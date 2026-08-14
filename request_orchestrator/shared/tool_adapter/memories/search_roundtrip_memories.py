@@ -8,8 +8,11 @@ from pydantic import BaseModel, Field
 from conversation.models.conversation_models import RoundtripMemory
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.clients.embeddings import embed_text
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from request_orchestrator.shared.tool_adapter.memories.constants import DEFAULT_MEMORY_RESULT_LIMIT
+from tool.constants import TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES
+from tool.constants import TOOL_RESULT_TYPE_MEMORY_RESULTS
 
 
 class SearchRoundtripMemoriesArgs(BaseModel):
@@ -19,7 +22,7 @@ class SearchRoundtripMemoriesArgs(BaseModel):
 
 
 @tool(
-    "search_roundtrip_memories",
+    TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES,
     args_schema=SearchRoundtripMemoriesArgs,
     description=f"""
 Search prior roundtrip summaries by semantic similarity within specific conversations.
@@ -32,7 +35,7 @@ Required fields:
 - limit (integer, optional): Maximum number of matching roundtrips to return. Defaults to {DEFAULT_MEMORY_RESULT_LIMIT}.
 """,
 )
-def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: int = DEFAULT_MEMORY_RESULT_LIMIT) -> list[RoundtripMemory]:
+def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: int = DEFAULT_MEMORY_RESULT_LIMIT) -> ToolResult:
     parsed_ids: list[UUID] = []
     for conversation_id in conversation_ids:
         try:
@@ -41,12 +44,43 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
             continue
 
     if not parsed_ids:
-        return []
+        return ToolResult(result=[], evidence_views=[], hydrated_evidence=[])
 
     query_embedding = embed_text(query)
-    return get_conversation_repo().search_roundtrip_memories(
+    memories = get_conversation_repo().search_roundtrip_memories(
         query_embedding=query_embedding,
         conversation_ids=parsed_ids,
         limit=limit,
         user_id=get_current_user_id(),
     )
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+    for memory in memories:
+        hydrated = HydratedEvidence(
+            item_id=str(memory.roundtrip_id),
+            tool_name=TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES,
+            title=f"Memory from message {memory.message_index}",
+            summary=(memory.roundtrip_summary or memory.generated_response or "").strip(),
+            published_at=memory.created_at,
+            source=TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES,
+            entity_type=TOOL_RESULT_TYPE_MEMORY_RESULTS,
+            metadata={
+                "conversation_id": str(memory.conversation_id),
+                "roundtrip_id": str(memory.roundtrip_id),
+                "message_index": memory.message_index,
+                "user_prompt": memory.user_prompt,
+                "created_at": memory.created_at,
+                "relevance_score": memory.relevance_score,
+            },
+            raw_payload=memory,
+        )
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        )
+    return ToolResult(result=memories, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)

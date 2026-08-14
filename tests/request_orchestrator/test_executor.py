@@ -16,6 +16,7 @@ if 'pycountry' not in sys.modules:
 
 from request_orchestrator.agents.models.agent_profile import AgentProfile
 from request_orchestrator.models.agent_state import AgentState, IterationState
+from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.executor.executor import run_executor
 from request_orchestrator.shared.runtime_context import get_current_conversation_id, get_current_roundtrip_id, get_current_user_id
@@ -62,7 +63,7 @@ def test_run_executor_parallelizes_pending_steps() -> None:
                 released.set()
         assert released.wait(timeout=1.0)
         time.sleep(0.02)
-        return {"tool": step_name, **(tool_input or {})}
+        return ToolResult(result={"tool": step_name, **(tool_input or {})})
 
     with patch(
         "request_orchestrator.shared.executor.executor.call_tool",
@@ -70,8 +71,8 @@ def test_run_executor_parallelizes_pending_steps() -> None:
     ):
         run_executor(state)
 
-    assert state.iteration_trace[-1].results["P1E1"] == {"tool": "tool_a", "value": "a"}
-    assert state.iteration_trace[-1].results["P1E2"] == {"tool": "tool_b", "value": "b"}
+    assert state.iteration_trace[-1].results["P1E1"].result == {"tool": "tool_a", "value": "a"}
+    assert state.iteration_trace[-1].results["P1E2"].result == {"tool": "tool_b", "value": "b"}
     assert started_steps[:2] == ["tool_a", "tool_b"]
     assert len(state.agent_log.entries) == 2
     assert all(isinstance(entry.data.get("latency_ms"), int) for entry in state.agent_log.entries)
@@ -110,7 +111,7 @@ def test_run_executor_leaves_unresolved_refs_unchanged_with_parallel_execution()
 
     def fake_call_tool(name: str, tool_input=None, allowed_tool_names=None):
         seen_inputs[str(name)] = dict(tool_input or {})
-        return {"tool": str(name), **(tool_input or {})}
+        return ToolResult(result={"tool": str(name), **(tool_input or {})})
 
     with patch(
         "request_orchestrator.shared.executor.executor.call_tool",
@@ -120,6 +121,56 @@ def test_run_executor_leaves_unresolved_refs_unchanged_with_parallel_execution()
 
     assert seen_inputs["tool_a"] == {"value": "#E2"}
     assert seen_inputs["tool_b"] == {"value": "b"}
+
+
+def test_run_executor_unwraps_prior_step_result_for_resolved_refs() -> None:
+    profile = AgentProfile(
+        name="test_agent",
+        extra_tools=[
+            SimpleNamespace(name="tool_a"),
+            SimpleNamespace(name="tool_b"),
+        ],
+        persist_tool_calls=False,
+    )
+    state = AgentState.new(
+        task="Run tools",
+        max_turns=5,
+        llm=object(),
+        agent_profile=profile,
+    )
+    state.iteration_trace = [
+        IterationState(
+            plan=Plan.model_validate(
+                {
+                    "steps": [
+                        {"id": "E1", "plan": "Run tool A", "tool": "tool_a", "args": {"value": "a"}},
+                    ]
+                }
+            ),
+            results={"P1E2": ToolResult(result={"value": "b"})},
+        )
+    ]
+
+    seen_inputs: dict[str, dict[str, object]] = {}
+    state.iteration_trace[-1].plan = Plan.model_validate(
+        {
+            "steps": [
+                {"id": "E1", "plan": "Run tool A", "tool": "tool_a", "args": {"value": "#E2"}},
+            ]
+        }
+    )
+
+    def fake_call_tool(name: str, tool_input=None, allowed_tool_names=None):
+        seen_inputs[str(name)] = dict(tool_input or {})
+        return ToolResult(result={"tool": str(name), **(tool_input or {})})
+
+    with patch(
+        "request_orchestrator.shared.executor.executor.call_tool",
+        side_effect=fake_call_tool,
+    ):
+        run_executor(state)
+
+    assert seen_inputs["tool_a"] == {"value": {"value": "b"}}
 
 
 def test_run_executor_propagates_runtime_context_to_worker_threads() -> None:
@@ -156,7 +207,7 @@ def test_run_executor_propagates_runtime_context_to_worker_threads() -> None:
         seen_context["conversation_id"] = get_current_conversation_id()
         seen_context["roundtrip_id"] = get_current_roundtrip_id()
         seen_context["user_id"] = get_current_user_id()
-        return {"tool": str(name), **(tool_input or {})}
+        return ToolResult(result={"tool": str(name), **(tool_input or {})})
 
     with patch(
         "request_orchestrator.shared.executor.executor.call_tool",

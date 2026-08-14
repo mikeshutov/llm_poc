@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
 from integrations.coingecko import CoinGeckoClient, CoinMarket
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from tool.constants import TOOL_NAME_GET_CRYPTO_MARKETS
+from tool.constants import TOOL_RESULT_TYPE_CRYPTO_MARKET
 
 _coingecko_client = CoinGeckoClient()
 
@@ -22,8 +25,56 @@ class CryptoMarketsArgs(BaseModel):
     )
 
 
+def _tool_result(result: list[CoinMarket]) -> ToolResult:
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+    for market in result:
+        url = f"https://www.coingecko.com/en/coins/{market.id}".strip()
+        price_text = f"{market.current_price} {market.symbol.upper()}".strip() if market.current_price is not None else ""
+        change_text = (
+            f"24h change {market.price_change_percentage_24h:.2f}%"
+            if market.price_change_percentage_24h is not None
+            else ""
+        )
+        summary = ". ".join(part for part in (price_text, change_text) if part) or f"Crypto market data for {market.name}."
+        hydrated = HydratedEvidence(
+            item_id=market.id,
+            tool_name=TOOL_NAME_GET_CRYPTO_MARKETS,
+            title=market.name,
+            summary=summary,
+            urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+            image_url=(market.image or "").strip(),
+            source=TOOL_NAME_GET_CRYPTO_MARKETS,
+            entity_type=TOOL_RESULT_TYPE_CRYPTO_MARKET,
+            metadata={
+                "symbol": market.symbol,
+                "current_price": market.current_price,
+                "market_cap": market.market_cap,
+                "market_cap_rank": market.market_cap_rank,
+                "total_volume": market.total_volume,
+                "high_24h": market.high_24h,
+                "low_24h": market.low_24h,
+                "price_change_24h": market.price_change_24h,
+                "price_change_percentage_24h": market.price_change_percentage_24h,
+            },
+            raw_payload=market,
+        )
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
+        )
+    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+
+
+
+
 @tool(
-    "get_crypto_markets",
+    TOOL_NAME_GET_CRYPTO_MARKETS,
     args_schema=CryptoMarketsArgs,
     description="""
 Get top cryptocurrencies by market cap from CoinGecko, including current price, 24h change, volume, and market cap.
@@ -37,8 +88,8 @@ Example valid calls:
 {"vs_currency": "eur", "per_page": 10}
 """,
 )
-def get_crypto_markets(vs_currency: str = "usd", per_page: int = 20) -> list[CoinMarket] | str:
+def get_crypto_markets(vs_currency: str = "usd", per_page: int = 20) -> ToolResult:
     try:
-        return _coingecko_client.get_markets(vs_currency=vs_currency, per_page=per_page)
+        return _tool_result(_coingecko_client.get_markets(vs_currency=vs_currency, per_page=per_page))
     except RequestException as e:
-        return f"CoinGecko API unavailable: {e}"
+        return ToolResult.error(f"CoinGecko API unavailable: {e}")
