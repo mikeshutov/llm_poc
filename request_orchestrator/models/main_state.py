@@ -8,7 +8,7 @@ from conversation.models.conversation_model_config import ConversationModelConfi
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import UserProfile
 from request_orchestrator.models.agent_result import AgentResult
-from request_orchestrator.models.agent_state import AgentState, AgentStateLog, IterationState, RequestAnalysis
+from request_orchestrator.models.agent_state import AgentState, AgentStateLog, IterationState, RequestAnalysis, RequestAnalysisGoal
 from request_orchestrator.models.plan_step_ids import format_plan_step_id
 
 
@@ -71,7 +71,7 @@ class MainState:
         if self.agent_states:
             return
 
-        self.agent_states = [
+        self.upsert_agent_state(
             AgentState.new(
                 task=self.task,
                 max_turns=self.max_turns,
@@ -82,7 +82,9 @@ class MainState:
                 roundtrip_id=self.roundtrip_id,
                 llm=self.llm,
                 conversation_model_config=self.conversation_model_config,
-            ),
+            )
+        )
+        self.upsert_agent_state(
             AgentState.new(
                 task=self.task,
                 max_turns=self.max_turns,
@@ -93,21 +95,71 @@ class MainState:
                 roundtrip_id=self.roundtrip_id,
                 llm=self.llm,
                 conversation_model_config=self.conversation_model_config,
-            ),
-        ]
+            )
+        )
+
+    def agent_state_map(self) -> dict[str, AgentState]:
+        return {
+            agent_state.agent_profile.name: agent_state
+            for agent_state in self.agent_states
+        }
 
     def get_agent_state(self, agent_name: str) -> AgentState:
-        for agent_state in self.agent_states:
-            if agent_state.agent_profile.name == agent_name:
-                return agent_state
+        agent_state = self.agent_state_map().get(agent_name)
+        if agent_state is not None:
+            return agent_state
         raise KeyError(f"Unknown agent state: {agent_name}")
 
-    def set_agent_state(self, updated_state: AgentState) -> None:
-        for index, agent_state in enumerate(self.agent_states):
-            if agent_state.agent_profile.name == updated_state.agent_profile.name:
-                self.agent_states[index] = updated_state
-                return
-        self.agent_states.append(updated_state)
+    def upsert_agent_state(self, updated_state: AgentState) -> None:
+        updated_map = self.agent_state_map()
+        updated_map[updated_state.agent_profile.name] = updated_state
+        self.agent_states = list(updated_map.values())
+
+    def routable_agent_states(self) -> list[AgentState]:
+        return [
+            agent_state
+            for agent_state in self.agent_states
+            if agent_state.agent_profile.request_analysis_selectable
+        ]
+
+    def request_analysis_agent_state(self) -> AgentState:
+        routable_agent_states = self.routable_agent_states()
+        if routable_agent_states:
+            return routable_agent_states[0]
+        if self.agent_states:
+            return self.agent_states[0]
+        raise KeyError("No agent states available")
+
+    def synthesis_agent_state(self) -> AgentState:
+        routable_agent_states = self.routable_agent_states()
+        if routable_agent_states:
+            return routable_agent_states[-1]
+        if self.agent_states:
+            return self.agent_states[-1]
+        raise KeyError("No agent states available")
+
+    def available_request_analysis_agents_payload(self) -> list[dict[str, Any]]:
+        available_agents: list[dict[str, Any]] = []
+        for agent_state in self.routable_agent_states():
+            available_agents.append(
+                {
+                    "agent": agent_state.agent_profile.name,
+                    "tool_categories": [
+                        {
+                            "name": name,
+                            "description": category.description,
+                        }
+                        for name, category in sorted(agent_state.agent_profile.allowed_tool_categories().items())
+                    ],
+                }
+            )
+        return available_agents
+
+    def resolve_synthesis_instruction(self) -> str:
+        instruction = self.synthesis_agent_state().agent_profile.synthesis_instruction.strip()
+        if instruction:
+            return instruction
+        return _get_main_agent_profile().synthesis_instruction
 
     def fan_out_shared_state(self) -> None:
         for agent_state in self.agent_states:
@@ -120,7 +172,24 @@ class MainState:
             if self.llm is not None:
                 agent_state.llm = self.llm
             agent_state.conversation_model_config = self.conversation_model_config
-            agent_state.request_analysis = self.request_analysis.model_copy(deep=True)
+
+    def build_agent_request_analysis(self, agent_name: str) -> RequestAnalysis:
+        normalized_agent_name = agent_name.strip()
+        matching_goals: list[RequestAnalysisGoal] = []
+
+        for goal in self.request_analysis.goals:
+            if goal.agent.strip() != normalized_agent_name:
+                continue
+            matching_goals.append(goal.model_copy(deep=True))
+
+        return RequestAnalysis(
+            goals=matching_goals,
+            requested_user_attribute_types=list(self.request_analysis.requested_user_attribute_types),
+        )
+
+    def distribute_goals_to_agent_states(self) -> None:
+        for agent_state in self.agent_states:
+            agent_state.request_analysis = self.build_agent_request_analysis(agent_state.agent_profile.name)
 
     def collect_agent_outputs(self) -> None:
         if not self.agent_states:
@@ -138,9 +207,30 @@ class MainState:
                 continue
             seen.add(normalized)
             deduped_evidence_ids.append(normalized)
+        self.result = AgentResult(
+            answer=list(self.result.answer),
+            answer_blocks=list(self.result.answer_blocks),
+            next_question=self.result.next_question,
+            roundtrip_summary=self.result.roundtrip_summary,
+            roundtrip_latency_ms=self.result.roundtrip_latency_ms,
+            tool_summary=dict(self.result.tool_summary),
+            agent_logs=self.build_agent_logs(),
+            used_evidence_ids=deduped_evidence_ids,
+            hydrated_evidence_by_id=dict(self.result.hydrated_evidence_by_id),
+        )
 
-        main_agent_state = self.get_agent_state(_get_main_agent_profile().name)
-        main_agent_state.relevant_evidence_ids = deduped_evidence_ids
+    def build_final_result(self) -> AgentResult:
+        return AgentResult(
+            answer=list(self.result.answer),
+            answer_blocks=list(self.result.answer_blocks),
+            next_question=self.result.next_question,
+            roundtrip_summary=self.result.roundtrip_summary,
+            roundtrip_latency_ms=self.result.roundtrip_latency_ms,
+            tool_summary=dict(self.result.tool_summary),
+            agent_logs=self.build_agent_logs(),
+            used_evidence_ids=list(self.result.used_evidence_ids),
+            hydrated_evidence_by_id=dict(self.result.hydrated_evidence_by_id),
+        )
 
     def build_agent_logs(self) -> dict[str, list[dict[str, Any]]]:
         logs = self.agent_log.to_grouped_dict()

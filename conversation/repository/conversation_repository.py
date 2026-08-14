@@ -13,6 +13,7 @@ from conversation.model_config_resolver import resolve_conversation_model_config
 from conversation.models.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig, ConversationModelConfigEntry
 from conversation.models.conversation_models import (
     Conversation,
+    ConversationEvent,
     ConversationMemory,
     ConversationRoundtrip,
     LlmCallRecord,
@@ -167,6 +168,89 @@ class ConversationRepository:
             row = cur.fetchone()
             assert row is not None
             return RoundtripPrompt(**row)
+
+    def create_conversation_event(
+        self,
+        *,
+        conversation_id: UUID,
+        roundtrip_id: UUID | None,
+        event_type: str,
+        source: str,
+        agent_name: str = "",
+        node_name: str = "",
+        step_id: str = "",
+        iteration: int | None = None,
+        payload: Optional[dict[str, Any]] = None,
+    ) -> ConversationEvent:
+        payload = payload or {}
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO conversation_event (
+                    conversation_id,
+                    roundtrip_id,
+                    event_type,
+                    source,
+                    agent_name,
+                    node_name,
+                    step_id,
+                    iteration,
+                    payload
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING
+                    id,
+                    conversation_id,
+                    roundtrip_id,
+                    event_type,
+                    source,
+                    agent_name,
+                    node_name,
+                    step_id,
+                    iteration,
+                    payload,
+                    created_at
+                """,
+                (
+                    conversation_id,
+                    roundtrip_id,
+                    event_type,
+                    source,
+                    agent_name,
+                    node_name,
+                    step_id,
+                    iteration,
+                    Jsonb(payload),
+                ),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            return ConversationEvent(**row)
+
+    def list_conversation_events_for_roundtrip(self, roundtrip_id: UUID) -> list[ConversationEvent]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    conversation_id,
+                    roundtrip_id,
+                    event_type,
+                    source,
+                    agent_name,
+                    node_name,
+                    step_id,
+                    iteration,
+                    payload,
+                    created_at
+                FROM conversation_event
+                WHERE roundtrip_id = %s
+                ORDER BY id ASC
+                """,
+                (roundtrip_id,),
+            )
+            rows = cur.fetchall()
+            return [ConversationEvent(**row) for row in rows]
 
     def create_llm_call(
         self,

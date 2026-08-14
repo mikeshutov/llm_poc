@@ -24,16 +24,61 @@ from .evaluation_result import EvaluationStatus, EVALUATION_STATUS_RETRYABLE
 from .plan import Plan
 
 
-class RequestAnalysis(BaseModel):
+class RequestAnalysisGoal(BaseModel):
+    agent: str = ""
     goal: str = ""
-    applicable_tool_categories: list[str] = []
+    tool_categories: list[str] = []
+
+
+class RequestAnalysis(BaseModel):
+    goals: list[RequestAnalysisGoal] = []
     requested_user_attribute_types: list[str] = []
+
+    def goal_for_agent(self, agent_name: str, default: str = "") -> str:
+        normalized_agent_name = agent_name.strip()
+        for goal_entry in self.goals:
+            if goal_entry.agent.strip() == normalized_agent_name:
+                return goal_entry.goal.strip()
+        return default
+
+    def tool_categories_for_agent(self, agent_name: str) -> list[str]:
+        normalized_agent_name = agent_name.strip()
+        for goal_entry in self.goals:
+            if goal_entry.agent.strip() == normalized_agent_name:
+                return [category for category in goal_entry.tool_categories if isinstance(category, str) and category.strip()]
+        return []
+
+    def set_goal_for_agent(self, agent_name: str, goal: str, *, tool_categories: list[str] | None = None) -> None:
+        normalized_agent_name = agent_name.strip()
+        normalized_goal = goal.strip()
+        normalized_tool_categories = [] if tool_categories is None else [
+            category.strip()
+            for category in tool_categories
+            if isinstance(category, str) and category.strip()
+        ]
+        for goal_entry in self.goals:
+            if goal_entry.agent.strip() == normalized_agent_name:
+                goal_entry.goal = normalized_goal
+                if tool_categories is not None:
+                    goal_entry.tool_categories = normalized_tool_categories
+                return
+        self.goals.append(
+            RequestAnalysisGoal(
+                agent=normalized_agent_name,
+                goal=normalized_goal,
+                tool_categories=normalized_tool_categories,
+            )
+        )
 
 
 def _get_main_agent_profile() -> AgentProfile:
     from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 
     return MAIN_AGENT_PROFILE
+
+
+def _build_default_llm() -> ChatOpenAI:
+    return ChatOpenAI(model=ConversationModelConfig.default_main_agent_planner_model())
 
 
 
@@ -61,6 +106,7 @@ def build_geometadata(
 class AgentStateLogElement:
     agent_name: str
     kind: str = "event"
+    node_name: str = ""
     title: str = ""
     summary: str = ""
     details: str = ""
@@ -81,6 +127,8 @@ class AgentStateLogElement:
         }
         if self.title:
             payload["title"] = self.title
+        if self.node_name:
+            payload["node_name"] = self.node_name
         if self.summary:
             payload["summary"] = self.summary
         if self.details:
@@ -116,6 +164,7 @@ class AgentStateLog:
         agent_name: str,
         kind: str = "event",
         title: str = "",
+        node_name: str = "",
         summary: str = "",
         details: str = "",
         status: str = "",
@@ -132,6 +181,7 @@ class AgentStateLog:
             AgentStateLogElement(
                 agent_name=agent_name,
                 kind=kind,
+                node_name=node_name,
                 title=title,
                 summary=summary,
                 details=details,
@@ -146,6 +196,21 @@ class AgentStateLog:
                 metadata={} if metadata is None else dict(metadata),
             )
         )
+        self._persist_entry(self.entries[-1])
+
+    @staticmethod
+    def _persist_entry(entry: AgentStateLogElement) -> None:
+        from common.logging import create_conversation_event
+
+        create_conversation_event(
+            event_type=entry.kind,
+            source=entry.agent_name,
+            agent_name=entry.agent_name,
+            node_name=entry.node_name,
+            step_id=entry.step_id,
+            iteration=entry.iteration,
+            payload=entry.to_payload(),
+        )
 
     def clone(self) -> AgentStateLog:
         return AgentStateLog(
@@ -153,6 +218,7 @@ class AgentStateLog:
                 AgentStateLogElement(
                     agent_name=entry.agent_name,
                     kind=entry.kind,
+                    node_name=entry.node_name,
                     title=entry.title,
                     summary=entry.summary,
                     details=entry.details,
@@ -220,7 +286,7 @@ class AgentState:
     relevant_evidence_ids: list[str] = field(default_factory=list)
     evaluation_status: EvaluationStatus = EVALUATION_STATUS_RETRYABLE
     goal_reached: bool = False
-    llm: Any = field(default_factory=lambda: ChatOpenAI(model=ConversationModelConfig.default_main_agent_planner_model()), repr=False)
+    llm: Any = field(default_factory=_build_default_llm, repr=False)
     conversation_model_config: ConversationModelConfig = field(default_factory=ConversationModelConfig.build_default)
 
     @classmethod
@@ -236,16 +302,36 @@ class AgentState:
         llm: Any | None = None,
         conversation_model_config: ConversationModelConfig | None = None,
     ) -> "AgentState":
+        resolved_agent_profile = _get_main_agent_profile() if agent_profile is None else agent_profile
+        resolved_conversation_model_config = (
+            ConversationModelConfig.build_default()
+            if conversation_model_config is None
+            else conversation_model_config
+        )
+        resolved_agent_scope = (
+            PROFILE_AGENT_MODEL_SCOPE
+            if resolved_agent_profile.name == PROFILE_MANAGEMENT_AGENT_NAME
+            else MAIN_AGENT_MODEL_SCOPE
+        )
         return cls(
             task=task,
             max_turns=max_turns,
             conversation_context=ConversationContext() if conversation_context is None else conversation_context,
             user_profile=UserProfile() if user_profile is None else user_profile,
-            agent_profile=_get_main_agent_profile() if agent_profile is None else agent_profile,
+            agent_profile=resolved_agent_profile,
             conversation_id=conversation_id,
             roundtrip_id=roundtrip_id,
-            llm=ChatOpenAI(model=ConversationModelConfig.default_main_agent_planner_model()) if llm is None else llm,
-            conversation_model_config=ConversationModelConfig.build_default() if conversation_model_config is None else conversation_model_config,
+            llm=(
+                ChatOpenAI(
+                    model=resolved_conversation_model_config.resolve(
+                        agent=resolved_agent_scope,
+                        stage=PLANNER_STAGE,
+                    )
+                )
+                if llm is None
+                else llm
+            ),
+            conversation_model_config=resolved_conversation_model_config,
         )
 
     def add_iteration(self, iteration: IterationState) -> IterationState:
@@ -278,6 +364,7 @@ class AgentState:
         agent_name: str,
         kind: str = "event",
         title: str = "",
+        node_name: str = "",
         summary: str = "",
         details: str = "",
         status: str = "",
@@ -294,6 +381,7 @@ class AgentState:
             agent_name=agent_name,
             kind=kind,
             title=title,
+            node_name=node_name,
             summary=summary,
             details=details,
             status=status,
@@ -319,11 +407,18 @@ class AgentState:
         return MAIN_AGENT_MODEL_SCOPE
 
     def build_llm_for_stage(self, *, stage: str, agent: str | None = None) -> Any:
+        if self.llm is None:
+            resolved_agent = self.resolve_agent_scope() if agent is None else agent
+            return ChatOpenAI(model=self.resolve_model_for_stage(agent=resolved_agent, stage=stage))
         if not isinstance(self.llm, ChatOpenAI):
             return self.llm
         resolved_agent = self.resolve_agent_scope() if agent is None else agent
         model_name = self.resolve_model_for_stage(agent=resolved_agent, stage=stage)
-        if resolved_agent == MAIN_AGENT_MODEL_SCOPE and stage == PLANNER_STAGE and model_name == ConversationModelConfig.default_main_agent_planner_model():
+        default_planner_model = ConversationModelConfig.build_default().resolve(
+            agent=self.resolve_agent_scope(),
+            stage=PLANNER_STAGE,
+        )
+        if resolved_agent == self.resolve_agent_scope() and stage == "planner" and model_name == default_planner_model:
             return self.llm
         return ChatOpenAI(model=model_name)
 

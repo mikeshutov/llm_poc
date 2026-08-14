@@ -3,9 +3,12 @@ import html
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 import streamlit as st
 
+from common.logging import fetch_agent_logs_for_roundtrip, fetch_llm_call_payloads_for_roundtrip
+from llm.usage import build_llm_usage_payload
 from rendering.debug import debug_render_message, render_agent_logs
 from rendering.cards import render_cards
 from rendering.feedback import render_feedback_controls
@@ -115,6 +118,13 @@ def _render_roundtrip_llm_usage(llm_usage: dict | None) -> None:
             st.json(summary, expanded=False)
         if calls:
             st.json(calls, expanded=False)
+
+
+def fetch_llm_usage_for_roundtrip(roundtrip_id: str | None) -> dict[str, Any] | None:
+    llm_calls = fetch_llm_call_payloads_for_roundtrip(roundtrip_id)
+    if not llm_calls:
+        return None
+    return build_llm_usage_payload(llm_calls)
 
 
 def _get_hydrated_evidence_by_id(payload: dict | None) -> dict[str, HydratedEvidence]:
@@ -274,18 +284,15 @@ def _render_result_block(
     return block_cards
 
 
-def render_assistant_content(content: str, payload: dict | None) -> None:
+def render_assistant_content(content: str, payload: dict | None, *, roundtrip_id: str | None = None) -> None:
     next_question = None
-    agent_logs = None
-    llm_usage = None
     if isinstance(payload, dict):
         next_question = payload.get("next_question")
-        agent_logs = payload.get("agent_logs")
-        llm_usage = payload.get("llm_usage")
     hydrated_evidence_by_id = _get_hydrated_evidence_by_id(payload)
     result_blocks = get_renderable_result_blocks(content, payload)
     has_next_question = isinstance(next_question, str) and bool(next_question)
     all_block_cards: list[EvidenceCard] = []
+    llm_usage = fetch_llm_usage_for_roundtrip(roundtrip_id)
 
     for block in result_blocks:
         all_block_cards.extend(_render_result_block(block, hydrated_evidence_by_id))
@@ -310,7 +317,7 @@ def render_assistant_content(content: str, payload: dict | None) -> None:
         st.markdown(next_question)
 
     _render_roundtrip_llm_usage(llm_usage)
-    render_agent_logs(agent_logs)
+    render_agent_logs(fetch_agent_logs_for_roundtrip(roundtrip_id))
 
 
 def _render_file_preview(attached_file: dict) -> None:
@@ -343,7 +350,11 @@ def render_message(msg: dict) -> None:
     else:
         with st.chat_message(role):
             if role == ROLE_ASSISTANT:
-                render_assistant_content(content, msg.get("payload"))
+                render_assistant_content(
+                    content,
+                    msg.get("payload"),
+                    roundtrip_id=msg.get("roundtrip_id"),
+                )
                 render_feedback_controls(
                     roundtrip_id=msg.get("roundtrip_id"),
                     model=msg.get("model"),
@@ -351,7 +362,7 @@ def render_message(msg: dict) -> None:
                     feedback_id=msg.get("feedback_id"),
                     timestamp=footer_timestamp,
                     usage_summary=_format_roundtrip_usage_summary(
-                        payload.get("llm_usage") if isinstance(payload, dict) else None
+                        fetch_llm_usage_for_roundtrip(msg.get("roundtrip_id"))
                     ),
                 )
             else:

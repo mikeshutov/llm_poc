@@ -6,11 +6,11 @@ from langsmith import traceable
 
 from request_orchestrator.models.agent_state import AgentState, IterationState
 from request_orchestrator.models import AgentResult, Plan, PlanningResult
+from common.logging import log_roundtrip_prompt
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from request_orchestrator.constants import PLANNER_PROMPT_STEP
 from common.data import repair_common_json_issues, strip_code_fences
 from conversation.models.conversation_model_config import PLANNER_STAGE
-from conversation.repository.repo_factory import get_conversation_repo
 from llm.usage import record_llm_call, serialize_llm_call_record
 from tool.repository.plan_repository import PlanRepository
 from rendering.debug import PLAN_KIND
@@ -45,6 +45,7 @@ def _invoke_planner(
         stage=PLANNER_STAGE,
         callsite="shared_planner.run_planner",
         latency_ms=latency_ms,
+        owner_agent_name=agent_state.agent_profile.name,
         input_object=prompt_input_object,
         output_object={
             "raw_content": response.content,
@@ -114,8 +115,8 @@ def run_planner(agent_state: AgentState) -> AgentState:
     )
 
     if agent_state.roundtrip_id:
-        get_conversation_repo().create_roundtrip_prompt(
-            agent_state.roundtrip_id,
+        log_roundtrip_prompt(
+            roundtrip_id=agent_state.roundtrip_id,
             agent=agent_state.agent_profile.name,
             prompt_step=PLANNER_PROMPT_STEP,
             prompt=prompt_text,

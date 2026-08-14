@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from conversation.models.conversation_model_config import (
+    DEFAULT_MAIN_AGENT_PLANNER_MODEL,
+    DEFAULT_MAIN_AGENT_REQUEST_ANALYSIS_MODEL,
+    DEFAULT_MAIN_AGENT_SYNTHESIS_MODEL,
+)
 from request_orchestrator.agents.models.agent_profile import AgentProfile
 from request_orchestrator.shared.tool_adapter.memories.get_memory_detail import get_memory_detail
 from request_orchestrator.shared.tool_adapter.memories.search_memories import search_memories
@@ -18,4 +23,9 @@ MAIN_AGENT_PROFILE = AgentProfile(
     name='main_agent',
     allowed_categories=set(TOOL_CATEGORIES.keys()) - {'memories', 'user_attributes'},
     extra_tools=READ_ONLY_PROFILE_AND_MEMORY_TOOLS,
+    default_stage_models={
+        "request_analysis": DEFAULT_MAIN_AGENT_REQUEST_ANALYSIS_MODEL,
+        "planner": DEFAULT_MAIN_AGENT_PLANNER_MODEL,
+        "synthesis": DEFAULT_MAIN_AGENT_SYNTHESIS_MODEL,
+    },
 )

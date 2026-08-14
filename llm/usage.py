@@ -5,9 +5,11 @@ from typing import Any, Iterable
 from uuid import UUID
 
 from common.data import sanitize_for_json_storage
+from common.logging import create_conversation_event
 from conversation.models.conversation_model_config import ConversationModelConfig
 from conversation.models.conversation_models import LlmCallRecord, LlmUsage
 from conversation.repository.repo_factory import get_conversation_repo
+from request_orchestrator.shared.runtime_context import get_current_agent_name
 
 ONE_MILLION = Decimal("1000000")
 
@@ -168,8 +170,11 @@ def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[st
         input_object = metadata.pop("input_object", None)
         output_object = metadata.pop("output_object", None)
         latency_ms = _normalize_latency_ms(metadata.pop("latency_ms", None))
+        owner_agent_name = metadata.pop("owner_agent_name", None)
         return {
             "agent": record.get("agent"),
+            "model_scope": record.get("agent"),
+            "owner_agent_name": owner_agent_name,
             "stage": record.get("stage"),
             "callsite": record.get("callsite"),
             "model": record.get("model"),
@@ -192,8 +197,11 @@ def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[st
     input_object = metadata.pop("input_object", None)
     output_object = metadata.pop("output_object", None)
     latency_ms = _normalize_latency_ms(metadata.pop("latency_ms", None))
+    owner_agent_name = metadata.pop("owner_agent_name", None)
     return {
         "agent": record.agent,
+        "model_scope": record.agent,
+        "owner_agent_name": owner_agent_name,
         "stage": record.stage,
         "callsite": record.callsite,
         "model": record.model,
@@ -254,6 +262,7 @@ def record_llm_call(
     input_object: Any = None,
     output_object: Any = None,
     latency_ms: int | None = None,
+    owner_agent_name: str | None = None,
 ):
     usage = extract_llm_usage(raw_response)
     if usage is None:
@@ -272,7 +281,12 @@ def record_llm_call(
     if not hasattr(repo, "create_llm_call"):
         return None
 
-    return repo.create_llm_call(
+    resolved_owner_agent_name = (owner_agent_name or get_current_agent_name() or "").strip() or None
+    metadata_with_owner = {} if metadata is None else dict(metadata)
+    if resolved_owner_agent_name:
+        metadata_with_owner["owner_agent_name"] = resolved_owner_agent_name
+
+    record = repo.create_llm_call(
         conversation_id=_parse_uuid(conversation_id),
         roundtrip_id=_parse_uuid(roundtrip_id),
         user_id=user_id,
@@ -290,9 +304,18 @@ def record_llm_call(
         computed_output_cost=output_cost,
         computed_total_cost=total_cost,
         metadata=_build_llm_call_metadata(
-            metadata=metadata,
+            metadata=metadata_with_owner,
             input_object=input_object,
             output_object=output_object,
             latency_ms=latency_ms,
         ),
     )
+    serialized_record = serialize_llm_call_record(record)
+    create_conversation_event(
+        event_type="llm_call",
+        source=callsite,
+        agent_name=resolved_owner_agent_name or agent or "",
+        node_name=stage or "",
+        payload=serialized_record,
+    )
+    return record

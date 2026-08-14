@@ -11,7 +11,7 @@ from request_orchestrator.models.agent_result import AgentResult
 from conversation.repository.repo_factory import get_conversation_repo
 from conversation.summary_service import rebuild_conversation_summaries
 from rendering.feedback import render_feedback_controls
-from rendering.rendering import render_assistant_content, format_timestamp, _format_roundtrip_usage_summary
+from rendering.rendering import render_assistant_content, format_timestamp, _format_roundtrip_usage_summary, fetch_llm_usage_for_roundtrip
 from common.config import (
     CONTENT_KEY,
     ROLE_ASSISTANT,
@@ -26,23 +26,7 @@ MESSAGE_HISTORY_LIMIT = 10
 
 
 def _build_answer_payload(answer: AgentResult) -> dict:
-    payload = {
-        "response": answer.raw_response,
-        "result": [block.model_dump() for block in answer.answer_blocks],
-        "used_evidence_ids": list(answer.used_evidence_ids),
-        "hydrated_evidence_by_id": {
-            evidence_id: evidence.model_dump()
-            for evidence_id, evidence in answer.hydrated_evidence_by_id.items()
-        },
-        "next_question": answer.next_question,
-        "roundtrip_summary": answer.roundtrip_summary,
-        "tool_summary": answer.tool_summary,
-        "agent_logs": answer.agent_logs,
-    }
-    roundtrip_latency_ms = getattr(answer, "roundtrip_latency_ms", None)
-    if roundtrip_latency_ms is not None:
-        payload["roundtrip_latency_ms"] = roundtrip_latency_ms
-    return payload
+    return answer.to_payload()
 
 
 def _merge_response_payload(roundtrip: ConversationRoundtrip, answer: AgentResult) -> dict:
@@ -51,12 +35,6 @@ def _merge_response_payload(roundtrip: ConversationRoundtrip, answer: AgentResul
     merged = dict(stored_payload)
 
     for key, value in answer_payload.items():
-        if key == "response":
-            merged[key] = value or merged.get(key) or roundtrip.generated_response or ""
-            continue
-        if key == "agent_logs":
-            merged[key] = value or merged.get(key) or {}
-            continue
         if key == "result":
             merged[key] = value or merged.get(key) or []
             continue
@@ -127,7 +105,7 @@ def append_assistant_response(
     conversation_repository = get_conversation_repo()
 
     payload = _merge_response_payload(roundtrip, answer)
-    rendered_response = str(payload.get("response") or answer.raw_response or roundtrip.generated_response or "")
+    rendered_response = str(answer.raw_response or roundtrip.generated_response or "")
 
     now = datetime.now(timezone.utc)
     assistant_message = {
@@ -141,14 +119,18 @@ def append_assistant_response(
     }
     st.session_state.messages.append(assistant_message)
     with st.chat_message(ROLE_ASSISTANT):
-        render_assistant_content(rendered_response, payload)
+        render_assistant_content(
+            rendered_response,
+            payload,
+            roundtrip_id=str(roundtrip.id),
+        )
         render_feedback_controls(
             roundtrip_id=roundtrip.id,
             model=roundtrip.model,
             sources_payload=payload,
             feedback_id=None,
             timestamp=format_timestamp(now),
-            usage_summary=_format_roundtrip_usage_summary(payload.get("llm_usage") if isinstance(payload, dict) else None),
+            usage_summary=_format_roundtrip_usage_summary(fetch_llm_usage_for_roundtrip(str(roundtrip.id))),
         )
 
     _update_conversation_summary(conversation_id, roundtrip)

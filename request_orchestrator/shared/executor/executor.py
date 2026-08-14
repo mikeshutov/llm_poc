@@ -13,7 +13,7 @@ from request_orchestrator.models.agent_state import AgentState, IterationState
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import PlanStep
 from request_orchestrator.models.plan_step_ids import format_plan_step_id
-from request_orchestrator.shared.runtime_context import bind_runtime_context
+from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context
 from tool.registry import call_tool
 from tool.repository.tool_call_repository import ToolCallRepository
 from rendering.debug import TOOL_CALL_KIND
@@ -134,34 +134,35 @@ def run_executor(agent_state: AgentState) -> AgentState:
         roundtrip_id=str(agent_state.roundtrip_id) if agent_state.roundtrip_id else None,
         user_id=agent_state.user_profile.user_id,
     ):
-        plan = iteration.plan
-        if plan is None or not plan.steps:
-            return agent_state
+        with bind_agent_context(agent_name=agent_state.agent_profile.name):
+            plan = iteration.plan
+            if plan is None or not plan.steps:
+                return agent_state
 
-        with ThreadPoolExecutor(max_workers=len(plan.steps)) as executor:
-            futures_by_step_id = {
-                step.id: executor.submit(
-                    copy_context().run,
-                    _execute_step,
-                    step,
+            with ThreadPoolExecutor(max_workers=len(plan.steps)) as executor:
+                futures_by_step_id = {
+                    step.id: executor.submit(
+                        copy_context().run,
+                        _execute_step,
+                        step,
+                        iteration=iteration,
+                        iteration_number=iteration_number,
+                        allowed_tool_names=allowed_tool_names,
+                    )
+                    for step in plan.steps
+                }
+                execution_results = [
+                    futures_by_step_id[step.id].result()
+                    for step in plan.steps
+                ]
+
+            for execution_result in execution_results:
+                _record_step_result(
+                    agent_state,
                     iteration=iteration,
+                    tool_repo=tool_repo,
                     iteration_number=iteration_number,
-                    allowed_tool_names=allowed_tool_names,
+                    execution_result=execution_result,
                 )
-                for step in plan.steps
-            }
-            execution_results = [
-                futures_by_step_id[step.id].result()
-                for step in plan.steps
-            ]
-
-        for execution_result in execution_results:
-            _record_step_result(
-                agent_state,
-                iteration=iteration,
-                tool_repo=tool_repo,
-                iteration_number=iteration_number,
-                execution_result=execution_result,
-            )
 
     return agent_state

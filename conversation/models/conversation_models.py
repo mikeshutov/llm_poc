@@ -74,6 +74,21 @@ class ConversationRoundtrip:
 
 
 @dataclass(frozen=False)
+class ConversationEvent:
+    id: int
+    conversation_id: UUID
+    roundtrip_id: Optional[UUID]
+    event_type: str
+    source: str
+    agent_name: str
+    node_name: str
+    step_id: str
+    iteration: Optional[int]
+    payload: dict[str, Any]
+    created_at: str
+
+
+@dataclass(frozen=False)
 class RoundtripFeedback:
     id: UUID
     roundtrip_id: UUID

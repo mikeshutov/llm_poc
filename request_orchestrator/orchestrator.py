@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from langgraph.graph import END, StateGraph
 from langsmith import traceable
 
@@ -8,7 +10,6 @@ from request_orchestrator.agents.profile_management.agent import run_agent as ru
 from request_orchestrator.constants import REQUEST_ANALYSIS_EDGE, SYNTHESIZE_EDGE
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.main_state import MainState
-from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from request_orchestrator.shared.profile import load_user_profile
 from request_orchestrator.shared.request_analysis.analyze_request import analyze_request
 from request_orchestrator.shared.synthesis.synthesis import run_synthesis
@@ -18,82 +19,40 @@ MAIN_AGENT_EDGE = "main_agent"
 COLLECT_EDGE = "collect"
 FANOUT_EDGE = "fanout"
 PROFILE_LOADING_EDGE = "load_user_profile"
+DISTRIBUTE_GOALS_EDGE = "distribute_goals"
+AGENT_RUNNERS: dict[str, Callable] = {
+    PROFILE_MANAGEMENT_EDGE: run_profile_management_agent,
+    MAIN_AGENT_EDGE: run_main_agent,
+}
+AGENT_EXECUTION_ORDER = [
+    PROFILE_MANAGEMENT_EDGE,
+    MAIN_AGENT_EDGE,
+]
 
 
 def _fanout_node(state: MainState) -> MainState:
     state.fan_out_shared_state()
-    return MainState(
-        task=state.task,
-        max_turns=state.max_turns,
-        conversation_context=state.conversation_context,
-        user_profile=state.user_profile,
-        conversation_id=state.conversation_id,
-        roundtrip_id=state.roundtrip_id,
-        request_analysis=state.request_analysis,
-        agent_states=list(state.agent_states),
-        agent_log=state.agent_log,
-        result=state.result,
-        llm=state.llm,
-        conversation_model_config=state.conversation_model_config,
-    )
+    return state
 
 
-def _run_profile_management_update(state: MainState) -> MainState:
-    agent_state = state.get_agent_state("profile_management").clone_for_parallel()
-    updated_state = run_profile_management_agent(agent_state)
-    state.set_agent_state(updated_state)
-    return MainState(
-        task=state.task,
-        max_turns=state.max_turns,
-        conversation_context=state.conversation_context,
-        user_profile=state.user_profile,
-        conversation_id=state.conversation_id,
-        roundtrip_id=state.roundtrip_id,
-        request_analysis=state.request_analysis,
-        agent_states=list(state.agent_states),
-        agent_log=state.agent_log,
-        result=state.result,
-        llm=state.llm,
-        conversation_model_config=state.conversation_model_config,
-    )
+def _distribute_goals_node(state: MainState) -> MainState:
+    state.distribute_goals_to_agent_states()
+    return state
 
 
-def _run_main_agent_update(state: MainState) -> MainState:
-    agent_state = state.get_agent_state("main_agent").clone_for_parallel()
-    updated_state = run_main_agent(agent_state)
-    state.set_agent_state(updated_state)
-    return MainState(
-        task=state.task,
-        max_turns=state.max_turns,
-        conversation_context=state.conversation_context,
-        user_profile=state.user_profile,
-        conversation_id=state.conversation_id,
-        roundtrip_id=state.roundtrip_id,
-        request_analysis=state.request_analysis,
-        agent_states=list(state.agent_states),
-        agent_log=state.agent_log,
-        result=state.result,
-        llm=state.llm,
-        conversation_model_config=state.conversation_model_config,
-    )
+def _build_run_agent_node(agent_name: str, runner: Callable) -> Callable[[MainState], MainState]:
+    def _run_agent_update(state: MainState) -> MainState:
+        agent_state = state.get_agent_state(agent_name).clone_for_parallel()
+        updated_state = runner(agent_state)
+        state.upsert_agent_state(updated_state)
+        return state
+
+    return _run_agent_update
 
 
 def _collect_node(state: MainState) -> MainState:
     state.collect_agent_outputs()
-    return MainState(
-        task=state.task,
-        max_turns=state.max_turns,
-        conversation_context=state.conversation_context,
-        user_profile=state.user_profile,
-        conversation_id=state.conversation_id,
-        roundtrip_id=state.roundtrip_id,
-        request_analysis=state.request_analysis,
-        agent_states=list(state.agent_states),
-        agent_log=state.agent_log,
-        result=state.result,
-        llm=state.llm,
-        conversation_model_config=state.conversation_model_config,
-    )
+    return state
 
 
 def _compile_graph():
@@ -101,17 +60,21 @@ def _compile_graph():
     builder.add_node(REQUEST_ANALYSIS_EDGE, analyze_request)
     builder.add_node(PROFILE_LOADING_EDGE, load_user_profile)
     builder.add_node(FANOUT_EDGE, _fanout_node)
-    builder.add_node(PROFILE_MANAGEMENT_EDGE, _run_profile_management_update)
-    builder.add_node(MAIN_AGENT_EDGE, _run_main_agent_update)
+    builder.add_node(DISTRIBUTE_GOALS_EDGE, _distribute_goals_node)
+    for agent_name in AGENT_EXECUTION_ORDER:
+        builder.add_node(agent_name, _build_run_agent_node(agent_name, AGENT_RUNNERS[agent_name]))
     builder.add_node(COLLECT_EDGE, _collect_node)
     builder.add_node(SYNTHESIZE_EDGE, run_synthesis)
     builder.set_entry_point(REQUEST_ANALYSIS_EDGE)
 
     builder.add_edge(REQUEST_ANALYSIS_EDGE, PROFILE_LOADING_EDGE)
     builder.add_edge(PROFILE_LOADING_EDGE, FANOUT_EDGE)
-    builder.add_edge(FANOUT_EDGE, PROFILE_MANAGEMENT_EDGE)
-    builder.add_edge(PROFILE_MANAGEMENT_EDGE, MAIN_AGENT_EDGE)
-    builder.add_edge(MAIN_AGENT_EDGE, COLLECT_EDGE)
+    builder.add_edge(FANOUT_EDGE, DISTRIBUTE_GOALS_EDGE)
+    previous_edge = DISTRIBUTE_GOALS_EDGE
+    for agent_name in AGENT_EXECUTION_ORDER:
+        builder.add_edge(previous_edge, agent_name)
+        previous_edge = agent_name
+    builder.add_edge(previous_edge, COLLECT_EDGE)
     builder.add_edge(COLLECT_EDGE, SYNTHESIZE_EDGE)
     builder.add_edge(SYNTHESIZE_EDGE, END)
     return builder.compile()
@@ -125,19 +88,4 @@ def run_agent(main_state: MainState) -> AgentResult:
         config={"configurable": {"thread_id": main_state.conversation_id or ""}},
     )
     final = final_state if isinstance(final_state, MainState) else MainState(**final_state)
-    return AgentResult(
-        answer=list(final.result.answer),
-        answer_blocks=[
-            SynthesisResultBlock(
-                content=block.content,
-                evidence_ids=list(block.evidence_ids),
-            )
-            for block in final.result.answer_blocks
-        ],
-        next_question=final.result.next_question,
-        roundtrip_summary=final.result.roundtrip_summary,
-        tool_summary=dict(final.result.tool_summary),
-        agent_logs=final.build_agent_logs(),
-        used_evidence_ids=list(final.result.used_evidence_ids),
-        hydrated_evidence_by_id=dict(final.result.hydrated_evidence_by_id),
-    )
+    return final.build_final_result()
