@@ -14,16 +14,17 @@ ORCHESTRATOR_AGENT_NAME = "request_orchestrator"
 @traceable(name="Load User Profile Node")
 def load_user_profile(main_state: MainState) -> MainState:
     requested_attribute_types = list(main_state.request_analysis.requested_user_attribute_types)
-    hydrate_user_profile_core(main_state.user_profile)
+    user_profile = main_state.execution_context.user_profile
+    hydrate_user_profile_core(user_profile)
     load_user_profile_attributes(
-        main_state.user_profile,
+        user_profile,
         requested_attribute_types=requested_attribute_types,
     )
 
-    loaded_attributes = main_state.user_profile.user_attributes.attributes
+    loaded_attributes = user_profile.user_attributes.attributes
     create_conversation_event(
-        conversation_id=main_state.conversation_id,
-        roundtrip_id=main_state.roundtrip_id,
+        conversation_id=main_state.execution_context.conversation_id,
+        roundtrip_id=main_state.execution_context.roundtrip_id,
         event_type=PROFILE_LOAD_KIND,
         source=ORCHESTRATOR_AGENT_NAME,
         agent_name=ORCHESTRATOR_AGENT_NAME,
@@ -31,9 +32,9 @@ def load_user_profile(main_state: MainState) -> MainState:
             "agent_name": ORCHESTRATOR_AGENT_NAME,
             "kind": PROFILE_LOAD_KIND,
             "data": {
-                "first_name": main_state.user_profile.first_name,
-                "last_name": main_state.user_profile.last_name,
-                "display_name": main_state.user_profile.display_name,
+                "first_name": user_profile.first_name,
+                "last_name": user_profile.last_name,
+                "display_name": user_profile.display_name,
                 "requested_user_attribute_types": requested_attribute_types,
                 "loaded_attribute_count": len(loaded_attributes),
                 "loaded_attribute_types": sorted({attribute.attribute_type for attribute in loaded_attributes}),

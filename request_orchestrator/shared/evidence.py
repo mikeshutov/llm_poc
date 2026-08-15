@@ -1,34 +1,52 @@
 from __future__ import annotations
 
 from request_orchestrator.models.agent_prompt import EvidenceStep
-from request_orchestrator.models.agent_state import IterationState
 from request_orchestrator.models.evidence import EvidenceBundle, EvidenceView, HydratedEvidence, ToolResult
-from request_orchestrator.models.plan_step_ids import format_plan_step_id
 from tool.tools import get_tool_result_type
 
 
-def build_evidence_bundle(iteration_trace: list[IterationState]) -> EvidenceBundle:
+def _resolve_step_id(
+    tool_result: ToolResult,
+    *,
+    fallback_step_id: str,
+) -> str:
+    return tool_result.step_id.strip() or fallback_step_id
+
+
+def _resolve_tool_name(
+    tool_result: ToolResult,
+    *,
+    fallback_tool_name: str,
+) -> str:
+    if tool_result.tool_name.strip():
+        return tool_result.tool_name.strip()
+    for evidence in tool_result.hydrated_evidence:
+        if evidence.tool_name.strip():
+            return evidence.tool_name.strip()
+        if evidence.source.strip():
+            return evidence.source.strip()
+    return fallback_tool_name
+
+
+def build_evidence_bundle_from_tool_results(tool_results: list[ToolResult]) -> EvidenceBundle:
     hydrated_evidence_by_id: dict[str, HydratedEvidence] = {}
     evidence_views_by_step_id: dict[str, list[EvidenceView]] = {}
 
-    for iteration_number, iteration in enumerate(iteration_trace, start=1):
-        if iteration.plan is None:
+    for tool_result in tool_results:
+        resolved_step_id = _resolve_step_id(tool_result, fallback_step_id="")
+        if not resolved_step_id:
             continue
-        for step in iteration.plan.steps:
-            step_id = format_plan_step_id(iteration_number, step.id)
-            tool_result = iteration.results.get(step_id)
-            if not isinstance(tool_result, ToolResult):
-                continue
-            hydrated_evidence, evidence_views = _rehydrate_tool_result_records(
-                tool_result,
-                step_id=step_id,
-                tool_name=step.tool,
-            )
-            if not hydrated_evidence:
-                continue
-            evidence_views_by_step_id[step_id] = evidence_views
-            for evidence in hydrated_evidence:
-                hydrated_evidence_by_id[evidence.evidence_id] = evidence
+        resolved_tool_name = _resolve_tool_name(tool_result, fallback_tool_name="")
+        hydrated_evidence, evidence_views = _rehydrate_tool_result_records(
+            tool_result,
+            step_id=resolved_step_id,
+            tool_name=resolved_tool_name,
+        )
+        if not hydrated_evidence:
+            continue
+        evidence_views_by_step_id[resolved_step_id] = evidence_views
+        for evidence in hydrated_evidence:
+            hydrated_evidence_by_id[evidence.evidence_id] = evidence
 
     return EvidenceBundle(
         hydrated_evidence_by_id=hydrated_evidence_by_id,
@@ -36,24 +54,32 @@ def build_evidence_bundle(iteration_trace: list[IterationState]) -> EvidenceBund
     )
 
 
-def build_evidence_steps(
-    iteration_trace: list[IterationState],
+def build_evidence_steps_from_tool_results(
+    tool_results: list[ToolResult],
     evidence_views_by_step_id: dict[str, list[EvidenceView]],
 ) -> list[EvidenceStep]:
     evidence_steps: list[EvidenceStep] = []
-    for iteration_number, iteration in enumerate(iteration_trace, start=1):
-        if iteration.plan is None:
+    evidence_step_by_type: dict[str, EvidenceStep] = {}
+    for tool_result in tool_results:
+        resolved_step_id = _resolve_step_id(tool_result, fallback_step_id="")
+        if not resolved_step_id:
             continue
-        for step in iteration.plan.steps:
-            step_id = format_plan_step_id(iteration_number, step.id)
-            tool_result = iteration.results.get(step_id)
-            step_type = get_tool_result_type(step.tool)
+        resolved_tool_name = _resolve_tool_name(tool_result, fallback_tool_name="")
+        step_type = get_tool_result_type(resolved_tool_name)
+        step_metadata = dict(tool_result.metadata)
+        step_evidence = list(evidence_views_by_step_id.get(resolved_step_id, []))
+        existing_step = evidence_step_by_type.get(step_type)
+        if existing_step is None:
             evidence_step = EvidenceStep(
                 type=step_type,
-                metadata=dict(tool_result.metadata) if isinstance(tool_result, ToolResult) else {},
-                evidence=list(evidence_views_by_step_id.get(step_id, [])),
+                metadata=step_metadata,
+                evidence=step_evidence,
             )
+            evidence_step_by_type[step_type] = evidence_step
             evidence_steps.append(evidence_step)
+            continue
+        existing_step.metadata = _merge_step_metadata(existing_step.metadata, step_metadata)
+        existing_step.evidence.extend(step_evidence)
     return evidence_steps
 
 

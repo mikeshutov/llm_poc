@@ -1,141 +1,41 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 from uuid import UUID
 
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
-
-from conversation.models.conversation_model_config import (
-    ConversationModelConfig,
-    PLANNER_STAGE,
-)
+from conversation.models.conversation_model_config import ConversationModelConfig
 from conversation.models.conversation_models import ConversationContext
-from personalization.profile.models import GeoLocation, GeoMetadata, UserProfile
-from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
-from request_orchestrator.models.agent_profile import AgentProfile
+from personalization.profile.models import UserProfile
+from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
+from request_orchestrator.models.plan import Plan
+from .agent_execution_context import AgentExecutionContext
 from .agent_result import AgentResult
-from .evaluation_result import EvaluationStatus, EVALUATION_STATUS_RETRYABLE
-from .plan import Plan
-
-
-class RequestAnalysisGoal(BaseModel):
-    agent: str = ""
-    goal: str = ""
-    tool_categories: list[str] = []
-
-
-class RequestAnalysis(BaseModel):
-    goals: list[RequestAnalysisGoal] = []
-    requested_user_attribute_types: list[str] = []
-
-    def _goal_entry_for_agent(self, agent_name: str) -> RequestAnalysisGoal | None:
-        normalized_agent_name = agent_name.strip()
-        for goal_entry in self.goals:
-            if goal_entry.agent.strip() == normalized_agent_name:
-                return goal_entry
-        return None
-
-    def goal_for_agent(self, agent_name: str, default: str = "") -> str:
-        goal_entry = self._goal_entry_for_agent(agent_name)
-        if goal_entry is None:
-            return default
-        return goal_entry.goal.strip()
-
-    def tool_categories_for_agent(self, agent_name: str) -> list[str]:
-        goal_entry = self._goal_entry_for_agent(agent_name)
-        if goal_entry is None:
-            return []
-        return [
-            category
-            for category in goal_entry.tool_categories
-            if isinstance(category, str) and category.strip()
-        ]
-
-    def set_goal_for_agent(self, agent_name: str, goal: str, *, tool_categories: list[str] | None = None) -> None:
-        goal_entry = self._goal_entry_for_agent(agent_name)
-        normalized_agent_name = agent_name.strip()
-        normalized_goal = goal.strip()
-        normalized_tool_categories = [] if tool_categories is None else [
-            category.strip()
-            for category in tool_categories
-            if isinstance(category, str) and category.strip()
-        ]
-        if goal_entry is not None:
-            goal_entry.goal = normalized_goal
-            if tool_categories is not None:
-                goal_entry.tool_categories = normalized_tool_categories
-            return
-        self.goals.append(
-            RequestAnalysisGoal(
-                agent=normalized_agent_name,
-                goal=normalized_goal,
-                tool_categories=normalized_tool_categories,
-            )
-        )
-
-def _default_planner_model_for_agent_scope(agent_scope: str) -> str:
-    return ConversationModelConfig.build_default().resolve(
-        agent=agent_scope,
-        stage=PLANNER_STAGE,
-    )
-
-def _build_default_llm() -> ChatOpenAI:
-    return ChatOpenAI(model=ConversationModelConfig.default_main_agent_planner_model())
-
-
-@dataclass
-class IterationState:
-    plan: Plan | None = None
-    results: dict[str, Any] = field(default_factory=dict)
-    needs_replan: bool = False
-
-    @classmethod
-    def new(
-        cls,
-        *,
-        plan: Plan | None = None,
-        results: dict[str, Any] | None = None,
-    ) -> "IterationState":
-        return cls(
-            plan=plan,
-            results={} if results is None else results,
-            needs_replan=False,
-        )
-
-    def clone(self) -> IterationState:
-        return IterationState(
-            plan=None if self.plan is None else self.plan.model_copy(deep=True),
-            results=dict(self.results),
-            needs_replan=self.needs_replan,
-        )
-
+from .evidence import ToolResult
+from request_orchestrator.shared.node_state import AgentNodeStates
 
 @dataclass
 class AgentState:
     task: str
-    max_turns: int
-    conversation_context: ConversationContext = field(default_factory=ConversationContext)
-    user_profile: UserProfile = field(default_factory=UserProfile)
-    agent_profile: AgentProfile = field(default_factory=lambda: MAIN_AGENT_PROFILE)
-    conversation_id: str | None = None
-    roundtrip_id: UUID | None = None
-    request_analysis: RequestAnalysis = field(default_factory=RequestAnalysis)
-    iteration_trace: list[IterationState] = field(default_factory=list)
-    result: AgentResult = field(default_factory=lambda: AgentResult(answer=[]))
-    relevant_evidence_ids: list[str] = field(default_factory=list)
-    evaluation_status: EvaluationStatus = EVALUATION_STATUS_RETRYABLE
-    goal_reached: bool = False
-    llm: Any = field(default_factory=_build_default_llm, repr=False)
-    conversation_model_config: ConversationModelConfig = field(default_factory=ConversationModelConfig.build_default)
+    agent_profile: AgentProfile
+    execution_context: AgentExecutionContext = field(default_factory=AgentExecutionContext)
+    tool_category_names: list[str] = field(default_factory=list)
+    node_states: AgentNodeStates = field(default_factory=AgentNodeStates)
+    result: AgentResult = field(default_factory=AgentResult)
+    llm: Any = field(
+        default_factory=lambda: ChatOpenAI(
+            model=ConversationModelConfig.default_main_agent_planner_model()
+        ),
+        repr=False,
+    )
 
     @classmethod
     def new(
         cls,
         task: str,
-        max_turns: int,
         agent_profile: AgentProfile,
+        max_turns: int | None = None,
         conversation_context: ConversationContext | None = None,
         user_profile: UserProfile | None = None,
         conversation_id: str | None = None,
@@ -148,74 +48,81 @@ class AgentState:
             if conversation_model_config is None
             else conversation_model_config
         )
-        resolved_agent_scope = agent_profile.scope
+        resolved_agent_profile = (
+            replace(agent_profile, max_turns=max_turns)
+            if max_turns is not None and max_turns != agent_profile.max_turns
+            else agent_profile
+        )
+        resolved_agent_scope = resolved_agent_profile.scope
         return cls(
             task=task,
-            max_turns=max_turns,
-            conversation_context=ConversationContext() if conversation_context is None else conversation_context,
-            user_profile=UserProfile() if user_profile is None else user_profile,
-            agent_profile=agent_profile,
-            conversation_id=conversation_id,
-            roundtrip_id=roundtrip_id,
+            execution_context=AgentExecutionContext(
+                conversation_context=ConversationContext() if conversation_context is None else conversation_context,
+                user_profile=UserProfile() if user_profile is None else user_profile,
+                conversation_id=conversation_id,
+                roundtrip_id=roundtrip_id,
+                model_config=resolved_conversation_model_config,
+            ),
+            agent_profile=resolved_agent_profile,
             llm=(
                 ChatOpenAI(
                     model=resolved_conversation_model_config.resolve(
                         agent=resolved_agent_scope,
-                        stage=PLANNER_STAGE,
+                        stage="planner",
                     )
                 )
                 if llm is None
                 else llm
             ),
-            conversation_model_config=resolved_conversation_model_config,
         )
 
-    def add_iteration(self, iteration: IterationState) -> IterationState:
-        self.iteration_trace.append(iteration)
-        return iteration
+    def begin_plan(self, plan: Plan | None, *, needs_replan: bool = False) -> None:
+        self.node_states.planner.plan = None if plan is None else plan.model_copy(deep=True)
+        self.node_states.planner.needs_replan = needs_replan
+        self.node_states.planner.plan_count += 1
 
-    def clone_for_parallel(self) -> AgentState:
-        return AgentState(
-            task=self.task,
-            max_turns=self.max_turns,
-            conversation_context=self.conversation_context,
-            user_profile=self.user_profile,
-            agent_profile=self.agent_profile,
-            conversation_id=self.conversation_id,
-            roundtrip_id=self.roundtrip_id,
-            request_analysis=self.request_analysis.model_copy(deep=True),
-            iteration_trace=[iteration.clone() for iteration in self.iteration_trace],
-            result=self.result,
-            relevant_evidence_ids=list(self.relevant_evidence_ids),
-            evaluation_status=self.evaluation_status,
-            goal_reached=self.goal_reached,
-            llm=self.llm,
-            conversation_model_config=self.conversation_model_config.model_copy(deep=True),
-        )
+    @property
+    def max_turns(self) -> int:
+        return self.agent_profile.max_turns
 
-    def resolve_model_for_stage(self, *, agent: str, stage: str) -> str:
-        return self.conversation_model_config.resolve(agent, stage)
+    def set_agent_inputs(
+        self,
+        *,
+        task: str,
+        tool_category_names: list[str] | None = None,
+    ) -> None:
+        self.task = task.strip()
+        self.tool_category_names = [] if tool_category_names is None else [
+            category.strip()
+            for category in tool_category_names
+            if isinstance(category, str) and category.strip()
+        ]
 
     def resolve_agent_scope(self) -> str:
         return self.agent_profile.scope
 
-    def build_llm_for_stage(self, *, stage: str, agent: str | None = None) -> Any:
-        resolved_agent = self.resolve_agent_scope() if agent is None else agent
-        if self.llm is None:
-            return ChatOpenAI(
-                model=self.conversation_model_config.resolve(
-                    agent=resolved_agent,
-                    stage=stage,
-                )
-            )
-        if not isinstance(self.llm, ChatOpenAI):
-            return self.llm
-        model_name = self.resolve_model_for_stage(agent=resolved_agent, stage=stage)
-        agent_scope = self.resolve_agent_scope()
-        default_planner_model = _default_planner_model_for_agent_scope(agent_scope)
-        if resolved_agent == agent_scope and stage == PLANNER_STAGE and model_name == default_planner_model:
-            return self.llm
-        return ChatOpenAI(model=model_name)
+    def gather_tool_results(self) -> list[ToolResult]:
+        return [tool_result.model_copy(deep=True) for tool_result in self.result.tool_results]
 
+    def gather_used_tools(self) -> list[str]:
+        used_tools: list[str] = []
+        seen: set[str] = set()
+        for tool_result in self.gather_tool_results():
+            tool_name = tool_result.tool_name.strip()
+            if not tool_name or tool_name in seen:
+                continue
+            seen.add(tool_name)
+            used_tools.append(tool_name)
+        return used_tools
 
-
+    def upsert_tool_result(self, tool_result: ToolResult) -> None:
+        resolved_tool_result = tool_result.model_copy(deep=True)
+        updated_tool_results = [existing.model_copy(deep=True) for existing in self.result.tool_results]
+        if resolved_tool_result.step_id.strip():
+            for index, existing in enumerate(updated_tool_results):
+                if existing.step_id.strip() == resolved_tool_result.step_id.strip():
+                    updated_tool_results[index] = resolved_tool_result
+                    self.result = self.result.copy(tool_results=updated_tool_results)
+                    return
+        updated_tool_results.append(resolved_tool_result)
+        self.result = self.result.copy(tool_results=updated_tool_results)

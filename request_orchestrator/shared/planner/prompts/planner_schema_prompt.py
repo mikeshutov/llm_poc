@@ -21,6 +21,6 @@ Schema Rules:
 - Set needs_replan to true only when the current plan is intentionally incomplete because additional useful tool calls depend on the results of the current steps.
 - Otherwise set needs_replan to false.
 - Do not use outputs from one planned step as arguments for another planned step. Each step must be independently runnable from the provided args.
-- You may use already-available tool results from previous work or previous iterations when choosing the next step.
+- You may use already-available tool results from previous work when choosing the next step.
 - Return JSON only.
 """

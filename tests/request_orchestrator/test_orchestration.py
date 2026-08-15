@@ -30,15 +30,20 @@ from request_orchestrator.agents.profile_management.profile import PROFILE_MANAG
 from request_orchestrator.orchestrator import run_agent
 from request_orchestrator.constants import SYNTHESIS_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep
-from request_orchestrator.models.agent_state import AgentState, IterationState, RequestAnalysis, RequestAnalysisGoal
+from request_orchestrator.models.agent_state import AgentState, IterationState
+from request_orchestrator.models.request_analysis import RequestAnalysis, RequestAnalysisGoal
 from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from request_orchestrator.shared.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
-from request_orchestrator.shared.evidence import build_evidence_bundle, build_evidence_steps
+from request_orchestrator.shared.evidence import (
+    build_evidence_bundle_from_tool_results,
+    build_evidence_steps_from_tool_results,
+)
 from request_orchestrator.shared.evaluator.prompts.evaluator_prompt import build_evaluator_prompt
+from request_orchestrator.shared.llm_factory import build_llm_for_stage
 from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
 from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
 
@@ -307,7 +312,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertIn('"agent": "main_agent"', prompt_text)
         self.assertIn('"agent": "profile_management"', prompt_text)
 
-    def test_main_state_rebases_child_iteration_ids_for_synthesis_evidence(self) -> None:
+    def test_main_state_gathers_child_tool_results_for_synthesis_evidence(self) -> None:
         main_state = MainState.new(
             task='Combine child agent evidence.',
             max_turns=10,
@@ -317,8 +322,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             agent_profiles=_agent_profiles_for(UserProfile()),
         )
 
-        profile_state = main_state.get_agent_state('profile_management')
-        profile_state.iteration_trace = [
+        profile_state = main_state.agent_states['profile_management']
+        profile_state.set_iterations([
             IterationState(
                 plan=Plan.model_validate(
                     {
@@ -354,10 +359,10 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     )
                 },
             )
-        ]
+        ])
 
-        main_agent_state = main_state.get_agent_state('main_agent')
-        main_agent_state.iteration_trace = [
+        main_agent_state = main_state.agent_states['main_agent']
+        main_agent_state.set_iterations([
             IterationState(
                 plan=Plan.model_validate(
                     {
@@ -393,17 +398,28 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     )
                 },
             )
-        ]
+        ])
         main_agent_state.relevant_evidence_ids = ['P1E1R1']
 
-        iteration_trace = main_state.gather_iteration_trace()
-        evidence_bundle = build_evidence_bundle(iteration_trace)
-        evidence_steps = build_evidence_steps(iteration_trace, evidence_bundle.evidence_views_by_step_id)
+        tool_results = main_state.gather_tool_results()
+        evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
+        evidence_steps = build_evidence_steps_from_tool_results(
+            tool_results,
+            evidence_bundle.evidence_views_by_step_id,
+        )
 
-        self.assertEqual(sorted(evidence_bundle.hydrated_evidence_by_id.keys()), ['P1E1R1', 'P2E1R1'])
-        self.assertEqual(main_state.gather_relevant_evidence_ids(), ['P2E1R1'])
-        self.assertEqual(evidence_steps[0].evidence[0].title, 'Weather Result')
-        self.assertEqual(evidence_steps[1].evidence[0].title, 'Ramen Result')
+        self.assertEqual(len(tool_results), 2)
+        self.assertEqual(
+            [tool_result.evidence_views[0].title for tool_result in tool_results],
+            ['Weather Result', 'Ramen Result'],
+        )
+        self.assertEqual(sorted(evidence_bundle.hydrated_evidence_by_id.keys()), ['P1E1R1'])
+        self.assertEqual(main_state.gather_relevant_evidence_ids(), ['P1E1R1'])
+        self.assertEqual(len(evidence_steps), 2)
+        self.assertEqual(
+            [step.evidence[0].title for step in evidence_steps],
+            ['Ramen Result', 'Ramen Result'],
+        )
 
     def test_main_state_distributes_goals_to_matching_child_agents(self) -> None:
         main_state = MainState.new(
@@ -430,10 +446,10 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             requested_user_attribute_types=['projects.goals'],
         )
 
-        main_state.distribute_goals_to_agent_states()
+        main_state.initialize_agent_states()
 
-        profile_state = main_state.get_agent_state('profile_management')
-        routed_main_state = main_state.get_agent_state('main_agent')
+        profile_state = main_state.agent_states['profile_management']
+        routed_main_state = main_state.agent_states['main_agent']
 
         self.assertEqual(profile_state.request_analysis.goals, [])
         self.assertEqual(
@@ -461,7 +477,16 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             agent_profile=MAIN_AGENT_PROFILE,
         )
 
-        self.assertIs(parent_state.build_llm_for_stage(stage='planner'), parent_state.llm)
+        self.assertIs(
+            build_llm_for_stage(
+                execution_context=parent_state.execution_context,
+                llm=parent_state.llm,
+                agent=parent_state.resolve_agent_scope(),
+                stage='planner',
+                reuse_llm_for_agent_scope=parent_state.resolve_agent_scope(),
+            ),
+            parent_state.llm,
+        )
 
     def test_prompt_text_prunes_null_fields_from_plan_evidence(self) -> None:
         prompt = AgentPrompt(

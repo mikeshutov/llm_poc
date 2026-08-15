@@ -167,10 +167,26 @@ def _resolve_response_model_name(raw_response: Any, fallback_model_name: str | N
 def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[str, Any]:
     if isinstance(record, dict):
         metadata = dict(record.get("metadata") or {})
-        input_object = metadata.pop("input_object", None)
-        output_object = metadata.pop("output_object", None)
-        latency_ms = _normalize_latency_ms(metadata.pop("latency_ms", None))
-        owner_agent_name = metadata.pop("owner_agent_name", None)
+        input_object = record.get("input_object")
+        if input_object is None:
+            input_object = metadata.pop("input_object", None)
+        else:
+            metadata.pop("input_object", None)
+        output_object = record.get("output_object")
+        if output_object is None:
+            output_object = metadata.pop("output_object", None)
+        else:
+            metadata.pop("output_object", None)
+        latency_ms = _normalize_latency_ms(record.get("latency_ms"))
+        if latency_ms is None:
+            latency_ms = _normalize_latency_ms(metadata.pop("latency_ms", None))
+        else:
+            metadata.pop("latency_ms", None)
+        owner_agent_name = record.get("owner_agent_name")
+        if owner_agent_name is None:
+            owner_agent_name = metadata.pop("owner_agent_name", None)
+        else:
+            metadata.pop("owner_agent_name", None)
         return {
             "agent": record.get("agent"),
             "model_scope": record.get("agent"),

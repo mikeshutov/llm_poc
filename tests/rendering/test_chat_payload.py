@@ -14,24 +14,102 @@ if 'pycountry' not in sys.modules:
     sys.modules['pycountry'] = pycountry_module
 
 from request_orchestrator.models.agent_result import AgentResult
+from request_orchestrator.models.evidence import HydratedEvidence, ToolResult
+from request_orchestrator.models.orchestrator_result import OrchestratorResult
+from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from conversation.models.conversation_models import ConversationEvent
 from common.logging import fetch_agent_logs_for_roundtrip
-from rendering.debug import _build_log_payload, _ordered_agent_log_sections, _split_orchestrator_entries_for_agents
+from rendering.debug import _build_log_payload, _build_llm_call_payload, _ordered_agent_log_sections, _split_orchestrator_entries_for_agents
 from rendering.messages.chat import _build_answer_payload
 from rendering.rendering import fetch_llm_usage_for_roundtrip
 
 
-def test_build_answer_payload_includes_roundtrip_latency_ms() -> None:
+def test_build_answer_payload_omits_roundtrip_latency_ms() -> None:
     payload = _build_answer_payload(
-        AgentResult(
+        OrchestratorResult(
+            agent_result=AgentResult(),
             answer=['done'],
-            roundtrip_summary='summary',
-            roundtrip_latency_ms=1234,
         )
     )
 
-    assert payload['roundtrip_latency_ms'] == 1234
+    assert 'roundtrip_latency_ms' not in payload
     assert 'response' not in payload
+
+
+def test_build_answer_payload_preserves_result_block_evidence_ids() -> None:
+    payload = _build_answer_payload(
+        OrchestratorResult(
+            agent_result=AgentResult(
+                tool_results=[
+                    ToolResult(
+                        step_id="P1E1",
+                        tool_name="generic_web_search",
+                        hydrated_evidence=[
+                            HydratedEvidence(
+                                title="Example",
+                                summary="Summary",
+                                source="generic_web_search",
+                            )
+                        ],
+                    )
+                ],
+            ),
+            result_blocks=[
+                SynthesisResultBlock(
+                    content="Paragraph with evidence.",
+                    evidence_ids=["P1E1R1"],
+                )
+            ],
+            answer=["Paragraph with evidence."],
+        )
+    )
+
+    assert payload["result"] == [
+        {
+            "content": "Paragraph with evidence.",
+            "evidence_ids": ["P1E1R1"],
+        }
+    ]
+    assert payload["used_evidence_ids"] == ["P1E1R1"]
+    assert "P1E1R1" in payload["hydrated_evidence_by_id"]
+
+
+def test_build_answer_payload_normalizes_result_block_evidence_ids_to_namespaced_keys() -> None:
+    payload = _build_answer_payload(
+        OrchestratorResult(
+            agent_result=AgentResult(
+                tool_results=[
+                    ToolResult(
+                        step_id="main_agent:P1E1",
+                        tool_name="generic_web_search",
+                        hydrated_evidence=[
+                            HydratedEvidence(
+                                title="Example",
+                                summary="Summary",
+                                source="generic_web_search",
+                            )
+                        ],
+                    )
+                ],
+            ),
+            result_blocks=[
+                SynthesisResultBlock(
+                    content="Paragraph with evidence.",
+                    evidence_ids=["P1E1R1"],
+                )
+            ],
+            answer=["Paragraph with evidence."],
+        )
+    )
+
+    assert payload["result"] == [
+        {
+            "content": "Paragraph with evidence.",
+            "evidence_ids": ["main_agent:P1E1R1"],
+        }
+    ]
+    assert payload["used_evidence_ids"] == ["main_agent:P1E1R1"]
+    assert "main_agent:P1E1R1" in payload["hydrated_evidence_by_id"]
 
 
 def test_fetch_llm_usage_for_roundtrip_reads_llm_call_events_first() -> None:
@@ -74,6 +152,9 @@ def test_fetch_llm_usage_for_roundtrip_reads_llm_call_events_first() -> None:
                 )
             ]
 
+        def list_llm_calls_for_roundtrip(self, requested_roundtrip_id):
+            raise AssertionError('should not need llm_call table fallback when event payloads are complete')
+
     with patch('common.logging.conversation_event_view.get_conversation_repo', return_value=FakeRepo()):
         payload = fetch_llm_usage_for_roundtrip(str(roundtrip_id))
 
@@ -83,6 +164,85 @@ def test_fetch_llm_usage_for_roundtrip_reads_llm_call_events_first() -> None:
     assert payload['summary']['output_tokens'] == 20
     assert payload['summary']['total_tokens'] == 120
     assert payload['summary']['computed_total_cost'] == '0.000325'
+
+
+def test_fetch_llm_usage_for_roundtrip_falls_back_to_llm_call_rows_when_event_trace_is_missing() -> None:
+    roundtrip_id = uuid4()
+
+    class FakeRepo:
+        def list_conversation_events_for_roundtrip(self, requested_roundtrip_id):
+            assert requested_roundtrip_id == roundtrip_id
+            return [
+                ConversationEvent(
+                    id=1,
+                    conversation_id=uuid4(),
+                    roundtrip_id=roundtrip_id,
+                    event_type='llm_call',
+                    source='synthesis',
+                    agent_name='request_orchestrator',
+                    node_name='synthesis',
+                    step_id='',
+                    iteration=None,
+                    payload={
+                        'agent': 'main_agent',
+                        'model_scope': 'main_agent',
+                        'owner_agent_name': None,
+                        'stage': 'synthesis',
+                        'callsite': 'shared_synthesis.run_synthesis',
+                        'model': 'gpt-5.4-mini-2026-03-17',
+                        'input_tokens': 2059,
+                        'output_tokens': 396,
+                        'total_tokens': 2455,
+                        'cached_input_tokens': 0,
+                        'input_price_per_million_tokens': '0.75',
+                        'output_price_per_million_tokens': '4.5',
+                        'computed_input_cost': '0.00154425',
+                        'computed_output_cost': '0.001782',
+                        'computed_total_cost': '0.00332625',
+                        'latency_ms': None,
+                        'input_object': None,
+                        'output_object': None,
+                        'metadata': {},
+                    },
+                    created_at='2026-08-14T12:00:00Z',
+                )
+            ]
+
+        def list_llm_calls_for_roundtrip(self, requested_roundtrip_id):
+            assert requested_roundtrip_id == roundtrip_id
+            return [
+                {
+                    'agent': 'main_agent',
+                    'stage': 'synthesis',
+                    'callsite': 'shared_synthesis.run_synthesis',
+                    'model': 'gpt-5.4-mini-2026-03-17',
+                    'input_tokens': 2059,
+                    'output_tokens': 396,
+                    'total_tokens': 2455,
+                    'cached_input_tokens': 0,
+                    'input_price_per_million_tokens': '0.75',
+                    'output_price_per_million_tokens': '4.5',
+                    'computed_input_cost': '0.00154425',
+                    'computed_output_cost': '0.001782',
+                    'computed_total_cost': '0.00332625',
+                    'metadata': {
+                        'latency_ms': 450,
+                        'input_object': {'prompt': 'hello'},
+                        'output_object': {'raw_content': '{}'},
+                        'owner_agent_name': 'request_orchestrator',
+                    },
+                }
+            ]
+
+    with patch('common.logging.conversation_event_view.get_conversation_repo', return_value=FakeRepo()):
+        payload = fetch_llm_usage_for_roundtrip(str(roundtrip_id))
+
+    assert payload is not None
+    assert payload['retrieved_call_count'] == 1
+    assert payload['calls'][0]['input_object'] == {'prompt': 'hello'}
+    assert payload['calls'][0]['output_object'] == {'raw_content': '{}'}
+    assert payload['calls'][0]['latency_ms'] == 450
+    assert payload['calls'][0]['owner_agent_name'] == 'request_orchestrator'
 
 
 def test_build_log_payload_labels_llm_call_entries() -> None:
@@ -109,6 +269,32 @@ def test_build_log_payload_labels_llm_call_entries() -> None:
     assert payload['model'] == 'gpt-5.4'
     assert payload['total_tokens'] == 120
     assert payload['computed_total_cost'] == '0.000325'
+
+
+def test_build_llm_call_payload_reads_input_and_output_objects_from_metadata() -> None:
+    payload = _build_llm_call_payload(
+        {
+            'kind': 'llm_call',
+            'model_scope': 'shared',
+            'model': 'gpt-5.4',
+            'stage': 'synthesis',
+            'callsite': 'shared_synthesis.run_synthesis',
+            'input_tokens': 100,
+            'output_tokens': 20,
+            'total_tokens': 120,
+            'cached_input_tokens': 0,
+            'computed_input_cost': '0.000125',
+            'computed_output_cost': '0.0002',
+            'computed_total_cost': '0.000325',
+            'metadata': {
+                'input_object': {'prompt': 'hello'},
+                'output_object': {'raw_content': '{}'},
+            },
+        }
+    )
+
+    assert payload['input_object'] == {'prompt': 'hello'}
+    assert payload['output_object'] == {'raw_content': '{}'}
 
 
 def test_fetch_agent_logs_for_roundtrip_excludes_prompt_and_llm_call_events() -> None:

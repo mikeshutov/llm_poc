@@ -12,11 +12,13 @@ from pydantic import ValidationError
 
 from common.data import sanitize_for_json_storage
 from common.logging import create_conversation_event
-from request_orchestrator.models.agent_state import AgentState, IterationState
-from request_orchestrator.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
+from request_orchestrator.agent_runner.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
+from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evidence import ToolResult
+from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan import PlanStep
-from request_orchestrator.models.plan_step_ids import format_plan_step_id
+from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
+from request_orchestrator.shared.planner_state import current_plan_results
 from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context
 from tool.registry import call_tool
 from tool.repository.tool_call_repository import ToolCallRepository
@@ -52,11 +54,11 @@ def _substitute_refs(obj, results: dict, *, iteration_number: int):
 def _execute_step(
     step: PlanStep,
     *,
-    iteration: IterationState,
+    tool_results_by_step_id: dict[str, ToolResult],
     iteration_number: int,
     allowed_tool_names: set[str] | None,
 ) -> StepExecutionResult:
-    args = _substitute_refs(step.args, iteration.results, iteration_number=iteration_number)
+    args = _substitute_refs(step.args, tool_results_by_step_id, iteration_number=iteration_number)
     started_at = perf_counter()
     try:
         output = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)
@@ -89,23 +91,35 @@ def _execute_step(
 def _record_step_result(
     agent_state: AgentState,
     *,
-    iteration: IterationState,
+    plan: Plan | None,
     tool_repo: ToolCallRepository | None,
     iteration_number: int,
     execution_result: StepExecutionResult,
 ) -> None:
+    execution_context = agent_state.execution_context
     step = execution_result.step
-    qualified_step_id = format_plan_step_id(iteration_number, step.id)
-    iteration.results[qualified_step_id] = execution_result.output
+    local_step_id = format_plan_step_id(iteration_number, step.id)
+    qualified_step_id = namespace_step_id(agent_state.agent_profile.name, local_step_id)
+    output = execution_result.output
+    if isinstance(output, ToolResult):
+        output = output.model_copy(
+            update={
+                "step_id": qualified_step_id,
+                "tool_name": step.tool,
+                "iteration": iteration_number,
+            }
+        )
+    if isinstance(output, ToolResult):
+        agent_state.upsert_tool_result(output)
 
     payload = {
         "agent_name": agent_state.agent_profile.name,
         "kind": TOOL_CALL_KIND,
         "tool_name": step.tool,
-        "step_id": qualified_step_id,
+        "step_id": local_step_id,
         "iteration": iteration_number,
         "request": sanitize_for_json_storage(execution_result.args),
-        "response": sanitize_for_json_storage(execution_result.output),
+        "response": sanitize_for_json_storage(output),
         "data": sanitize_for_json_storage({
             "step_plan": step.plan,
             "latency_ms": execution_result.latency_ms,
@@ -114,24 +128,24 @@ def _record_step_result(
     if execution_result.error_text:
         payload["error"] = execution_result.error_text
     create_conversation_event(
-        conversation_id=agent_state.conversation_id,
-        roundtrip_id=agent_state.roundtrip_id,
+        conversation_id=execution_context.conversation_id,
+        roundtrip_id=execution_context.roundtrip_id,
         event_type=TOOL_CALL_KIND,
         source=agent_state.agent_profile.name,
         agent_name=agent_state.agent_profile.name,
         node_name="tool_call",
-        step_id=qualified_step_id,
+        step_id=local_step_id,
         iteration=iteration_number,
         payload=payload,
     )
 
-    if tool_repo and agent_state.roundtrip_id:
+    if tool_repo and execution_context.roundtrip_id:
         tool_repo.append_tool_call(
-            agent_state.roundtrip_id,
-            iteration,
+            execution_context.roundtrip_id,
+            plan,
             step,
             input_payload=execution_result.args,
-            output_payload=execution_result.output,
+            output_payload=output,
             error_message=execution_result.error_text or None,
             duration_ms=execution_result.latency_ms,
         )
@@ -139,25 +153,33 @@ def _record_step_result(
 
 @traceable(name="Executor Node")
 def run_executor(agent_state: AgentState) -> AgentState:
-    iteration = agent_state.iteration_trace[-1]
+    planner_state = agent_state.node_states.planner
+    plan = planner_state.plan
+    if plan is None:
+        return agent_state
     tool_repo = (
         ToolCallRepository()
-        if isinstance(agent_state.roundtrip_id, UUID) and agent_state.agent_profile.name != PROFILE_MANAGEMENT_AGENT_NAME
+        if isinstance(agent_state.execution_context.roundtrip_id, UUID)
+        and agent_state.agent_profile.name != PROFILE_MANAGEMENT_AGENT_NAME
         else None
     )
     allowed_tool_names = set(agent_state.agent_profile.tool_names)
-    iteration_number = len(agent_state.iteration_trace)
+    iteration_number = planner_state.plan_count
 
     with bind_runtime_context(
-        conversation_id=agent_state.conversation_id,
-        conversation_model_config=agent_state.conversation_model_config,
-        roundtrip_id=str(agent_state.roundtrip_id) if agent_state.roundtrip_id else None,
-        user_id=agent_state.user_profile.user_id,
+        conversation_id=agent_state.execution_context.conversation_id,
+        conversation_model_config=agent_state.execution_context.model_config,
+        roundtrip_id=str(agent_state.execution_context.roundtrip_id) if agent_state.execution_context.roundtrip_id else None,
+        user_id=agent_state.execution_context.user_profile.user_id,
     ):
         with bind_agent_context(agent_name=agent_state.agent_profile.name):
-            plan = iteration.plan
             if plan is None or not plan.steps:
                 return agent_state
+            tool_results_by_step_id = current_plan_results(
+                planner_state,
+                agent_state.result.tool_results,
+                agent_name=agent_state.agent_profile.name,
+            )
 
             with ThreadPoolExecutor(max_workers=len(plan.steps)) as executor:
                 futures_by_step_id = {
@@ -165,7 +187,7 @@ def run_executor(agent_state: AgentState) -> AgentState:
                         copy_context().run,
                         _execute_step,
                         step,
-                        iteration=iteration,
+                        tool_results_by_step_id=tool_results_by_step_id,
                         iteration_number=iteration_number,
                         allowed_tool_names=allowed_tool_names,
                     )
@@ -179,7 +201,7 @@ def run_executor(agent_state: AgentState) -> AgentState:
             for execution_result in execution_results:
                 _record_step_result(
                     agent_state,
-                    iteration=iteration,
+                    plan=plan,
                     tool_repo=tool_repo,
                     iteration_number=iteration_number,
                     execution_result=execution_result,

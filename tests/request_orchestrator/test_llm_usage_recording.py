@@ -23,7 +23,8 @@ from request_orchestrator.agents.profile_management.profile import build_profile
 from request_orchestrator.shared.request_analysis.analyze_request import analyze_request
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from request_orchestrator.models.agent_prompt import PromptSectionKeys
-from request_orchestrator.models.agent_state import AgentState, IterationState, RequestAnalysis, RequestAnalysisGoal
+from request_orchestrator.models.agent_state import AgentState, IterationState
+from request_orchestrator.models.request_analysis import RequestAnalysis, RequestAnalysisGoal
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
@@ -275,8 +276,8 @@ def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_retu
 
     assert len(repo.llm_calls) == 1
     assert state.goal_reached is True
-    assert state.iteration_trace[-1].plan is not None
-    assert state.iteration_trace[-1].plan.steps == []
+    assert state.current_iteration.plan is not None
+    assert state.current_iteration.plan.steps == []
     payload = _latest_event_payload(repo, event_type='plan', agent_name='main_agent')
     assert payload['status'] == 'blocked'
     assert payload['data']['planner_status'] == 'blocked'
@@ -295,7 +296,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
         llm=FakeInvokeLLM('{"result": [{"content": "done", "evidence_ids": []}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.4'),
         agent_profile=MAIN_AGENT_PROFILE,
     )
-    state.iteration_trace = [IterationState(plan=Plan.model_validate({'steps': []}), results={})]
+    state.set_iterations([IterationState(plan=Plan.model_validate({'steps': []}), results={})])
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',
@@ -393,7 +394,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
             )
         ]
     )
-    state.iteration_trace = [
+    state.set_iterations([
         IterationState(
             plan=Plan.model_validate({
                 'steps': [
@@ -406,7 +407,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
             }),
             results={'P1E1': {'items': ['result']}},
         )
-    ]
+    ])
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',
@@ -472,7 +473,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
         agent_profile=MAIN_AGENT_PROFILE,
     )
     state.relevant_evidence_ids = ['P1E2R1']
-    state.iteration_trace = [
+    state.set_iterations([
         IterationState(
             plan=Plan.model_validate({
                 'steps': [
@@ -518,7 +519,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
                 ),
             },
         )
-    ]
+    ])
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',

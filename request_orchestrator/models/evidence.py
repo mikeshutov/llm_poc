@@ -56,6 +56,9 @@ class EvidenceBundle(BaseModel):
 
 
 class ToolResult(BaseModel):
+    step_id: str = ""
+    tool_name: str = ""
+    iteration: int | None = None
     result: Any = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     evidence_views: list[EvidenceView] = Field(default_factory=list)

@@ -1,5 +1,4 @@
 from common.data import format_prompt_bullet_list
-from request_orchestrator.models.agent_state import RequestAnalysis
 from tool.tools import TOOL_CATEGORIES
 
 BASE_RULES = [
@@ -7,11 +6,10 @@ BASE_RULES = [
 ]
 
 
-def build_synthesis_rules(request_analysis: RequestAnalysis | None = None) -> str:
+def build_synthesis_rules(tool_categories: list[str] | None = None) -> str:
     result_rules = [
         rule
-        for goal in (request_analysis.goals if request_analysis else [])
-        for cat in goal.tool_categories
+        for cat in (tool_categories or [])
         if cat in TOOL_CATEGORIES
         for rule in TOOL_CATEGORIES[cat].result_rules
     ]

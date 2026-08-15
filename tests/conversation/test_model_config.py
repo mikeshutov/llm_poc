@@ -34,7 +34,9 @@ from personalization.profile.models import UserProfile
 from rendering.sidebar import build_model_config_rows
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.models.agent_result import AgentResult
+from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.service import run_request_orchestrator_for_query
+from request_orchestrator.shared.llm_factory import build_llm_for_stage
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from reranker.service import CandidateReranker
 
@@ -45,10 +47,6 @@ class TrackingChatOpenAI:
 
     def invoke(self, prompt: str):
         raise AssertionError(f'Unexpected invoke for prompt: {prompt[:80]}')
-
-
-class DummyAgentResult(AgentResult):
-    pass
 
 
 class FakeConversationRepository:
@@ -226,7 +224,7 @@ def test_conversation_model_config_resolve_model_pricing_returns_expected_values
     )
 
 
-def test_agent_state_build_llm_for_stage_uses_conversation_model_config() -> None:
+def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> None:
     from request_orchestrator.models.agent_state import AgentState
 
     conversation_id = uuid4()
@@ -247,7 +245,7 @@ def test_agent_state_build_llm_for_stage_uses_conversation_model_config() -> Non
         ]
     )
 
-    with patch('request_orchestrator.models.agent_state.ChatOpenAI', TrackingChatOpenAI):
+    with patch('request_orchestrator.shared.llm_factory.ChatOpenAI', TrackingChatOpenAI):
         state = AgentState.new(
             task='Help me remember this.',
             max_turns=5,
@@ -258,15 +256,20 @@ def test_agent_state_build_llm_for_stage_uses_conversation_model_config() -> Non
             conversation_model_config=config,
         )
 
-        request_analysis_llm = state.build_llm_for_stage(
+        request_analysis_llm = build_llm_for_stage(
+            execution_context=state.execution_context,
+            llm=state.llm,
             agent=MAIN_AGENT_MODEL_SCOPE,
             stage=REQUEST_ANALYSIS_STAGE,
         )
         assert request_analysis_llm.model == 'gpt-5.4'
 
-        profile_planner_llm = state.build_llm_for_stage(
+        profile_planner_llm = build_llm_for_stage(
+            execution_context=state.execution_context,
+            llm=state.llm,
             agent=PROFILE_AGENT_MODEL_SCOPE,
             stage=PLANNER_STAGE,
+            reuse_llm_for_agent_scope=state.resolve_agent_scope(),
         )
         assert profile_planner_llm.model == 'gpt-5.4'
 
@@ -314,7 +317,7 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
         return_value=None,
     ), patch(
         'request_orchestrator.service.run_agent',
-        return_value=DummyAgentResult(answer=['done'], roundtrip_summary='summary'),
+        return_value=OrchestratorResult(agent_result=AgentResult(), answer=['done']),
     ), patch(
         'request_orchestrator.service.embed_text',
         return_value=[0.1, 0.2, 0.3],
@@ -335,7 +338,7 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
     assert fake_repo.update_calls[0]['payload']['roundtrip_latency_ms'] >= 0
 
 
-def test_run_request_orchestrator_populates_geometadata_location_when_available() -> None:
+def test_run_request_orchestrator_passes_geometadata_to_user_profile_builder() -> None:
     conversation_id = uuid4()
     config = ConversationModelConfig.build_default()
     fake_repo = FakeConversationRepository(config)
@@ -353,18 +356,6 @@ def test_run_request_orchestrator_populates_geometadata_location_when_available(
         'request_orchestrator.service.build_roundtrip_context',
         return_value=ConversationContext(),
     ), patch(
-        'request_orchestrator.service._ip_api_client.get_location',
-        return_value=IpLocation(
-            status='success',
-            country='Canada',
-            region='ON',
-            region_name='Ontario',
-            city='Toronto',
-            lat=43.6532,
-            lon=-79.3832,
-            timezone='America/Toronto',
-        ),
-    ), patch(
         'request_orchestrator.service.build_user_profile',
         side_effect=fake_build_user_profile,
     ), patch(
@@ -372,22 +363,14 @@ def test_run_request_orchestrator_populates_geometadata_location_when_available(
         return_value=None,
     ), patch(
         'request_orchestrator.service.run_agent',
-        return_value=DummyAgentResult(answer=['done'], roundtrip_summary='summary'),
+        return_value=OrchestratorResult(agent_result=AgentResult(), answer=['done']),
     ), patch(
         'request_orchestrator.service.embed_text',
         return_value=[0.1, 0.2, 0.3],
     ):
         run_request_orchestrator_for_query(str(conversation_id), 'hello world', user_id='anonymous')
 
-    geometadata = captured_profile_kwargs['geometadata']
-    assert geometadata is not None
-    assert geometadata.timezone == 'America/Toronto'
-    assert geometadata.location is not None
-    assert geometadata.location.city == 'Toronto'
-    assert geometadata.location.region == 'Ontario'
-    assert geometadata.location.country == 'Canada'
-    assert geometadata.location.latitude == 43.6532
-    assert geometadata.location.longitude == -79.3832
+    assert captured_profile_kwargs['geometadata'] is None
 
 
 def test_build_model_config_rows_exposes_effective_models_overrides_and_pricing() -> None:

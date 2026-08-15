@@ -9,7 +9,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel
 
 from db.connection import get_connection
-from request_orchestrator.models.agent_state import IterationState
+from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan import PlanStep
 from tool.repository.models import ToolCall
 
@@ -21,7 +21,7 @@ class ToolCallRepository:
     def append_tool_call(
         self,
         roundtrip_id: UUID,
-        iteration: IterationState,
+        plan: Plan | None,
         step: PlanStep,
         *,
         input_payload: Any | None = None,
@@ -29,9 +29,8 @@ class ToolCallRepository:
         error_message: str | None = None,
         duration_ms: int | None = None,
     ) -> None:
-        plan = iteration.plan
         plan_id = plan.db_id if plan else None
-        result = iteration.results.get(step.id) if output_payload is None else output_payload
+        result = output_payload
         status = "completed" if result is not None else "pending"
         sanitized_input_payload = self._sanitize_for_storage(step.args if input_payload is None else input_payload)
         output = self._sanitize_for_storage(result) if result is not None else None
