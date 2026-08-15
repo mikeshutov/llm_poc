@@ -3,7 +3,7 @@ from __future__ import annotations
 from conversation.models.conversation_model_config import DEFAULT_PROFILE_AGENT_PLANNER_MODEL, PROFILE_AGENT_MODEL_SCOPE
 from personalization.profile.models import UserProfile
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_CATEGORIES, ATTRIBUTE_QUALIFIERS
-from request_orchestrator.models.agent_profile import AgentProfile, PROFILE_MANAGEMENT_AGENT_NAME
+from request_orchestrator.agent_runner.models.agent_profile import AgentProfile, PROFILE_MANAGEMENT_AGENT_NAME
 from request_orchestrator.shared.tool_adapter.profile.set_user_display_name import set_user_display_name
 from request_orchestrator.shared.tool_adapter.profile.set_user_first_name import set_user_first_name
 from request_orchestrator.shared.tool_adapter.profile.set_user_last_name import set_user_last_name

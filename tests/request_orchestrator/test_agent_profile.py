@@ -13,7 +13,7 @@ if "pycountry" not in sys.modules:
     sys.modules["pycountry"] = pycountry_module
 
 from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
-from request_orchestrator.models.agent_profile import AgentProfile
+from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
 from tool.tools import TOOL_CATEGORIES
 
 

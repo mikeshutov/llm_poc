@@ -7,9 +7,9 @@ import streamlit as st
 
 from conversation.conversation import generate_conversation_title
 from conversation.models.conversation_models import ConversationRoundtrip
-from request_orchestrator.models.agent_result import AgentResult
 from conversation.repository.repo_factory import get_conversation_repo
 from conversation.summary_service import rebuild_conversation_summaries
+from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from rendering.feedback import render_feedback_controls
 from rendering.rendering import render_assistant_content, format_timestamp, _format_roundtrip_usage_summary, fetch_llm_usage_for_roundtrip
 from common.config import (
@@ -25,11 +25,11 @@ from common.config import (
 MESSAGE_HISTORY_LIMIT = 10
 
 
-def _build_answer_payload(answer: AgentResult) -> dict:
+def _build_answer_payload(answer: OrchestratorResult) -> dict:
     return answer.to_payload()
 
 
-def _merge_response_payload(roundtrip: ConversationRoundtrip, answer: AgentResult) -> dict:
+def _merge_response_payload(roundtrip: ConversationRoundtrip, answer: OrchestratorResult) -> dict:
     stored_payload = roundtrip.response_payload if isinstance(roundtrip.response_payload, dict) else {}
     answer_payload = _build_answer_payload(answer)
     merged = dict(stored_payload)
@@ -39,12 +39,6 @@ def _merge_response_payload(roundtrip: ConversationRoundtrip, answer: AgentResul
             merged[key] = value or merged.get(key) or []
             continue
         if key == "hydrated_evidence_by_id":
-            merged[key] = value or merged.get(key) or {}
-            continue
-        if key == "used_evidence_ids":
-            merged[key] = value or merged.get(key) or []
-            continue
-        if key == "tool_summary":
             merged[key] = value or merged.get(key) or {}
             continue
         merged[key] = value if value not in ("", None) else merged.get(key)
@@ -99,7 +93,7 @@ def _update_conversation_summary(conversation_id: str, roundtrip: ConversationRo
 def append_assistant_response(
     conversation_id: str,
     user_query: str,
-    answer: AgentResult,
+    answer: OrchestratorResult,
     roundtrip: ConversationRoundtrip,
 ) -> None:
     conversation_repository = get_conversation_repo()

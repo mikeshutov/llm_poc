@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from langgraph.graph import END, StateGraph
 
-from request_orchestrator.agent_stratagies.planner_executor_evaluator.validator import validator
+from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.validator import validator
 from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.evaluator import evaluator_router

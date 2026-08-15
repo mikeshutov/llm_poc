@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 DEFAULT_SYNTHESIS_NEXT_QUESTION = "What would you like to do next?"
@@ -22,23 +20,6 @@ class SynthesisResult(BaseModel):
     next_question: str = ""
     roundtrip_summary: str = ""
     tool_summary: SynthesisToolSummary = Field(default_factory=SynthesisToolSummary)
-
-    @model_validator(mode="before")
-    @classmethod
-    def merge_legacy_question_fields(cls, data: Any) -> Any:
-        if not isinstance(data, dict):
-            return data
-        if data.get("next_question"):
-            return data
-        clarifying_question = str(data.get("clarifying_question") or "").strip()
-        follow_up = str(data.get("follow_up") or "").strip()
-        merged = clarifying_question or follow_up
-        if not merged:
-            return data
-        return {
-            **data,
-            "next_question": merged,
-        }
 
     @field_validator("result", mode="before")
     @classmethod

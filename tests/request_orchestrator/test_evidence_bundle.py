@@ -14,13 +14,17 @@ if 'pycountry' not in sys.modules:
 from integrations.brave.models import NewsSearchResponse, WebSearchResponse
 from integrations.meal_db.models import MealSearchResult
 from integrations.wikidata.models import SparqlResult
+from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence
 from request_orchestrator.shared.tool_adapter.search.wikipedia_search import WikipediaSearchResponse
 from integrations.wikipedia.models import WikipediaPageSummary, WikipediaSearchResult
-from request_orchestrator.models.agent_state import IterationState
+from request_orchestrator.models.agent_state import AgentState, IterationState
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
-from request_orchestrator.shared.evidence import build_evidence_bundle, build_evidence_steps
+from request_orchestrator.shared.evidence import (
+    build_evidence_bundle_from_tool_results,
+    build_evidence_steps_from_tool_results,
+)
 from request_orchestrator.shared.tool_adapter.food.search_meals import _tool_result as meal_tool_result
 from request_orchestrator.shared.tool_adapter.news.hn_search import _tool_result as hn_tool_result
 from request_orchestrator.shared.tool_adapter.search.generic_web_search import _web_search_tool_result
@@ -67,6 +71,32 @@ def _tool_result(result, tool_name: str) -> ToolResult:
             hydrated_evidence=[hydrated],
         )
     raise AssertionError(f"Unsupported test tool_name {tool_name}")
+
+
+def _gather_tool_results(iterations: list[IterationState]) -> list[ToolResult]:
+    state = AgentState(
+        task="",
+        max_turns=max(len(iterations), 1),
+        agent_profile=MAIN_AGENT_PROFILE,
+        llm=object(),
+    )
+    state.set_iterations(iterations)
+    return state.gather_tool_results()
+
+
+def _build_evidence_bundle(iterations: list[IterationState]):
+    return build_evidence_bundle_from_tool_results(_gather_tool_results(iterations))
+
+
+def _build_evidence_steps(iterations: list[IterationState], evidence_views_by_step_id: dict[str, list[EvidenceView]]):
+    return build_evidence_steps_from_tool_results(
+        _gather_tool_results(iterations),
+        evidence_views_by_step_id,
+    )
+
+
+build_evidence_bundle = _build_evidence_bundle
+build_evidence_steps = _build_evidence_steps
 
 
 def test_build_evidence_bundle_creates_canonical_news_records() -> None:
@@ -389,6 +419,57 @@ def test_build_evidence_bundle_uses_pre_normalized_tool_evidence_when_present() 
     assert record.metadata == {"quality": "high"}
 
 
+def test_build_evidence_bundle_prefers_tool_result_step_context_when_present() -> None:
+    iteration = IterationState(
+        plan=Plan.model_validate(
+            {
+                "steps": [
+                    {
+                        "id": "E1",
+                        "plan": "Search the web.",
+                        "tool": "generic_web_search",
+                        "args": {"query_text": "best ramen toronto"},
+                    }
+                ]
+            }
+        ),
+        results={
+            "P1E1": ToolResult.model_validate(
+                {
+                    "step_id": "P9E3",
+                    "tool_name": "generic_web_search",
+                    "iteration": 9,
+                    "result": {"results": [{"title": "Ramen spot"}]},
+                    "evidence_views": [
+                        {
+                            "item_id": "ramen-1",
+                            "title": "Prepared Ramen Spot",
+                            "summary": "Prepared on write.",
+                        }
+                    ],
+                    "hydrated_evidence": [
+                        {
+                            "item_id": "ramen-1",
+                            "title": "Prepared Ramen Spot",
+                            "summary": "Prepared on write.",
+                            "source": "generic_web_search",
+                            "entity_type": "web_search_results",
+                        }
+                    ],
+                }
+            )
+        },
+    )
+
+    bundle = build_evidence_bundle([iteration])
+    evidence_steps = build_evidence_steps([iteration], bundle.evidence_views_by_step_id)
+
+    assert set(bundle.hydrated_evidence_by_id) == {"P9E3R1"}
+    assert [view.evidence_id for view in bundle.evidence_views_by_step_id["P9E3"]] == ["P9E3R1"]
+    assert evidence_steps[0].type == "web_search_results"
+    assert [evidence.evidence_id for evidence in evidence_steps[0].evidence] == ["P9E3R1"]
+
+
 def test_build_evidence_bundle_falls_back_to_evidence_views_when_hydrated_records_are_missing() -> None:
     iteration = IterationState(
         plan=Plan.model_validate(
@@ -627,7 +708,7 @@ def test_build_evidence_bundle_skips_empty_wikipedia_wrapper_without_results() -
 
 
 def test_build_evidence_steps_merges_deck_results_into_one_group() -> None:
-    iteration_trace = [
+    iterations = [
         IterationState(
             plan=Plan.model_validate(
                 {
@@ -661,7 +742,7 @@ def test_build_evidence_steps_merges_deck_results_into_one_group() -> None:
                                 "title": "Uril, the Miststalker (Commander)",
                                 "summary": "Aura-focused Naya Voltron commander.",
                                 "source": "get_commander_details",
-                                "entity_type": ",
+                                "entity_type": "decks",
                                 "metadata": {"top_themes": "Auras, Voltron"},
                             }
                         ],
@@ -712,8 +793,8 @@ def test_build_evidence_steps_merges_deck_results_into_one_group() -> None:
         ),
     ]
 
-    bundle = build_evidence_bundle(iteration_trace)
-    evidence_steps = build_evidence_steps(iteration_trace, bundle.evidence_views_by_step_id)
+    bundle = build_evidence_bundle(iterations)
+    evidence_steps = build_evidence_steps(iterations, bundle.evidence_views_by_step_id)
 
     assert len(evidence_steps) == 1
     assert evidence_steps[0].type == "decks"
@@ -727,7 +808,7 @@ def test_build_evidence_steps_merges_deck_results_into_one_group() -> None:
 
 
 def test_build_evidence_steps_puts_wrapper_search_metadata_on_parent_step() -> None:
-    iteration_trace = [
+    iterations = [
         IterationState(
             plan=Plan.model_validate(
                 {
@@ -763,8 +844,8 @@ def test_build_evidence_steps_puts_wrapper_search_metadata_on_parent_step() -> N
         )
     ]
 
-    bundle = build_evidence_bundle(iteration_trace)
-    evidence_steps = build_evidence_steps(iteration_trace, bundle.evidence_views_by_step_id)
+    bundle = build_evidence_bundle(iterations)
+    evidence_steps = build_evidence_steps(iterations, bundle.evidence_views_by_step_id)
 
     assert len(evidence_steps) == 1
     assert evidence_steps[0].metadata == {

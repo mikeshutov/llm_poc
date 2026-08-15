@@ -7,8 +7,9 @@ from uuid import UUID
 from conversation.models.conversation_model_config import ConversationModelConfig
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import UserProfile
-from request_orchestrator.models.agent_profile import AgentProfile
-from request_orchestrator.models.agent_state import AgentState, RequestAnalysis, RequestAnalysisGoal
+from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
+from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.models.request_analysis import RequestAnalysis, RequestAnalysisGoal
 
 
 class AgentStratagy(Protocol):
@@ -19,6 +20,12 @@ class AgentStratagy(Protocol):
 class AgentRunner:
     profile: AgentProfile
     stratagy: AgentStratagy
+
+    def _default_goal(self) -> str:
+        return self.profile.request_analysis_goal.strip()
+
+    def _default_tool_categories(self) -> list[str]:
+        return sorted(self.profile.allowed_categories)
 
     def _build_default_request_analysis(self) -> RequestAnalysis:
         goal = self.profile.request_analysis_goal.strip()
@@ -36,9 +43,11 @@ class AgentRunner:
 
     def _prepare_state(self, agent_state: AgentState) -> AgentState:
         agent_state.agent_profile = self.profile
-        agent_state.max_turns = self.profile.max_turns
-        if not agent_state.request_analysis.goal_for_agent(self.profile.name) and self.profile.request_analysis_goal.strip():
-            agent_state.request_analysis = self._build_default_request_analysis()
+        if not agent_state.task and self._default_goal():
+            agent_state.set_agent_inputs(
+                task=self._default_goal(),
+                tool_category_names=self._default_tool_categories(),
+            )
         return agent_state
 
     def run(
@@ -70,10 +79,14 @@ class AgentRunner:
                 conversation_model_config=conversation_model_config,
             )
             if request_analysis is not None:
-                agent_state.request_analysis = request_analysis.model_copy(deep=True)
+                agent_task = request_analysis.goal_for_agent(self.profile.name)
+                agent_state.set_agent_inputs(
+                    task=agent_task,
+                    tool_category_names=request_analysis.tool_categories_for_agent(self.profile.name),
+                )
 
         prepared_state = self._prepare_state(agent_state)
         return self.stratagy.run(
             prepared_state,
-            thread_id=prepared_state.conversation_id or conversation_id or "",
+            thread_id=prepared_state.execution_context.conversation_id or conversation_id or "",
         )

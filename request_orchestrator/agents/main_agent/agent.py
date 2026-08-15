@@ -7,10 +7,11 @@ from conversation.models.conversation_model_config import ConversationModelConfi
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import UserProfile
 from request_orchestrator.agent_runner import AgentRunner
-from request_orchestrator.agent_stratagies.planner_executor_evaluator.graph import PlannerExecutorEvaluatorStratagy
+from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.graph import PlannerExecutorEvaluatorStratagy
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.main_agent.router.router import router
-from request_orchestrator.models.agent_state import AgentState, RequestAnalysis
+from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.models.request_analysis import RequestAnalysis
 
 RUNNER = AgentRunner(
     MAIN_AGENT_PROFILE,

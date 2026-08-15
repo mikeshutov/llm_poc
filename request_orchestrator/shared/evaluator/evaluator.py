@@ -7,16 +7,22 @@ from langsmith import traceable
 from common.data import repair_common_json_issues, strip_code_fences
 from common.logging import create_conversation_event, log_roundtrip_prompt
 from conversation.models.conversation_model_config import EVALUATOR_STAGE, SHARED_MODEL_SCOPE
-from llm.usage import record_llm_call, serialize_llm_call_record
-from request_orchestrator.constants import EVALUATOR_PROMPT_STEP
+from llm.usage import record_llm_call
+from request_orchestrator.constants import EVALUATOR_PROMPT_KIND
 from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.models.evaluator_event_payload import EvaluatorEventPayload
 from request_orchestrator.models.evaluation_result import (
     EVALUATION_STATUS_TERMINAL,
     EvaluationResult,
     TERMINAL_EVALUATION_STATUSES,
 )
-from request_orchestrator.shared.evidence import build_evidence_bundle, build_evidence_steps
+from request_orchestrator.models.plan_step_ids import namespace_evidence_id
+from request_orchestrator.shared.evidence import (
+    build_evidence_bundle_from_tool_results,
+    build_evidence_steps_from_tool_results,
+)
 from request_orchestrator.shared.evaluator.prompts import build_evaluator_prompt
+from request_orchestrator.shared.llm_factory import build_llm_for_stage, resolve_stage_model_name
 
 EVALUATOR_KIND = "evaluator"
 
@@ -33,26 +39,44 @@ def _dedupe_string_list(values: list[str]) -> list[str]:
     return deduped
 
 
+def _namespace_relevant_evidence_ids(agent_name: str, evidence_ids: list[str]) -> list[str]:
+    return [
+        namespace_evidence_id(agent_name, evidence_id)
+        for evidence_id in _dedupe_string_list(evidence_ids)
+    ]
+
+
 @traceable(name="Evaluator Node")
 def run_evaluator(state: AgentState) -> AgentState:
-    evidence_bundle = build_evidence_bundle(state.iteration_trace)
-    evidence_steps = build_evidence_steps(
-        state.iteration_trace,
+    execution_context = state.execution_context
+    tool_results = state.gather_tool_results()
+    evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
+    evidence_steps = build_evidence_steps_from_tool_results(
+        tool_results,
         evidence_bundle.evidence_views_by_step_id,
     )
     prompt = build_evaluator_prompt(state=state, evidence=evidence_steps)
     prompt_text = prompt.prompt_text()
     prompt_input_object = prompt.to_log_input_object()
-    llm = state.build_llm_for_stage(agent=SHARED_MODEL_SCOPE, stage=EVALUATOR_STAGE)
+    llm = build_llm_for_stage(
+        execution_context=execution_context,
+        llm=state.llm,
+        agent=SHARED_MODEL_SCOPE,
+        stage=EVALUATOR_STAGE,
+    )
     started_at = perf_counter()
     response = llm.invoke(prompt_text)
     latency_ms = int((perf_counter() - started_at) * 1000)
     llm_call = record_llm_call(
         raw_response=response,
-        model_name=state.resolve_model_for_stage(agent=SHARED_MODEL_SCOPE, stage=EVALUATOR_STAGE),
-        conversation_id=state.conversation_id,
-        roundtrip_id=state.roundtrip_id,
-        user_id=state.user_profile.user_id,
+        model_name=resolve_stage_model_name(
+            execution_context=execution_context,
+            agent=SHARED_MODEL_SCOPE,
+            stage=EVALUATOR_STAGE,
+        ),
+        conversation_id=execution_context.conversation_id,
+        roundtrip_id=execution_context.roundtrip_id,
+        user_id=execution_context.user_profile.user_id,
         agent=SHARED_MODEL_SCOPE,
         stage=EVALUATOR_STAGE,
         callsite="shared_evaluator.run_evaluator",
@@ -69,68 +93,62 @@ def run_evaluator(state: AgentState) -> AgentState:
     try:
         evaluation = EvaluationResult.model_validate_json(raw)
     except Exception as exc:
-        state.evaluation_status = EVALUATION_STATUS_TERMINAL
-        state.goal_reached = True
-        state.relevant_evidence_ids = []
+        state.result = state.result.copy(relevant_evidence_ids=[])
+        state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
+        state.node_states.evaluator.goal_reached = True
         create_conversation_event(
-            conversation_id=state.conversation_id,
-            roundtrip_id=state.roundtrip_id,
+            conversation_id=execution_context.conversation_id,
+            roundtrip_id=execution_context.roundtrip_id,
             event_type=EVALUATOR_KIND,
             source=state.agent_profile.name,
             agent_name=state.agent_profile.name,
-            payload={
-                "agent_name": state.agent_profile.name,
-                "kind": EVALUATOR_KIND,
-                "status": EVALUATION_STATUS_TERMINAL,
-                "data": {
-                    "status": EVALUATION_STATUS_TERMINAL,
-                    "relevant_evidence": [],
-                    "missing_information": [],
-                    "refined_goal": "",
-                    "parse_error": str(exc),
-                    "llm_usage": None if llm_call is None else serialize_llm_call_record(llm_call),
-                },
-            },
+            payload=EvaluatorEventPayload.from_parse_error(
+                agent_name=state.agent_profile.name,
+                kind=EVALUATOR_KIND,
+                status=EVALUATION_STATUS_TERMINAL,
+                parse_error=str(exc),
+                llm_call=llm_call,
+            ).model_dump(),
         )
         return state
 
-    deduped_relevant_evidence = _dedupe_string_list(evaluation.relevant_evidence)
-    state.relevant_evidence_ids = deduped_relevant_evidence
-    state.evaluation_status = evaluation.status
+    deduped_relevant_evidence = _namespace_relevant_evidence_ids(
+        state.agent_profile.name,
+        evaluation.relevant_evidence,
+    )
+    state.result = state.result.copy(relevant_evidence_ids=deduped_relevant_evidence)
+    state.node_states.evaluator.evaluation_status = evaluation.status
 
     if evaluation.status in TERMINAL_EVALUATION_STATUSES:
-        state.goal_reached = True
+        state.node_states.evaluator.goal_reached = True
     else:
         refined_goal = evaluation.refined_goal.strip()
         if refined_goal:
-            state.request_analysis.set_goal_for_agent(state.agent_profile.name, refined_goal)
-        state.goal_reached = False
+            state.task = refined_goal
+        state.node_states.evaluator.goal_reached = False
 
     create_conversation_event(
-        conversation_id=state.conversation_id,
-        roundtrip_id=state.roundtrip_id,
+        conversation_id=execution_context.conversation_id,
+        roundtrip_id=execution_context.roundtrip_id,
         event_type=EVALUATOR_KIND,
         source=state.agent_profile.name,
         agent_name=state.agent_profile.name,
-        payload={
-            "agent_name": state.agent_profile.name,
-            "kind": EVALUATOR_KIND,
-            "status": evaluation.status,
-            "data": {
-                "status": evaluation.status,
-                "relevant_evidence": deduped_relevant_evidence,
-                "missing_information": evaluation.missing_information,
-                "refined_goal": evaluation.refined_goal,
-                "llm_usage": None if llm_call is None else serialize_llm_call_record(llm_call),
-            },
-        },
+        payload=EvaluatorEventPayload.from_evaluation(
+            agent_name=state.agent_profile.name,
+            kind=EVALUATOR_KIND,
+            status=evaluation.status,
+            relevant_evidence=deduped_relevant_evidence,
+            missing_information=evaluation.missing_information,
+            refined_goal=evaluation.refined_goal,
+            llm_call=llm_call,
+        ).model_dump(),
     )
 
-    if state.roundtrip_id:
+    if execution_context.roundtrip_id:
         log_roundtrip_prompt(
-            roundtrip_id=state.roundtrip_id,
+            roundtrip_id=execution_context.roundtrip_id,
             agent=state.agent_profile.name,
-            prompt_step=EVALUATOR_PROMPT_STEP,
+            prompt_step=EVALUATOR_PROMPT_KIND,
             prompt=prompt_text,
         )
 

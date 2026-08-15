@@ -340,34 +340,6 @@ def test_synthesis_result_falls_back_when_next_question_is_empty() -> None:
     assert result.next_question == DEFAULT_SYNTHESIS_NEXT_QUESTION
 
 
-def test_synthesis_result_accepts_legacy_question_fields() -> None:
-    result = SynthesisResult.model_validate(
-        {
-            "result": [{"content": "done", "evidence_ids": []}],
-            "follow_up": "Do you want more detail?",
-            "clarifying_question": "",
-            "roundtrip_summary": "summary",
-            "tool_summary": {},
-        }
-    )
-
-    assert result.next_question == "Do you want more detail?"
-
-
-def test_synthesis_result_prefers_legacy_clarifying_question_when_both_legacy_fields_are_set() -> None:
-    result = SynthesisResult.model_validate(
-        {
-            "result": [{"content": "done", "evidence_ids": []}],
-            "follow_up": "Do you want more detail?",
-            "clarifying_question": "Which option do you mean?",
-            "roundtrip_summary": "summary",
-            "tool_summary": {},
-        }
-    )
-
-    assert result.next_question == "Which option do you mean?"
-
-
 def test_synthesis_result_rejects_legacy_string_result_entries() -> None:
     with pytest.raises(ValueError):
         SynthesisResult.model_validate(

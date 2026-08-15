@@ -85,6 +85,8 @@ class LlmCallLogPayload(BaseModel):
     computed_output_cost: str = ""
     computed_total_cost: str = ""
     latency_ms: int | None = None
+    input_object: object | None = None
+    output_object: object | None = None
     metadata: dict = Field(default_factory=dict)
 
 
@@ -176,6 +178,7 @@ def _build_tool_call_payload(entry: dict) -> dict:
 
 
 def _build_llm_call_payload(entry: dict) -> dict:
+    metadata = entry.get("metadata") or {}
     return LlmCallLogPayload(
         model_scope=entry.get("model_scope") or entry.get("agent") or "",
         model=entry.get("model") or "",
@@ -189,7 +192,9 @@ def _build_llm_call_payload(entry: dict) -> dict:
         computed_output_cost=str(entry.get("computed_output_cost") or ""),
         computed_total_cost=str(entry.get("computed_total_cost") or ""),
         latency_ms=entry.get("latency_ms"),
-        metadata=entry.get("metadata") or {},
+        input_object=entry.get("input_object", metadata.get("input_object")),
+        output_object=entry.get("output_object", metadata.get("output_object")),
+        metadata=metadata,
     ).model_dump()
 
 

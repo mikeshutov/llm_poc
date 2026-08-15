@@ -16,11 +16,49 @@ from langgraph.graph import END
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from request_orchestrator.agents.profile_management.router.router import router
 from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE
-from request_orchestrator.models.agent_state import AgentState, IterationState
+from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_SATISFIED
-from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_SATISFIED
+from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
+from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
 from request_orchestrator.shared.evaluator import evaluator_router
+
+
+def _hydrate_plan_state(state: AgentState, *, plan: Plan, results: dict[str, object] | None = None) -> None:
+    state.node_states.planner.plan = plan.model_copy(deep=True)
+    state.node_states.planner.plan_count = 1
+    state.node_states.planner.needs_replan = False
+    agent_name = state.agent_profile.name
+    tool_name_by_step_id = {
+        namespace_step_id(agent_name, format_plan_step_id(1, step.id)): step.tool
+        for step in plan.steps
+    }
+    step_id_by_local_step_id = {
+        format_plan_step_id(1, step.id): namespace_step_id(agent_name, format_plan_step_id(1, step.id))
+        for step in plan.steps
+    }
+    normalized_results: list[ToolResult] = []
+    for step_id, value in (results or {}).items():
+        if isinstance(value, ToolResult):
+            normalized_results.append(
+                value.model_copy(
+                    update={
+                        "step_id": value.step_id or step_id_by_local_step_id.get(step_id, step_id),
+                        "tool_name": value.tool_name or tool_name_by_step_id.get(step_id_by_local_step_id.get(step_id, step_id), ""),
+                        "iteration": 1 if value.iteration is None else value.iteration,
+                    }
+                )
+            )
+            continue
+        normalized_results.append(
+            ToolResult(
+                step_id=step_id_by_local_step_id.get(step_id, step_id),
+                tool_name=tool_name_by_step_id.get(step_id_by_local_step_id.get(step_id, step_id), ""),
+                iteration=1,
+                result=value,
+            )
+        )
+    state.result = state.result.copy(tool_results=normalized_results)
 
 
 def test_profile_router_routes_first_pass_to_plan() -> None:
@@ -31,56 +69,41 @@ def test_profile_router_routes_first_pass_to_plan() -> None:
 
 def test_profile_router_routes_empty_plan_to_end() -> None:
     state = AgentState.new(task="Remember this", max_turns=5, llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
-    state.iteration_trace = [
-        IterationState(
-            plan=Plan.model_validate({"steps": []}),
-            results={},
-        )
-    ]
+    _hydrate_plan_state(state, plan=Plan.model_validate({"steps": []}), results={})
 
     assert router(state) == END
 
 
 def test_profile_router_routes_pending_steps_to_execute() -> None:
     state = AgentState.new(task="Remember this", max_turns=5, llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
-    state.iteration_trace = [
-        IterationState(
-            plan=Plan.model_validate({
-                "steps": [
-                    {
-                        "id": "E1",
-                        "plan": "Load current profile state.",
-                        "tool": "get_user_attributes",
-                        "args": {"limit": 10, "is_active": True}}
-                ]}),
-            results={},
-        )
-    ]
+    _hydrate_plan_state(state, plan=Plan.model_validate({
+            "steps": [
+                {
+                    "id": "E1",
+                    "plan": "Load current profile state.",
+                    "tool": "get_user_attributes",
+                    "args": {"limit": 10, "is_active": True}}
+            ]}), results={})
 
     assert router(state) == EXECUTE_TOOLS_EDGE
 
 
 def test_profile_router_routes_completed_results_to_evaluator() -> None:
     state = AgentState.new(task="Remember this", max_turns=5, llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
-    state.iteration_trace = [
-        IterationState(
-            plan=Plan.model_validate({
-                "steps": [
-                    {
-                        "id": "E1",
-                        "plan": "Load current profile state.",
-                        "tool": "get_user_attributes",
-                        "args": {"limit": 10, "is_active": True}}
-                ]}),
-            results={"P1E1": {"items": []}},
-        )
-    ]
+    _hydrate_plan_state(state, plan=Plan.model_validate({
+            "steps": [
+                {
+                    "id": "E1",
+                    "plan": "Load current profile state.",
+                    "tool": "get_user_attributes",
+                    "args": {"limit": 10, "is_active": True}}
+            ]}), results={"P1E1": {"items": []}})
 
     assert router(state) == EVALUATE_EDGE
 
 
 def test_profile_evaluator_router_can_end_when_satisfied() -> None:
     state = AgentState.new(task="Remember this", max_turns=5, llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
-    state.evaluation_status = EVALUATION_STATUS_SATISFIED
+    state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
 
     assert evaluator_router(state) == 'synthesize'

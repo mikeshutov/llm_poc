@@ -5,11 +5,12 @@ from request_orchestrator.models.agent_state import AgentState
 
 
 def validator(state: AgentState) -> str:
-    if state.goal_reached or not state.iteration_trace:
+    planner_state = state.node_states.planner
+    evaluator_state = state.node_states.evaluator
+    if evaluator_state.goal_reached or planner_state.plan is None:
         return SYNTHESIZE_EDGE
 
-    last_iteration = state.iteration_trace[-1]
-    plan = last_iteration.plan
+    plan = planner_state.plan
     if plan is None or len(plan.steps) == 0:
         return SYNTHESIZE_EDGE
 

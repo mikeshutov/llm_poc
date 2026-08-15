@@ -1,11 +1,13 @@
+from request_orchestrator.agent_runner.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
 import json
 
-from request_orchestrator.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
-from request_orchestrator.models.agent_prompt import AgentPrompt, PreviousIteration, PreviousIterationStep
+from request_orchestrator.models.agent_prompt import AgentPrompt
 from request_orchestrator.models.agent_state import AgentState
-from request_orchestrator.models.plan_step_ids import format_plan_step_id
-from request_orchestrator.shared.evidence import build_evidence_bundle, build_evidence_steps
+from request_orchestrator.shared.evidence import (
+    build_evidence_bundle_from_tool_results,
+    build_evidence_steps_from_tool_results,
+)
 from request_orchestrator.shared.planner.models.compiled_planner_context import CompiledPlannerContext
 from request_orchestrator.shared.planner.prompts.planner_rules import build_planner_rules
 from request_orchestrator.shared.planner.prompts.planner_schema_prompt import PLANNER_SCHEMA
@@ -54,7 +56,7 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     tools = []
     rules = {}
 
-    agent_tool_categories = state.request_analysis.tool_categories_for_agent(state.agent_profile.name)
+    agent_tool_categories = list(state.tool_category_names)
 
     if agent_tool_categories:
         for category_name in agent_tool_categories:
@@ -83,53 +85,14 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     else:
         compiled_tools = "\n".join(f"- {t.name}: {t.description}".strip() for t in deduped_tools.values())
     return CompiledPlannerContext(tools=list(deduped_tools.values()), compiled_tools=compiled_tools, rules=rules)
-
-
-def _build_planner_task(state: AgentState) -> str:
-    goal = state.request_analysis.goal_for_agent(state.agent_profile.name).strip()
-    return goal or state.task
-
-
 def build_planner_prompt(state: AgentState) -> AgentPrompt:
     context = _compile_tools_rules_from_state(state)
-    previous_iterations: list[PreviousIteration] = []
-    evidence_bundle = build_evidence_bundle(state.iteration_trace)
-    evidence_steps = build_evidence_steps(
-        state.iteration_trace,
+    tool_results = state.gather_tool_results()
+    evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
+    evidence_steps = build_evidence_steps_from_tool_results(
+        tool_results,
         evidence_bundle.evidence_views_by_step_id,
     )
-
-    if state.iteration_trace:
-        for i, it in enumerate(state.iteration_trace, start=1):
-            if it.plan is None:
-                previous_iterations.append(
-                    PreviousIteration(
-                        iteration=i,
-                        has_plan=False,
-                        steps=[],
-                    )
-                )
-                continue
-
-            steps: list[PreviousIterationStep] = []
-            for step in it.plan.steps:
-                qualified_step_id = format_plan_step_id(i, step.id)
-                steps.append(
-                    PreviousIterationStep(
-                        step_id=qualified_step_id,
-                        plan=step.plan,
-                        tool=step.tool,
-                        args=step.args,
-                    )
-                )
-
-            previous_iterations.append(
-                PreviousIteration(
-                    iteration=i,
-                    has_plan=True,
-                    steps=steps,
-                )
-            )
 
     compiled_rules = build_planner_rules(context.rules)
     if state.agent_profile.planner_rules:
@@ -138,12 +101,12 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
     prompt = AgentPrompt(
         prompt_kind=PLANNER_PROMPT_KIND,
         instruction=state.agent_profile.planner_instruction,
-        user_profile=state.user_profile,
-        task=_build_planner_task(state),
+        user_profile=state.execution_context.user_profile,
+        conversation_context=state.execution_context.conversation_context,
+        task=state.task,
         latest_user_prompt=state.task if _is_profile_management_agent(state) else None,
         available_tools=context.compiled_tools,
         rules=compiled_rules,
-        previous_iterations=previous_iterations,
         evidence=evidence_steps,
         schema=PLANNER_SCHEMA,
     )
@@ -154,7 +117,6 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
     prompt.include_conversation_context()
     prompt.include_available_tools()
     prompt.include_rules_raw()
-    prompt.include_previous_iterations()
     prompt.include_evidence()
     if _is_profile_management_agent(state):
         prompt.include_latest_user_prompt()

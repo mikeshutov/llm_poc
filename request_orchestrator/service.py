@@ -2,13 +2,12 @@ import threading
 from time import perf_counter
 from uuid import UUID
 
-from integrations.ip_api import IpApiClient
-from personalization.profile.models import GeoLocation, GeoMetadata, build_geometadata
+from personalization.profile.models import GeoMetadata
 from personalization.profile.service import build_user_profile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
-from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.main_state import MainState
+from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.orchestrator import run_agent
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from llm.clients.embeddings import embed_text
@@ -17,29 +16,6 @@ from conversation.context_builder import build_roundtrip_context
 from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo
 
-_ip_api_client = IpApiClient()
-
-
-def _resolve_geometadata(geometadata: GeoMetadata | None) -> GeoMetadata:
-    if geometadata is not None:
-        return geometadata
-
-    try:
-        location = _ip_api_client.get_location()
-        return build_geometadata(
-            timezone=location.timezone,
-            location=GeoLocation(
-                city=location.city,
-                region=location.region_name or location.region,
-                country=location.country,
-                latitude=location.lat,
-                longitude=location.lon,
-                timezone=location.timezone,
-            ),
-        )
-    except Exception:
-        return build_geometadata()
-
 
 def run_request_orchestrator_for_query(
     conversation_id: str,
@@ -47,7 +23,7 @@ def run_request_orchestrator_for_query(
     user_id: str | None = None,
     context_limit: int = 5,
     geometadata: GeoMetadata | None = None,
-) -> tuple[AgentResult, ConversationRoundtrip]:
+) -> tuple[OrchestratorResult, ConversationRoundtrip]:
     started_at = perf_counter()
     repo = get_conversation_repo()
     conversation = repo.get_conversation(UUID(conversation_id))
@@ -76,11 +52,9 @@ def run_request_orchestrator_for_query(
         conversation_id,
         limit=context_limit,
     )
-
-    resolved_geometadata = _resolve_geometadata(geometadata)
     user_profile = build_user_profile(
         user_id=resolved_user_id,
-        geometadata=resolved_geometadata,
+        geometadata=geometadata,
     )
     main_state = MainState.new(
         task=user_query,
@@ -102,21 +76,21 @@ def run_request_orchestrator_for_query(
         roundtrip_id=str(roundtrip.id),
         user_id=user_profile.user_id,
     ):
-        result = run_agent(main_state)
+        orchestrator_result = run_agent(main_state)
 
     roundtrip_latency_ms = int((perf_counter() - started_at) * 1000)
-    if isinstance(result, AgentResult):
-        result = result.with_roundtrip_latency(roundtrip_latency_ms)
-    payload = result.to_payload()
+    orchestrator_result = orchestrator_result.with_roundtrip_latency(roundtrip_latency_ms)
+    payload = orchestrator_result.to_payload()
+    roundtrip_summary = orchestrator_result.roundtrip_summary
 
-    roundtrip_summary_embedding = embed_text(result.roundtrip_summary) if result.roundtrip_summary else None
+    roundtrip_summary_embedding = embed_text(roundtrip_summary) if roundtrip_summary else None
     roundtrip = repo.update_roundtrip(
         roundtrip.id,
-        result.raw_response,
+        orchestrator_result.raw_response,
         payload,
-        roundtrip_summary=result.roundtrip_summary,
+        roundtrip_summary=roundtrip_summary,
         roundtrip_summary_embedding=roundtrip_summary_embedding,
     )
     #TODO: enable this once we improve summarization.
     #threading.Thread(target=summarize_tool_calls, args=(roundtrip.id,), daemon=True).start()
-    return result, roundtrip
+    return orchestrator_result, roundtrip

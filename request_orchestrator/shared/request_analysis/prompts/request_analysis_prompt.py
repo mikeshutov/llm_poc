@@ -7,7 +7,7 @@ from request_orchestrator.shared.request_analysis.prompts.request_analysis_schem
 
 def _build_available_agents_payload(main_state: MainState) -> list[dict[str, object]]:
     available_agents: list[dict[str, object]] = []
-    for agent_state in main_state.agent_states:
+    for agent_state in main_state.agent_states.values():
         available_agents.append(
             {
                 "agent": agent_state.agent_profile.name,
@@ -49,8 +49,8 @@ def build_request_analysis_prompt(main_state: MainState) -> AgentPrompt:
             "Requested attribute types must use the format prefix.suffix such as food.likes or projects.goals. "
             "Only request user attribute types that would materially help with the current request. "
         ),
-        conversation_context=main_state.conversation_context,
-        user_profile=main_state.user_profile,
+        conversation_context=main_state.execution_context.conversation_context,
+        user_profile=main_state.execution_context.user_profile,
         available_tool_categories=AgentPrompt._serialize_json(available_agents),
         schema=REQUEST_ANALYSIS_SCHEMA,
         task=main_state.task,

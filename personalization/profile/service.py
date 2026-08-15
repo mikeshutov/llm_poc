@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from personalization.profile.models import GeoMetadata, UserAttributesSection, UserProfile
+from integrations.ip_api import IpApiClient
+from personalization.profile.models import GeoLocation, GeoMetadata, UserAttributesSection, UserProfile, build_geometadata
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
@@ -10,6 +11,7 @@ from personalization.user_attributes.models.user_attribute_types import ATTRIBUT
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 
 VALID_ATTRIBUTE_TYPES = set(ATTRIBUTE_TYPE_VALUES)
+_ip_api_client = IpApiClient()
 
 
 def _condense_attributes(attributes: list[UserAttribute]) -> list[UserAttribute]:
@@ -61,9 +63,27 @@ def build_user_profile(
     tone: TonePreferences | None = None,
     attributes: list[UserAttribute] | None = None,
 ) -> UserProfile:
+    resolved_geometadata = geometadata
+    if resolved_geometadata is None:
+        try:
+            location = _ip_api_client.get_location()
+            resolved_geometadata = build_geometadata(
+                timezone=location.timezone,
+                location=GeoLocation(
+                    city=location.city,
+                    region=location.region_name or location.region,
+                    country=location.country,
+                    latitude=location.lat,
+                    longitude=location.lon,
+                    timezone=location.timezone,
+                ),
+            )
+        except Exception:
+            resolved_geometadata = build_geometadata()
+
     return hydrate_user_profile_core(UserProfile(
         user_id=user_id,
-        geometadata=geometadata,
+        geometadata=resolved_geometadata,
         tone=tone,
         user_attributes=UserAttributesSection(attributes=[] if attributes is None else attributes),
     ))

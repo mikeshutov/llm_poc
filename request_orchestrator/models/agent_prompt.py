@@ -15,19 +15,6 @@ from conversation.models.conversation_models import ConversationContext
 from request_orchestrator.models.evidence import EvidenceView
 
 
-class PreviousIterationStep(BaseModel):
-    step_id: str
-    plan: str
-    tool: str
-    args: dict[str, Any]
-
-
-class PreviousIteration(BaseModel):
-    iteration: int
-    has_plan: bool
-    steps: list[PreviousIterationStep] = Field(default_factory=list)
-
-
 class EvidenceStep(BaseModel):
     type: str
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -40,7 +27,6 @@ class PromptSectionKeys:
     AVAILABLE_TOOL_CATEGORIES = "available_tool_categories"
     AVAILABLE_TOOLS = "available_tools"
     RULES = "rules"
-    PREVIOUS_ITERATIONS = "previous_iterations"
     EVIDENCE = "evidence"
     LATEST_USER_PROMPT = "latest_user_prompt"
     TASK = "task"
@@ -93,7 +79,6 @@ class AgentPrompt:
     schema: str = ""
     available_tool_categories: str = ""
     available_tools: str = ""
-    previous_iterations: list[PreviousIteration] | None = None
     evidence: list[EvidenceStep] | None = None
     _sections: dict[str, PromptSection] = field(default_factory=dict, init=False, repr=False)
 
@@ -166,17 +151,6 @@ class AgentPrompt:
     def include_rules_raw(self, *, key: str = PromptSectionKeys.RULES) -> AgentPrompt:
         return self.include_text(self.rules, key=key)
 
-    def include_previous_iterations(self, heading: str = "Evidence From Previous Plans (JSON):", *, key: str = PromptSectionKeys.PREVIOUS_ITERATIONS) -> AgentPrompt:
-        if not self.previous_iterations:
-            return self
-        return self._append_section(
-            heading,
-            self._serialize_json(prune_empty_prompt_values([
-                iteration.model_dump() for iteration in self.previous_iterations
-            ])),
-            key=key,
-        )
-
     def include_evidence(
         self,
         heading: str = "Evidence (JSON):",
@@ -219,9 +193,6 @@ class AgentPrompt:
 
     def included_sections(self) -> tuple[PromptSection, ...]:
         return tuple(self._sections.values())
-
-    def sections_by_key(self) -> dict[str, PromptSection]:
-        return dict(self._sections)
 
     def get_section(self, key: str) -> PromptSection | None:
         return self._sections.get(key)
@@ -303,10 +274,6 @@ class AgentPrompt:
                 include_management_fields=include_management_fields,
                 include_tone=include_tone,
             )
-        if self.previous_iterations is not None:
-            data[PromptSectionKeys.PREVIOUS_ITERATIONS] = prune_empty_prompt_values([
-                iteration.model_dump() for iteration in self.previous_iterations
-            ])
         if self.evidence is not None:
             data[PromptSectionKeys.EVIDENCE] = self._serialize_evidence_steps()
         return prune_empty_prompt_values(data)

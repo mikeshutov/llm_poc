@@ -54,8 +54,10 @@ def fetch_agent_logs_for_roundtrip(roundtrip_id: str | None) -> dict[str, list[d
 def fetch_llm_call_payloads_for_roundtrip(roundtrip_id: str | None) -> list[dict[str, Any]]:
     if not isinstance(roundtrip_id, str) or not roundtrip_id.strip():
         return []
+    parsed_roundtrip_id = UUID(roundtrip_id)
+    repo = get_conversation_repo()
     try:
-        events = get_conversation_repo().list_conversation_events_for_roundtrip(UUID(roundtrip_id))
+        events = repo.list_conversation_events_for_roundtrip(parsed_roundtrip_id)
     except Exception:
         return []
 
@@ -66,4 +68,23 @@ def fetch_llm_call_payloads_for_roundtrip(roundtrip_id: str | None) -> list[dict
         if not isinstance(event.payload, dict):
             continue
         llm_calls.append(dict(event.payload))
+    if llm_calls and all(_llm_call_payload_has_trace_data(payload) for payload in llm_calls):
+        return llm_calls
+    try:
+        records = repo.list_llm_calls_for_roundtrip(parsed_roundtrip_id)
+    except Exception:
+        return llm_calls
+    if records:
+        return list(records)
     return llm_calls
+
+
+def _llm_call_payload_has_trace_data(payload: dict[str, Any]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("input_object") is not None or payload.get("output_object") is not None:
+        return True
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, dict):
+        return False
+    return metadata.get("input_object") is not None or metadata.get("output_object") is not None

@@ -6,10 +6,11 @@ from langsmith import traceable
 
 from common.data import sanitize_for_json_storage
 from common.logging import create_conversation_event, log_roundtrip_prompt
-from request_orchestrator.models.agent_state import AgentState, IterationState
+from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models import AgentResult, Plan, PlanningResult
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
-from request_orchestrator.constants import PLANNER_PROMPT_STEP
+from request_orchestrator.shared.llm_factory import build_llm_for_stage, resolve_stage_model_name
+from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from common.data import repair_common_json_issues, strip_code_fences
 from conversation.models.conversation_model_config import PLANNER_STAGE
 from llm.usage import record_llm_call, serialize_llm_call_record
@@ -31,17 +32,28 @@ def _invoke_planner(
     *,
     prompt_input_object: dict[str, object],
 ) -> tuple[PlanningResult, object | None]:
-    llm = agent_state.build_llm_for_stage(stage=PLANNER_STAGE)
+    execution_context = agent_state.execution_context
+    agent_scope = agent_state.resolve_agent_scope()
+    llm = build_llm_for_stage(
+        execution_context=execution_context,
+        llm=agent_state.llm,
+        agent=agent_scope,
+        stage=PLANNER_STAGE,
+        reuse_llm_for_agent_scope=agent_scope,
+    )
     started_at = perf_counter()
     response = llm.invoke(prompt_text)
     latency_ms = int((perf_counter() - started_at) * 1000)
-    agent_scope = agent_state.resolve_agent_scope()
     llm_call = record_llm_call(
         raw_response=response,
-        model_name=agent_state.resolve_model_for_stage(agent=agent_scope, stage=PLANNER_STAGE),
-        conversation_id=agent_state.conversation_id,
-        roundtrip_id=agent_state.roundtrip_id,
-        user_id=agent_state.user_profile.user_id,
+        model_name=resolve_stage_model_name(
+            execution_context=execution_context,
+            agent=agent_scope,
+            stage=PLANNER_STAGE,
+        ),
+        conversation_id=execution_context.conversation_id,
+        roundtrip_id=execution_context.roundtrip_id,
+        user_id=execution_context.user_profile.user_id,
         agent=agent_scope,
         stage=PLANNER_STAGE,
         callsite="shared_planner.run_planner",
@@ -58,8 +70,6 @@ def _invoke_planner(
 
 @traceable(name="Planner Node")
 def run_planner(agent_state: AgentState) -> AgentState:
-    it_state = IterationState.new()
-
     prompt = build_planner_prompt(state=agent_state)
     prompt_text = prompt.prompt_text()
     prompt_input_object = prompt.to_log_input_object()
@@ -76,10 +86,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         if serialized is not None:
             llm_calls.append(serialized)
     except Exception as e:
-        agent_state.goal_reached = True
-        agent_state.result = AgentResult(
-            answer=[f"Planner produced invalid JSON plan: {e}"]
-        )
+        agent_state.node_states.evaluator.goal_reached = True
         return agent_state
 
     if len(planning_result.steps) == 0 and planning_result.status == "blocked" and not planning_result.reason:
@@ -92,15 +99,16 @@ def run_planner(agent_state: AgentState) -> AgentState:
 
     plan = Plan(steps=planning_result.steps)
 
-    if agent_state.roundtrip_id:
-        plan.db_id = PlanRepository().save_plan(agent_state.roundtrip_id, plan)
+    if agent_state.execution_context.roundtrip_id:
+        plan.db_id = PlanRepository().save_plan(agent_state.execution_context.roundtrip_id, plan)
 
-    it_state.plan = plan
-    it_state.needs_replan = planning_result.needs_replan
-    agent_state.add_iteration(it_state)
+    agent_state.begin_plan(
+        plan,
+        needs_replan=planning_result.needs_replan,
+    )
 
     if len(plan.steps) == 0:
-        agent_state.goal_reached = True
+        agent_state.node_states.evaluator.goal_reached = True
 
     payload = {
         "agent_name": agent_state.agent_profile.name,
@@ -115,19 +123,19 @@ def run_planner(agent_state: AgentState) -> AgentState:
         }),
     }
     create_conversation_event(
-        conversation_id=agent_state.conversation_id,
-        roundtrip_id=agent_state.roundtrip_id,
+        conversation_id=agent_state.execution_context.conversation_id,
+        roundtrip_id=agent_state.execution_context.roundtrip_id,
         event_type=PLAN_KIND,
         source=agent_state.agent_profile.name,
         agent_name=agent_state.agent_profile.name,
         payload=payload,
     )
 
-    if agent_state.roundtrip_id:
+    if agent_state.execution_context.roundtrip_id:
         log_roundtrip_prompt(
-            roundtrip_id=agent_state.roundtrip_id,
+            roundtrip_id=agent_state.execution_context.roundtrip_id,
             agent=agent_state.agent_profile.name,
-            prompt_step=PLANNER_PROMPT_STEP,
+            prompt_step=PLANNER_PROMPT_KIND,
             prompt=prompt_text,
         )
 
