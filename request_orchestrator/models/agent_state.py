@@ -114,15 +114,3 @@ class AgentState:
             seen.add(tool_name)
             used_tools.append(tool_name)
         return used_tools
-
-    def upsert_tool_result(self, tool_result: ToolResult) -> None:
-        resolved_tool_result = tool_result.model_copy(deep=True)
-        updated_tool_results = [existing.model_copy(deep=True) for existing in self.result.tool_results]
-        if resolved_tool_result.step_id.strip():
-            for index, existing in enumerate(updated_tool_results):
-                if existing.step_id.strip() == resolved_tool_result.step_id.strip():
-                    updated_tool_results[index] = resolved_tool_result
-                    self.result = self.result.copy(tool_results=updated_tool_results)
-                    return
-        updated_tool_results.append(resolved_tool_result)
-        self.result = self.result.copy(tool_results=updated_tool_results)

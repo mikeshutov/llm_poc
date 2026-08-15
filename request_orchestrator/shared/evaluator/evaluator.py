@@ -56,7 +56,7 @@ def run_evaluator(state: AgentState) -> AgentState:
         evidence_bundle.evidence_views_by_step_id,
     )
     prompt = build_evaluator_prompt(state=state, evidence=evidence_steps)
-    prompt_text = prompt.prompt_text()
+    prompt_text = prompt.build()
     prompt_input_object = prompt.to_log_input_object()
     llm = build_llm_for_stage(
         execution_context=execution_context,

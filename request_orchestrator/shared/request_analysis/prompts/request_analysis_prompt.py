@@ -1,6 +1,5 @@
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_CATEGORIES, ATTRIBUTE_QUALIFIERS
-from request_orchestrator.constants import REQUEST_ANALYSIS_PROMPT_KIND
-from request_orchestrator.models.agent_prompt import AgentPrompt
+from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.shared.request_analysis.prompts.request_analysis_schema_prompt import REQUEST_ANALYSIS_SCHEMA
 
@@ -29,7 +28,6 @@ def build_request_analysis_prompt(main_state: MainState) -> AgentPrompt:
     attribute_suffixes = ", ".join(ATTRIBUTE_QUALIFIERS)
 
     prompt = AgentPrompt(
-        prompt_kind=REQUEST_ANALYSIS_PROMPT_KIND,
         instruction=(
             "You are a request analyzer. "
             "Infer one or more self-contained goals for the available agents. "
@@ -55,9 +53,9 @@ def build_request_analysis_prompt(main_state: MainState) -> AgentPrompt:
         schema=REQUEST_ANALYSIS_SCHEMA,
         task=main_state.task,
     )
-    prompt.include_user_profile()
-    prompt.include_conversation_context(heading="Conversation context (JSON):")
-    prompt.include_available_tool_categories(heading="Available agents (JSON):")
-    prompt.include_latest_user_prompt()
-    prompt.include_schema_as_response_label()
+    prompt.include_section(PromptSectionKeys.USER_PROFILE)
+    prompt.include_section(PromptSectionKeys.CONVERSATION_CONTEXT)
+    prompt.include_section(PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES)
+    prompt.include_section(PromptSectionKeys.LATEST_USER_PROMPT)
+    prompt.include_section(PromptSectionKeys.SCHEMA)
     return prompt

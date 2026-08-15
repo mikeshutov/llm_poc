@@ -20,7 +20,7 @@ ORCHESTRATOR_AGENT_NAME = "request_orchestrator"
 @traceable(name="Request Analysis Node")
 def analyze_request(main_state: MainState) -> MainState:
     prompt = build_request_analysis_prompt(main_state)
-    prompt_text = prompt.prompt_text()
+    prompt_text = prompt.build()
     prompt_input_object = prompt.to_log_input_object()
     execution_context = main_state.execution_context
     model_name = resolve_stage_model_name(

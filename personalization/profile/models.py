@@ -156,7 +156,6 @@ class UserProfile(BaseModel):
     ) -> dict[str, Any]:
         return prune_empty_prompt_values(
             {
-                "user_id": self.user_id,
                 "first_name": self.first_name,
                 "last_name": self.last_name,
                 "display_name": self.display_name,

@@ -25,7 +25,6 @@ from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan, PlanStep
 from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
 from request_orchestrator.shared.evaluator import evaluator_router
-from request_orchestrator.shared.planner_state import current_plan_results
 
 
 def _hydrate_plan_state(
@@ -196,7 +195,7 @@ def test_main_agent_graph_executes_plan_after_planner(monkeypatch) -> None:
         nonlocal executor_called
         executor_called = True
         state.node_states.evaluator.goal_reached = True
-        state.upsert_tool_result(
+        state.result = state.result.with_recorded_tool_result(
             ToolResult(
                 step_id="main_agent:P1E1",
                 tool_name="generic_web_search",
@@ -217,8 +216,4 @@ def test_main_agent_graph_executes_plan_after_planner(monkeypatch) -> None:
 
     assert planner_called is True
     assert executor_called is True
-    assert current_plan_results(
-        final_state.node_states.planner,
-        final_state.result.tool_results,
-        agent_name=final_state.agent_profile.name,
-    )["P1E1"].result == {"items": []}
+    assert final_state.result.tool_results_by_step_id()["main_agent:P1E1"].result == {"items": []}

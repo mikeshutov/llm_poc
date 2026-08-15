@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
@@ -33,19 +33,29 @@ class PromptSectionKeys:
     SCHEMA = "schema"
 
 
-@dataclass(frozen=True)
-class PromptSectionValue:
-    text: str = ""
-    token_count: int = 0
+BUILTIN_SECTION_KEYS = (
+    PromptSectionKeys.USER_PROFILE,
+    PromptSectionKeys.CONVERSATION_CONTEXT,
+    PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES,
+    PromptSectionKeys.AVAILABLE_TOOLS,
+    PromptSectionKeys.RULES,
+    PromptSectionKeys.EVIDENCE,
+    PromptSectionKeys.LATEST_USER_PROMPT,
+    PromptSectionKeys.TASK,
+    PromptSectionKeys.SCHEMA,
+)
 
-
-@dataclass(frozen=True)
-class PromptSection:
-    key: str = ""
-    heading: str = ""
-    value: PromptSectionValue = field(default_factory=PromptSectionValue)
-    metadata: dict[str, Any] = field(default_factory=dict)
-
+ROLE_RULES_SECTION_KEYS = (PromptSectionKeys.RULES,)
+INPUT_SECTION_KEYS = (
+    PromptSectionKeys.USER_PROFILE,
+    PromptSectionKeys.CONVERSATION_CONTEXT,
+    PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES,
+    PromptSectionKeys.AVAILABLE_TOOLS,
+    PromptSectionKeys.EVIDENCE,
+    PromptSectionKeys.LATEST_USER_PROMPT,
+    PromptSectionKeys.TASK,
+)
+OUTPUT_CONTRACT_SECTION_KEYS = (PromptSectionKeys.SCHEMA,)
 
 @lru_cache(maxsize=1)
 def _get_prompt_encoding():
@@ -69,7 +79,6 @@ def _count_prompt_tokens(text: str) -> int:
 
 @dataclass
 class AgentPrompt:
-    prompt_kind: str
     instruction: str
     conversation_context: ConversationContext | None = None
     user_profile: UserProfile | None = None
@@ -80,161 +89,102 @@ class AgentPrompt:
     available_tool_categories: str = ""
     available_tools: str = ""
     evidence: list[EvidenceStep] | None = None
-    _sections: dict[str, PromptSection] = field(default_factory=dict, init=False, repr=False)
+    _enabled_sections: dict[str, dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
 
-    def _append_section(
+    def include_section(
         self,
-        heading: str,
-        content: str,
+        key: str,
         *,
-        key: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> AgentPrompt:
-        if is_meaningful_prompt_value(content):
-            resolved_key = key or heading or f"section_{len(self._sections)}"
-            self._sections[resolved_key] = PromptSection(
-                key=resolved_key,
-                heading=heading,
-                value=PromptSectionValue(
-                    text=content,
-                    token_count=_count_prompt_tokens(content),
-                ),
-                metadata={} if metadata is None else dict(metadata),
-            )
+        if key not in BUILTIN_SECTION_KEYS:
+            raise KeyError(f"Unknown prompt section key: {key}")
+        self._enabled_sections[key] = {} if metadata is None else dict(metadata)
         return self
 
-    def include_user_profile(
-        self,
-        heading: str = "User Profile (JSON):",
-        *,
-        key: str = PromptSectionKeys.USER_PROFILE,
-        include_management_fields: bool = False,
-        include_tone: bool = False,
-    ) -> AgentPrompt:
-        if self.user_profile is None:
-            return self
-        return self._append_section(
-            heading,
-            self._serialize_json(
-                self.user_profile.to_prompt_dict(
-                    include_management_fields=include_management_fields,
-                    include_tone=include_tone,
+    @property
+    def sections_raw(self) -> dict[str, Any]:
+        sections: dict[str, Any] = {}
+        for key, metadata in self._enabled_sections.items():
+            value: Any = None
+            if key == PromptSectionKeys.USER_PROFILE and self.user_profile is not None:
+                value = self.user_profile.to_prompt_dict(
+                    include_management_fields=bool(metadata.get("include_management_fields", False)),
+                    include_tone=bool(metadata.get("include_tone", False)),
                 )
-            ),
-            key=key,
-            metadata={
-                "include_management_fields": include_management_fields,
-                "include_tone": include_tone,
-            },
-        )
+            elif key == PromptSectionKeys.CONVERSATION_CONTEXT and self.conversation_context is not None:
+                from conversation.utils import build_conversation_context_json
 
-    def include_conversation_context(self, heading: str = "Conversation Context (JSON):", *, key: str = PromptSectionKeys.CONVERSATION_CONTEXT) -> AgentPrompt:
-        if self.conversation_context is None:
-            return self
-        from conversation.utils import build_conversation_context_json
+                value = json.loads(build_conversation_context_json(self.conversation_context))
+            elif key == PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES:
+                value = self._parse_json_text_if_possible(self.available_tool_categories)
+            elif key == PromptSectionKeys.AVAILABLE_TOOLS:
+                value = self._parse_json_text_if_possible(self.available_tools)
+            elif key == PromptSectionKeys.RULES:
+                value = self.rules
+            elif key == PromptSectionKeys.EVIDENCE:
+                value = self._serialize_evidence_steps()
+            elif key == PromptSectionKeys.LATEST_USER_PROMPT:
+                value = self.latest_user_prompt or self.task
+            elif key == PromptSectionKeys.TASK:
+                value = self.task
+            elif key == PromptSectionKeys.SCHEMA:
+                value = self.schema.strip()
+            if is_meaningful_prompt_value(value):
+                sections[key] = value
+        return prune_empty_prompt_values(sections)
 
-        return self._append_section(
-            heading,
-            build_conversation_context_json(self.conversation_context),
-            key=key,
-        )
+    def build(self) -> str:
+        raw_sections = self.sections_raw
+        parts: list[str] = []
+        parts.append("ROLE / RULES")
+        if is_meaningful_prompt_value(self.instruction):
+            parts.append(self.instruction.rstrip())
+        for key in ROLE_RULES_SECTION_KEYS:
+            value = raw_sections.get(key)
+            if isinstance(value, str) and is_meaningful_prompt_value(value):
+                parts.append(value)
 
-    def include_available_tool_categories(self, heading: str = "Available categories:", *, key: str = PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES) -> AgentPrompt:
-        return self._append_section(heading, self.available_tool_categories, key=key)
+        input_payload = {
+            key: raw_sections[key]
+            for key in INPUT_SECTION_KEYS
+            if key in raw_sections
+        }
+        if input_payload:
+            parts.extend([
+                "INPUT",
+                self._serialize_json(input_payload),
+            ])
 
-    def include_available_tools(self, heading: str = "Allowed Tools:", *, key: str = PromptSectionKeys.AVAILABLE_TOOLS) -> AgentPrompt:
-        return self._append_section(heading, self.available_tools, key=key)
+        output_parts: list[str] = []
+        for key in OUTPUT_CONTRACT_SECTION_KEYS:
+            value = raw_sections.get(key)
+            if isinstance(value, str) and value.strip():
+                output_parts.append(value.strip())
+        if output_parts:
+            parts.append("OUTPUT CONTRACT")
+            parts.extend(output_parts)
+        return "\n\n".join(part for part in parts if part)
 
-    def include_rules_section(self, heading: str = "Rules:", *, key: str = PromptSectionKeys.RULES) -> AgentPrompt:
-        return self._append_section(heading, self.rules, key=key)
-
-    def include_rules_raw(self, *, key: str = PromptSectionKeys.RULES) -> AgentPrompt:
-        return self.include_text(self.rules, key=key)
-
-    def include_evidence(
-        self,
-        heading: str = "Evidence (JSON):",
-        *,
-        key: str = PromptSectionKeys.EVIDENCE,
-    ) -> AgentPrompt:
-        if not self.evidence:
-            return self
-        return self._append_section(
-            heading,
-            self._serialize_json(self._serialize_evidence_steps()),
-            key=key,
-        )
-
-    def include_latest_user_prompt(self, heading: str = "Latest User Prompt:", *, key: str = PromptSectionKeys.LATEST_USER_PROMPT) -> AgentPrompt:
-        return self._append_section(heading, self.latest_user_prompt or self.task, key=key)
-
-    def include_task(self, heading: str = "Task:", *, key: str = PromptSectionKeys.TASK) -> AgentPrompt:
-        return self._append_section(heading, self.task, key=key)
-
-    def include_schema_raw(self, *, key: str = PromptSectionKeys.SCHEMA) -> AgentPrompt:
-        return self.include_text(self.schema, key=key)
-
-    def include_schema_as_response_label(self, label: str = "Response Schema:", *, key: str = PromptSectionKeys.SCHEMA) -> AgentPrompt:
-        if not self.schema:
-            return self
-        return self.include_text(f"{label} {self.schema}", key=key)
-
-    def include_text(self, text: str, *, key: str | None = None) -> AgentPrompt:
-        if is_meaningful_prompt_value(text):
-            resolved_key = key or f"text_{len(self._sections)}"
-            self._sections[resolved_key] = PromptSection(
-                key=resolved_key,
-                value=PromptSectionValue(
-                    text=text,
-                    token_count=_count_prompt_tokens(text),
-                ),
-            )
-        return self
-
-    def included_sections(self) -> tuple[PromptSection, ...]:
-        return tuple(self._sections.values())
-
-    def get_section(self, key: str) -> PromptSection | None:
-        return self._sections.get(key)
-
-    def get_section_content(self, key: str, default: str = "") -> str:
-        section = self.get_section(key)
-        if section is None:
-            return default
-        return section.value.text
-
-    def prompt_parts(self) -> tuple[str, ...]:
-        parts = [self.instruction.rstrip()]
-        for section in self._sections.values():
-            if section.heading:
-                parts.extend([section.heading, section.value.text])
-            else:
-                parts.append(section.value.text)
-        return tuple(part for part in parts if part)
-
-    def prompt_text(self) -> str:
-        return "\n\n".join(self.prompt_parts())
+    @staticmethod
+    def _parse_json_text_if_possible(text: str) -> Any:
+        normalized = text.strip()
+        if not normalized:
+            return ""
+        try:
+            return json.loads(normalized)
+        except Exception:
+            return text
 
     def prompt_token_count(self) -> int:
-        return _count_prompt_tokens(self.prompt_text())
+        return _count_prompt_tokens(self.build())
 
     def to_log_input_object(self) -> dict[str, Any]:
         return {
-            "prompt": self.prompt_text(),
+            "prompt": self.build(),
             "prompt_token_count": self.prompt_token_count(),
-            "prompt_sections": [
-                {
-                    "key": section.key,
-                    "heading": section.heading,
-                    "text": section.value.text,
-                    "token_count": section.value.token_count,
-                }
-                for section in self.included_sections()
-            ],
+            "sections_raw": self.sections_raw,
         }
-
-    def render(self) -> str:
-        return self.prompt_text()
 
     @staticmethod
     def _serialize_json(value: Any, default: Any = str) -> str:
@@ -256,27 +206,4 @@ class AgentPrompt:
             )
         return prune_empty_prompt_values(serialized_steps)
 
-    def to_dict(self) -> dict[str, Any]:
-        data = asdict(self)
-        data.pop("_sections", None)
-        if self.conversation_context is not None:
-            data[PromptSectionKeys.CONVERSATION_CONTEXT] = prune_empty_prompt_values(
-                self.conversation_context.model_dump()
-            )
-        if self.user_profile is not None:
-            user_profile_section = self.get_section(PromptSectionKeys.USER_PROFILE)
-            include_management_fields = False
-            include_tone = False
-            if user_profile_section is not None:
-                include_management_fields = bool(user_profile_section.metadata.get("include_management_fields", False))
-                include_tone = bool(user_profile_section.metadata.get("include_tone", False))
-            data[PromptSectionKeys.USER_PROFILE] = self.user_profile.to_prompt_dict(
-                include_management_fields=include_management_fields,
-                include_tone=include_tone,
-            )
-        if self.evidence is not None:
-            data[PromptSectionKeys.EVIDENCE] = self._serialize_evidence_steps()
-        return prune_empty_prompt_values(data)
 
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict(), indent=2, ensure_ascii=True, default=str)

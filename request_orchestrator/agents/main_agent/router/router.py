@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.constants import EVALUATE_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
-from request_orchestrator.shared.planner_state import current_plan_results
+from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
 
 
 def router(state: AgentState) -> str:
@@ -14,11 +14,18 @@ def router(state: AgentState) -> str:
     if planner_state.plan_count >= state.max_turns:
         return SYNTHESIZE_EDGE
 
-    current_results = current_plan_results(
-        planner_state,
-        state.result.tool_results,
-        agent_name=state.agent_profile.name,
-    )
+    current_result_step_ids = {
+        namespace_step_id(
+            state.agent_profile.name,
+            format_plan_step_id(planner_state.plan_count, step.id),
+        )
+        for step in planner_state.plan.steps
+    } if planner_state.plan is not None else set()
+    current_results = [
+        tool_result
+        for tool_result in state.result.tool_results
+        if tool_result.step_id in current_result_step_ids
+    ]
     if current_results and planner_state.needs_replan:
         return PLAN_EDGE
     if current_results:

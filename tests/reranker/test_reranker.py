@@ -128,11 +128,11 @@ def test_reranker_prompt_renders_prompt_text() -> None:
 
     prompt_text = prompt.to_prompt_text()
 
-    assert 'Ranking Goal:' in prompt_text
+    assert 'goal:' in prompt_text
     assert 'find the best option' in prompt_text
-    assert 'Candidates (JSON):' in prompt_text
+    assert 'candidates:' in prompt_text
     assert 'candidate-1' in prompt_text
-    assert 'Response Schema:' in prompt_text
+    assert 'schema:' in prompt_text
     assert 'https://example.com' not in prompt_text
     assert 'candidate_type' not in prompt_text
     assert 'ranked_ids' in prompt_text
@@ -167,7 +167,7 @@ def test_rerank_candidates_includes_user_profile_when_provided() -> None:
     rerank_candidates(candidates, goal="find the best option", user_profile=profile, llm=llm)
 
     assert llm.last_prompt is not None
-    assert 'User Profile (JSON):' in llm.last_prompt
+    assert 'user_profile:' in llm.last_prompt
     assert 'style.preferences' in llm.last_prompt
     assert 'blue' in llm.last_prompt
 

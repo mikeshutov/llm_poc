@@ -1,7 +1,6 @@
 from conversation.models.conversation_models import ConversationContext
 from request_orchestrator.agent_runner.models.agent_profile import DEFAULT_SYNTHESIS_INSTRUCTION
-from request_orchestrator.constants import SYNTHESIS_PROMPT_KIND
-from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep
+from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep, PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.shared.synthesis.prompts.synthesis_rules import build_synthesis_rules
@@ -28,7 +27,6 @@ def build_synthesis_prompt(evidence: list[EvidenceStep], state: AgentState | Mai
         else list(state.tool_category_names)
     )
     prompt = AgentPrompt(
-        prompt_kind=SYNTHESIS_PROMPT_KIND,
         instruction=(
             DEFAULT_SYNTHESIS_INSTRUCTION
             if isinstance(state, MainState)
@@ -41,10 +39,13 @@ def build_synthesis_prompt(evidence: list[EvidenceStep], state: AgentState | Mai
         schema=SYNTHESIS_SCHEMA,
         task=state.task,
     )
-    prompt.include_user_profile(include_tone=True)
-    prompt.include_rules_section()
-    prompt.include_conversation_context()
-    prompt.include_evidence()
-    prompt.include_latest_user_prompt()
-    prompt.include_schema_raw()
+    prompt.include_section(
+        PromptSectionKeys.USER_PROFILE,
+        metadata={"include_tone": True},
+    )
+    prompt.include_section(PromptSectionKeys.RULES)
+    prompt.include_section(PromptSectionKeys.CONVERSATION_CONTEXT)
+    prompt.include_section(PromptSectionKeys.EVIDENCE)
+    prompt.include_section(PromptSectionKeys.LATEST_USER_PROMPT)
+    prompt.include_section(PromptSectionKeys.SCHEMA)
     return prompt

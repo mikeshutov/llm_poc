@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import unittest
 from contextlib import ExitStack
+from dataclasses import dataclass
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
@@ -28,9 +29,8 @@ from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from request_orchestrator.orchestrator import run_agent
-from request_orchestrator.constants import SYNTHESIS_PROMPT_KIND
-from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep
-from request_orchestrator.models.agent_state import AgentState, IterationState
+from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep, PromptSectionKeys
+from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.request_analysis import RequestAnalysis, RequestAnalysisGoal
 from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.models.main_state import MainState
@@ -46,6 +46,12 @@ from request_orchestrator.shared.evaluator.prompts.evaluator_prompt import build
 from request_orchestrator.shared.llm_factory import build_llm_for_stage
 from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
 from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
+
+
+@dataclass
+class IterationState:
+    plan: Plan
+    results: dict[str, ToolResult]
 
 
 class InMemoryConversationEventRepo:
@@ -156,7 +162,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             )
         ]
         prompt = build_planner_prompt(profile_state)
-        prompt_text = prompt.prompt_text()
+        prompt_text = prompt.build()
 
         self.assertEqual(profile_state.task, 'Please remember that I like pizza and eggs.')
         self.assertEqual(
@@ -164,7 +170,9 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             PROFILE_MANAGEMENT_PROFILE.request_analysis_goal,
         )
         self.assertEqual(profile_state.agent_profile.max_turns, 5)
-        self.assertIn('Latest User Prompt:', prompt_text)
+        self.assertIn('ROLE / RULES', prompt_text)
+        self.assertIn('INPUT', prompt_text)
+        self.assertIn('"latest_user_prompt": "Please remember that I like pizza and eggs."', prompt_text)
         self.assertIn('Please remember that I like pizza and eggs.', prompt_text)
         self.assertNotIn('Use recent_roundtrip_tool_summaries', prompt_text)
         self.assertNotIn('Use recent_roundtrips when the user refers', prompt_text)
@@ -178,8 +186,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             'Review this turn for durable user profile field and user attribute maintenance needs. If profile work is needed, plan the minimal retrieval and/or update step combination required.',
         )
         self.assertEqual(prompt.latest_user_prompt, 'Please remember that I like pizza and eggs.')
-        self.assertIn('Task:', prompt_text)
-        self.assertNotIn('Goal:', prompt_text)
+        self.assertIn('"task": "Review this turn for durable user profile field and user attribute maintenance needs. If profile work is needed, plan the minimal retrieval and/or update step combination required."', prompt_text)
         self.assertIn(PROFILE_MANAGEMENT_PROFILE.request_analysis_goal, prompt_text)
         self.assertIn('attribute_type (required): Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.', prompt_text)
         self.assertIn('Available attribute prefixes:', prompt_text)
@@ -203,11 +210,11 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         )
 
         prompt = build_planner_prompt(state)
-        prompt_text = prompt.prompt_text()
+        prompt_text = prompt.build()
 
-        self.assertIn('Goal:', prompt_text)
+        self.assertIn('"task": "Search the web for frozen or dry okonomiyaki kits for sale, since the user clarified they want okonomiyaki and wants a broader web check."', prompt_text)
         self.assertIn('Search the web for frozen or dry okonomiyaki kits for sale, since the user clarified they want okonomiyaki and wants a broader web check.', prompt_text)
-        self.assertNotIn('Latest User Prompt:', prompt_text)
+        self.assertNotIn('"latest_user_prompt":', prompt_text)
         self.assertNotIn('Can you find frozen or dry okonomiyaki kits for sale online?', prompt_text)
 
     def test_tone_is_included_only_for_planner_and_synthesis_prompts(self) -> None:
@@ -231,7 +238,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             'Use the available evidence to answer the request.',
         )
 
-        planner_prompt = build_planner_prompt(state).prompt_text()
+        planner_prompt = build_planner_prompt(state).build()
         synthesis_prompt = build_synthesis_prompt(
             evidence=[
                 EvidenceStep(
@@ -247,7 +254,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 )
             ],
             state=state,
-        ).prompt_text()
+        ).build()
         request_analysis_prompt = build_request_analysis_prompt(
             MainState.new(
                 task=state.task,
@@ -257,7 +264,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                 llm=state.llm,
                 agent_profiles=_agent_profiles_for(state.user_profile),
             )
-        ).prompt_text()
+        ).build()
         evaluator_prompt = build_evaluator_prompt(
             state=state,
             evidence=[
@@ -273,7 +280,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     ],
                 )
             ],
-        ).prompt_text()
+        ).build()
 
         self.assertIn('"tone"', planner_prompt)
         self.assertIn('"verbosity": "concise"', planner_prompt)
@@ -302,7 +309,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         )
 
         prompt = build_request_analysis_prompt(state)
-        prompt_text = prompt.prompt_text()
+        prompt_text = prompt.build()
 
         self.assertIn('Make every goal self-contained for downstream steps because the full conversation context will not be passed through later.', prompt_text)
         self.assertIn('Each goal should capture the actual objective plus any relevant conversation-derived constraints, references, or continuity needed for planning and synthesis.', prompt_text)
@@ -490,7 +497,6 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
     def test_prompt_text_prunes_null_fields_from_plan_evidence(self) -> None:
         prompt = AgentPrompt(
-            prompt_kind=SYNTHESIS_PROMPT_KIND,
             instruction='Synthesize the answer.',
             user_profile=UserProfile(),
             evidence=[
@@ -508,11 +514,11 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             ],
             schema='{}',
         )
-        prompt.include_user_profile()
-        prompt.include_evidence()
-        prompt.include_schema_raw()
+        prompt.include_section(PromptSectionKeys.USER_PROFILE)
+        prompt.include_section(PromptSectionKeys.EVIDENCE)
+        prompt.include_section(PromptSectionKeys.SCHEMA)
 
-        prompt_text = prompt.prompt_text()
+        prompt_text = prompt.build()
 
         self.assertIn('"title": "Soba Noodles"', prompt_text)
         self.assertIn('"evidence_id": "P1E1R1"', prompt_text)
@@ -558,9 +564,9 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             ],
             state=state,
         )
-        prompt_text = prompt.prompt_text()
+        prompt_text = prompt.build()
 
-        self.assertIn('Conversation Context (JSON):', prompt_text)
+        self.assertIn('conversation_context: {', prompt_text)
         self.assertIn('conversation_summary', prompt_text)
         self.assertIn('User has been comparing pantry noodle options and cares about quick preparation.', prompt_text)
         self.assertIn('latest_conversation_summary', prompt_text)
@@ -602,7 +608,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             state=state,
         )
 
-        prompt_text = prompt.prompt_text()
+        prompt_text = prompt.build()
 
         self.assertIn('"evidence_object"', prompt_text)
         self.assertIn('"top_themes"', prompt_text)
@@ -635,9 +641,10 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             state=state,
         )
 
-        prompt_text = prompt.prompt_text()
+        prompt_text = prompt.build()
 
-        self.assertNotIn('Conversation Context (JSON):', prompt_text)
+        self.assertNotIn('conversation_context:', prompt_text)
+        self.assertNotIn('conversation_context: {', prompt_text)
         self.assertNotIn('\n\n{}\n\n', prompt_text)
 
     def test_user_attribute_creation_orchestration(self) -> None:
@@ -747,9 +754,9 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertEqual(created_attribute.source, 'explicit')
 
         self.assertEqual(len(llm.invocations), 6)
-        self.assertIn('Latest User Prompt:', llm.prompts[0] or '')
-        self.assertIn('User Profile (JSON):', llm.prompts[0] or '')
-        self.assertNotIn('Conversation Context (JSON):', llm.prompts[3] or '')
+        self.assertIn('"latest_user_prompt": "Please remember that I like pizza and eggs."', llm.prompts[0] or '')
+        self.assertIn('"user_profile":', llm.prompts[0] or '')
+        self.assertNotIn('conversation_context:', llm.prompts[3] or '')
         self.assertNotIn('recent_roundtrip_tool_summaries', llm.prompts[-1] or '')
         self.assertNotIn('conversation_summary', llm.prompts[-1] or '')
         self.assertLessEqual((llm.prompts[-1] or '').count('message_index'), 3)
@@ -853,7 +860,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(result.answer, ['I used your stored food preferences while looking up a meal idea.'])
         self.assertEqual(len(llm.invocations), 4)
-        self.assertIn('User Profile (JSON):', llm.prompts[0] or '')
+        self.assertIn('"user_profile":', llm.prompts[0] or '')
 
         with patch('common.logging.conversation_event_view.get_conversation_repo', return_value=repo):
             fetched_logs = fetch_agent_logs_for_roundtrip(roundtrip_id)

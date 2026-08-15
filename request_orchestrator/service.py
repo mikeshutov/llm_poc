@@ -2,6 +2,7 @@ import threading
 from time import perf_counter
 from uuid import UUID
 
+from common.data import sanitize_for_json_storage
 from personalization.profile.models import GeoMetadata
 from personalization.profile.service import build_user_profile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
@@ -80,7 +81,7 @@ def run_request_orchestrator_for_query(
 
     roundtrip_latency_ms = int((perf_counter() - started_at) * 1000)
     orchestrator_result = orchestrator_result.with_roundtrip_latency(roundtrip_latency_ms)
-    payload = orchestrator_result.to_payload()
+    payload = sanitize_for_json_storage(orchestrator_result.to_payload_model().model_dump(exclude_none=True))
     roundtrip_summary = orchestrator_result.roundtrip_summary
 
     roundtrip_summary_embedding = embed_text(roundtrip_summary) if roundtrip_summary else None

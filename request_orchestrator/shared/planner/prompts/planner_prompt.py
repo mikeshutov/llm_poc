@@ -1,8 +1,7 @@
 from request_orchestrator.agent_runner.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
 import json
 
-from request_orchestrator.constants import PLANNER_PROMPT_KIND
-from request_orchestrator.models.agent_prompt import AgentPrompt
+from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.evidence import (
     build_evidence_bundle_from_tool_results,
@@ -99,7 +98,6 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         compiled_rules = f"{compiled_rules}\n\nAgent Rules:\n{state.agent_profile.planner_rules}"
 
     prompt = AgentPrompt(
-        prompt_kind=PLANNER_PROMPT_KIND,
         instruction=state.agent_profile.planner_instruction,
         user_profile=state.execution_context.user_profile,
         conversation_context=state.execution_context.conversation_context,
@@ -110,16 +108,19 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         evidence=evidence_steps,
         schema=PLANNER_SCHEMA,
     )
-    prompt.include_user_profile(
-        include_management_fields=_is_profile_management_agent(state),
-        include_tone=True,
+    prompt.include_section(
+        PromptSectionKeys.USER_PROFILE,
+        metadata={
+            "include_management_fields": _is_profile_management_agent(state),
+            "include_tone": True,
+        },
     )
-    prompt.include_conversation_context()
-    prompt.include_available_tools()
-    prompt.include_rules_raw()
-    prompt.include_evidence()
+    prompt.include_section(PromptSectionKeys.CONVERSATION_CONTEXT)
+    prompt.include_section(PromptSectionKeys.AVAILABLE_TOOLS)
+    prompt.include_section(PromptSectionKeys.RULES)
+    prompt.include_section(PromptSectionKeys.EVIDENCE)
     if _is_profile_management_agent(state):
-        prompt.include_latest_user_prompt()
-    prompt.include_schema_raw()
-    prompt.include_task(heading="Task:" if _is_profile_management_agent(state) else "Goal:")
+        prompt.include_section(PromptSectionKeys.LATEST_USER_PROMPT)
+    prompt.include_section(PromptSectionKeys.SCHEMA)
+    prompt.include_section(PromptSectionKeys.TASK)
     return prompt
