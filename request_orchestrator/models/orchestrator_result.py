@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from common.data import sanitize_for_json_storage
 from request_orchestrator.models.agent_result import AgentResult
+from request_orchestrator.models.orchestrator_payload import (
+    OrchestratorPayload,
+    OrchestratorPayloadResultBlock,
+)
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from request_orchestrator.shared.evidence import build_evidence_bundle_from_tool_results
 
@@ -102,11 +105,7 @@ class OrchestratorResult:
             roundtrip_latency_ms=self.roundtrip_latency_ms,
         )
 
-    def to_payload(self) -> dict[str, object]:
-        payload: dict[str, object] = {
-            "tool_results": [tool_result.model_dump() for tool_result in self.agent_result.tool_results],
-            "relevant_evidence_ids": list(self.agent_result.relevant_evidence_ids),
-        }
+    def to_payload_model(self) -> OrchestratorPayload:
         evidence_bundle = build_evidence_bundle_from_tool_results(self.agent_result.tool_results)
         hydrated_evidence_by_id = {
             evidence_id: evidence.model_dump()
@@ -129,16 +128,22 @@ class OrchestratorResult:
             )
             for block in result_blocks
         ]
-        result_block_payload = [block.model_dump() for block in normalized_result_blocks]
-        payload["result"] = result_block_payload
-        payload["hydrated_evidence_by_id"] = hydrated_evidence_by_id
-        payload["used_evidence_ids"] = _normalize_evidence_ids(
-            self.used_evidence_ids,
-            hydrated_evidence_by_id,
+        return OrchestratorPayload(
+            tool_results=[tool_result.model_dump() for tool_result in self.agent_result.tool_results],
+            relevant_evidence_ids=list(self.agent_result.relevant_evidence_ids),
+            result=[
+                OrchestratorPayloadResultBlock(
+                    content=block.content,
+                    evidence_ids=list(block.evidence_ids),
+                )
+                for block in normalized_result_blocks
+            ],
+            hydrated_evidence_by_id=hydrated_evidence_by_id,
+            used_evidence_ids=_normalize_evidence_ids(
+                self.used_evidence_ids,
+                hydrated_evidence_by_id,
+            ),
+            next_question=self.next_question,
+            roundtrip_summary=self.roundtrip_summary,
+            roundtrip_latency_ms=self.roundtrip_latency_ms,
         )
-        payload["next_question"] = self.next_question
-        if self.roundtrip_summary:
-            payload["roundtrip_summary"] = self.roundtrip_summary
-        if self.roundtrip_latency_ms is not None:
-            payload["roundtrip_latency_ms"] = self.roundtrip_latency_ms
-        return sanitize_for_json_storage(payload)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from types import ModuleType, SimpleNamespace
 
 if 'yfinance' not in sys.modules:
@@ -18,7 +19,6 @@ from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence
 from request_orchestrator.shared.tool_adapter.search.wikipedia_search import WikipediaSearchResponse
 from integrations.wikipedia.models import WikipediaPageSummary, WikipediaSearchResult
-from request_orchestrator.models.agent_state import AgentState, IterationState
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.evidence import (
@@ -33,6 +33,12 @@ from request_orchestrator.shared.tool_adapter.search.wikipedia_search import _to
 from integrations.open_meteo.models import CurrentWeather, GeocodedLocation
 from request_orchestrator.shared.tool_adapter.search.brave_news_search import _tool_result as news_tool_result
 from request_orchestrator.shared.tool_adapter.weather.get_current_weather import CurrentWeatherResult, _tool_result as current_weather_tool_result
+
+
+@dataclass
+class IterationState:
+    plan: Plan
+    results: dict[str, ToolResult]
 
 
 def _tool_result(result, tool_name: str) -> ToolResult:
@@ -74,14 +80,25 @@ def _tool_result(result, tool_name: str) -> ToolResult:
 
 
 def _gather_tool_results(iterations: list[IterationState]) -> list[ToolResult]:
-    state = AgentState(
-        task="",
-        max_turns=max(len(iterations), 1),
-        agent_profile=MAIN_AGENT_PROFILE,
-        llm=object(),
-    )
-    state.set_iterations(iterations)
-    return state.gather_tool_results()
+    gathered: list[ToolResult] = []
+    for iteration in iterations:
+        tool_name_by_step_id = {
+            step_id: next(
+                (step.tool for step in iteration.plan.steps if step_id.endswith(step.id)),
+                "",
+            )
+            for step_id in iteration.results
+        }
+        for step_id, tool_result in iteration.results.items():
+            gathered.append(
+                tool_result.model_copy(
+                    update={
+                        "step_id": tool_result.step_id or step_id,
+                        "tool_name": tool_result.tool_name or tool_name_by_step_id.get(step_id, ""),
+                    }
+                )
+            )
+    return gathered
 
 
 def _build_evidence_bundle(iterations: list[IterationState]):

@@ -66,7 +66,7 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
     ])
 
     prompt = build_planner_prompt(state)
-    evidence_section = prompt.get_section_content(PromptSectionKeys.EVIDENCE)
+    evidence_section = prompt.to_log_input_object()["sections_raw"][PromptSectionKeys.EVIDENCE]
 
     assert '"type": "web_search_results"' in evidence_section
     assert '"metadata": {' in evidence_section

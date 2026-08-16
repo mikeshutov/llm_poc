@@ -18,7 +18,6 @@ from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan import PlanStep
 from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
-from request_orchestrator.shared.planner_state import current_plan_results
 from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context
 from tool.registry import call_tool
 from tool.repository.tool_call_repository import ToolCallRepository
@@ -49,6 +48,22 @@ def _substitute_refs(obj, results: dict, *, iteration_number: int):
     if isinstance(obj, dict):
         return {k: _substitute_refs(v, results, iteration_number=iteration_number) for k, v in obj.items()}
     return obj
+
+
+def _tool_results_by_local_step_id(agent_state: AgentState) -> dict[str, ToolResult]:
+    planner_state = agent_state.node_states.planner
+    plan = planner_state.plan
+    if plan is None:
+        return {}
+    results_by_step_id = agent_state.result.tool_results_by_step_id()
+    tool_results_by_local_step_id: dict[str, ToolResult] = {}
+    for step in plan.steps:
+        local_step_id = format_plan_step_id(planner_state.plan_count, step.id)
+        namespaced_step_id = namespace_step_id(agent_state.agent_profile.name, local_step_id)
+        tool_result = results_by_step_id.get(namespaced_step_id)
+        if tool_result is not None:
+            tool_results_by_local_step_id[local_step_id] = tool_result
+    return tool_results_by_local_step_id
 
 
 def _execute_step(
@@ -110,7 +125,7 @@ def _record_step_result(
             }
         )
     if isinstance(output, ToolResult):
-        agent_state.upsert_tool_result(output)
+        agent_state.result = agent_state.result.with_recorded_tool_result(output)
 
     payload = {
         "agent_name": agent_state.agent_profile.name,
@@ -175,11 +190,7 @@ def run_executor(agent_state: AgentState) -> AgentState:
         with bind_agent_context(agent_name=agent_state.agent_profile.name):
             if plan is None or not plan.steps:
                 return agent_state
-            tool_results_by_step_id = current_plan_results(
-                planner_state,
-                agent_state.result.tool_results,
-                agent_name=agent_state.agent_profile.name,
-            )
+            tool_results_by_step_id = _tool_results_by_local_step_id(agent_state)
 
             with ThreadPoolExecutor(max_workers=len(plan.steps)) as executor:
                 futures_by_step_id = {

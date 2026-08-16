@@ -55,7 +55,7 @@ def run_synthesis(state: MainState) -> MainState:
         evidence_steps = all_evidence_steps
 
     prompt = build_synthesis_prompt(evidence=evidence_steps, state=state)
-    prompt_text = prompt.prompt_text()
+    prompt_text = prompt.build()
     prompt_input_object = prompt.to_log_input_object()
     llm = build_llm_for_stage(
         execution_context=execution_context,

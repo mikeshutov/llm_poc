@@ -94,19 +94,19 @@ class RerankerPrompt:
 
         if goal_text:
             parts.extend([
-                "Ranking Goal:",
+                "goal:",
                 goal_text,
             ])
 
         if "user_profile" in payload:
             parts.extend([
-                "User Profile (JSON):",
+                "user_profile:",
                 json.dumps(payload["user_profile"], indent=2, ensure_ascii=True),
             ])
 
         parts.extend([
-            "Candidates (JSON):",
+            "candidates:",
             json.dumps(payload.get("candidates", []), indent=2, ensure_ascii=True),
-            RERANKER_RESPONSE_SCHEMA,
+            f"schema: {RERANKER_RESPONSE_SCHEMA}",
         ])
         return "\n\n".join(parts)

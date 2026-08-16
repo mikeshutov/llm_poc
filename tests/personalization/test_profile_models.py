@@ -16,11 +16,11 @@ if 'pycountry' not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules['pycountry'] = pycountry_module
 
+from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import GeoLocation, GeoMetadata, UserAttributesSection, UserProfile, build_geometadata
 from personalization.profile.service import build_user_profile, hydrate_user_profile_core, load_user_profile_attributes
 from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
-from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from request_orchestrator.models.synthesized_result import DEFAULT_SYNTHESIS_NEXT_QUESTION, SynthesisResult
 from common.data import repair_common_json_issues
@@ -163,20 +163,21 @@ def test_prompt_profile_excludes_management_fields_by_default() -> None:
     )
 
     default_prompt = AgentPrompt(
-        prompt_kind=PLANNER_PROMPT_KIND,
         instruction='test',
         user_profile=profile,
     )
-    default_prompt.include_user_profile()
+    default_prompt.include_section(PromptSectionKeys.USER_PROFILE)
     management_prompt = AgentPrompt(
-        prompt_kind=PLANNER_PROMPT_KIND,
         instruction='test',
         user_profile=profile,
     )
-    management_prompt.include_user_profile(include_management_fields=True)
+    management_prompt.include_section(
+        PromptSectionKeys.USER_PROFILE,
+        metadata={"include_management_fields": True},
+    )
 
-    default_rendered = default_prompt.prompt_text()
-    management_rendered = management_prompt.prompt_text()
+    default_rendered = default_prompt.build()
+    management_rendered = management_prompt.build()
 
     assert 'food.likes' in default_rendered
     assert 'pizza' in default_rendered
@@ -201,6 +202,18 @@ def test_prompt_profile_prunes_empty_fields() -> None:
     rendered = profile.to_prompt_dict()
 
     assert rendered == {}
+
+
+def test_prompt_profile_excludes_internal_user_id() -> None:
+    profile = UserProfile(
+        user_id="user-123",
+        display_name="Mike",
+    )
+
+    rendered = profile.to_prompt_dict()
+
+    assert "user_id" not in rendered
+    assert rendered["display_name"] == "Mike"
 
 
 def test_prompt_profile_includes_shared_tone_preferences() -> None:
@@ -406,32 +419,51 @@ def test_build_user_profile_preserves_input_tone_without_persisted_profile() -> 
 
 def test_agent_prompt_exposes_prompt_text_sections_and_token_count() -> None:
     prompt = AgentPrompt(
-        prompt_kind=PLANNER_PROMPT_KIND,
         instruction='test',
-        user_profile=UserProfile(user_id='user-123'),
+        user_profile=UserProfile(user_id='user-123', display_name='Mike'),
         task='Find boots.',
     )
-    prompt.include_user_profile().include_latest_user_prompt().include_task(heading='Goal:')
+    prompt.include_section(PromptSectionKeys.USER_PROFILE).include_section(PromptSectionKeys.LATEST_USER_PROMPT).include_section(PromptSectionKeys.TASK)
 
-    prompt_text = prompt.prompt_text()
+    prompt_text = prompt.build()
     prompt_token_count = prompt.prompt_token_count()
+    sections_raw = prompt.to_log_input_object()["sections_raw"]
 
     assert prompt_text
     assert prompt_token_count > 0
-    assert [section.heading for section in prompt.included_sections()] == [
-        'User Profile (JSON):',
-        'Latest User Prompt:',
-        'Goal:',
-    ]
-    assert [section.key for section in prompt.included_sections()] == [
+    assert 'ROLE / RULES' in prompt_text
+    assert 'INPUT' in prompt_text
+    assert list(sections_raw.keys()) == [
         PromptSectionKeys.USER_PROFILE,
         PromptSectionKeys.LATEST_USER_PROMPT,
         PromptSectionKeys.TASK,
     ]
-    assert prompt.get_section(PromptSectionKeys.TASK) is not None
-    assert prompt.get_section(PromptSectionKeys.TASK).value.text == 'Find boots.'
-    assert prompt.get_section(PromptSectionKeys.TASK).value.token_count > 0
-    assert prompt.get_section_content(PromptSectionKeys.TASK) == 'Find boots.'
+    assert "user_id" not in sections_raw[PromptSectionKeys.USER_PROFILE]
+    assert sections_raw[PromptSectionKeys.USER_PROFILE]["display_name"] == "Mike"
+    assert sections_raw[PromptSectionKeys.TASK] == 'Find boots.'
+    assert '"latest_user_prompt": "Find boots."' in prompt_text
+    assert '"task": "Find boots."' in prompt_text
+
+
+def test_agent_prompt_orders_sections_by_builtin_order_instead_of_include_order() -> None:
+    prompt = AgentPrompt(
+        instruction='test',
+        user_profile=UserProfile(user_id='user-123', display_name='Mike'),
+        conversation_context=ConversationContext(),
+        task='Find boots.',
+        available_tools='- search_products',
+        schema='{"steps": []}',
+    )
+
+    prompt.include_section(PromptSectionKeys.SCHEMA)
+    prompt.include_section(PromptSectionKeys.TASK)
+    prompt.include_section(PromptSectionKeys.AVAILABLE_TOOLS)
+    prompt.include_section(PromptSectionKeys.USER_PROFILE)
+
+    prompt_text = prompt.build()
+    assert prompt_text.index('"user_profile"') < prompt_text.index('"available_tools"')
+    assert prompt_text.index('"available_tools"') < prompt_text.index('"task"')
+    assert prompt_text.index('OUTPUT CONTRACT') < prompt_text.index('{"steps": []}')
 
 
 def test_agent_prompt_user_profile_includes_tone_only_when_requested() -> None:
@@ -444,28 +476,29 @@ def test_agent_prompt_user_profile_includes_tone_only_when_requested() -> None:
     )
 
     default_prompt = AgentPrompt(
-        prompt_kind=PLANNER_PROMPT_KIND,
         instruction='test',
         user_profile=profile,
     )
-    default_prompt.include_user_profile()
+    default_prompt.include_section(PromptSectionKeys.USER_PROFILE)
 
     tone_prompt = AgentPrompt(
-        prompt_kind=PLANNER_PROMPT_KIND,
         instruction='test',
         user_profile=profile,
     )
-    tone_prompt.include_user_profile(include_tone=True)
+    tone_prompt.include_section(
+        PromptSectionKeys.USER_PROFILE,
+        metadata={"include_tone": True},
+    )
 
-    assert '"tone"' not in default_prompt.prompt_text()
-    assert '"verbosity": "concise"' not in default_prompt.prompt_text()
+    assert '"tone"' not in default_prompt.build()
+    assert '"verbosity": "concise"' not in default_prompt.build()
 
-    assert '"tone"' in tone_prompt.prompt_text()
-    assert '"verbosity": "concise"' in tone_prompt.prompt_text()
-    assert '"directness": "high"' in tone_prompt.prompt_text()
+    assert '"tone"' in tone_prompt.build()
+    assert '"verbosity": "concise"' in tone_prompt.build()
+    assert '"directness": "high"' in tone_prompt.build()
 
 
-def test_agent_prompt_to_dict_includes_tone_when_user_profile_section_requested_with_tone() -> None:
+def test_agent_prompt_includes_tone_when_user_profile_section_requested_with_tone() -> None:
     profile = UserProfile(
         user_id='user-123',
         tone=TonePreferences(
@@ -475,18 +508,19 @@ def test_agent_prompt_to_dict_includes_tone_when_user_profile_section_requested_
     )
 
     prompt = AgentPrompt(
-        prompt_kind=PLANNER_PROMPT_KIND,
         instruction='test',
         user_profile=profile,
     )
-    prompt.include_user_profile(include_tone=True)
+    prompt.include_section(
+        PromptSectionKeys.USER_PROFILE,
+        metadata={"include_tone": True},
+    )
 
-    payload = prompt.to_dict()
+    prompt_text = prompt.build()
 
-    assert payload["user_profile"]["tone"] == {
-        "verbosity": "concise",
-        "directness": "high",
-    }
+    assert '"tone"' in prompt_text
+    assert '"verbosity": "concise"' in prompt_text
+    assert '"directness": "high"' in prompt_text
 
 
 

@@ -71,7 +71,7 @@ def _invoke_planner(
 @traceable(name="Planner Node")
 def run_planner(agent_state: AgentState) -> AgentState:
     prompt = build_planner_prompt(state=agent_state)
-    prompt_text = prompt.prompt_text()
+    prompt_text = prompt.build()
     prompt_input_object = prompt.to_log_input_object()
     llm_calls: list[dict[str, object]] = []
     planning_result: PlanningResult

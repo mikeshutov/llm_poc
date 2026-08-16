@@ -5,6 +5,7 @@ from uuid import UUID
 
 import streamlit as st
 
+from common.data import sanitize_for_json_storage
 from conversation.conversation import generate_conversation_title
 from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo
@@ -26,7 +27,7 @@ MESSAGE_HISTORY_LIMIT = 10
 
 
 def _build_answer_payload(answer: OrchestratorResult) -> dict:
-    return answer.to_payload()
+    return sanitize_for_json_storage(answer.to_payload_model().model_dump(exclude_none=True))
 
 
 def _merge_response_payload(roundtrip: ConversationRoundtrip, answer: OrchestratorResult) -> dict:
