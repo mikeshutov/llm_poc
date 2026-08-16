@@ -6,9 +6,9 @@ from uuid import UUID
 
 from common.data import sanitize_for_json_storage
 from common.logging import create_conversation_event
-from conversation.models.conversation_model_config import ConversationModelConfig
 from conversation.models.conversation_models import LlmCallRecord, LlmUsage
 from conversation.repository.repo_factory import get_conversation_repo
+from llm.conversation_model_config import ConversationModelConfig
 from request_orchestrator.shared.runtime_context import get_current_agent_name
 
 ONE_MILLION = Decimal("1000000")

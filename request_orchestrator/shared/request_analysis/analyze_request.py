@@ -5,13 +5,13 @@ from time import perf_counter
 from langsmith import traceable
 from common.data import repair_common_json_issues, strip_code_fences
 from common.logging import create_conversation_event, log_roundtrip_prompt
-from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, REQUEST_ANALYSIS_STAGE
+from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, REQUEST_ANALYSIS_STAGE
 from llm.usage import record_llm_call, serialize_llm_call_record
 from rendering.debug import REQUEST_ANALYSIS_KIND
 from request_orchestrator.constants import REQUEST_ANALYSIS_PROMPT_KIND
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.request_analysis import RequestAnalysis
-from request_orchestrator.shared.llm_factory import build_llm_for_stage, resolve_stage_model_name
+from llm.chat_models import build_llm_for_stage, resolve_stage_model_name
 from request_orchestrator.shared.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
 
 ORCHESTRATOR_AGENT_NAME = "request_orchestrator"

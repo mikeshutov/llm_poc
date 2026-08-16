@@ -3,12 +3,11 @@ from __future__ import annotations
 from time import perf_counter
 from typing import Any
 
-from langchain_openai import ChatOpenAI
-
 from common.data import strip_code_fences
-from conversation.models.conversation_model_config import ConversationModelConfig, RERANKER_STAGE, SHARED_MODEL_SCOPE
+from llm.conversation_model_config import ConversationModelConfig, RERANKER_STAGE, SHARED_MODEL_SCOPE
 from llm.usage import record_llm_call
 from personalization.profile.models import UserProfile
+from llm.chat_models import build_chat_model
 from request_orchestrator.shared.runtime_context import (
     get_current_agent_name,
     get_current_conversation_model_config,
@@ -27,9 +26,10 @@ class CandidateReranker:
         conversation_model_config: ConversationModelConfig | None = None,
     ):
         resolved_config = conversation_model_config or get_current_conversation_model_config() or ConversationModelConfig.build_default()
+        resolved_provider = resolved_config.resolve_provider(SHARED_MODEL_SCOPE, RERANKER_STAGE)
         resolved_model = resolved_config.resolve(SHARED_MODEL_SCOPE, RERANKER_STAGE)
         self.model_name = resolved_model
-        self.llm = ChatOpenAI(model=resolved_model) if llm is None else llm
+        self.llm = build_chat_model(provider=resolved_provider, model_name=resolved_model) if llm is None else llm
 
     def rerank(
         self,

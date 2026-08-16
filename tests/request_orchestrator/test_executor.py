@@ -15,7 +15,7 @@ if 'pycountry' not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules['pycountry'] = pycountry_module
 
-from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
+from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_state import AgentState

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from conversation.models.conversation_model_config import ConversationModelConfig, ConversationModelConfigEntry
+from llm.conversation_model_config import ConversationModelConfig, ConversationModelConfigEntry
 
 
 def resolve_conversation_model_config(
@@ -8,5 +8,5 @@ def resolve_conversation_model_config(
 ) -> ConversationModelConfig:
     config = ConversationModelConfig.build_default()
     for entry in entries or []:
-        config.set_value(entry.agent, entry.stage, entry.model)
+        config.set_value(entry.agent, entry.stage, entry.provider, entry.model)
     return config

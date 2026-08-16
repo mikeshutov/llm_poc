@@ -5,7 +5,8 @@ from uuid import UUID, uuid4
 
 import streamlit as st
 
-from conversation.models.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig
+from llm.repository.repo_factory import get_conversation_model_config_repo
+from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 from rendering.feedback import clear_feedback_state
@@ -128,6 +129,42 @@ def _format_model_option_label(model_name: str, input_price: str, output_price: 
     return f"{model_name} ({input_price} / {output_price})"
 
 
+def _build_model_option_lookup() -> dict[str, dict[str, str]]:
+    grouped_options: dict[str, dict[str, str]] = {}
+    for provider, model_names in ConversationModelConfig.model_names_by_provider().items():
+        grouped_options[provider] = {
+            _format_model_option_label(
+                model_name,
+                _format_price(ConversationModelConfig.resolve_model_pricing(provider, model_name).input_price_per_million_tokens),
+                _format_price(ConversationModelConfig.resolve_model_pricing(provider, model_name).output_price_per_million_tokens),
+            ): model_name
+            for model_name in model_names
+        }
+    return grouped_options
+
+
+def _resolve_config_model(config: ConversationModelConfig, agent: str, stage: str) -> str:
+    resolved = config.resolve(agent, stage)
+    if isinstance(resolved, str):
+        return resolved
+    return getattr(resolved, "model", str(resolved))
+
+
+def _resolve_config_provider(config: ConversationModelConfig, agent: str, stage: str) -> str:
+    resolver = getattr(config, "resolve_provider", None)
+    if callable(resolver):
+        return resolver(agent, stage)
+
+    selection_resolver = getattr(config, "resolve_selection", None)
+    if callable(selection_resolver):
+        selection = selection_resolver(agent, stage)
+        provider = getattr(selection, "provider", "")
+        if isinstance(provider, str) and provider.strip():
+            return provider
+
+    return "openai"
+
+
 def build_model_config_rows(
     resolved_config: ConversationModelConfig,
     overrides: list,
@@ -136,39 +173,53 @@ def build_model_config_rows(
         (entry.agent, entry.stage): entry.model
         for entry in overrides
     }
+    provider_options = _build_model_option_lookup()
+    option_to_model = {
+        option_label: model_name
+        for provider_option_map in provider_options.values()
+        for option_label, model_name in provider_option_map.items()
+    }
     rows: list[dict[str, str | None]] = []
     for spec in CONVERSATION_MODEL_CONFIG_SPECS:
         pricing = resolved_config.resolve_pricing(spec.agent, spec.stage)
-        effective_model = resolved_config.resolve(spec.agent, spec.stage)
+        effective_model = _resolve_config_model(resolved_config, spec.agent, spec.stage)
+        effective_provider_key = _resolve_config_provider(resolved_config, spec.agent, spec.stage)
         input_price = _format_price(pricing.input_price_per_million_tokens)
         output_price = _format_price(pricing.output_price_per_million_tokens)
-        option_to_model = {
-            _format_model_option_label(model_name, _format_price(model_pricing.input_price_per_million_tokens), _format_price(model_pricing.output_price_per_million_tokens)): model_name
-            for model_name, model_pricing in ConversationModelConfig.MODEL_PRICING_REGISTRY.items()
-        }
         rows.append(
             {
                 "agent": spec.agent,
                 "stage": spec.stage,
                 "label": spec.label,
                 "effective_model": effective_model,
+                "effective_provider_key": effective_provider_key,
                 "override_model": override_map.get((spec.agent, spec.stage)),
+                "override_provider": next(
+                    (
+                        entry.provider
+                        for entry in overrides
+                        if entry.agent == spec.agent and entry.stage == spec.stage
+                    ),
+                    None,
+                ),
                 "input_price": input_price,
                 "output_price": output_price,
+                "effective_provider": ConversationModelConfig.provider_display_name(effective_provider_key),
                 "effective_model_option": _format_model_option_label(effective_model, input_price, output_price),
+                "provider_options": provider_options,
                 "option_to_model": option_to_model,
             }
         )
     return rows
 
 
-def _apply_model_config_form(conversation_repository, conversation_id: str, rows: list[dict[str, str | None]]) -> None:
+def _apply_model_config_form(model_config_repository, conversation_id: str, rows: list[dict[str, str | None]]) -> None:
     for row in rows:
-        select_key = f"conversation_model_config::{conversation_id}::{row['agent']}::{row['stage']}"
+        select_key = f"conversation_model_config::{conversation_id}::{row['agent']}::{row['stage']}::model"
         default_option_label = f"Default ({row['effective_model_option']})"
         selected_value = st.session_state.get(select_key, default_option_label)
         if selected_value == default_option_label:
-            conversation_repository.clear_conversation_model_config(
+            model_config_repository.clear(
                 UUID(conversation_id),
                 row["agent"],
                 row["stage"],
@@ -177,12 +228,81 @@ def _apply_model_config_form(conversation_repository, conversation_id: str, rows
             selected_model = row["option_to_model"].get(selected_value)
             if selected_model is None:
                 raise KeyError(f"Unsupported model option label: {selected_value}")
-            conversation_repository.upsert_conversation_model_config(
+            selected_provider = st.session_state.get(
+                f"conversation_model_config::{conversation_id}::{row['agent']}::{row['stage']}::provider",
+                row["effective_provider_key"],
+            )
+            model_config_repository.upsert(
                 UUID(conversation_id),
                 row["agent"],
                 row["stage"],
+                selected_provider,
                 selected_model,
             )
+
+
+def _render_model_config_section(model_config_repository, conversation_id: str, rows: list[dict[str, str | None]]) -> None:
+    for row in rows:
+        provider_key = f"conversation_model_config::{conversation_id}::{row['agent']}::{row['stage']}::provider"
+        model_key = f"conversation_model_config::{conversation_id}::{row['agent']}::{row['stage']}::model"
+        default_option_label = f"Default ({row['effective_model_option']})"
+        provider_options = row["provider_options"]
+        providers = list(provider_options.keys())
+
+        selected_provider = st.session_state.get(provider_key, row["effective_provider_key"])
+        if selected_provider not in providers:
+            selected_provider = row["effective_provider_key"] if row["effective_provider_key"] in providers else providers[0]
+
+        available_model_options = list(provider_options.get(selected_provider, {}).keys())
+        if selected_provider == row["effective_provider_key"]:
+            available_model_options = [default_option_label, *available_model_options]
+
+        selected_value = st.session_state.get(model_key)
+        if selected_value not in available_model_options:
+            if selected_provider == row["effective_provider_key"]:
+                selected_value = row["effective_model_option"] if row["override_model"] else default_option_label
+                if selected_value not in available_model_options:
+                    selected_value = default_option_label
+            else:
+                selected_value = available_model_options[0] if available_model_options else ""
+            st.session_state[model_key] = selected_value
+        if provider_key not in st.session_state:
+            st.session_state[provider_key] = selected_provider
+        if model_key not in st.session_state:
+            st.session_state[model_key] = selected_value
+
+        st.markdown(f"**{row['label']}**")
+        col_provider, col_model, col_reset = st.columns([1.4, 4.6, 1])
+        with col_provider:
+            st.selectbox(
+                "Provider",
+                providers,
+                key=provider_key,
+                format_func=ConversationModelConfig.provider_display_name,
+                label_visibility="collapsed",
+                help="Filter model options by provider.",
+            )
+        with col_model:
+            st.selectbox(
+                "Model",
+                available_model_options,
+                key=model_key,
+                label_visibility="collapsed",
+                help=f"Current effective model: {row['effective_model']}",
+            )
+        with col_reset:
+            st.write("")
+            if st.button(
+                "Reset",
+                key=f"reset_model_config::{conversation_id}::{row['agent']}::{row['stage']}",
+                type="secondary",
+            ):
+                model_config_repository.clear(
+                    UUID(conversation_id),
+                    row["agent"],
+                    row["stage"],
+                )
+                st.rerun()
 
 
 @st.dialog("Conversation Model Config", width="large")
@@ -192,8 +312,9 @@ def render_conversation_model_config_dialog(
     title: str,
     replay_source_roundtrip_id: str | None = None,
 ) -> None:
-    resolved_config = conversation_repository.resolve_conversation_model_config(UUID(conversation_id))
-    overrides = conversation_repository.list_conversation_model_config(UUID(conversation_id))
+    model_config_repository = get_conversation_model_config_repo()
+    resolved_config = model_config_repository.resolve(UUID(conversation_id))
+    overrides = model_config_repository.list(UUID(conversation_id))
     rows = build_model_config_rows(resolved_config, overrides)
     is_replay_mode = bool(replay_source_roundtrip_id)
 
@@ -218,51 +339,25 @@ def render_conversation_model_config_dialog(
     else:
         st.caption(f"Configure model overrides for `{title}`. Unset stages fall back to defaults.")
 
-    current_section: str | None = None
-    for index, row in enumerate(rows):
-        if row["agent"] != current_section:
-            current_section = row["agent"]
-            if index > 0:
-                st.divider()
-            st.subheader(MODEL_CONFIG_SECTION_TITLES.get(current_section, str(current_section)))
+    rows_by_agent: dict[str, list[dict[str, str | None]]] = {}
+    for row in rows:
+        rows_by_agent.setdefault(str(row["agent"]), []).append(row)
 
-        select_key = f"conversation_model_config::{conversation_id}::{row['agent']}::{row['stage']}"
-        default_option_label = f"Default ({row['effective_model_option']})"
-        options = [default_option_label, *row["option_to_model"].keys()]
-        selected_value = row["effective_model_option"] if row["override_model"] else default_option_label
-        selected_index = options.index(selected_value) if selected_value in options else 0
-
-        col_select, col_info, col_reset = st.columns([3.8, 1.6, 1])
-        with col_select:
-            st.selectbox(
-                row["label"],
-                options,
-                index=selected_index,
-                key=select_key,
-                help=f"Current effective model: {row['effective_model']}",
+    section_agents = list(rows_by_agent.keys())
+    section_tabs = st.tabs([MODEL_CONFIG_SECTION_TITLES.get(agent, agent) for agent in section_agents])
+    for tab, agent in zip(section_tabs, section_agents):
+        with tab:
+            _render_model_config_section(
+                model_config_repository,
+                conversation_id,
+                rows_by_agent[agent],
             )
-        with col_info:
-            st.caption(f"Effective: {row['effective_model']}")
-            st.caption(f"Override: {row['override_model'] or 'default'}")
-        with col_reset:
-            st.write("")
-            if st.button(
-                "Reset",
-                key=f"reset_model_config::{conversation_id}::{row['agent']}::{row['stage']}",
-                type="secondary",
-            ):
-                conversation_repository.clear_conversation_model_config(
-                    UUID(conversation_id),
-                    row["agent"],
-                    row["stage"],
-                )
-                st.rerun()
 
     if is_replay_mode:
         action_col, reset_col, cancel_col = st.columns(3)
         with action_col:
             if st.button("Accept replay", use_container_width=True, type="primary"):
-                _apply_model_config_form(conversation_repository, conversation_id, rows)
+                _apply_model_config_form(model_config_repository, conversation_id, rows)
                 clear_conversation_model_config_dialog()
                 st.session_state[PENDING_REPLAY_PREPARE_KEY] = {
                     "conversation_id": conversation_id,
@@ -271,7 +366,7 @@ def render_conversation_model_config_dialog(
                 st.rerun()
         with reset_col:
             if st.button("Reset all", use_container_width=True, type="secondary"):
-                conversation_repository.clear_all_conversation_model_config(UUID(conversation_id))
+                model_config_repository.clear_all(UUID(conversation_id))
                 st.rerun()
         with cancel_col:
             if st.button("Cancel", use_container_width=True):
@@ -281,12 +376,12 @@ def render_conversation_model_config_dialog(
         save_col, reset_col, close_col = st.columns(3)
         with save_col:
             if st.button("Save config", use_container_width=True, type="primary"):
-                _apply_model_config_form(conversation_repository, conversation_id, rows)
+                _apply_model_config_form(model_config_repository, conversation_id, rows)
                 clear_conversation_model_config_dialog()
                 st.rerun()
         with reset_col:
             if st.button("Reset all", use_container_width=True, type="secondary"):
-                conversation_repository.clear_all_conversation_model_config(UUID(conversation_id))
+                model_config_repository.clear_all(UUID(conversation_id))
                 st.rerun()
         with close_col:
             if st.button("Close", use_container_width=True):
