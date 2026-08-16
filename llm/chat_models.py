@@ -3,11 +3,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
-try:
-    from langchain_anthropic import ChatAnthropic
-except ModuleNotFoundError:
-    ChatAnthropic = None
 
 from llm.conversation_model_config import (
     ANTHROPIC_PROVIDER,
@@ -89,10 +86,6 @@ def build_chat_model(*, provider: str, model_name: str) -> Any:
     if provider == OPENAI_PROVIDER:
         return ChatOpenAI(model=model_name)
     if provider == ANTHROPIC_PROVIDER:
-        if ChatAnthropic is None:
-            raise ModuleNotFoundError(
-                "Anthropic provider requires `langchain_anthropic` to be installed."
-            )
         return ChatAnthropic(model_name=model_name)
     raise KeyError(f"Unsupported model provider: {provider}")
 
@@ -101,8 +94,6 @@ def is_provider_model_instance(llm: Any, provider: str) -> bool:
     if provider == OPENAI_PROVIDER:
         return isinstance(llm, ChatOpenAI)
     if provider == ANTHROPIC_PROVIDER:
-        if ChatAnthropic is None:
-            return False
         return isinstance(llm, ChatAnthropic)
     return False
 
@@ -128,7 +119,7 @@ def build_llm_for_stage(
     if llm is None:
         return build_chat_model(provider=provider, model_name=model_name)
     if (
-        not isinstance(llm, tuple(cls for cls in (ChatOpenAI, ChatAnthropic) if cls is not None))
+        not isinstance(llm, (ChatOpenAI, ChatAnthropic))
         and not hasattr(llm, "model")
         and not hasattr(llm, "model_name")
     ):
