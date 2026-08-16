@@ -29,24 +29,6 @@ MESSAGE_HISTORY_LIMIT = 10
 def _build_answer_payload(answer: OrchestratorResult) -> dict:
     return sanitize_for_json_storage(answer.to_payload_model().model_dump(exclude_none=True))
 
-
-def _merge_response_payload(roundtrip: ConversationRoundtrip, answer: OrchestratorResult) -> dict:
-    stored_payload = roundtrip.response_payload if isinstance(roundtrip.response_payload, dict) else {}
-    answer_payload = _build_answer_payload(answer)
-    merged = dict(stored_payload)
-
-    for key, value in answer_payload.items():
-        if key == "result":
-            merged[key] = value or merged.get(key) or []
-            continue
-        if key == "hydrated_evidence_by_id":
-            merged[key] = value or merged.get(key) or {}
-            continue
-        merged[key] = value if value not in ("", None) else merged.get(key)
-
-    return merged
-
-
 def ensure_messages_loaded(conversation_repository, conversation_id: str, limit: int = MESSAGE_HISTORY_LIMIT) -> None:
     if "messages" not in st.session_state or st.session_state.get("loaded_cid") != conversation_id:
         roundtrips = conversation_repository.list_roundtrips(
@@ -99,7 +81,7 @@ def append_assistant_response(
 ) -> None:
     conversation_repository = get_conversation_repo()
 
-    payload = _merge_response_payload(roundtrip, answer)
+    payload = _build_answer_payload(answer)
     rendered_response = str(answer.raw_response or roundtrip.generated_response or "")
 
     now = datetime.now(timezone.utc)

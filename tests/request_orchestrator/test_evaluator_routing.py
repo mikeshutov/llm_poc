@@ -15,6 +15,7 @@ from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.main_agent.router.router import router
 from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.validator import validator
 from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
+from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evaluation_result import (
     EVALUATION_STATUS_RETRYABLE,
@@ -72,21 +73,21 @@ def _hydrate_plan_state(
 
 
 def test_validator_routes_empty_plan_to_synthesis() -> None:
-    state = AgentState.new(task="Find something", max_turns=5, llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
     _hydrate_plan_state(state, plan=Plan.model_validate({"steps": []}), results={}, plan_count=1)
 
     assert validator(state) == SYNTHESIZE_EDGE
 
 
 def test_validator_routes_empty_plan_to_synthesis_again() -> None:
-    state = AgentState.new(task="Find something", max_turns=5, llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
     _hydrate_plan_state(state, plan=Plan.model_validate({"steps": []}), results={}, plan_count=1)
 
     assert validator(state) == SYNTHESIZE_EDGE
 
 
 def test_validator_routes_action_plan_to_execute() -> None:
-    state = AgentState.new(task="Find something", max_turns=5, llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
     _hydrate_plan_state(
         state,
         plan=Plan.model_validate({
@@ -105,7 +106,7 @@ def test_validator_routes_action_plan_to_execute() -> None:
 
 
 def test_router_routes_executed_results_to_evaluator() -> None:
-    state = AgentState.new(task="Find something", max_turns=5, llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
     _hydrate_plan_state(
         state,
         plan=Plan.model_validate({
@@ -124,7 +125,7 @@ def test_router_routes_executed_results_to_evaluator() -> None:
 
 
 def test_router_routes_missing_results_back_to_plan() -> None:
-    state = AgentState.new(task="Find something", max_turns=5, llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
     _hydrate_plan_state(
         state,
         plan=Plan.model_validate({
@@ -143,21 +144,21 @@ def test_router_routes_missing_results_back_to_plan() -> None:
 
 
 def test_evaluator_router_returns_synthesis_when_status_is_satisfied() -> None:
-    state = AgentState.new(task="Find something", max_turns=5, llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
     state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
 
     assert evaluator_router(state) == SYNTHESIZE_EDGE
 
 
 def test_evaluator_router_returns_synthesis_when_status_is_terminal() -> None:
-    state = AgentState.new(task="Find something", max_turns=5, llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
     state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
 
     assert evaluator_router(state) == SYNTHESIZE_EDGE
 
 
 def test_evaluator_router_returns_plan_when_status_is_retryable() -> None:
-    state = AgentState.new(task="Find something", max_turns=5, llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
     state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_RETRYABLE
     state.node_states.evaluator.goal_reached = False
 
@@ -209,8 +210,8 @@ def test_main_agent_graph_executes_plan_after_planner(monkeypatch) -> None:
     monkeypatch.setattr(strategy_module, "run_executor", fake_executor)
 
     final_state = main_agent_module.run_agent(
-        conversation_context=[],
         user_query="Find something",
+        execution_context=AgentExecutionContext.new(),
         llm=object(),
     )
 

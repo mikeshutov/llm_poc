@@ -24,7 +24,7 @@ def build_synthesis_prompt(evidence: list[EvidenceStep], state: AgentState | Mai
             for category in goal.tool_categories
         ]
         if isinstance(state, MainState)
-        else list(state.tool_category_names)
+        else list(state.inputs.tool_category_names)
     )
     prompt = AgentPrompt(
         instruction=(
@@ -37,7 +37,7 @@ def build_synthesis_prompt(evidence: list[EvidenceStep], state: AgentState | Mai
         rules=build_synthesis_rules(tool_categories),
         evidence=evidence,
         schema=SYNTHESIS_SCHEMA,
-        task=state.task,
+        task=state.task if isinstance(state, MainState) else state.inputs.task,
     )
     prompt.include_section(
         PromptSectionKeys.USER_PROFILE,

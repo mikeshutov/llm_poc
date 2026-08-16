@@ -25,7 +25,6 @@ from request_orchestrator.models.plan_step_ids import format_plan_step_id, names
 def _state_with_completed_plan(*, needs_replan: bool, profile=MAIN_AGENT_PROFILE) -> AgentState:
     state = AgentState.new(
         task="Run tools",
-        max_turns=5,
         llm=object(),
         agent_profile=profile,
     )

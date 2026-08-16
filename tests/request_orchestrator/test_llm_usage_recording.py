@@ -22,6 +22,7 @@ from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
 from request_orchestrator.shared.request_analysis.analyze_request import analyze_request
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
+from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_prompt import PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.agent_result import AgentResult
@@ -178,10 +179,11 @@ def test_request_analysis_records_llm_usage() -> None:
     repo = RecordingRepo()
     state = MainState.new(
         task='Find me boots.',
-        max_turns=5,
-        conversation_context=ConversationContext(),
-        user_profile=user_profile,
-        conversation_id=str(uuid4()),
+        execution_context=AgentExecutionContext.new(
+            conversation_context=ConversationContext(),
+            user_profile=user_profile,
+            conversation_id=str(uuid4()),
+        ),
         llm=FakeInvokeLLM('{"goals":[{"agent":"main_agent","goal":"Find boots","tool_categories":[]}],"requested_user_attribute_types":[]}'),
         agent_profiles=_agent_profiles_for(user_profile),
     )
@@ -209,19 +211,21 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
     repo = RecordingRepo()
     main_state = AgentState.new(
         task='Find me boots.',
-        max_turns=5,
-        conversation_context=ConversationContext(),
-        user_profile=UserProfile(),
-        conversation_id=str(uuid4()),
+        execution_context=AgentExecutionContext.new(
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            conversation_id=str(uuid4()),
+        ),
         llm=FakeInvokeLLM('{"steps": [], "needs_replan": false}'),
         agent_profile=MAIN_AGENT_PROFILE,
     )
     profile_state = AgentState.new(
         task='Remember I like pizza.',
-        max_turns=5,
-        conversation_context=ConversationContext(),
-        user_profile=UserProfile(),
-        conversation_id=str(uuid4()),
+        execution_context=AgentExecutionContext.new(
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            conversation_id=str(uuid4()),
+        ),
         llm=FakeInvokeLLM('{"steps": [], "needs_replan": false}'),
         agent_profile=PROFILE_MANAGEMENT_PROFILE,
     )
@@ -248,10 +252,11 @@ def test_agent_log_persists_conversation_event_immediately() -> None:
     roundtrip_id = uuid4()
     state = AgentState.new(
         task='Find me boots.',
-        max_turns=5,
-        conversation_context=ConversationContext(),
-        user_profile=UserProfile(),
-        conversation_id=str(conversation_id),
+        execution_context=AgentExecutionContext.new(
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            conversation_id=str(conversation_id),
+        ),
         llm=FakeInvokeLLM('{"steps": [], "needs_replan": false}'),
         agent_profile=MAIN_AGENT_PROFILE,
     )
@@ -300,10 +305,11 @@ def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_retu
     repo = RecordingRepo()
     state = AgentState.new(
         task='Find me boots.',
-        max_turns=5,
-        conversation_context=ConversationContext(),
-        user_profile=UserProfile(),
-        conversation_id=str(uuid4()),
+        execution_context=AgentExecutionContext.new(
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            conversation_id=str(uuid4()),
+        ),
         llm=FakeInvokeLLM('{"steps": [], "status": "blocked", "reason": "required capability unavailable.", "needs_replan": false}'),
         agent_profile=MAIN_AGENT_PROFILE,
     )
@@ -329,10 +335,11 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
     repo = RecordingRepo()
     state = MainState.new(
         task='Summarize this.',
-        max_turns=5,
-        conversation_context=ConversationContext(),
-        user_profile=UserProfile(),
-        conversation_id=str(uuid4()),
+        execution_context=AgentExecutionContext.new(
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            conversation_id=str(uuid4()),
+        ),
         llm=FakeInvokeLLM('{"result": [{"content": "done", "evidence_ids": []}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.4'),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
@@ -413,10 +420,11 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     repo = RecordingRepo()
     state = AgentState.new(
         task='Find current pricing for shortlisted products.',
-        max_turns=5,
-        conversation_context=ConversationContext(),
-        user_profile=UserProfile(),
-        conversation_id=str(uuid4()),
+        execution_context=AgentExecutionContext.new(
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            conversation_id=str(uuid4()),
+        ),
         llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["P1E1R1"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.4'),
         agent_profile=MAIN_AGENT_PROFILE,
     )
@@ -447,7 +455,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     assert repo.llm_calls[0]['model'] == 'gpt-5.4'
     assert PromptSectionKeys.EVIDENCE in repo.llm_calls[0]['metadata']['input_object']['sections_raw']
     assert state.node_states.evaluator.evaluation_status == EVALUATION_STATUS_RETRYABLE
-    assert state.task == 'Find current Canadian pricing and availability for the two shortlisted products.'
+    assert state.inputs.task == 'Find current Canadian pricing and availability for the two shortlisted products.'
     payload = _latest_event_payload(repo, event_type='evaluator', agent_name='main_agent')
     assert payload['data']['llm_usage']['model'] == 'gpt-5.4'
     assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
@@ -485,10 +493,11 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
 
     state = MainState.new(
         task='Summarize this.',
-        max_turns=5,
-        conversation_context=ConversationContext(),
-        user_profile=UserProfile(),
-        conversation_id=str(uuid4()),
+        execution_context=AgentExecutionContext.new(
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            conversation_id=str(uuid4()),
+        ),
         llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["P1E2R1"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.4'),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )

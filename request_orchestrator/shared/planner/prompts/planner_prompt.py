@@ -55,7 +55,7 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     tools = []
     rules = {}
 
-    agent_tool_categories = list(state.tool_category_names)
+    agent_tool_categories = list(state.inputs.tool_category_names)
 
     if agent_tool_categories:
         for category_name in agent_tool_categories:
@@ -101,8 +101,8 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         instruction=state.agent_profile.planner_instruction,
         user_profile=state.execution_context.user_profile,
         conversation_context=state.execution_context.conversation_context,
-        task=state.task,
-        latest_user_prompt=state.task if _is_profile_management_agent(state) else None,
+        task=state.inputs.task,
+        latest_user_prompt=state.inputs.task if _is_profile_management_agent(state) else None,
         available_tools=context.compiled_tools,
         rules=compiled_rules,
         evidence=evidence_steps,

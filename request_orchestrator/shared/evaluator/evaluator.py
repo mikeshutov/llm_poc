@@ -124,7 +124,7 @@ def run_evaluator(state: AgentState) -> AgentState:
     else:
         refined_goal = evaluation.refined_goal.strip()
         if refined_goal:
-            state.task = refined_goal
+            state.inputs.task = refined_goal
         state.node_states.evaluator.goal_reached = False
 
     create_conversation_event(

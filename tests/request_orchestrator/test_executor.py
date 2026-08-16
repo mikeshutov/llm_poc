@@ -17,12 +17,12 @@ if 'pycountry' not in sys.modules:
 
 from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
+from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
 from request_orchestrator.shared.executor.executor import run_executor
-from request_orchestrator.shared.planner_state import current_plan_results
 from request_orchestrator.shared.runtime_context import bind_runtime_context, get_current_conversation_id, get_current_roundtrip_id, get_current_user_id
 
 
@@ -83,10 +83,11 @@ def test_run_executor_parallelizes_pending_steps() -> None:
     )
     state = AgentState.new(
         task="Run tools",
-        max_turns=5,
         llm=object(),
         agent_profile=profile,
-        conversation_id=str(uuid4()),
+        execution_context=AgentExecutionContext.new(
+            conversation_id=str(uuid4()),
+        ),
     )
     _set_plan_state(
         state,
@@ -129,19 +130,15 @@ def test_run_executor_parallelizes_pending_steps() -> None:
                 ):
                     run_executor(state)
 
-    current_results = current_plan_results(
-        state.node_states.planner,
-        state.result.tool_results,
-        agent_name=state.agent_profile.name,
-    )
-    assert current_results["P1E1"].result == {"tool": "tool_a", "value": "a"}
-    assert current_results["P1E2"].result == {"tool": "tool_b", "value": "b"}
-    assert current_results["P1E1"].step_id == "test_agent:P1E1"
-    assert current_results["P1E1"].tool_name == "tool_a"
-    assert current_results["P1E1"].iteration == 1
-    assert current_results["P1E2"].step_id == "test_agent:P1E2"
-    assert current_results["P1E2"].tool_name == "tool_b"
-    assert current_results["P1E2"].iteration == 1
+    current_results = state.result.tool_results_by_step_id()
+    assert current_results["test_agent:P1E1"].result == {"tool": "tool_a", "value": "a"}
+    assert current_results["test_agent:P1E2"].result == {"tool": "tool_b", "value": "b"}
+    assert current_results["test_agent:P1E1"].step_id == "test_agent:P1E1"
+    assert current_results["test_agent:P1E1"].tool_name == "tool_a"
+    assert current_results["test_agent:P1E1"].iteration == 1
+    assert current_results["test_agent:P1E2"].step_id == "test_agent:P1E2"
+    assert current_results["test_agent:P1E2"].tool_name == "tool_b"
+    assert current_results["test_agent:P1E2"].iteration == 1
     assert started_steps[:2] == ["tool_a", "tool_b"]
     repo = repo_getter.return_value
     assert len(repo.conversation_events) == 2
@@ -159,7 +156,6 @@ def test_run_executor_leaves_unresolved_refs_unchanged_with_parallel_execution()
     )
     state = AgentState.new(
         task="Run tools",
-        max_turns=5,
         llm=object(),
         agent_profile=profile,
     )
@@ -202,7 +198,6 @@ def test_run_executor_unwraps_prior_step_result_for_resolved_refs() -> None:
     )
     state = AgentState.new(
         task="Run tools",
-        max_turns=5,
         llm=object(),
         agent_profile=profile,
     )
@@ -242,10 +237,11 @@ def test_run_executor_propagates_runtime_context_to_worker_threads() -> None:
     )
     state = AgentState.new(
         task="Run tools",
-        max_turns=5,
         llm=object(),
         agent_profile=profile,
-        conversation_id="conversation-123",
+        execution_context=AgentExecutionContext.new(
+            conversation_id="conversation-123",
+        ),
     )
     state.execution_context.roundtrip_id = "roundtrip-456"  # type: ignore[assignment]
     state.execution_context.user_profile.user_id = "user-789"
