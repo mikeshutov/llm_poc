@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Protocol
-from uuid import UUID
 
-from conversation.models.conversation_model_config import ConversationModelConfig
-from conversation.models.conversation_models import ConversationContext
-from personalization.profile.models import UserProfile
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
+from request_orchestrator.models.agent_execution_context import AgentExecutionContext
+from request_orchestrator.models.agent_inputs import AgentInputs
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.request_analysis import RequestAnalysis, RequestAnalysisGoal
 
@@ -43,8 +41,8 @@ class AgentRunner:
 
     def _prepare_state(self, agent_state: AgentState) -> AgentState:
         agent_state.agent_profile = self.profile
-        if not agent_state.task and self._default_goal():
-            agent_state.set_agent_inputs(
+        if not agent_state.inputs.task and self._default_goal():
+            agent_state.inputs = AgentInputs.new(
                 task=self._default_goal(),
                 tool_category_names=self._default_tool_categories(),
             )
@@ -54,39 +52,27 @@ class AgentRunner:
         self,
         agent_state: AgentState | None = None,
         *,
-        conversation_context: ConversationContext | None = None,
         user_query: str | None = None,
-        conversation_id: str | None = None,
-        roundtrip_id: str | None = None,
-        max_turns: int | None = None,
-        user_profile: UserProfile | None = None,
+        execution_context: AgentExecutionContext | None = None,
         request_analysis: RequestAnalysis | None = None,
         llm: Any | None = None,
-        conversation_model_config: ConversationModelConfig | None = None,
     ) -> AgentState:
         if agent_state is None:
-            if conversation_context is None or user_query is None:
-                raise ValueError("conversation_context and user_query are required when agent_state is not provided")
+            if user_query is None:
+                raise ValueError("user_query is required when agent_state is not provided")
+            if execution_context is None:
+                raise ValueError("execution_context is required when agent_state is not provided")
             agent_state = AgentState.new(
-                task=user_query,
-                max_turns=self.profile.max_turns if max_turns is None else max_turns,
-                conversation_context=conversation_context,
-                user_profile=user_profile,
                 agent_profile=self.profile,
-                conversation_id=conversation_id,
-                roundtrip_id=UUID(roundtrip_id) if roundtrip_id else None,
+                inputs=AgentInputs.new(task=user_query),
+                execution_context=execution_context,
                 llm=llm,
-                conversation_model_config=conversation_model_config,
             )
             if request_analysis is not None:
-                agent_task = request_analysis.goal_for_agent(self.profile.name)
-                agent_state.set_agent_inputs(
-                    task=agent_task,
-                    tool_category_names=request_analysis.tool_categories_for_agent(self.profile.name),
-                )
+                agent_state.inputs = request_analysis.inputs_for_agent(self.profile.name)
 
         prepared_state = self._prepare_state(agent_state)
         return self.stratagy.run(
             prepared_state,
-            thread_id=prepared_state.execution_context.conversation_id or conversation_id or "",
+            thread_id=prepared_state.execution_context.conversation_id or "",
         )

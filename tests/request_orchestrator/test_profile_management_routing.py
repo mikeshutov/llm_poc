@@ -62,20 +62,20 @@ def _hydrate_plan_state(state: AgentState, *, plan: Plan, results: dict[str, obj
 
 
 def test_profile_router_routes_first_pass_to_plan() -> None:
-    state = AgentState.new(task="Remember this", max_turns=5, llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
+    state = AgentState.new(task="Remember this", llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
 
     assert router(state) == PLAN_EDGE
 
 
 def test_profile_router_routes_empty_plan_to_end() -> None:
-    state = AgentState.new(task="Remember this", max_turns=5, llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
+    state = AgentState.new(task="Remember this", llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
     _hydrate_plan_state(state, plan=Plan.model_validate({"steps": []}), results={})
 
     assert router(state) == END
 
 
 def test_profile_router_routes_pending_steps_to_execute() -> None:
-    state = AgentState.new(task="Remember this", max_turns=5, llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
+    state = AgentState.new(task="Remember this", llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
     _hydrate_plan_state(state, plan=Plan.model_validate({
             "steps": [
                 {
@@ -89,7 +89,7 @@ def test_profile_router_routes_pending_steps_to_execute() -> None:
 
 
 def test_profile_router_routes_completed_results_to_evaluator() -> None:
-    state = AgentState.new(task="Remember this", max_turns=5, llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
+    state = AgentState.new(task="Remember this", llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
     _hydrate_plan_state(state, plan=Plan.model_validate({
             "steps": [
                 {
@@ -103,7 +103,7 @@ def test_profile_router_routes_completed_results_to_evaluator() -> None:
 
 
 def test_profile_evaluator_router_can_end_when_satisfied() -> None:
-    state = AgentState.new(task="Remember this", max_turns=5, llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
+    state = AgentState.new(task="Remember this", llm=object(), agent_profile=PROFILE_MANAGEMENT_PROFILE)
     state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
 
     assert evaluator_router(state) == 'synthesize'

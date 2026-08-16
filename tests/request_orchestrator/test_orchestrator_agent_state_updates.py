@@ -17,6 +17,7 @@ from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import UserProfile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
+from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.main_state import MainState
@@ -27,18 +28,19 @@ def test_run_agent_node_persists_returned_agent_state_into_main_state() -> None:
     user_profile = UserProfile()
     main_state = MainState.new(
         task="Run child agent.",
-        conversation_context=ConversationContext(),
-        user_profile=user_profile,
+        execution_context=AgentExecutionContext.new(
+            conversation_context=ConversationContext(),
+            user_profile=user_profile,
+        ),
         llm=object(),
         agent_profiles=[
             build_profile_management_profile(user_profile),
             MAIN_AGENT_PROFILE,
         ],
-        initialize_agent_states=True,
     )
 
     main_agent_state = main_state.agent_states["main_agent"]
-    main_agent_state.set_agent_inputs(task="Find evidence")
+    main_agent_state.inputs.task = "Find evidence"
 
     def fake_runner(agent_state):
         updated_state = agent_state

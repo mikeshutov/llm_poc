@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel
+from request_orchestrator.models.agent_inputs import AgentInputs
 
 
 class RequestAnalysisGoal(BaseModel):
@@ -35,6 +36,15 @@ class RequestAnalysis(BaseModel):
             for category in goal_entry.tool_categories
             if isinstance(category, str) and category.strip()
         ]
+
+    def inputs_for_agent(self, agent_name: str, *, default_task: str = "") -> AgentInputs:
+        goal_entry = self._goal_entry_for_agent(agent_name)
+        if goal_entry is None:
+            return AgentInputs.new(task=default_task)
+        return AgentInputs.new(
+            task=goal_entry.goal,
+            tool_category_names=goal_entry.tool_categories,
+        )
 
     def set_goal_for_agent(self, agent_name: str, goal: str, *, tool_categories: list[str] | None = None) -> None:
         goal_entry = self._goal_entry_for_agent(agent_name)

@@ -1,23 +1,22 @@
-import os
 import html
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
-from uuid import UUID
 
 import streamlit as st
 
+from common.config import CONTENT_KEY, FILES_DIR, IMAGE_MIME_PREFIX, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
 from common.logging import fetch_agent_logs_for_roundtrip, fetch_llm_call_payloads_for_roundtrip
 from llm.usage import build_llm_usage_payload
-from rendering.debug import debug_render_message, render_agent_logs
 from rendering.cards import render_cards
+from rendering.debug import debug_render_message, render_agent_logs
 from rendering.feedback import render_feedback_controls
 from rendering.replay import render_replay_control
-from common.config import CONTENT_KEY, FILES_DIR, IMAGE_MIME_PREFIX, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
 from request_orchestrator.models.evidence import EvidenceUrl, HydratedEvidence
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
-from tool.constants import TOOL_NAME_STRUCTURED_FACTS_LOOKUP
 from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
+from tool.constants import TOOL_NAME_STRUCTURED_FACTS_LOOKUP
 from tool.constants import TOOL_NAME_WIKIPEDIA_SEARCH
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
@@ -50,11 +49,19 @@ INLINE_EVIDENCE_TOOL_NAMES: set[str] = {
 }
 
 
-def _is_inline_evidence(hydrated: HydratedEvidence) -> bool:
+def _is_inline_link_evidence(hydrated: HydratedEvidence) -> bool:
     return (
-        hydrated.entity_type.strip() in INLINE_EVIDENCE_TYPES
-        or hydrated.tool_name.strip() in INLINE_EVIDENCE_TOOL_NAMES
+        hydrated.tool_name.strip() in INLINE_EVIDENCE_TOOL_NAMES
+        or hydrated.source.strip() in INLINE_EVIDENCE_TOOL_NAMES
     )
+
+
+def _is_inline_label_evidence(hydrated: HydratedEvidence) -> bool:
+    return hydrated.entity_type.strip() in INLINE_EVIDENCE_TYPES
+
+
+def _is_inline_evidence(hydrated: HydratedEvidence) -> bool:
+    return _is_inline_link_evidence(hydrated) or _is_inline_label_evidence(hydrated)
 
 
 def format_timestamp(ts) -> str | None:
@@ -144,7 +151,35 @@ def _get_hydrated_evidence_by_id(payload: dict | None) -> dict[str, HydratedEvid
     return hydrated_evidence_by_id
 
 
+def _normalize_block_evidence_ids(
+    evidence_ids: list[str],
+    hydrated_evidence_by_id: dict[str, HydratedEvidence],
+) -> list[str]:
+    if not evidence_ids or not hydrated_evidence_by_id:
+        return evidence_ids
+
+    normalized_ids: list[str] = []
+    for evidence_id in evidence_ids:
+        normalized = evidence_id.strip()
+        if not normalized:
+            continue
+        if normalized in hydrated_evidence_by_id:
+            normalized_ids.append(normalized)
+            continue
+        suffix_matches = [
+            candidate_id
+            for candidate_id in hydrated_evidence_by_id
+            if candidate_id == normalized or candidate_id.endswith(f":{normalized}")
+        ]
+        if len(suffix_matches) == 1:
+            normalized_ids.append(suffix_matches[0])
+            continue
+        normalized_ids.append(normalized)
+    return normalized_ids
+
+
 def get_renderable_result_blocks(content: str, payload: dict | None) -> list[SynthesisResultBlock]:
+    hydrated_evidence_by_id = _get_hydrated_evidence_by_id(payload)
     if isinstance(payload, dict):
         raw_blocks = payload.get("result")
         if isinstance(raw_blocks, list):
@@ -166,6 +201,10 @@ def get_renderable_result_blocks(content: str, payload: dict | None) -> list[Syn
                         for evidence_id in raw_evidence_ids
                         if isinstance(evidence_id, str) and evidence_id.strip()
                     ]
+                evidence_ids = _normalize_block_evidence_ids(
+                    evidence_ids,
+                    hydrated_evidence_by_id,
+                )
                 blocks.append(
                     SynthesisResultBlock(
                         content=content_text,
@@ -245,19 +284,22 @@ def _render_result_block(
     hydrated_evidence_by_id: dict[str, HydratedEvidence],
 ) -> list[EvidenceCard]:
     inline_evidence = _build_inline_evidence(block, hydrated_evidence_by_id)
-    inline_urls: list[str] = []
+    inline_links: list[tuple[str, str]] = []
     inline_labels: list[str] = []
     for evidence in inline_evidence:
         hydrated = hydrated_evidence_by_id.get(evidence.evidence_id)
-        hydrated_url = "" if hydrated is None else _primary_card_url(hydrated.urls)
-        if hydrated_url:
-            inline_urls.append(hydrated_url)
+        if hydrated is None:
             continue
-        title = (evidence.title or evidence.evidence_id).strip()
-        source = evidence.source.strip()
-        inline_labels.append(f"{title} ({source})" if source else title)
+        hydrated_url = _primary_card_url(hydrated.urls)
+        if hydrated_url:
+            label = hydrated.title.strip() or hydrated.source.strip() or evidence.evidence_id
+            inline_links.append((label, hydrated_url))
+            continue
+        label = hydrated.summary.strip() or hydrated.title.strip() or evidence.evidence_id
+        source = hydrated.source.strip()
+        inline_labels.append(f"{label} ({source})" if source else label)
 
-    if inline_urls:
+    if inline_links:
         inline_buttons = " ".join(
             (
                 "<a "
@@ -269,7 +311,7 @@ def _render_result_block(
                 "line-height:1.4;color:inherit;background:rgba(255,255,255,0.65);\">"
                 f"↗ {html.escape(url)}</a>"
             )
-            for url in inline_urls
+            for _, url in inline_links
         )
         st.markdown(
             f"<p>{html.escape(block.content)} {inline_buttons}</p>",

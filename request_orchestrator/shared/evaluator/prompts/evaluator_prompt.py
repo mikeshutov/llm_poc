@@ -18,8 +18,8 @@ def build_evaluator_prompt(state: AgentState, evidence: list[EvidenceStep]) -> A
     prompt = AgentPrompt(
         instruction=_build_instruction(state),
         user_profile=state.execution_context.user_profile,
-        task=state.task.strip(),
-        latest_user_prompt=state.task,
+        task=state.inputs.task.strip(),
+        latest_user_prompt=state.inputs.task,
         evidence=evidence,
         schema=EVALUATOR_SCHEMA,
     )

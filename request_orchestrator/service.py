@@ -7,6 +7,7 @@ from personalization.profile.models import GeoMetadata
 from personalization.profile.service import build_user_profile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
+from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.orchestrator import run_agent
@@ -57,14 +58,16 @@ def run_request_orchestrator_for_query(
         user_id=resolved_user_id,
         geometadata=geometadata,
     )
-    main_state = MainState.new(
-        task=user_query,
-        max_turns=10,
+    execution_context = AgentExecutionContext.new(
         conversation_context=conversation_context,
         user_profile=user_profile,
         conversation_id=conversation_id,
         roundtrip_id=roundtrip.id,
-        conversation_model_config=resolved_model_config,
+        model_config=resolved_model_config,
+    )
+    main_state = MainState.new(
+        task=user_query,
+        execution_context=execution_context,
         agent_profiles=[
             build_profile_management_profile(user_profile),
             MAIN_AGENT_PROFILE,

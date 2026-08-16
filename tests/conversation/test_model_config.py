@@ -33,6 +33,7 @@ from integrations.ip_api.models import IpLocation
 from personalization.profile.models import UserProfile
 from rendering.sidebar import build_model_config_rows
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
+from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.service import run_request_orchestrator_for_query
@@ -248,12 +249,13 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
     with patch('request_orchestrator.shared.llm_factory.ChatOpenAI', TrackingChatOpenAI):
         state = AgentState.new(
             task='Help me remember this.',
-            max_turns=5,
-            conversation_context=ConversationContext(),
-            user_profile=UserProfile(),
+            execution_context=AgentExecutionContext.new(
+                conversation_context=ConversationContext(),
+                user_profile=UserProfile(),
+                model_config=config,
+            ),
             agent_profile=MAIN_AGENT_PROFILE,
             llm=TrackingChatOpenAI(model='gpt-5.4-mini'),
-            conversation_model_config=config,
         )
 
         request_analysis_llm = build_llm_for_stage(

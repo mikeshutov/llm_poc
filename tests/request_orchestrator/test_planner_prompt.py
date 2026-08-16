@@ -21,7 +21,7 @@ from request_orchestrator.shared.planner.prompts.planner_prompt import build_pla
 
 
 def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> None:
-    state = AgentState.new(task="Find a good answer", max_turns=3, llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
     plan = Plan.model_validate(
         {
             "steps": [
@@ -68,10 +68,9 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
     prompt = build_planner_prompt(state)
     evidence_section = prompt.to_log_input_object()["sections_raw"][PromptSectionKeys.EVIDENCE]
 
-    assert '"type": "web_search_results"' in evidence_section
-    assert '"metadata": {' in evidence_section
-    assert '"title": "Example Result"' in evidence_section
-    assert '"summary": "Short evidence summary."' in evidence_section
-    assert '"evidence_object"' in evidence_section
-    assert "should stay out of planner" in evidence_section
-    assert "raw payload should not be in planner prompt" not in evidence_section
+    assert evidence_section[0]["type"] == "web_search_results"
+    assert evidence_section[0]["evidence"][0]["title"] == "Example Result"
+    assert evidence_section[0]["evidence"][0]["summary"] == "Short evidence summary."
+    assert evidence_section[0]["evidence"][0]["evidence_object"] == {"detail": "should stay out of planner"}
+    assert evidence_section[0]["evidence"][0]["metadata"] == {"kind": "web"}
+    assert "secret" not in str(evidence_section)

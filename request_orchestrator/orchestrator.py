@@ -30,7 +30,7 @@ AGENT_EXECUTION_ORDER = [
 
 def _should_run_agent(state: MainState, agent_name: str) -> bool:
     agent_state = state.agent_states[agent_name]
-    return bool(agent_state.task.strip())
+    return bool(agent_state.inputs.task.strip())
 
 
 def _build_run_agent_node(agent_name: str, runner: Callable) -> Callable[[MainState], MainState]:

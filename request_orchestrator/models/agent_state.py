@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any
-from uuid import UUID
 
 from langchain_openai import ChatOpenAI
 from conversation.models.conversation_model_config import ConversationModelConfig
-from conversation.models.conversation_models import ConversationContext
-from personalization.profile.models import UserProfile
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
+from request_orchestrator.models.agent_inputs import AgentInputs
 from request_orchestrator.models.plan import Plan
 from .agent_execution_context import AgentExecutionContext
 from .agent_result import AgentResult
@@ -17,10 +15,9 @@ from request_orchestrator.shared.node_state import AgentNodeStates
 
 @dataclass
 class AgentState:
-    task: str
     agent_profile: AgentProfile
+    inputs: AgentInputs = field(default_factory=AgentInputs)
     execution_context: AgentExecutionContext = field(default_factory=AgentExecutionContext)
-    tool_category_names: list[str] = field(default_factory=list)
     node_states: AgentNodeStates = field(default_factory=AgentNodeStates)
     result: AgentResult = field(default_factory=AgentResult)
     llm: Any = field(
@@ -33,40 +30,25 @@ class AgentState:
     @classmethod
     def new(
         cls,
-        task: str,
         agent_profile: AgentProfile,
-        max_turns: int | None = None,
-        conversation_context: ConversationContext | None = None,
-        user_profile: UserProfile | None = None,
-        conversation_id: str | None = None,
-        roundtrip_id: UUID | None = None,
+        task: str = "",
+        inputs: AgentInputs | None = None,
+        execution_context: AgentExecutionContext | None = None,
         llm: Any | None = None,
-        conversation_model_config: ConversationModelConfig | None = None,
     ) -> "AgentState":
-        resolved_conversation_model_config = (
-            ConversationModelConfig.build_default()
-            if conversation_model_config is None
-            else conversation_model_config
+        resolved_execution_context = (
+            AgentExecutionContext.new()
+            if execution_context is None
+            else execution_context
         )
-        resolved_agent_profile = (
-            replace(agent_profile, max_turns=max_turns)
-            if max_turns is not None and max_turns != agent_profile.max_turns
-            else agent_profile
-        )
-        resolved_agent_scope = resolved_agent_profile.scope
+        resolved_agent_scope = agent_profile.scope
         return cls(
-            task=task,
-            execution_context=AgentExecutionContext(
-                conversation_context=ConversationContext() if conversation_context is None else conversation_context,
-                user_profile=UserProfile() if user_profile is None else user_profile,
-                conversation_id=conversation_id,
-                roundtrip_id=roundtrip_id,
-                model_config=resolved_conversation_model_config,
-            ),
-            agent_profile=resolved_agent_profile,
+            inputs=AgentInputs.new(task=task) if inputs is None else inputs,
+            execution_context=resolved_execution_context,
+            agent_profile=agent_profile,
             llm=(
                 ChatOpenAI(
-                    model=resolved_conversation_model_config.resolve(
+                    model=resolved_execution_context.model_config.resolve(
                         agent=resolved_agent_scope,
                         stage="planner",
                     )
@@ -84,19 +66,6 @@ class AgentState:
     @property
     def max_turns(self) -> int:
         return self.agent_profile.max_turns
-
-    def set_agent_inputs(
-        self,
-        *,
-        task: str,
-        tool_category_names: list[str] | None = None,
-    ) -> None:
-        self.task = task.strip()
-        self.tool_category_names = [] if tool_category_names is None else [
-            category.strip()
-            for category in tool_category_names
-            if isinstance(category, str) and category.strip()
-        ]
 
     def resolve_agent_scope(self) -> str:
         return self.agent_profile.scope

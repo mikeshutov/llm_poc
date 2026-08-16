@@ -17,6 +17,7 @@ from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import UserProfile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
+from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.models.main_state import MainState
@@ -27,14 +28,15 @@ def test_main_state_gathers_child_results_without_rebasing_ids() -> None:
     user_profile = UserProfile()
     main_state = MainState.new(
         task="Combine child evidence.",
-        conversation_context=ConversationContext(),
-        user_profile=user_profile,
+        execution_context=AgentExecutionContext.new(
+            conversation_context=ConversationContext(),
+            user_profile=user_profile,
+        ),
         llm=object(),
         agent_profiles=[
             build_profile_management_profile(user_profile),
             MAIN_AGENT_PROFILE,
         ],
-        initialize_agent_states=True,
     )
 
     profile_state = main_state.agent_states["profile_management"]

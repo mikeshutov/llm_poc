@@ -3,6 +3,9 @@ from rendering.rendering import (
     InlineEvidenceReference,
     _build_block_cards,
     _build_inline_evidence,
+    _is_inline_label_evidence,
+    _is_inline_link_evidence,
+    _render_result_block,
     get_renderable_result_blocks,
 )
 from request_orchestrator.models.evidence import EvidenceUrl, HydratedEvidence
@@ -99,6 +102,17 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
             source=TOOL_NAME_GET_CURRENT_WEATHER,
         ),
     ]
+    assert _is_inline_label_evidence(
+        HydratedEvidence(
+            evidence_id="P1E2R1",
+            title="Weather Result",
+            summary="25.9 C in Toronto",
+            urls=[],
+            image_url="",
+            source=TOOL_NAME_GET_CURRENT_WEATHER,
+            entity_type=TOOL_RESULT_TYPE_WEATHER,
+        )
+    )
 
 
 def test_build_inline_evidence_includes_generic_web_search_results() -> None:
@@ -124,3 +138,75 @@ def test_build_inline_evidence_includes_generic_web_search_results() -> None:
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
         ),
     ]
+    assert _is_inline_link_evidence(
+        HydratedEvidence(
+            evidence_id="P1E1R1",
+            title="Article Title",
+            summary="Article summary",
+            urls=[EvidenceUrl(url="https://example.com/article", url_type="website")],
+            image_url="https://example.com/article.jpg",
+            source=TOOL_NAME_GENERIC_WEB_SEARCH,
+            tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
+        )
+    )
+
+
+def test_build_inline_evidence_includes_generic_web_search_results_from_source_only() -> None:
+    evidence = _build_inline_evidence(
+        SynthesisResultBlock(content="Web summary", evidence_ids=["P1E1R1"]),
+        {
+            "P1E1R1": HydratedEvidence(
+                evidence_id="P1E1R1",
+                title="Article Title",
+                summary="Article summary",
+                urls=[EvidenceUrl(url="https://example.com/article", url_type="website")],
+                image_url="https://example.com/article.jpg",
+                source=TOOL_NAME_GENERIC_WEB_SEARCH,
+                tool_name="",
+            )
+        },
+    )
+
+    assert evidence == [
+        InlineEvidenceReference(
+            evidence_id="P1E1R1",
+            title="Article Title",
+            source=TOOL_NAME_GENERIC_WEB_SEARCH,
+        ),
+    ]
+
+
+def test_render_result_block_renders_weather_as_inline_markdown_link(monkeypatch) -> None:
+    calls: dict[str, list[object]] = {"markdown": [], "write": [], "caption": []}
+
+    monkeypatch.setattr(
+        "rendering.rendering.st.markdown",
+        lambda value, **kwargs: calls["markdown"].append((value, kwargs)),
+    )
+    monkeypatch.setattr("rendering.rendering.st.write", lambda value: calls["write"].append(value))
+    monkeypatch.setattr("rendering.rendering.st.caption", lambda value: calls["caption"].append(value))
+
+    cards = _render_result_block(
+        SynthesisResultBlock(content="Toronto is warm today.", evidence_ids=["P1E1R1"]),
+        {
+            "P1E1R1": HydratedEvidence(
+                evidence_id="P1E1R1",
+                title="Get Current Weather",
+                summary="25.9 C in Toronto",
+                urls=[EvidenceUrl(url="https://open-meteo.com/", url_type="website")],
+                image_url="",
+                source=TOOL_NAME_GET_CURRENT_WEATHER,
+                tool_name=TOOL_NAME_GET_CURRENT_WEATHER,
+                entity_type=TOOL_RESULT_TYPE_WEATHER,
+            )
+        },
+    )
+
+    assert cards == []
+    assert calls["write"] == []
+    assert calls["caption"] == []
+    assert len(calls["markdown"]) == 1
+    rendered_value, rendered_kwargs = calls["markdown"][0]
+    assert "Toronto is warm today." in rendered_value
+    assert "https://open-meteo.com/" in rendered_value
+    assert rendered_kwargs == {"unsafe_allow_html": True}
