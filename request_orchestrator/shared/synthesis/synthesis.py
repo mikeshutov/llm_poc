@@ -5,7 +5,7 @@ from langsmith import traceable
 
 from common.data import repair_common_json_issues, strip_code_fences
 from common.logging import create_conversation_event, log_roundtrip_prompt
-from conversation.models.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, SYNTHESIS_STAGE
+from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, SYNTHESIS_STAGE
 from llm.usage import record_llm_call, serialize_llm_call_record
 from request_orchestrator.constants import SYNTHESIS_PROMPT_KIND
 from request_orchestrator.models.main_state import MainState
@@ -16,7 +16,7 @@ from request_orchestrator.shared.evidence import (
     build_evidence_steps_from_tool_results,
     filter_evidence_steps,
 )
-from request_orchestrator.shared.llm_factory import build_llm_for_stage, resolve_stage_model_name
+from llm.chat_models import build_llm_for_stage, resolve_stage_model_name
 from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
 from rendering.debug import SYNTHESIS_KIND
 def _resolve_relevant_evidence_ids(state: MainState) -> set[str]:

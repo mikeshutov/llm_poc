@@ -6,7 +6,7 @@ from langsmith import traceable
 
 from common.data import repair_common_json_issues, strip_code_fences
 from common.logging import create_conversation_event, log_roundtrip_prompt
-from conversation.models.conversation_model_config import EVALUATOR_STAGE, SHARED_MODEL_SCOPE
+from llm.conversation_model_config import EVALUATOR_STAGE, SHARED_MODEL_SCOPE
 from llm.usage import record_llm_call
 from request_orchestrator.constants import EVALUATOR_PROMPT_KIND
 from request_orchestrator.models.agent_state import AgentState
@@ -22,7 +22,7 @@ from request_orchestrator.shared.evidence import (
     build_evidence_steps_from_tool_results,
 )
 from request_orchestrator.shared.evaluator.prompts import build_evaluator_prompt
-from request_orchestrator.shared.llm_factory import build_llm_for_stage, resolve_stage_model_name
+from llm.chat_models import build_llm_for_stage, resolve_stage_model_name
 
 EVALUATOR_KIND = "evaluator"
 

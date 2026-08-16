@@ -45,7 +45,7 @@ from request_orchestrator.shared.evidence import (
     build_evidence_steps_from_tool_results,
 )
 from request_orchestrator.shared.evaluator.prompts.evaluator_prompt import build_evaluator_prompt
-from request_orchestrator.shared.llm_factory import build_llm_for_stage
+from llm.chat_models import build_llm_for_stage
 from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
 from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
 

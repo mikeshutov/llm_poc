@@ -13,6 +13,7 @@ from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.orchestrator import run_agent
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from llm.clients.embeddings import embed_text
+from llm.repository.repo_factory import get_conversation_model_config_repo
 from tool.summarize_tool_call import summarize_tool_calls
 from conversation.context_builder import build_roundtrip_context
 from conversation.models.conversation_models import ConversationRoundtrip
@@ -28,6 +29,7 @@ def run_request_orchestrator_for_query(
 ) -> tuple[OrchestratorResult, ConversationRoundtrip]:
     started_at = perf_counter()
     repo = get_conversation_repo()
+    model_config_repo = get_conversation_model_config_repo()
     conversation = repo.get_conversation(UUID(conversation_id))
     if conversation is None:
         raise ValueError(f"Conversation not found: {conversation_id}")
@@ -42,11 +44,11 @@ def run_request_orchestrator_for_query(
             f"Conversation {conversation_id} belongs to user {conversation.user_id}, not {resolved_user_id}"
         )
 
-    resolved_model_config = repo.resolve_conversation_model_config(UUID(conversation_id))
+    resolved_model_config = model_config_repo.resolve(UUID(conversation_id))
     roundtrip = repo.create_pending_roundtrip(
         UUID(conversation_id),
         user_query,
-        model=resolved_model_config.main_agent.planner,
+        model=resolved_model_config.main_agent.planner.model,
         metadata={"resolved_model_config": resolved_model_config.to_metadata_payload()},
     )
 

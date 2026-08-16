@@ -5,8 +5,8 @@ from typing import Any, Optional, Sequence
 from openai import OpenAI
 
 from common.config import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
-from conversation.models.conversation_model_config import ConversationModelConfig
 from llm.clients.tool_response_parser import parse_tool_args
+from llm.conversation_model_config import ConversationModelConfig
 from llm.models.tool_call import ToolCall, ToolCallResult
 from llm.usage import record_llm_call
 from request_orchestrator.shared.runtime_context import get_current_conversation_id, get_current_roundtrip_id, get_current_user_id

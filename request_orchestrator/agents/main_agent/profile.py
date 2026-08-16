@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from conversation.models.conversation_model_config import (
+from llm.conversation_model_config import (
     DEFAULT_MAIN_AGENT_PLANNER_MODEL,
     DEFAULT_MAIN_AGENT_REQUEST_ANALYSIS_MODEL,
     DEFAULT_MAIN_AGENT_SYNTHESIS_MODEL,

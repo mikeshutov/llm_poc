@@ -67,13 +67,34 @@ The more detailed documentation now lives in the [`docs/`](docs/) folder.
 ### Prereqs
 - Docker + Docker Compose
 - Python 3.11+ (uses local `.venv`)
-- `DATABASE_URL`, `OPENAI_API_KEY`, `BRAVE_SEARCH_API_KEY` in `.env`
+- Environment variables in `.env`
 
 Example `.env`:
 ```text
 DATABASE_URL=postgresql://app:app@localhost:5432/products
 OPENAI_API_KEY=...
 BRAVE_SEARCH_API_KEY=...
+```
+
+### API Keys
+- `OPENAI_API_KEY`
+- `BRAVE_SEARCH_API_KEY`
+- `DEEPSEEK_API_KEY`
+- `XAI_API_KEY`
+- `MISTRAL_API_KEY`
+- `GEMINI_API_KEY`
+- `COHERE_API_KEY`
+
+Example with optional provider keys:
+```text
+DATABASE_URL=postgresql://app:app@localhost:5432/products
+OPENAI_API_KEY=...
+BRAVE_SEARCH_API_KEY=...
+DEEPSEEK_API_KEY=...
+XAI_API_KEY=...
+MISTRAL_API_KEY=...
+GEMINI_API_KEY=...
+COHERE_API_KEY=...
 ```
 
 ## Quick Start

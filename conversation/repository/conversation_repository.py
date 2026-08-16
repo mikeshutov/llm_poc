@@ -9,8 +9,6 @@ from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from conversation.model_config_resolver import resolve_conversation_model_config
-from conversation.models.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig, ConversationModelConfigEntry
 from conversation.models.conversation_models import (
     Conversation,
     ConversationEvent,
@@ -23,6 +21,7 @@ from conversation.models.conversation_models import (
     RoundtripPrompt,
 )
 from db.connection import get_connection
+from llm.repository.conversation_model_config_repository import ConversationModelConfigRepository
 
 
 class ConversationRepository:
@@ -45,7 +44,7 @@ class ConversationRepository:
             assert row is not None
             conversation = Conversation(**row)
 
-        self.ensure_conversation_model_config_defaults(conversation.id)
+        ConversationModelConfigRepository(self._conn).ensure_defaults(conversation.id)
         return conversation
 
     def create_pending_roundtrip(
@@ -584,109 +583,6 @@ class ConversationRepository:
             )
             row = cur.fetchone()
             return Conversation(**row) if row else None
-
-    def ensure_conversation_model_config_defaults(
-        self,
-        conversation_id: UUID,
-        entries: list[ConversationModelConfigEntry] | None = None,
-    ) -> list[ConversationModelConfigEntry]:
-        existing_entries = list(entries) if entries is not None else self.list_conversation_model_config(conversation_id)
-        existing_keys = {(entry.agent, entry.stage) for entry in existing_entries}
-        default_config = ConversationModelConfig.build_default()
-        missing_entries: list[ConversationModelConfigEntry] = []
-
-        for spec in CONVERSATION_MODEL_CONFIG_SPECS:
-            if (spec.agent, spec.stage) in existing_keys:
-                continue
-            model = default_config.resolve(spec.agent, spec.stage)
-            persisted_entry = self.upsert_conversation_model_config(conversation_id, spec.agent, spec.stage, model)
-            missing_entries.append(persisted_entry)
-
-        return [*existing_entries, *missing_entries]
-
-    def list_conversation_model_config(self, conversation_id: UUID) -> list[ConversationModelConfigEntry]:
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT conversation_id, agent, stage, model, created_at, updated_at
-                FROM conversation_model_config
-                WHERE conversation_id = %s
-                ORDER BY agent ASC, stage ASC
-                """,
-                (conversation_id,),
-            )
-            rows = cur.fetchall()
-            return [
-                ConversationModelConfigEntry(
-                    conversation_id=row['conversation_id'],
-                    agent=row['agent'],
-                    stage=row['stage'],
-                    model=row['model'],
-                    created_at=str(row['created_at']),
-                    updated_at=str(row['updated_at']),
-                )
-                for row in rows
-            ]
-
-    def upsert_conversation_model_config(
-        self,
-        conversation_id: UUID,
-        agent: str,
-        stage: str,
-        model: str,
-    ) -> ConversationModelConfigEntry:
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                INSERT INTO conversation_model_config (conversation_id, agent, stage, model)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (conversation_id, agent, stage)
-                DO UPDATE SET
-                    model = EXCLUDED.model,
-                    updated_at = now()
-                RETURNING conversation_id, agent, stage, model, created_at, updated_at
-                """,
-                (conversation_id, agent, stage, model),
-            )
-            row = cur.fetchone()
-            assert row is not None
-            return ConversationModelConfigEntry(
-                conversation_id=row['conversation_id'],
-                agent=row['agent'],
-                stage=row['stage'],
-                model=row['model'],
-                created_at=str(row['created_at']),
-                updated_at=str(row['updated_at']),
-            )
-
-    def clear_conversation_model_config(self, conversation_id: UUID, agent: str, stage: str) -> bool:
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                DELETE FROM conversation_model_config
-                WHERE conversation_id = %s
-                  AND agent = %s
-                  AND stage = %s
-                """,
-                (conversation_id, agent, stage),
-            )
-            return cur.rowcount > 0
-
-    def clear_all_conversation_model_config(self, conversation_id: UUID) -> bool:
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                DELETE FROM conversation_model_config
-                WHERE conversation_id = %s
-                """,
-                (conversation_id,),
-            )
-            return cur.rowcount > 0
-
-    def resolve_conversation_model_config(self, conversation_id: UUID) -> ConversationModelConfig:
-        entries = self.list_conversation_model_config(conversation_id)
-        ensured_entries = self.ensure_conversation_model_config_defaults(conversation_id, entries)
-        return resolve_conversation_model_config(ensured_entries)
 
     def list_roundtrips(
         self,

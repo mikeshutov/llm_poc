@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from typing import Iterator
 
-from conversation.models.conversation_model_config import ConversationModelConfig
+from llm.conversation_model_config import ConversationModelConfig
 
 _current_conversation_id: ContextVar[str | None] = ContextVar("current_conversation_id", default=None)
 _current_roundtrip_id: ContextVar[str | None] = ContextVar("current_roundtrip_id", default=None)

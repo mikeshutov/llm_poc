@@ -1,7 +1,10 @@
 from typing import Any
 
-import pycountry
 from pydantic import BaseModel, Field, field_validator
+try:
+    import pycountry
+except ModuleNotFoundError:
+    pycountry = None
 
 
 class WebSearchParams(BaseModel):
@@ -15,6 +18,8 @@ class WebSearchParams(BaseModel):
     @field_validator("country", mode="before")
     @classmethod
     def normalize_country(cls, v: str) -> str:
+        if pycountry is None:
+            return str(v).upper() if isinstance(v, str) and len(v.strip()) == 2 else "ALL"
         try:
             return pycountry.countries.lookup(v).alpha_2
         except LookupError:

@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from conversation.models.conversation_model_config import ConversationModelConfig
 from conversation.models.conversation_models import ConversationContext
+from llm.conversation_model_config import ConversationModelConfig
 from personalization.profile.models import UserProfile
 
 

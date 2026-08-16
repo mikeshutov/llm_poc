@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import yfinance as yf
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
+try:
+    import yfinance as yf
+except ModuleNotFoundError:
+    yf = None
 
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_STOCK_PRICE
@@ -75,6 +78,10 @@ Example valid calls:
 """,
 )
 def get_stock_price(ticker: str) -> ToolResult:
+    if yf is None:
+        return ToolResult.error(
+            "Stock price lookup is unavailable because `yfinance` is not installed."
+        )
     try:
         t = yf.Ticker(ticker.upper())
         info = t.fast_info

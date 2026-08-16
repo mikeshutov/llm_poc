@@ -9,10 +9,10 @@ from common.logging import create_conversation_event, log_roundtrip_prompt
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models import AgentResult, Plan, PlanningResult
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
-from request_orchestrator.shared.llm_factory import build_llm_for_stage, resolve_stage_model_name
+from llm.chat_models import build_llm_for_stage, resolve_stage_model_name
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from common.data import repair_common_json_issues, strip_code_fences
-from conversation.models.conversation_model_config import PLANNER_STAGE
+from llm.conversation_model_config import PLANNER_STAGE
 from llm.usage import record_llm_call, serialize_llm_call_record
 from tool.repository.plan_repository import PlanRepository
 from rendering.debug import PLAN_KIND

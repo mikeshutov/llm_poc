@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from langchain_openai import ChatOpenAI
-from conversation.models.conversation_model_config import ConversationModelConfig
+from llm.chat_models import build_chat_model
+from llm.conversation_model_config import ConversationModelConfig
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
 from request_orchestrator.models.agent_inputs import AgentInputs
 from request_orchestrator.models.plan import Plan
@@ -21,8 +21,9 @@ class AgentState:
     node_states: AgentNodeStates = field(default_factory=AgentNodeStates)
     result: AgentResult = field(default_factory=AgentResult)
     llm: Any = field(
-        default_factory=lambda: ChatOpenAI(
-            model=ConversationModelConfig.default_main_agent_planner_model()
+        default_factory=lambda: build_chat_model(
+            provider=ConversationModelConfig.build_default().main_agent.planner.provider,
+            model_name=ConversationModelConfig.default_main_agent_planner_model(),
         ),
         repr=False,
     )
@@ -47,11 +48,15 @@ class AgentState:
             execution_context=resolved_execution_context,
             agent_profile=agent_profile,
             llm=(
-                ChatOpenAI(
-                    model=resolved_execution_context.model_config.resolve(
+                build_chat_model(
+                    provider=resolved_execution_context.model_config.resolve_provider(
                         agent=resolved_agent_scope,
                         stage="planner",
-                    )
+                    ),
+                    model_name=resolved_execution_context.model_config.resolve(
+                        agent=resolved_agent_scope,
+                        stage="planner",
+                    ),
                 )
                 if llm is None
                 else llm
