@@ -3,6 +3,8 @@ from time import perf_counter
 from uuid import UUID
 
 from common.data import sanitize_for_json_storage
+from llm.clients.embeddings import embed_text
+from llm.repository.repo_factory import get_conversation_model_config_repo
 from personalization.profile.models import GeoMetadata
 from personalization.profile.service import build_user_profile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
@@ -12,8 +14,6 @@ from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.orchestrator import run_agent
 from request_orchestrator.shared.runtime_context import bind_runtime_context
-from llm.clients.embeddings import embed_text
-from llm.repository.repo_factory import get_conversation_model_config_repo
 from tool.summarize_tool_call import summarize_tool_calls
 from conversation.context_builder import build_roundtrip_context
 from conversation.models.conversation_models import ConversationRoundtrip

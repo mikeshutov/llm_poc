@@ -72,6 +72,10 @@ class AgentState:
     def max_turns(self) -> int:
         return self.agent_profile.max_turns
 
+    @property
+    def agent_name(self) -> str:
+        return self.agent_profile.name
+
     def resolve_agent_scope(self) -> str:
         return self.agent_profile.scope
 
