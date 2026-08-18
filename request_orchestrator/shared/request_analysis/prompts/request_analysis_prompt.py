@@ -7,8 +7,6 @@ from request_orchestrator.shared.request_analysis.prompts.request_analysis_schem
 def _build_available_agents_payload(main_state: MainState) -> list[dict[str, object]]:
     available_agents: list[dict[str, object]] = []
     for agent_state in main_state.agent_states.values():
-        if not agent_state.agent_profile.request_analysis_selectable:
-            continue
         agent_payload = {
             "agent": agent_state.agent_profile.name,
             "tool_categories": [
@@ -19,9 +17,8 @@ def _build_available_agents_payload(main_state: MainState) -> list[dict[str, obj
                 for name, category in sorted(agent_state.agent_profile.tool_categories.items())
             ],
         }
-        metadata = main_state.available_agent_metadata.get(agent_state.agent_profile.name, {})
-        if metadata.get("description", "").strip():
-            agent_payload["description"] = metadata["description"]
+        if agent_state.agent_profile.description.strip():
+            agent_payload["description"] = agent_state.agent_profile.description
         available_agents.append(agent_payload)
     return available_agents
 

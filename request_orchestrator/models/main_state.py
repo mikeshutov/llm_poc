@@ -16,7 +16,6 @@ class MainState:
     task: str
     execution_context: AgentExecutionContext = field(default_factory=AgentExecutionContext)
     agent_profiles: list[AgentProfile] = field(default_factory=list)
-    available_agent_metadata: dict[str, dict[str, str]] = field(default_factory=dict)
     request_analysis: RequestAnalysis = field(default_factory=RequestAnalysis)
     agent_states: dict[str, AgentState] = field(default_factory=dict)
     result: OrchestratorResult = field(default_factory=OrchestratorResult)

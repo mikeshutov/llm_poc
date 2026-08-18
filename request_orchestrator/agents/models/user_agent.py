@@ -27,6 +27,7 @@ class UserAgent(BaseModel):
         return AgentProfile(
             name=self.name,
             scope=MAIN_AGENT_MODEL_SCOPE,
+            description=self.description,
             kind=AgentKind.USER_AGENT,
             allowed_categories=set(self.allowed_categories),
             planner_instruction=self.planner_instruction,

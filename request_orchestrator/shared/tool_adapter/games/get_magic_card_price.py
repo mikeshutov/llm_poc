@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from integrations.scryfall import ScryfallCard, ScryfallClient
+from integrations.scryfall import MagicCardPriceEntry, MagicCardPriceResult, ScryfallClient
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_MAGIC_CARD_PRICE
 from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
@@ -20,39 +20,6 @@ class GetMagicCardPriceArgs(BaseModel):
         default=True,
         description="Whether to use Scryfall fuzzy name matching when resolving the card.",
     )
-
-
-class MagicCardPriceResult(BaseModel):
-    id: str
-    name: str
-    scryfall_uri: str | None = None
-    image_url: str | None = None
-    pricing: list["MagicCardPriceEntry"] = Field(default_factory=list)
-
-
-class MagicCardPriceEntry(BaseModel):
-    set_name: str | None = None
-    scryfall_uri: str | None = None
-    image_url: str | None = None
-    usd: str | None = None
-    usd_foil: str | None = None
-    usd_etched: str | None = None
-    eur: str | None = None
-    eur_foil: str | None = None
-    tix: str | None = None
-
-
-def _card_image_url(card: ScryfallCard) -> str:
-    if card.image_uris is not None:
-        return (card.image_uris.normal or card.image_uris.large or card.image_uris.small or "").strip()
-    if not card.card_faces:
-        return ""
-    first_face = card.card_faces[0]
-    if first_face.image_uris is None:
-        return ""
-    return (first_face.image_uris.normal or first_face.image_uris.large or first_face.image_uris.small or "").strip()
-
-
 @tool(
     TOOL_NAME_GET_MAGIC_CARD_PRICE,
     args_schema=GetMagicCardPriceArgs,
@@ -83,30 +50,8 @@ def get_magic_card_price(card_name: str, fuzzy: bool = True) -> ToolResult:
         order="released",
         dir="desc",
     )
-    pricing = []
-    for card in search_result.data:
-        prices = dict(card.prices or {})
-        pricing.append(
-            MagicCardPriceEntry(
-                set_name=card.set_name,
-                scryfall_uri=card.scryfall_uri or None,
-                image_url=_card_image_url(card) or None,
-                usd=prices.get("usd"),
-                usd_foil=prices.get("usd_foil"),
-                usd_etched=prices.get("usd_etched"),
-                eur=prices.get("eur"),
-                eur_foil=prices.get("eur_foil"),
-                tix=prices.get("tix"),
-            )
-        )
-
-    result = MagicCardPriceResult(
-        id=resolved_card.id,
-        name=resolved_card.name,
-        scryfall_uri=resolved_card.scryfall_uri or None,
-        image_url=_card_image_url(resolved_card) or None,
-        pricing=pricing,
-    )
+    pricing = [MagicCardPriceEntry.from_card(card) for card in search_result.data]
+    result = MagicCardPriceResult.from_card(resolved_card, pricing=pricing)
     priced_printings = sum(
         1
         for price in result.pricing

@@ -26,6 +26,7 @@ class AgentKind(StrEnum):
 class AgentProfile:
     name: str
     scope: str
+    description: str = ""
     kind: AgentKind = AgentKind.BUILTIN
     allowed_categories: set[str] = field(default_factory=set)
     extra_tools: list[Any] = field(default_factory=list)

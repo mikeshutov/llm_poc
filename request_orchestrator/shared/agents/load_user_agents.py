@@ -17,13 +17,6 @@ def load_user_agents(main_state: MainState) -> MainState:
         user_agent.to_agent_profile()
         for user_agent in user_agents
     ]
-    loaded_metadata = {
-        user_agent.name: {
-            "description": user_agent.description,
-        }
-        for user_agent in user_agents
-    }
-    main_state.available_agent_metadata.update(loaded_metadata)
     if not loaded_profiles:
         return main_state
 

@@ -3,6 +3,33 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 
+def _resolve_card_image_url(card: object) -> str | None:
+    image_uris = getattr(card, "image_uris", None)
+    if image_uris is not None:
+        image_url = (
+            getattr(image_uris, "normal", None)
+            or getattr(image_uris, "large", None)
+            or getattr(image_uris, "small", None)
+            or ""
+        )
+        return image_url.strip() or None
+
+    card_faces = getattr(card, "card_faces", None)
+    if not card_faces:
+        return None
+    first_face = card_faces[0]
+    first_face_image_uris = getattr(first_face, "image_uris", None)
+    if first_face_image_uris is None:
+        return None
+    image_url = (
+        getattr(first_face_image_uris, "normal", None)
+        or getattr(first_face_image_uris, "large", None)
+        or getattr(first_face_image_uris, "small", None)
+        or ""
+    )
+    return image_url.strip() or None
+
+
 class ScryfallImageUris(BaseModel):
     small: str | None = None
     normal: str | None = None
@@ -44,6 +71,9 @@ class ScryfallCard(BaseModel):
     legalities: dict[str, str] = {}
     games: list[str] = []
 
+    def image_url(self) -> str | None:
+        return _resolve_card_image_url(self)
+
 
 class ScryfallCardSearchResult(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -70,3 +100,53 @@ class ScryfallRulingList(BaseModel):
     object: str = "list"
     has_more: bool = Field(default=False, alias="has_more")
     data: list[ScryfallRuling] = []
+
+
+class MagicCardPriceEntry(BaseModel):
+    set_name: str | None = None
+    scryfall_uri: str | None = None
+    image_url: str | None = None
+    usd: str | None = None
+    usd_foil: str | None = None
+    usd_etched: str | None = None
+    eur: str | None = None
+    eur_foil: str | None = None
+    tix: str | None = None
+
+    @classmethod
+    def from_card(cls, card: ScryfallCard) -> "MagicCardPriceEntry":
+        prices = dict(card.prices or {})
+        return cls(
+            set_name=card.set_name,
+            scryfall_uri=card.scryfall_uri or None,
+            image_url=_resolve_card_image_url(card),
+            usd=prices.get("usd"),
+            usd_foil=prices.get("usd_foil"),
+            usd_etched=prices.get("usd_etched"),
+            eur=prices.get("eur"),
+            eur_foil=prices.get("eur_foil"),
+            tix=prices.get("tix"),
+        )
+
+
+class MagicCardPriceResult(BaseModel):
+    id: str
+    name: str
+    scryfall_uri: str | None = None
+    image_url: str | None = None
+    pricing: list[MagicCardPriceEntry] = Field(default_factory=list)
+
+    @classmethod
+    def from_card(
+        cls,
+        card: ScryfallCard,
+        *,
+        pricing: list[MagicCardPriceEntry] | None = None,
+    ) -> "MagicCardPriceResult":
+        return cls(
+            id=card.id,
+            name=card.name,
+            scryfall_uri=card.scryfall_uri or None,
+            image_url=_resolve_card_image_url(card),
+            pricing=[] if pricing is None else list(pricing),
+        )
