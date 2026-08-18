@@ -9,9 +9,11 @@ from llm.repository.repo_factory import get_conversation_model_config_repo
 from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
+from request_orchestrator.agents.repository.repo_factory import get_user_agent_repo
 from rendering.feedback import clear_feedback_state
 from rendering.replay import clear_replay_state
 from rendering.sources import clear_sources_panel
+from tool.tools import TOOL_CATEGORIES
 
 MODEL_CONFIG_DIALOG_KEY = "conversation_model_config_dialog"
 PENDING_REPLAY_PREPARE_KEY = "pending_replay_prepare"
@@ -23,6 +25,8 @@ MODEL_CONFIG_SECTION_TITLES = {
 USER_CREATE_FORM_KEY = "show_create_user_form"
 PROFILE_DETAILS_DIALOG_KEY = "profile_details_dialog"
 PROFILE_EDIT_MODE_KEY = "profile_details_edit_mode"
+USER_AGENTS_DIALOG_KEY = "user_agents_dialog"
+USER_AGENTS_CREATE_MODE_KEY = "user_agents_create_mode"
 
 
 def clear_conversation_model_config_dialog() -> None:
@@ -57,6 +61,20 @@ def request_profile_details_dialog(user_id: str) -> None:
 
 def get_profile_details_dialog_request() -> dict[str, str] | None:
     payload = st.session_state.get(PROFILE_DETAILS_DIALOG_KEY)
+    return payload if isinstance(payload, dict) else None
+
+
+def clear_user_agents_dialog() -> None:
+    st.session_state.pop(USER_AGENTS_DIALOG_KEY, None)
+    st.session_state.pop(USER_AGENTS_CREATE_MODE_KEY, None)
+
+
+def request_user_agents_dialog(user_id: str) -> None:
+    st.session_state[USER_AGENTS_DIALOG_KEY] = {"user_id": user_id}
+
+
+def get_user_agents_dialog_request() -> dict[str, str] | None:
+    payload = st.session_state.get(USER_AGENTS_DIALOG_KEY)
     return payload if isinstance(payload, dict) else None
 
 
@@ -485,6 +503,111 @@ def render_profile_details_dialog(conversation_repository, user_id: str) -> None
                 st.rerun()
 
 
+@st.dialog("User Agents", width="large")
+def render_user_agents_dialog(user_id: str) -> None:
+    user_agent_repository = get_user_agent_repo()
+    user_agents = user_agent_repository.list_for_user(user_id, is_active=None)
+    create_mode = bool(st.session_state.get(USER_AGENTS_CREATE_MODE_KEY, False))
+
+    header_col, action_col = st.columns([4.5, 1.5], vertical_alignment="center")
+    with header_col:
+        st.caption(f"Manage planner-only user agents for `{user_id}`.")
+    with action_col:
+        if st.button(
+            "Create agent" if not create_mode else "Hide form",
+            key=f"user_agents_toggle_create::{user_id}",
+            use_container_width=True,
+            type="primary" if not create_mode else "secondary",
+        ):
+            st.session_state[USER_AGENTS_CREATE_MODE_KEY] = not create_mode
+            st.rerun()
+
+    if create_mode:
+        with st.form(f"user_agent_create_form::{user_id}"):
+            agent_name = st.text_input("Agent name")
+            agent_description = st.text_area("Description", placeholder="What this agent is for.")
+            allowed_category_names = st.multiselect(
+                "Tool categories",
+                options=sorted(TOOL_CATEGORIES.keys()),
+                help="These categories determine which tools the agent can use.",
+            )
+            planner_instruction = st.text_area(
+                "Planner instruction",
+                placeholder="Core planner behavior for this user agent.",
+                height=140,
+            )
+            planner_rules = st.text_area(
+                "Planner rules",
+                placeholder="Optional extra rules or constraints.",
+                height=120,
+            )
+            max_turns = st.number_input("Max turns", min_value=1, max_value=20, value=10, step=1)
+            save_col, cancel_col = st.columns(2)
+            with save_col:
+                create_agent = st.form_submit_button("Create agent", type="primary", use_container_width=True)
+            with cancel_col:
+                cancel_create = st.form_submit_button("Cancel", use_container_width=True)
+
+        if create_agent:
+            user_agent_repository.upsert(
+                user_id=user_id,
+                name=agent_name,
+                description=agent_description.strip(),
+                allowed_categories=allowed_category_names,
+                planner_instruction=planner_instruction,
+                planner_rules=planner_rules.strip(),
+                max_turns=int(max_turns),
+                is_active=True,
+                metadata={"source": "streamlit"},
+            )
+            st.session_state[USER_AGENTS_CREATE_MODE_KEY] = False
+            st.rerun()
+        if cancel_create:
+            st.session_state[USER_AGENTS_CREATE_MODE_KEY] = False
+            st.rerun()
+
+    if not user_agents:
+        st.info("No user agents yet.")
+    else:
+        for user_agent in user_agents:
+            with st.container(border=True):
+                title_col, status_col, action_col = st.columns([4.5, 1.5, 1.5], vertical_alignment="center")
+                with title_col:
+                    st.markdown(f"**{user_agent.name}**")
+                with status_col:
+                    st.caption("Active" if user_agent.is_active else "Disabled")
+                with action_col:
+                    if user_agent.is_active:
+                        if st.button(
+                            "Disable",
+                            key=f"disable_user_agent::{user_id}::{user_agent.name}",
+                            use_container_width=True,
+                            type="secondary",
+                        ):
+                            user_agent_repository.disable(user_id, user_agent.name)
+                            st.rerun()
+                    else:
+                        if st.button(
+                            "Enable",
+                            key=f"enable_user_agent::{user_id}::{user_agent.name}",
+                            use_container_width=True,
+                            type="primary",
+                        ):
+                            user_agent_repository.enable(user_id, user_agent.name)
+                            st.rerun()
+
+                if user_agent.description.strip():
+                    st.write(user_agent.description)
+                st.caption(
+                    f"Categories: {', '.join(user_agent.allowed_categories) if user_agent.allowed_categories else '-'}"
+                )
+                st.caption(f"Max turns: {user_agent.max_turns}")
+
+    if st.button("Close", key=f"close_user_agents_dialog::{user_id}", use_container_width=True):
+        clear_user_agents_dialog()
+        st.rerun()
+
+
 def render_sidebar(conversation_repository) -> None:
     st.title("LLM Agentic Chat")
 
@@ -519,6 +642,10 @@ def render_sidebar(conversation_repository) -> None:
 
     if st.button("View profile details", use_container_width=True):
         request_profile_details_dialog(user_id=selected_user_id)
+        st.rerun()
+
+    if st.button("View User Agents", use_container_width=True):
+        request_user_agents_dialog(user_id=selected_user_id)
         st.rerun()
 
     if st.session_state.get(USER_CREATE_FORM_KEY, False):
@@ -639,3 +766,7 @@ def render_sidebar(conversation_repository) -> None:
             conversation_repository,
             profile_dialog_request["user_id"],
         )
+
+    user_agents_dialog_request = get_user_agents_dialog_request()
+    if user_agents_dialog_request:
+        render_user_agents_dialog(user_agents_dialog_request["user_id"])

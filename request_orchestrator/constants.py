@@ -7,6 +7,7 @@ SYNTHESIZE_KIND = "synthesize"
 EXECUTE_TOOLS_KIND = "execute_tools"
 
 # Graph edges
+LOAD_USER_AGENTS_EDGE = "load_user_agents"
 REQUEST_ANALYSIS_EDGE = REQUEST_ANALYSIS_KIND
 PROFILE_LOADING_EDGE = "load_user_profile"
 DISTRIBUTE_GOALS_EDGE = "distribute_goals"

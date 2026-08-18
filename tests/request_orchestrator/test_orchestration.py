@@ -27,6 +27,7 @@ if 'pycountry' not in sys.modules:
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
+from request_orchestrator.agents.models.user_agent import UserAgent
 from request_orchestrator.orchestrator import run_agent
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep, PromptSectionKeys
@@ -84,6 +85,16 @@ class InMemoryConversationEventRepo:
         return None
 
 
+class FakeUserAgentRepository:
+    def __init__(self, agents: list[UserAgent] | None = None) -> None:
+        self.agents = list(agents or [])
+
+    def list_for_user(self, user_id: str, *, is_active: bool | None = True) -> list[UserAgent]:
+        if is_active is None:
+            return list(self.agents)
+        return [agent for agent in self.agents if agent.is_active == is_active]
+
+
 def _agent_profiles_for(user_profile: UserProfile) -> list:
     return [
         build_profile_management_profile(user_profile),
@@ -111,6 +122,12 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(patch('common.logging.conversation_event_logger.get_conversation_repo', return_value=repo))
             stack.enter_context(patch('common.logging.conversation_event_view.get_conversation_repo', return_value=repo))
+            stack.enter_context(
+                patch(
+                    'request_orchestrator.shared.agents.load_user_agents.get_user_agent_repo',
+                    return_value=FakeUserAgentRepository(),
+                )
+            )
             for patcher in patchers:
                 stack.enter_context(patcher)
             main_state = MainState.new(
@@ -291,6 +308,45 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertIn('one of the provided available agent names', prompt_text)
         self.assertIn('"agent": "main_agent"', prompt_text)
         self.assertIn('"agent": "profile_management"', prompt_text)
+
+    def test_loaded_user_agent_is_exposed_to_request_analysis(self) -> None:
+        user_profile = UserProfile(user_id="test-user")
+        custom_agent = UserAgent.model_validate(
+            {
+                "id": str(uuid4()),
+                "user_id": "test-user",
+                "name": "trip_planner",
+                "description": "Specialized travel planning agent.",
+                "allowed_categories": ["web_search", "calendar"],
+                "planner_instruction": "You are a travel planner.",
+                "planner_rules": "",
+                "max_turns": 10,
+                "is_active": True,
+                "metadata": {},
+            }
+        )
+        state = MainState.new(
+            task="Plan me a trip to Tokyo.",
+            execution_context=AgentExecutionContext.new(
+                conversation_context=ConversationContext(),
+                user_profile=user_profile,
+            ),
+            llm=MockLLM([]),
+            agent_profiles=_agent_profiles_for(user_profile),
+        )
+
+        with patch(
+            "request_orchestrator.shared.agents.load_user_agents.get_user_agent_repo",
+            return_value=FakeUserAgentRepository([custom_agent]),
+        ):
+            from request_orchestrator.shared.agents import load_user_agents
+
+            load_user_agents(state)
+
+        prompt_text = build_request_analysis_prompt(state).build()
+
+        self.assertIn('"agent": "trip_planner"', prompt_text)
+        self.assertIn('"description": "Specialized travel planning agent."', prompt_text)
 
     def test_main_state_gathers_child_tool_results_for_synthesis_evidence(self) -> None:
         main_state = MainState.new(
