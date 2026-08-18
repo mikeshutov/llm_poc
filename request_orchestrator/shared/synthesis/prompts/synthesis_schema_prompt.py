@@ -1,5 +1,4 @@
 SYNTHESIS_SCHEMA = """
-
 Result must be self-contained and final.
 Ensure the `roundtrip_summary` field is a detailed plain-language diagnostic summary of the roundtrip outcome for history and retrieval.
 `tool_summary` records information produced and key entities.Set `next_question` to one non-empty question or follow up statement.

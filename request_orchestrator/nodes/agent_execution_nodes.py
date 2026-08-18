@@ -24,7 +24,7 @@ def fanout_agent_runs_node(state: OrchestratorGraphState) -> list[Send] | str:
 
 
 def run_single_agent_node(state: AgentState) -> dict[str, dict[str, AgentState]]:
-    runner = agent_registry.get(state.agent_name)
+    runner = agent_registry.get(state.agent_profile)
     updated_agent_state = runner(state)
     return {
         "completed_agents": {

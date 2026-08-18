@@ -18,7 +18,7 @@ from personalization.profile.models import UserProfile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
 from request_orchestrator.agents.registry import agent_registry
-from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
+from request_orchestrator.agent_runner.models.agent_profile import AgentKind, AgentProfile
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.orchestrator_graph_state import OrchestratorGraphState
 from request_orchestrator.models.agent_result import AgentResult
@@ -65,7 +65,7 @@ def test_run_single_agent_returns_agent_update() -> None:
         return updated_state
 
     previous_registry_get = agent_registry.get
-    agent_registry.get = lambda agent_name: fake_runner if agent_name == "main_agent" else previous_registry_get(agent_name)
+    agent_registry.get = lambda agent_profile: fake_runner if agent_profile.name == "main_agent" else previous_registry_get(agent_profile)
     try:
         update_payload = run_single_agent_node(main_state.agent_states["main_agent"])
     finally:
@@ -125,9 +125,13 @@ def test_orchestrator_graph_is_compiled() -> None:
     assert isinstance(_ORCHESTRATOR, OrchestratorGraph)
 
 
-def test_run_single_agent_rejects_missing_agent_modules() -> None:
+def test_run_single_agent_supports_dynamic_profiles_without_agent_modules() -> None:
     user_profile = UserProfile()
-    unknown_profile = AgentProfile(name="unknown_agent", scope="main_agent")
+    unknown_profile = AgentProfile(
+        name="unknown_agent",
+        scope="main_agent",
+        kind=AgentKind.USER_AGENT,
+    )
     main_state = MainState.new(
         task="Run child agent.",
         execution_context=AgentExecutionContext.new(
@@ -139,9 +143,5 @@ def test_run_single_agent_rejects_missing_agent_modules() -> None:
     )
     unknown_agent_state = main_state.agent_states["unknown_agent"]
 
-    try:
-        run_single_agent_node(unknown_agent_state)
-    except ModuleNotFoundError as exc:
-        assert "unknown_agent" in str(exc)
-    else:
-        raise AssertionError("Expected missing agent module lookup to fail")
+    update_payload = run_single_agent_node(unknown_agent_state)
+    assert list(update_payload["completed_agents"]) == ["unknown_agent"]

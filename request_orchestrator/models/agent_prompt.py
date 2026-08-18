@@ -24,6 +24,7 @@ class EvidenceStep(BaseModel):
 class PromptSectionKeys:
     USER_PROFILE = "user_profile"
     CONVERSATION_CONTEXT = "conversation_context"
+    AVAILABLE_AGENTS = "available_agents"
     AVAILABLE_TOOL_CATEGORIES = "available_tool_categories"
     AVAILABLE_TOOLS = "available_tools"
     RULES = "rules"
@@ -36,6 +37,7 @@ class PromptSectionKeys:
 BUILTIN_SECTION_KEYS = (
     PromptSectionKeys.USER_PROFILE,
     PromptSectionKeys.CONVERSATION_CONTEXT,
+    PromptSectionKeys.AVAILABLE_AGENTS,
     PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES,
     PromptSectionKeys.AVAILABLE_TOOLS,
     PromptSectionKeys.RULES,
@@ -49,6 +51,7 @@ ROLE_RULES_SECTION_KEYS = (PromptSectionKeys.RULES,)
 INPUT_SECTION_KEYS = (
     PromptSectionKeys.USER_PROFILE,
     PromptSectionKeys.CONVERSATION_CONTEXT,
+    PromptSectionKeys.AVAILABLE_AGENTS,
     PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES,
     PromptSectionKeys.AVAILABLE_TOOLS,
     PromptSectionKeys.EVIDENCE,
@@ -86,8 +89,9 @@ class AgentPrompt:
     latest_user_prompt: str = ""
     rules: str = ""
     schema: str = ""
-    available_tool_categories: str = ""
-    available_tools: str = ""
+    available_agents: Any = ""
+    available_tool_categories: Any = ""
+    available_tools: Any = ""
     evidence: list[EvidenceStep] | None = None
     _enabled_sections: dict[str, dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
 
@@ -116,10 +120,12 @@ class AgentPrompt:
                 from conversation.utils import build_conversation_context_json
 
                 value = json.loads(build_conversation_context_json(self.conversation_context))
+            elif key == PromptSectionKeys.AVAILABLE_AGENTS:
+                value = self._normalize_section_value(self.available_agents)
             elif key == PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES:
-                value = self._parse_json_text_if_possible(self.available_tool_categories)
+                value = self._normalize_section_value(self.available_tool_categories)
             elif key == PromptSectionKeys.AVAILABLE_TOOLS:
-                value = self._parse_json_text_if_possible(self.available_tools)
+                value = self._normalize_section_value(self.available_tools)
             elif key == PromptSectionKeys.RULES:
                 value = self.rules
             elif key == PromptSectionKeys.EVIDENCE:
@@ -167,14 +173,27 @@ class AgentPrompt:
         return "\n\n".join(part for part in parts if part)
 
     @staticmethod
-    def _parse_json_text_if_possible(text: str) -> Any:
-        normalized = text.strip()
-        if not normalized:
-            return ""
-        try:
-            return json.loads(normalized)
-        except Exception:
-            return text
+    def _normalize_section_value(value: Any) -> Any:
+        if isinstance(value, BaseModel):
+            return prune_empty_prompt_values(value.model_dump())
+        if isinstance(value, list):
+            return [AgentPrompt._normalize_section_value(item) for item in value]
+        if isinstance(value, tuple):
+            return [AgentPrompt._normalize_section_value(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                key: AgentPrompt._normalize_section_value(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, str):
+            normalized = value.strip()
+            if not normalized:
+                return ""
+            try:
+                return json.loads(normalized)
+            except Exception:
+                return value
+        return value
 
     def prompt_token_count(self) -> int:
         return _count_prompt_tokens(self.build())

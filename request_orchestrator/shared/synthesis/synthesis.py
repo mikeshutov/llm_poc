@@ -56,7 +56,6 @@ def run_synthesis(state: MainState) -> MainState:
 
     prompt = build_synthesis_prompt(evidence=evidence_steps, state=state)
     prompt_text = prompt.build()
-    prompt_input_object = prompt.to_log_input_object()
     llm = build_llm_for_stage(
         execution_context=execution_context,
         llm=state.llm,
@@ -77,7 +76,7 @@ def run_synthesis(state: MainState) -> MainState:
         callsite="shared_synthesis.run_synthesis",
         latency_ms=latency_ms,
         owner_agent_name=_resolve_agent_name(state),
-        input_object=prompt_input_object,
+        input_object=prompt.to_log_input_object(),
         output_object={
             "raw_content": response.content,
         },

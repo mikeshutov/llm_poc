@@ -6,6 +6,7 @@ from langsmith import traceable
 from request_orchestrator.constants import (
     APPLY_AGENT_UPDATES_EDGE,
     DISTRIBUTE_GOALS_EDGE,
+    LOAD_USER_AGENTS_EDGE,
     PROFILE_LOADING_EDGE,
     REQUEST_ANALYSIS_EDGE,
     RUN_SINGLE_AGENT_EDGE,
@@ -18,6 +19,7 @@ from request_orchestrator.nodes.agent_execution_nodes import fanout_agent_runs_n
 from request_orchestrator.nodes.main_state_nodes import (
     apply_agent_updates_node,
     distribute_goals_node,
+    load_user_agents_node,
     load_user_profile_node,
     run_request_analysis_node,
     run_synthesis_node,
@@ -30,14 +32,16 @@ class OrchestratorGraph:
 
     def _build_graph(self):
         builder = StateGraph(OrchestratorGraphState)
+        builder.add_node(LOAD_USER_AGENTS_EDGE, load_user_agents_node)
         builder.add_node(REQUEST_ANALYSIS_EDGE, run_request_analysis_node)
         builder.add_node(PROFILE_LOADING_EDGE, load_user_profile_node)
         builder.add_node(DISTRIBUTE_GOALS_EDGE, distribute_goals_node)
         builder.add_node(RUN_SINGLE_AGENT_EDGE, run_single_agent_node)
         builder.add_node(APPLY_AGENT_UPDATES_EDGE, apply_agent_updates_node)
         builder.add_node(SYNTHESIZE_EDGE, run_synthesis_node)
-        builder.set_entry_point(REQUEST_ANALYSIS_EDGE)
+        builder.set_entry_point(LOAD_USER_AGENTS_EDGE)
 
+        builder.add_edge(LOAD_USER_AGENTS_EDGE, REQUEST_ANALYSIS_EDGE)
         builder.add_edge(REQUEST_ANALYSIS_EDGE, PROFILE_LOADING_EDGE)
         builder.add_edge(PROFILE_LOADING_EDGE, DISTRIBUTE_GOALS_EDGE)
         builder.add_conditional_edges(DISTRIBUTE_GOALS_EDGE, fanout_agent_runs_node)
@@ -55,7 +59,7 @@ class OrchestratorGraph:
         if isinstance(final_state, OrchestratorGraphState):
             return final_state.main_state.result.copy()
         if isinstance(final_state, dict):
-            return final_state.main_state.result.copy()
+            return final_state["main_state"].result.copy()
         return final_state.main_state.result.copy()
 
 
