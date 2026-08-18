@@ -20,6 +20,7 @@ ORCHESTRATOR_AGENT_NAME = "request_orchestrator"
 @traceable(name="Request Analysis Node")
 def analyze_request(main_state: MainState) -> MainState:
     prompt = build_request_analysis_prompt(main_state)
+    prompt_text = prompt.build()
     execution_context = main_state.execution_context
     model_name = resolve_stage_model_name(
         execution_context=execution_context,
@@ -33,7 +34,7 @@ def analyze_request(main_state: MainState) -> MainState:
         stage=REQUEST_ANALYSIS_STAGE,
     )
     started_at = perf_counter()
-    response = llm.invoke(prompt.build())
+    response = llm.invoke(prompt_text)
     latency_ms = int((perf_counter() - started_at) * 1000)
     llm_call = record_llm_call(
         raw_response=response,
