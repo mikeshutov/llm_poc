@@ -1,7 +1,4 @@
 REQUEST_ANALYSIS_SCHEMA = """
-You are a request analyzer.
-Return JSON only.
-
 Set "goals" to an array of goal objects. Each goal object must contain:
 - "agent": one of the provided available agent names
 - "goal": a self-contained statement of what that agent is trying to accomplish

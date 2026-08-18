@@ -15,14 +15,14 @@ class AgentRegistry:
 
     def get(self, agent_profile: AgentProfile) -> Callable:
         if agent_profile.kind == AgentKind.USER_AGENT:
-            return self._build_dynamic_runner(agent_profile)
+            return self._build_runner(agent_profile)
         module = import_module(f"request_orchestrator.agents.{agent_profile.name}")
         runner = getattr(module, "run_agent", None)
         if not callable(runner):
             raise AttributeError(f"Agent module {module.__name__!r} does not expose a callable 'run_agent'")
         return runner
 
-    def _build_dynamic_runner(self, agent_profile: AgentProfile) -> Callable:
+    def _build_runner(self, agent_profile: AgentProfile) -> Callable:
         runner = AgentRunner(agent_profile, self._dynamic_strategy)
         return runner.run
 
