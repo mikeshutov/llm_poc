@@ -108,12 +108,9 @@ Important:
 - Remove generic quality words like 'good', 'best', 'top', 'nice'.
 - Keep explicit user constraints that change the product itself.
 - Do not expand query_text with guessed synonyms, categories, product variants, ingredients, or audiences.
-- Do not pass tuples/arrays like ("summer clothing", "Toronto").
-- If you need weather context, use the weather tools separately before calling this tool.
 
 Examples:
 - 'good dumbbells for sale online' -> 'dumbbells'
-- 'any good protein powder for sale online' -> 'protein powder'
 - 'vegan protein powder' -> 'vegan protein powder'
 
 Example valid call:

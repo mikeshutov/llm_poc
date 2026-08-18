@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
-from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
+from request_orchestrator.agent_runner.models.agent_profile import AgentKind, AgentProfile
 
 
 class UserAgent(BaseModel):
@@ -27,6 +27,7 @@ class UserAgent(BaseModel):
         return AgentProfile(
             name=self.name,
             scope=MAIN_AGENT_MODEL_SCOPE,
+            kind=AgentKind.USER_AGENT,
             allowed_categories=set(self.allowed_categories),
             planner_instruction=self.planner_instruction,
             planner_rules=self.planner_rules,

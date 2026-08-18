@@ -18,7 +18,7 @@ from personalization.profile.models import UserProfile
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
 from request_orchestrator.agents.registry import agent_registry
-from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
+from request_orchestrator.agent_runner.models.agent_profile import AgentKind, AgentProfile
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.orchestrator_graph_state import OrchestratorGraphState
 from request_orchestrator.models.agent_result import AgentResult
@@ -127,7 +127,11 @@ def test_orchestrator_graph_is_compiled() -> None:
 
 def test_run_single_agent_supports_dynamic_profiles_without_agent_modules() -> None:
     user_profile = UserProfile()
-    unknown_profile = AgentProfile(name="unknown_agent", scope="main_agent")
+    unknown_profile = AgentProfile(
+        name="unknown_agent",
+        scope="main_agent",
+        kind=AgentKind.USER_AGENT,
+    )
     main_state = MainState.new(
         task="Run child agent.",
         execution_context=AgentExecutionContext.new(

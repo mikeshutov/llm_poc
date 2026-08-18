@@ -58,6 +58,5 @@ def build_request_analysis_prompt(main_state: MainState) -> AgentPrompt:
     prompt.include_section(PromptSectionKeys.USER_PROFILE)
     prompt.include_section(PromptSectionKeys.CONVERSATION_CONTEXT)
     prompt.include_section(PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES)
-    prompt.include_section(PromptSectionKeys.LATEST_USER_PROMPT)
     prompt.include_section(PromptSectionKeys.SCHEMA)
     return prompt

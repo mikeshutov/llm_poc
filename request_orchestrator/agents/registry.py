@@ -4,7 +4,7 @@ from collections.abc import Callable
 from importlib import import_module
 
 from request_orchestrator.agent_runner import AgentRunner
-from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
+from request_orchestrator.agent_runner.models.agent_profile import AgentKind, AgentProfile
 from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.graph import PlannerExecutorEvaluatorStratagy
 from request_orchestrator.agents.main_agent.router.router import router
 
@@ -14,10 +14,9 @@ class AgentRegistry:
         self._dynamic_strategy = PlannerExecutorEvaluatorStratagy(router)
 
     def get(self, agent_profile: AgentProfile) -> Callable:
-        try:
-            module = import_module(f"request_orchestrator.agents.{agent_profile.name}")
-        except ModuleNotFoundError:
+        if agent_profile.kind == AgentKind.USER_AGENT:
             return self._build_dynamic_runner(agent_profile)
+        module = import_module(f"request_orchestrator.agents.{agent_profile.name}")
         runner = getattr(module, "run_agent", None)
         if not callable(runner):
             raise AttributeError(f"Agent module {module.__name__!r} does not expose a callable 'run_agent'")

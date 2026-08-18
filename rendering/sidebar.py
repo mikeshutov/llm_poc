@@ -584,7 +584,11 @@ def render_user_agents_dialog(user_id: str) -> None:
                             use_container_width=True,
                             type="secondary",
                         ):
-                            user_agent_repository.disable(user_id, user_agent.name)
+                            user_agent_repository.set_active(
+                                user_id,
+                                user_agent.name,
+                                is_active=False,
+                            )
                             st.rerun()
                     else:
                         if st.button(
@@ -593,7 +597,11 @@ def render_user_agents_dialog(user_id: str) -> None:
                             use_container_width=True,
                             type="primary",
                         ):
-                            user_agent_repository.enable(user_id, user_agent.name)
+                            user_agent_repository.set_active(
+                                user_id,
+                                user_agent.name,
+                                is_active=True,
+                            )
                             st.rerun()
 
                 if user_agent.description.strip():

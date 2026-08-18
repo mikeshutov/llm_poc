@@ -133,7 +133,7 @@ class UserAgentRepository:
             assert row is not None
             return UserAgent(**self._normalize_row(row))
 
-    def disable(self, user_id: str, name: str) -> UserAgent | None:
+    def set_active(self, user_id: str, name: str, *, is_active: bool) -> bool:
         resolved_user_id = user_id.strip()
         resolved_name = name.strip()
         if not resolved_user_id:
@@ -145,64 +145,11 @@ class UserAgentRepository:
             cur.execute(
                 """
                 UPDATE user_agent
-                SET is_active = FALSE,
+                SET is_active = %s,
                     updated_at = now()
                 WHERE user_id = %s
                   AND name = %s
-                RETURNING
-                    id,
-                    user_id,
-                    name,
-                    description,
-                    allowed_categories,
-                    planner_instruction,
-                    planner_rules,
-                    max_turns,
-                    is_active,
-                    metadata,
-                    created_at,
-                    updated_at
                 """,
-                (resolved_user_id, resolved_name),
+                (is_active, resolved_user_id, resolved_name),
             )
-            row = cur.fetchone()
-            if row is None:
-                return None
-            return UserAgent(**self._normalize_row(row))
-
-    def enable(self, user_id: str, name: str) -> UserAgent | None:
-        resolved_user_id = user_id.strip()
-        resolved_name = name.strip()
-        if not resolved_user_id:
-            raise ValueError("user_id is required")
-        if not resolved_name:
-            raise ValueError("name is required")
-
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                UPDATE user_agent
-                SET is_active = TRUE,
-                    updated_at = now()
-                WHERE user_id = %s
-                  AND name = %s
-                RETURNING
-                    id,
-                    user_id,
-                    name,
-                    description,
-                    allowed_categories,
-                    planner_instruction,
-                    planner_rules,
-                    max_turns,
-                    is_active,
-                    metadata,
-                    created_at,
-                    updated_at
-                """,
-                (resolved_user_id, resolved_name),
-            )
-            row = cur.fetchone()
-            if row is None:
-                return None
-            return UserAgent(**self._normalize_row(row))
+            return cur.rowcount > 0

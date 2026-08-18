@@ -19,8 +19,7 @@ class FindProductsWebArgs(BaseModel):
             "Use the user's wording as closely as possible, but strip generic shopping words and quality words. "
             "Do not expand with speculative synonyms, product subtypes, ingredients, brands, geographies, "
             "or extra buying-intent phrases unless the user explicitly asked for them. "
-            "Examples: 'good dumbbells for sale online' -> 'dumbbells'; "
-            "'any good protein powder for sale online' -> 'protein powder'."
+            "Example: 'good dumbbells for sale online' -> 'dumbbells'; "
         ),
     )
 
@@ -81,9 +80,6 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
     description="""
 Search the web for products when the internal catalog has no results, or when external product searches are requested.
 
-Required fields:
-- query_text (string)
-
 Important query rules:
 - query_text should usually just be the item name or core noun phrase.
 - Remove generic shopping words like 'buy', 'for sale', 'online'.
@@ -97,7 +93,6 @@ Important query rules:
 
 Examples:
 - 'good dumbbells for sale online' -> 'dumbbells'
-- 'any good protein powder for sale online' -> 'protein powder'
 - 'vegan protein powder' -> 'vegan protein powder'
 
 Example valid call:

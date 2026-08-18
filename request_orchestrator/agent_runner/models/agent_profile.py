@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any
 
 from tool.tools import TOOL_CATEGORIES
@@ -16,10 +17,16 @@ DEFAULT_REQUEST_ANALYSIS_GOAL = ""
 DEFAULT_MAX_TURNS = 10
 
 
+class AgentKind(StrEnum):
+    BUILTIN = "builtin"
+    USER_AGENT = "user_agent"
+
+
 @dataclass
 class AgentProfile:
     name: str
     scope: str
+    kind: AgentKind = AgentKind.BUILTIN
     allowed_categories: set[str] = field(default_factory=set)
     extra_tools: list[Any] = field(default_factory=list)
     tools_by_name: dict[str, Any] = field(init=False, default_factory=dict)
