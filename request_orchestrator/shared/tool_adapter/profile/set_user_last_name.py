@@ -26,12 +26,7 @@ def _tool_result(result: UserProfileUpdateResult) -> ToolResult:
         summary=f"Last name set to {(result.last_name or '').strip() or 'unknown'}.",
         source=TOOL_NAME_SET_USER_LAST_NAME,
         entity_type=TOOL_RESULT_TYPE_PROFILE,
-        metadata={
-            "user_id": result.user_id,
-            "first_name": result.first_name,
-            "last_name": result.last_name,
-            "display_name": result.display_name,
-        },
+        metadata={},
         raw_payload=result,
     )
     return ToolResult(

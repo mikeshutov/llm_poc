@@ -18,10 +18,17 @@ class SearchFileForDetailsArgs(BaseModel):
     query: str
 
 
+class SearchFileForDetailsMetadata(BaseModel):
+    file_name: str | None = None
+
+
 def _tool_result(result: list[dict]) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for file_result in result:
+        metadata = SearchFileForDetailsMetadata(
+            file_name=str(file_result.get("file_name", "")).strip() or None,
+        )
         hydrated = HydratedEvidence(
             item_id=str(file_result.get("file_id", "")),
             tool_name=TOOL_NAME_SEARCH_FILE_FOR_DETAILS,
@@ -29,10 +36,7 @@ def _tool_result(result: list[dict]) -> ToolResult:
             summary=str(file_result.get("content", "")).strip() or "Matched file content.",
             source=TOOL_NAME_SEARCH_FILE_FOR_DETAILS,
             entity_type=TOOL_RESULT_TYPE_FILE_DETAILS,
-            metadata={
-                "file_name": file_result.get("file_name", ""),
-                "file_path": file_result.get("file_path", ""),
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=file_result,
         )
         hydrated_evidence.append(hydrated)

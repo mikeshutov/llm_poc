@@ -24,6 +24,17 @@ class FindProductsWebArgs(BaseModel):
     )
 
 
+class ProductEvidenceMetadata(BaseModel):
+    category: str | None = None
+    color: str | None = None
+    style: str | None = None
+    gender: str | None = None
+    season: str | None = None
+    year: int | None = None
+    price: float | None = None
+    product_source: str
+
+
 def _product_summary(product: ProductResult) -> str:
     parts: list[str] = []
     if product.description:
@@ -38,6 +49,16 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
     evidence_views: list[EvidenceView] = []
     for product in [*result.internal_results, *result.external_results]:
         url = (product.url or "").strip()
+        metadata = ProductEvidenceMetadata(
+            category=product.category,
+            color=product.color,
+            style=product.style,
+            gender=product.gender,
+            season=product.season,
+            year=product.year,
+            price=product.price,
+            product_source=product.source.value,
+        )
         hydrated = HydratedEvidence(
             item_id=product.id,
             tool_name=TOOL_NAME_FIND_PRODUCTS_WEB,
@@ -47,19 +68,7 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
             image_url=(product.image_url or "").strip(),
             source=TOOL_NAME_FIND_PRODUCTS_WEB,
             entity_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS,
-            metadata={
-                "category": product.category,
-                "color": product.color,
-                "style": product.style,
-                "gender": product.gender,
-                "season": product.season,
-                "year": product.year,
-                "price": product.price,
-                "score": product.score,
-                "product_source": product.source.value,
-                "retrieved_count": result.retrieved_count,
-                "reranked": result.reranked,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=product,
         )
         hydrated_evidence.append(hydrated)

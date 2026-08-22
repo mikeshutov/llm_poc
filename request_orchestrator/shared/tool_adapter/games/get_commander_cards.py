@@ -44,6 +44,14 @@ class CommanderCardsResult(BaseModel):
     cards: list[CommanderCardResult] = []
 
 
+class CommanderCardMetadata(BaseModel):
+    section: str | None = None
+    synergy: float | None = None
+    num_decks: int | None = None
+    potential_decks: int | None = None
+    trend_zscore: float | None = None
+
+
 def _flatten_candidate_cards(page: EdhrecCommanderPage) -> list[tuple[str, EdhrecCardView]]:
     flattened: list[tuple[str, EdhrecCardView]] = []
     for cardlist in page.container.json_dict.cardlists:
@@ -83,16 +91,13 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for card in result.cards:
-        metadata = {
-            "query": result.query,
-            "commander_slug": result.commander_slug,
-            "section": card.section,
-            "synergy": card.synergy,
-            "num_decks": card.num_decks,
-            "potential_decks": card.potential_decks,
-            "trend_zscore": card.trend_zscore,
-            "returned_count": result.returned_count,
-        }
+        metadata = CommanderCardMetadata(
+            section=card.section or None,
+            synergy=card.synergy,
+            num_decks=card.num_decks or None,
+            potential_decks=card.potential_decks or None,
+            trend_zscore=card.trend_zscore,
+        )
         evidence_object = card.model_dump()
         hydrated = HydratedEvidence(
             item_id=card.slug or card.name,
@@ -102,7 +107,7 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
             urls=[EvidenceUrl(url=card.card_url, url_type="website")] if card.card_url else [],
             source=TOOL_NAME_GET_COMMANDER_CARDS,
             entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
-            metadata=metadata,
+            metadata=metadata.model_dump(exclude_none=True),
             evidence_object=evidence_object,
             raw_payload=card,
         )

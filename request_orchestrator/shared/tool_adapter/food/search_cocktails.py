@@ -22,6 +22,14 @@ class SearchCocktailsArgs(BaseModel):
     )
 
 
+class CocktailSearchMetadata(BaseModel):
+    category: str | None = None
+    alcoholic: str | None = None
+    glass: str | None = None
+    tags: list[str] = []
+    ingredients: list[dict[str, object]] = []
+
+
 def _tool_result(result: CocktailSearchResult) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
@@ -36,6 +44,13 @@ def _tool_result(result: CocktailSearchResult) -> ToolResult:
             if part
         ]
         summary = ". ".join(summary_parts) or (cocktail.instructions or "").strip() or f"Cocktail result for {cocktail.name}."
+        metadata = CocktailSearchMetadata(
+            category=cocktail.category,
+            alcoholic=cocktail.alcoholic,
+            glass=cocktail.glass,
+            tags=list(cocktail.tags or []),
+            ingredients=[ingredient.model_dump(exclude_none=True) for ingredient in cocktail.ingredients],
+        )
         hydrated = HydratedEvidence(
             item_id=cocktail.id,
             tool_name=TOOL_NAME_SEARCH_COCKTAILS,
@@ -44,15 +59,7 @@ def _tool_result(result: CocktailSearchResult) -> ToolResult:
             image_url=(cocktail.thumbnail or "").strip(),
             source=TOOL_NAME_SEARCH_COCKTAILS,
             entity_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS,
-            metadata={
-                "category": cocktail.category,
-                "alcoholic": cocktail.alcoholic,
-                "glass": cocktail.glass,
-                "tags": cocktail.tags,
-                "ingredients": [ingredient.model_dump(exclude_none=True) for ingredient in cocktail.ingredients],
-                "retrieved_count": result.retrieved_count,
-                "reranked": result.reranked,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=cocktail,
         )
         hydrated_evidence.append(hydrated)

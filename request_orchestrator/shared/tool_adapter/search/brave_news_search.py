@@ -20,12 +20,17 @@ class NewsSearchArgs(BaseModel):
     )
 
 
+class BraveNewsSearchMetadata(BaseModel):
+    age: str | None = None
+
+
 def _tool_result(result: NewsSearchResponse) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
 
     for news_item in result.results:
         url = (news_item.url or "").strip()
+        metadata = BraveNewsSearchMetadata(age=news_item.age)
         hydrated = HydratedEvidence(
             item_id=url or (news_item.title or "").strip(),
             tool_name=TOOL_NAME_NEWS_SEARCH,
@@ -35,9 +40,7 @@ def _tool_result(result: NewsSearchResponse) -> ToolResult:
             image_url=(news_item.thumbnail_url or "").strip(),
             source=TOOL_NAME_NEWS_SEARCH,
             entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
-            metadata={
-                "age": news_item.age,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=news_item,
         )
         hydrated_evidence.append(hydrated)

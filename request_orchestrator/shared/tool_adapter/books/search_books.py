@@ -26,6 +26,12 @@ class SearchBooksArgs(BaseModel):
     )
 
 
+class BookSearchMetadata(BaseModel):
+    authors: list[str] = []
+    subjects: list[str] = []
+    languages: list[str] = []
+
+
 def _book_summary(book: BookDoc) -> str:
     parts: list[str] = []
     if book.author_name:
@@ -43,6 +49,11 @@ def _tool_result(result: BookSearchResult) -> ToolResult:
     for book in result.docs:
         url = OPEN_LIBRARY_WORK_URL_TEMPLATE.format(work_key=book.key).strip() if book.key else ""
         image_url = OPEN_LIBRARY_COVER_IMAGE_URL_TEMPLATE.format(cover_id=book.cover_i).strip() if book.cover_i is not None else ""
+        metadata = BookSearchMetadata(
+            authors=list(book.author_name or []),
+            subjects=list(book.subject or []),
+            languages=list(book.language or []),
+        )
         hydrated = HydratedEvidence(
             item_id=book.key,
             tool_name=TOOL_NAME_SEARCH_BOOKS,
@@ -52,11 +63,7 @@ def _tool_result(result: BookSearchResult) -> ToolResult:
             image_url=image_url,
             source=TOOL_NAME_SEARCH_BOOKS,
             entity_type=TOOL_RESULT_TYPE_BOOK_RESULTS,
-            metadata={
-                "authors": list(book.author_name or []),
-                "subjects": list(book.subject or []),
-                "languages": list(book.language or []),
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=book,
         )
         hydrated_evidence.append(hydrated)

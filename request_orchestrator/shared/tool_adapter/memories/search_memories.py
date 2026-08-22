@@ -17,6 +17,11 @@ class SearchMemoriesArgs(BaseModel):
     query: str = Field(..., description="Natural-language query describing the memory to search for.")
 
 
+class MemorySearchMetadata(BaseModel):
+    conversation_id: str
+    relevance_score: float | None = None
+
+
 @tool(
     TOOL_NAME_SEARCH_MEMORIES,
     args_schema=SearchMemoriesArgs,
@@ -40,6 +45,10 @@ def search_memories(query: str) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for memory in memories:
+        metadata = MemorySearchMetadata(
+            conversation_id=str(memory.conversation_id),
+            relevance_score=memory.relevance_score,
+        )
         hydrated = HydratedEvidence(
             item_id=str(memory.conversation_id),
             tool_name=TOOL_NAME_SEARCH_MEMORIES,
@@ -48,11 +57,7 @@ def search_memories(query: str) -> ToolResult:
             published_at=memory.last_used_date,
             source=TOOL_NAME_SEARCH_MEMORIES,
             entity_type=TOOL_RESULT_TYPE_MEMORY_RESULTS,
-            metadata={
-                "conversation_id": str(memory.conversation_id),
-                "last_used_date": memory.last_used_date,
-                "relevance_score": memory.relevance_score,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=memory,
         )
         hydrated_evidence.append(hydrated)

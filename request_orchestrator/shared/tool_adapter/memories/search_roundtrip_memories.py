@@ -21,6 +21,14 @@ class SearchRoundtripMemoriesArgs(BaseModel):
     limit: int = Field(default=DEFAULT_MEMORY_RESULT_LIMIT, ge=1, le=10, description=f"Maximum number of matching roundtrips to return. Defaults to {DEFAULT_MEMORY_RESULT_LIMIT}.")
 
 
+class RoundtripMemoryMetadata(BaseModel):
+    conversation_id: str
+    roundtrip_id: str
+    message_index: int
+    user_prompt: str | None = None
+    relevance_score: float | None = None
+
+
 @tool(
     TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES,
     args_schema=SearchRoundtripMemoriesArgs,
@@ -56,6 +64,13 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for memory in memories:
+        metadata = RoundtripMemoryMetadata(
+            conversation_id=str(memory.conversation_id),
+            roundtrip_id=str(memory.roundtrip_id),
+            message_index=memory.message_index,
+            user_prompt=memory.user_prompt,
+            relevance_score=memory.relevance_score,
+        )
         hydrated = HydratedEvidence(
             item_id=str(memory.roundtrip_id),
             tool_name=TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES,
@@ -64,14 +79,7 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
             published_at=memory.created_at,
             source=TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES,
             entity_type=TOOL_RESULT_TYPE_MEMORY_RESULTS,
-            metadata={
-                "conversation_id": str(memory.conversation_id),
-                "roundtrip_id": str(memory.roundtrip_id),
-                "message_index": memory.message_index,
-                "user_prompt": memory.user_prompt,
-                "created_at": memory.created_at,
-                "relevance_score": memory.relevance_score,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=memory,
         )
         hydrated_evidence.append(hydrated)

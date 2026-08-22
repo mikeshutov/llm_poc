@@ -75,9 +75,26 @@ class UpdateUserToneResult(BaseModel):
     tone: TonePreferences | None = None
 
 
+class UpdateUserToneMetadata(BaseModel):
+    user_id: str | None = None
+    applied: bool
+    status: str
+    confidence: float
+    minimum_confidence: float
+    tone: dict[str, object] | None = None
+
+
 def _tool_result(result: UpdateUserToneResult) -> ToolResult:
     status_text = result.status.replace("_", " ").strip() or "updated"
-    tone_metadata = {} if result.tone is None else result.tone.model_dump(exclude_none=True)
+    tone_metadata = None if result.tone is None else result.tone.model_dump(exclude_none=True)
+    metadata = UpdateUserToneMetadata(
+        user_id=result.user_id,
+        applied=result.applied,
+        status=result.status,
+        confidence=result.confidence,
+        minimum_confidence=result.minimum_confidence,
+        tone=tone_metadata,
+    )
     summary = result.reason.strip() or f"Tone preferences {status_text}."
     hydrated = HydratedEvidence(
         item_id=(result.user_id or "").strip() or "current-user",
@@ -86,14 +103,7 @@ def _tool_result(result: UpdateUserToneResult) -> ToolResult:
         summary=summary,
         source=TOOL_NAME_UPDATE_USER_TONE,
         entity_type=TOOL_RESULT_TYPE_TONE,
-        metadata={
-            "user_id": result.user_id,
-            "applied": result.applied,
-            "status": result.status,
-            "confidence": result.confidence,
-            "minimum_confidence": result.minimum_confidence,
-            "tone": tone_metadata,
-        },
+        metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(

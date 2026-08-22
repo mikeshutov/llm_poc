@@ -91,6 +91,15 @@ class MagicCardSearchRecord(BaseModel):
     rarity: str | None = None
 
 
+class MagicCardSearchMetadata(BaseModel):
+    set_name: str | None = None
+    rarity: str | None = None
+    mana_cost: str | None = None
+    type_line: str | None = None
+    colors: list[str] = []
+    color_identity: list[str] = []
+
+
 def _first_face(card: ScryfallCard) -> ScryfallCardFace | None:
     if card.card_faces:
         return card.card_faces[0]
@@ -166,14 +175,14 @@ def _tool_result(result: SearchMagicCardsResult) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for card in result.cards:
-        metadata = {
-            "set_name": card.set_name,
-            "rarity": card.rarity,
-            "mana_cost": card.mana_cost or "",
-            "type_line": card.type_line or "",
-            "colors": list(card.colors or []),
-            "color_identity": list(card.color_identity or []),
-        }
+        metadata = MagicCardSearchMetadata(
+            set_name=card.set_name,
+            rarity=card.rarity,
+            mana_cost=card.mana_cost,
+            type_line=card.type_line,
+            colors=list(card.colors or []),
+            color_identity=list(card.color_identity or []),
+        )
         hydrated = HydratedEvidence(
             item_id=card.id,
             tool_name=TOOL_NAME_SEARCH_MAGIC_CARDS,
@@ -183,7 +192,7 @@ def _tool_result(result: SearchMagicCardsResult) -> ToolResult:
             image_url=(card.image_url or "").strip(),
             source=TOOL_NAME_SEARCH_MAGIC_CARDS,
             entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
-            metadata=metadata,
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=card,
         )
         hydrated_evidence.append(hydrated)
