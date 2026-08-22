@@ -129,6 +129,28 @@ class MagicCardPriceEntry(BaseModel):
         )
 
 
+class MagicCardPriceMetadataEntry(BaseModel):
+    set: str
+    usd: str | None = None
+    usd_foil: str | None = None
+    usd_etched: str | None = None
+    eur: str | None = None
+    eur_foil: str | None = None
+    magic_online: str | None = None
+
+    @classmethod
+    def from_price_entry(cls, entry: MagicCardPriceEntry) -> "MagicCardPriceMetadataEntry":
+        return cls(
+            set=entry.set_name or "",
+            usd=entry.usd,
+            usd_foil=entry.usd_foil,
+            usd_etched=entry.usd_etched,
+            eur=entry.eur,
+            eur_foil=entry.eur_foil,
+            magic_online=entry.tix,
+        )
+
+
 class MagicCardPriceResult(BaseModel):
     id: str
     name: str

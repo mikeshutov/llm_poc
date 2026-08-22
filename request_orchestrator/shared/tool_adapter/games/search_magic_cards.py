@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from integrations.scryfall import (
     MagicCardPriceEntry,
+    MagicCardPriceMetadataEntry,
     ScryfallCard,
     ScryfallCardFace,
     ScryfallCardSearchResult,
@@ -64,7 +65,7 @@ class MagicCardSearchMetadata(BaseModel):
     mana_cost: str | None = None
     type_line: str | None = None
     color_identity: list[str] = []
-    pricing: list[dict[str, str | None]] | None = None
+    pricing: list[MagicCardPriceMetadataEntry] | None = None
 
 
 def _first_face(card: ScryfallCard) -> ScryfallCardFace | None:
@@ -129,20 +130,8 @@ def _has_pricing(entry: MagicCardPriceEntry) -> bool:
     return any((entry.usd, entry.usd_foil, entry.usd_etched, entry.eur, entry.eur_foil, entry.tix))
 
 
-def _pricing_metadata(pricing: list[MagicCardPriceEntry]) -> list[dict[str, str | None]]:
-    return [
-        {
-            "set": entry.set_name or "",
-            "usd": entry.usd,
-            "usd_foil": entry.usd_foil,
-            "usd_etched": entry.usd_etched,
-            "eur": entry.eur,
-            "eur_foil": entry.eur_foil,
-            "magic_online": entry.tix,
-        }
-        for entry in pricing
-        if _has_pricing(entry)
-    ]
+def _pricing_metadata(pricing: list[MagicCardPriceEntry]) -> list[MagicCardPriceMetadataEntry]:
+    return [MagicCardPriceMetadataEntry.from_price_entry(entry) for entry in pricing if _has_pricing(entry)]
 
 
 def _load_card_pricing(card_name: str) -> list[MagicCardPriceEntry]:

@@ -254,19 +254,12 @@ def test_search_magic_cards_can_include_pricing() -> None:
             "set": "Vintage Masters",
             "usd": "12345.67",
             "usd_foil": "23456.78",
-            "usd_etched": None,
             "eur": "11111.11",
-            "eur_foil": None,
             "magic_online": "999.99",
         },
         {
             "set": "Collectors' Edition",
             "usd": "10000.00",
-            "usd_foil": None,
-            "usd_etched": None,
-            "eur": None,
-            "eur_foil": None,
-            "magic_online": None,
         },
     ]
 
