@@ -4,7 +4,11 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
-from integrations.open_library import OpenLibraryClient
+from integrations.open_library import (
+    OPEN_LIBRARY_COVER_IMAGE_URL_TEMPLATE,
+    OPEN_LIBRARY_WORK_URL_TEMPLATE,
+    OpenLibraryClient,
+)
 from integrations.open_library.models import BookDoc, BookSearchResult
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.books.candidate_mapper import rerank_book_search_result
@@ -37,8 +41,8 @@ def _tool_result(result: BookSearchResult) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for book in result.docs:
-        url = f"https://openlibrary.org{book.key}" if book.key else ""
-        image_url = f"https://covers.openlibrary.org/b/id/{book.cover_i}-L.jpg" if book.cover_i is not None else ""
+        url = OPEN_LIBRARY_WORK_URL_TEMPLATE.format(work_key=book.key).strip() if book.key else ""
+        image_url = OPEN_LIBRARY_COVER_IMAGE_URL_TEMPLATE.format(cover_id=book.cover_i).strip() if book.cover_i is not None else ""
         hydrated = HydratedEvidence(
             item_id=book.key,
             tool_name=TOOL_NAME_SEARCH_BOOKS,

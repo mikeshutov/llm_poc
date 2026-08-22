@@ -6,6 +6,9 @@ from typing import Any
 from common.http import HttpClient, HttpClientError, DEFAULT_TTL
 from integrations.coingecko.models import CoinMarket
 
+COINGECKO_API_BASE_URL = "https://api.coingecko.com/api/v3"
+COINGECKO_WEBSITE_COIN_URL_TEMPLATE = "https://www.coingecko.com/en/coins/{coin_id}"
+
 
 class CoinGeckoClientError(RuntimeError):
     pass
@@ -14,7 +17,7 @@ class CoinGeckoClientError(RuntimeError):
 class CoinGeckoClient:
     def __init__(
         self,
-        base_url: str = "https://api.coingecko.com/api/v3",
+        base_url: str = COINGECKO_API_BASE_URL,
         timeout_s: float = 15.0,
         ttl: timedelta = timedelta(minutes=5),
     ):

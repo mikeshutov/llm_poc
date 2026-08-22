@@ -18,13 +18,20 @@ class SetUserFirstNameArgs(BaseModel):
     )
 
 
+class UserProfileMetadata(BaseModel):
+    user_id: str
+    first_name: str | None = None
+    last_name: str | None = None
+    display_name: str | None = None
+
+
 def _tool_result(result: UserProfileUpdateResult) -> ToolResult:
-    metadata = {
-        "user_id": result.user_id,
-        "first_name": result.first_name,
-        "last_name": result.last_name,
-        "display_name": result.display_name,
-    }
+    metadata = UserProfileMetadata(
+        user_id=result.user_id,
+        first_name=result.first_name,
+        last_name=result.last_name,
+        display_name=result.display_name,
+    )
     hydrated = HydratedEvidence(
         item_id=str(result.user_id or ""),
         tool_name=TOOL_NAME_SET_USER_FIRST_NAME,
@@ -32,7 +39,7 @@ def _tool_result(result: UserProfileUpdateResult) -> ToolResult:
         summary=f"First name set to {(result.first_name or '').strip() or 'unknown'}.",
         source=TOOL_NAME_SET_USER_FIRST_NAME,
         entity_type=TOOL_RESULT_TYPE_PROFILE,
-        metadata=metadata,
+        metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(

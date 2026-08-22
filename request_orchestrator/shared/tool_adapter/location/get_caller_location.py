@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from langchain_core.tools import tool
+from pydantic import BaseModel
 from requests.exceptions import RequestException
 
 from integrations.ip_api import IpApiClient
@@ -12,8 +13,25 @@ from tool.constants import TOOL_RESULT_TYPE_LOCATION
 _ip_api_client = IpApiClient()
 
 
+class CallerLocationMetadata(BaseModel):
+    country: str | None = None
+    country_code: str | None = None
+    region_name: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    timezone: str | None = None
+
+
 def _tool_result(result: IpLocation) -> ToolResult:
     location_name = ", ".join(part for part in [result.city, result.region_name, result.country] if part)
+    metadata = CallerLocationMetadata(
+        country=result.country,
+        country_code=result.country_code,
+        region_name=result.region_name,
+        lat=result.lat,
+        lon=result.lon,
+        timezone=result.timezone,
+    )
     hydrated = HydratedEvidence(
         item_id=(result.query or result.city or result.country or "").strip(),
         tool_name=TOOL_NAME_GET_CALLER_LOCATION,
@@ -22,19 +40,7 @@ def _tool_result(result: IpLocation) -> ToolResult:
         location_name=(result.city or "").strip(),
         source=TOOL_NAME_GET_CALLER_LOCATION,
         entity_type=TOOL_RESULT_TYPE_LOCATION,
-        metadata={
-            "country": result.country,
-            "country_code": result.country_code,
-            "region": result.region,
-            "region_name": result.region_name,
-            "zip": result.zip,
-            "lat": result.lat,
-            "lon": result.lon,
-            "timezone": result.timezone,
-            "isp": result.isp,
-            "org": result.org,
-            "query": result.query,
-        },
+        metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(

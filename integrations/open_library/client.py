@@ -7,6 +7,10 @@ from common.http import HttpClient, HttpClientError, DEFAULT_TTL
 from integrations.open_library.models import BookSearchResult
 from request_orchestrator.shared.tool_adapter.books.constants import DEFAULT_BOOK_SEARCH_LIMIT
 
+OPEN_LIBRARY_BASE_URL = "https://openlibrary.org"
+OPEN_LIBRARY_WORK_URL_TEMPLATE = "https://openlibrary.org{work_key}"
+OPEN_LIBRARY_COVER_IMAGE_URL_TEMPLATE = "https://covers.openlibrary.org/b/id/{cover_id}-L.jpg"
+
 
 class OpenLibraryClientError(RuntimeError):
     pass
@@ -15,7 +19,7 @@ class OpenLibraryClientError(RuntimeError):
 class OpenLibraryClient:
     def __init__(
         self,
-        base_url: str = "https://openlibrary.org",
+        base_url: str = OPEN_LIBRARY_BASE_URL,
         timeout_s: float = 20.0,
         ttl: timedelta = DEFAULT_TTL,
     ):

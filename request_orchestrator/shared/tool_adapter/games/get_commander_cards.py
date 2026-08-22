@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from integrations.edhrec import EdhrecCardView, EdhrecClient, EdhrecCommanderPage
+from integrations.edhrec import EDHREC_CARD_URL_TEMPLATE, EdhrecCardView, EdhrecClient, EdhrecCommanderPage
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.games.candidate_mapper import rerank_edhrec_cards
 from tool.constants import TOOL_NAME_GET_COMMANDER_CARDS
@@ -59,7 +59,7 @@ def _card_result(section: str, card: EdhrecCardView) -> CommanderCardResult:
     return CommanderCardResult(
         name=card.name.strip(),
         slug=(card.slug or "").strip(),
-        card_url=f"https://edhrec.com{card.url}" if card.url else "",
+        card_url=EDHREC_CARD_URL_TEMPLATE.format(path=card.url).strip() if card.url else "",
         section=section,
         synergy=card.synergy,
         num_decks=card.num_decks,

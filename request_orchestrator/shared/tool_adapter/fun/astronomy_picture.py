@@ -21,8 +21,13 @@ class GetAstronomyPictureArgs(BaseModel):
     )
 
 
+class AstronomyPictureMetadata(BaseModel):
+    media_type: str
+
+
 def _tool_result(result: AstronomyPicture) -> ToolResult:
     url = result.url.strip()
+    metadata = AstronomyPictureMetadata(media_type=result.media_type)
     hydrated = HydratedEvidence(
         item_id=f"{result.date}:{result.title}",
         tool_name=TOOL_NAME_GET_ASTRONOMY_PICTURE,
@@ -33,7 +38,7 @@ def _tool_result(result: AstronomyPicture) -> ToolResult:
         published_at=result.date,
         source=TOOL_NAME_GET_ASTRONOMY_PICTURE,
         entity_type=TOOL_RESULT_TYPE_ASTRONOMY_PICTURE,
-        metadata={"media_type": result.media_type},
+        metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(

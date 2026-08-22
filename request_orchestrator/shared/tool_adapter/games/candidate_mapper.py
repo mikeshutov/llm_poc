@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from integrations.edhrec import EDHREC_CARD_URL_TEMPLATE
 from integrations.edhrec.models import EdhrecCardView
 from reranker import Candidate, rerank_candidates
 
@@ -22,7 +23,7 @@ def edhrec_card_to_candidate(card: EdhrecCardView, *, section: str) -> Candidate
             "name": card.name,
             "summary": " | ".join(summary_parts) if summary_parts else None,
             "description": section,
-            "url": f"https://edhrec.com{card.url}" if card.url else None,
+            "url": EDHREC_CARD_URL_TEMPLATE.format(path=card.url) if card.url else None,
         },
         attributes={
             "section": section,

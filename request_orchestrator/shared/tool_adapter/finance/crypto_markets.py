@@ -6,7 +6,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
-from integrations.coingecko import CoinGeckoClient, CoinMarket
+from integrations.coingecko import COINGECKO_WEBSITE_COIN_URL_TEMPLATE, CoinGeckoClient, CoinMarket
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_CRYPTO_MARKETS
 from tool.constants import TOOL_RESULT_TYPE_CRYPTO_MARKET
@@ -25,11 +25,19 @@ class CryptoMarketsArgs(BaseModel):
     )
 
 
+class CryptoMarketMetadata(BaseModel):
+    symbol: str
+    current_price: float | None = None
+    market_cap: float | None = None
+    market_cap_rank: int | None = None
+    price_change_percentage_24h: float | None = None
+
+
 def _tool_result(result: list[CoinMarket]) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for market in result:
-        url = f"https://www.coingecko.com/en/coins/{market.id}".strip()
+        url = COINGECKO_WEBSITE_COIN_URL_TEMPLATE.format(coin_id=market.id).strip()
         price_text = f"{market.current_price} {market.symbol.upper()}".strip() if market.current_price is not None else ""
         change_text = (
             f"24h change {market.price_change_percentage_24h:.2f}%"
@@ -37,6 +45,13 @@ def _tool_result(result: list[CoinMarket]) -> ToolResult:
             else ""
         )
         summary = ". ".join(part for part in (price_text, change_text) if part) or f"Crypto market data for {market.name}."
+        metadata = CryptoMarketMetadata(
+            symbol=market.symbol,
+            current_price=market.current_price,
+            market_cap=market.market_cap,
+            market_cap_rank=market.market_cap_rank,
+            price_change_percentage_24h=market.price_change_percentage_24h,
+        )
         hydrated = HydratedEvidence(
             item_id=market.id,
             tool_name=TOOL_NAME_GET_CRYPTO_MARKETS,
@@ -46,17 +61,7 @@ def _tool_result(result: list[CoinMarket]) -> ToolResult:
             image_url=(market.image or "").strip(),
             source=TOOL_NAME_GET_CRYPTO_MARKETS,
             entity_type=TOOL_RESULT_TYPE_CRYPTO_MARKET,
-            metadata={
-                "symbol": market.symbol,
-                "current_price": market.current_price,
-                "market_cap": market.market_cap,
-                "market_cap_rank": market.market_cap_rank,
-                "total_volume": market.total_volume,
-                "high_24h": market.high_24h,
-                "low_24h": market.low_24h,
-                "price_change_24h": market.price_change_24h,
-                "price_change_percentage_24h": market.price_change_percentage_24h,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=market,
         )
         hydrated_evidence.append(hydrated)

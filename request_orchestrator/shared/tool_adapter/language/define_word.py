@@ -20,6 +20,11 @@ class DefineWordArgs(BaseModel):
     )
 
 
+class DictionaryEntryMetadata(BaseModel):
+    phonetic: str | None = None
+    meaning_count: int
+
+
 def _entry_summary(entry: DictionaryEntry) -> str:
     if entry.meanings and entry.meanings[0].definitions:
         return entry.meanings[0].definitions[0].definition
@@ -31,6 +36,10 @@ def _tool_result(result: list[DictionaryEntry]) -> ToolResult:
     evidence_views: list[EvidenceView] = []
     for entry in result:
         source_url = entry.source_urls[0].strip() if entry.source_urls else ""
+        metadata = DictionaryEntryMetadata(
+            phonetic=entry.phonetic,
+            meaning_count=len(entry.meanings),
+        )
         hydrated = HydratedEvidence(
             item_id=entry.word.strip(),
             tool_name=TOOL_NAME_DEFINE_WORD,
@@ -39,10 +48,7 @@ def _tool_result(result: list[DictionaryEntry]) -> ToolResult:
             urls=[EvidenceUrl(url=source_url, url_type="website")] if source_url else [],
             source=TOOL_NAME_DEFINE_WORD,
             entity_type=TOOL_RESULT_TYPE_DEFINITION,
-            metadata={
-                "phonetic": entry.phonetic,
-                "meaning_count": len(entry.meanings),
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=entry,
         )
         hydrated_evidence.append(hydrated)

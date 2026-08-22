@@ -21,6 +21,10 @@ class GetQuoteArgs(BaseModel):
     )
 
 
+class QuoteMetadata(BaseModel):
+    tags: list[str] = Field(default_factory=list)
+
+
 def _normalize_quotes(result: Quote | list[Quote]) -> list[Quote]:
     return result if isinstance(result, list) else [result]
 
@@ -31,6 +35,7 @@ def _tool_result(result: Quote | list[Quote]) -> ToolResult:
     evidence_views: list[EvidenceView] = []
     for quote in quotes:
         summary = f"\"{quote.content}\""
+        metadata = QuoteMetadata(tags=list(quote.tags))
         hydrated = HydratedEvidence(
             item_id=f"{quote.author}:{quote.content[:40]}",
             tool_name=TOOL_NAME_GET_QUOTE,
@@ -38,7 +43,7 @@ def _tool_result(result: Quote | list[Quote]) -> ToolResult:
             summary=summary,
             source=TOOL_NAME_GET_QUOTE,
             entity_type=TOOL_RESULT_TYPE_QUOTE,
-            metadata={"tags": list(quote.tags)},
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=quote,
         )
         hydrated_evidence.append(hydrated)

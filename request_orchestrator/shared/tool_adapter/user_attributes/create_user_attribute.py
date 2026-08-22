@@ -26,12 +26,27 @@ class CreateUserAttributeArgs(BaseModel):
 CREATE_USER_ATTRIBUTE_DESCRIPTION = "Create a persistent user attribute."
 
 
+class UserAttributeMetadata(BaseModel):
+    group_key: str | None = None
+    source: str | None = None
+    is_active: bool
+    confidence: float | None = None
+    importance: float | None = None
+
+
 def _value_text(value: list[str]) -> str:
     return "; ".join(normalize_string_list(value))
 
 
 def _tool_result(result: UserAttribute) -> ToolResult:
     summary = _value_text(result.value).strip() or "Stored user attribute."
+    metadata = UserAttributeMetadata(
+        group_key=result.group_key,
+        source=result.source,
+        is_active=result.is_active,
+        confidence=result.confidence,
+        importance=result.importance,
+    )
     hydrated = HydratedEvidence(
         item_id=str(result.id),
         tool_name=TOOL_NAME_CREATE_USER_ATTRIBUTE,
@@ -40,15 +55,7 @@ def _tool_result(result: UserAttribute) -> ToolResult:
         published_at=result.updated_at,
         source=TOOL_NAME_CREATE_USER_ATTRIBUTE,
         entity_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE,
-        metadata={
-            "group_key": result.group_key,
-            "source": result.source,
-            "is_active": result.is_active,
-            "confidence": result.confidence,
-            "importance": result.importance,
-            "created_at": result.created_at,
-            "updated_at": result.updated_at,
-        },
+        metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(

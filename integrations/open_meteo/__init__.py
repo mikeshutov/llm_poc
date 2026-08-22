@@ -1,4 +1,4 @@
-from integrations.open_meteo.client import OpenMeteoClient
+from integrations.open_meteo.client import OPEN_METEO_WEBSITE_URL, OpenMeteoClient
 from integrations.open_meteo.errors import (
     WeatherArchiveError,
     WeatherGeocodingError,
@@ -12,6 +12,7 @@ __all__ = [
     "GeocodedLocation",
     "MonthlyWeatherSummary",
     "OpenMeteoClient",
+    "OPEN_METEO_WEBSITE_URL",
     "WeatherArchiveError",
     "WeatherGeocodingError",
     "WeatherNotFoundError",

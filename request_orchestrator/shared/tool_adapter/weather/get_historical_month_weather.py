@@ -1,7 +1,7 @@
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from integrations.open_meteo import OpenMeteoClient
+from integrations.open_meteo import OPEN_METEO_WEBSITE_URL, OpenMeteoClient
 from integrations.open_meteo.models import MonthlyWeatherSummary
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER
@@ -10,30 +10,39 @@ from tool.constants import TOOL_RESULT_TYPE_WEATHER
 _weather_client = OpenMeteoClient()
 
 
+class HistoricalMonthWeatherMetadata(BaseModel):
+    year: int
+    month: int
+    temperature_mean: float | None = None
+    temperature_max: float | None = None
+    temperature_min: float | None = None
+    precipitation_sum: float | None = None
+
+
 def _tool_result(result: MonthlyWeatherSummary | None) -> ToolResult:
     if result is None:
         return ToolResult(result=None, evidence_views=[], hydrated_evidence=[])
 
     location_name = (result.location_name or "").strip()
     summary = f"{location_name} historical weather for {result.year}-{result.month:02d}."
-    metadata = {
-        "year": result.year,
-        "month": result.month,
-        "temperature_mean": result.temperature_mean,
-        "temperature_max": result.temperature_max,
-        "temperature_min": result.temperature_min,
-        "precipitation_sum": result.precipitation_sum,
-    }
+    metadata = HistoricalMonthWeatherMetadata(
+        year=result.year,
+        month=result.month,
+        temperature_mean=result.temperature_mean,
+        temperature_max=result.temperature_max,
+        temperature_min=result.temperature_min,
+        precipitation_sum=result.precipitation_sum,
+    )
     hydrated = HydratedEvidence(
         item_id=location_name or f"{result.year}-{result.month:02d}",
         tool_name=TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER,
         title="Historical Monthly Weather",
         summary=summary,
-        urls=[EvidenceUrl(url="https://open-meteo.com/", url_type="website")],
+        urls=[EvidenceUrl(url=OPEN_METEO_WEBSITE_URL, url_type="website")],
         location_name=location_name,
         source=TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER,
         entity_type=TOOL_RESULT_TYPE_WEATHER,
-        metadata=metadata,
+        metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(

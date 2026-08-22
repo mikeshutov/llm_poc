@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from integrations.edhrec import EdhrecClient, EdhrecCommanderPage, EdhrecComboLink
+from integrations.edhrec import EDHREC_COMMANDER_URL_TEMPLATE, EdhrecClient, EdhrecCommanderPage, EdhrecComboLink
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_COMMANDER_DETAILS
 from tool.constants import TOOL_RESULT_TYPE_DECKS
@@ -43,7 +43,7 @@ class CommanderDetailsResult(BaseModel):
 
 
 def _page_url(slug: str) -> str:
-    return f"https://edhrec.com/commanders/{slug}"
+    return EDHREC_COMMANDER_URL_TEMPLATE.format(slug=slug)
 
 
 def _combo_text(combo: EdhrecComboLink) -> str:
