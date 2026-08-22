@@ -60,7 +60,6 @@ class MagicCardSearchRecord(BaseModel):
 
 
 class MagicCardSearchMetadata(BaseModel):
-    set_name: str | None = None
     rarity: str | None = None
     mana_cost: str | None = None
     type_line: str | None = None
@@ -160,7 +159,6 @@ def _build_card_record(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -
 def _build_hydrated_evidence(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -> HydratedEvidence:
     pricing_metadata = [MagicCardPriceMetadataEntry.from_price_entry(entry) for entry in pricing if _has_pricing(entry)]
     metadata = MagicCardSearchMetadata(
-        set_name=card.set_name,
         rarity=card.rarity,
         mana_cost=_card_mana_cost(card) or None,
         type_line=_card_type_line(card) or None,
