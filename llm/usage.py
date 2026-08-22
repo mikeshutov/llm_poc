@@ -293,7 +293,17 @@ def record_llm_call(
         pricing = ConversationModelConfig.resolve_model_pricing(resolved_model_name)
     else:
         pricing = ConversationModelConfig.resolve_model_pricing(provider, resolved_model_name)
-    input_cost = (Decimal(usage.input_tokens) * pricing.input_price_per_million_tokens) / ONE_MILLION
+    cached_input_tokens = min(max(usage.cached_input_tokens, 0), usage.input_tokens)
+    uncached_input_tokens = usage.input_tokens - cached_input_tokens
+    cached_input_price = (
+        pricing.cached_input_price_per_million_tokens
+        if pricing.cached_input_price_per_million_tokens is not None
+        else pricing.input_price_per_million_tokens
+    )
+    input_cost = (
+        (Decimal(uncached_input_tokens) * pricing.input_price_per_million_tokens)
+        + (Decimal(cached_input_tokens) * cached_input_price)
+    ) / ONE_MILLION
     output_cost = (Decimal(usage.output_tokens) * pricing.output_price_per_million_tokens) / ONE_MILLION
     total_cost = input_cost + output_cost
 

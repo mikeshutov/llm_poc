@@ -31,7 +31,7 @@ def test_search_magic_cards_returns_typed_result() -> None:
                             "rarity": "bonus",
                             "games": ["paper"],
                             "prices": {"usd": None, "usd_foil": None},
-                            "legalities": {"commander": "not_legal"},
+                            "legalities": {"commander": "legal", "legacy": "legal", "modern": "not_legal"},
                             "image_uris": {
                                 "small": "https://cards.scryfall.io/small/front/b/l/black-lotus.jpg",
                                 "normal": "https://cards.scryfall.io/normal/front/b/l/black-lotus.jpg",
@@ -84,8 +84,9 @@ def test_search_magic_cards_returns_typed_result() -> None:
     }
     assert result.evidence_views[0].item_id == "card-1"
     assert result.evidence_views[0].title == "Black Lotus"
-    assert "Artifact" in result.evidence_views[0].summary
+    assert result.evidence_views[0].summary == "{T}, Sacrifice Black Lotus: Add three mana of any one color."
     assert "prices" not in result.evidence_views[0].metadata
+    assert result.evidence_views[0].metadata["legal_formats"] == ["commander", "legacy"]
     assert "legalities" not in result.evidence_views[0].metadata
     assert "games" not in result.evidence_views[0].metadata
     assert "query" not in result.evidence_views[0].metadata

@@ -156,68 +156,74 @@ def test_conversation_model_config_resolves_partial_overrides_with_defaults() ->
                 agent=MAIN_AGENT_MODEL_SCOPE,
                 stage=REQUEST_ANALYSIS_STAGE,
                 provider=OPENAI_PROVIDER,
-                model='gpt-5.4',
+                model='gpt-5.6-terra',
             ),
             ConversationModelConfigEntry(
                 conversation_id=conversation_id,
                 agent=SHARED_MODEL_SCOPE,
                 stage=EVALUATOR_STAGE,
                 provider=OPENAI_PROVIDER,
-                model='gpt-4o-mini',
+                model='gpt-5.6-luna',
             ),
             ConversationModelConfigEntry(
                 conversation_id=conversation_id,
                 agent=SHARED_MODEL_SCOPE,
                 stage=RERANKER_STAGE,
                 provider=OPENAI_PROVIDER,
-                model='gpt-5.4',
+                model='gpt-5.6-terra',
             ),
         ]
     )
 
     assert config.main_agent.request_analysis.provider == OPENAI_PROVIDER
-    assert config.main_agent.request_analysis.model == 'gpt-5.4'
-    assert config.main_agent.planner.model == 'gpt-5.4'
-    assert config.main_agent.synthesis.model == 'gpt-5.4'
-    assert config.profile_agent.planner.model == 'gpt-5.4-mini'
-    assert config.shared.evaluator.model == 'gpt-4o-mini'
-    assert config.shared.reranker.model == 'gpt-5.4'
+    assert config.main_agent.request_analysis.model == 'gpt-5.6-terra'
+    assert config.main_agent.planner.model == 'gpt-5.6-terra'
+    assert config.main_agent.synthesis.model == 'gpt-5.6-terra'
+    assert config.profile_agent.planner.model == 'gpt-5.6-luna'
+    assert config.shared.evaluator.model == 'gpt-5.6-luna'
+    assert config.shared.reranker.model == 'gpt-5.6-terra'
 
 
 def test_conversation_model_config_build_default_returns_defaults() -> None:
     config = ConversationModelConfig.build_default()
 
     assert config.main_agent.request_analysis.provider == OPENAI_PROVIDER
-    assert config.main_agent.request_analysis.model == 'gpt-5.4-mini'
-    assert config.main_agent.planner.model == 'gpt-5.4'
-    assert config.main_agent.synthesis.model == 'gpt-5.4'
-    assert config.profile_agent.planner.model == 'gpt-5.4-mini'
-    assert config.shared.evaluator.model == 'gpt-5.4-mini'
-    assert config.shared.reranker.model == 'gpt-5.4-mini'
+    assert config.main_agent.request_analysis.model == 'gpt-5.6-luna'
+    assert config.main_agent.planner.model == 'gpt-5.6-terra'
+    assert config.main_agent.synthesis.model == 'gpt-5.6-terra'
+    assert config.profile_agent.planner.model == 'gpt-5.6-luna'
+    assert config.shared.evaluator.model == 'gpt-5.6-luna'
+    assert config.shared.reranker.model == 'gpt-5.6-luna'
+    assert ConversationModelConfig.default_shared_reranker_model() == 'gpt-5.6-luna'
 
 
 def test_conversation_model_config_build_default_resolves_pricing_for_every_stage() -> None:
     config = ConversationModelConfig.build_default()
 
     assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, REQUEST_ANALYSIS_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('0.75'),
-        output_price_per_million_tokens=Decimal('4.50'),
+        input_price_per_million_tokens=Decimal('1.00'),
+        cached_input_price_per_million_tokens=Decimal('0.10'),
+        output_price_per_million_tokens=Decimal('6.00'),
     )
     assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
         input_price_per_million_tokens=Decimal('2.50'),
+        cached_input_price_per_million_tokens=Decimal('0.25'),
         output_price_per_million_tokens=Decimal('15.00'),
     )
     assert config.resolve_pricing(PROFILE_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('0.75'),
-        output_price_per_million_tokens=Decimal('4.50'),
+        input_price_per_million_tokens=Decimal('1.00'),
+        cached_input_price_per_million_tokens=Decimal('0.10'),
+        output_price_per_million_tokens=Decimal('6.00'),
     )
     assert config.resolve_pricing(SHARED_MODEL_SCOPE, EVALUATOR_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('0.75'),
-        output_price_per_million_tokens=Decimal('4.50'),
+        input_price_per_million_tokens=Decimal('1.00'),
+        cached_input_price_per_million_tokens=Decimal('0.10'),
+        output_price_per_million_tokens=Decimal('6.00'),
     )
     assert config.resolve_pricing(SHARED_MODEL_SCOPE, RERANKER_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('0.75'),
-        output_price_per_million_tokens=Decimal('4.50'),
+        input_price_per_million_tokens=Decimal('1.00'),
+        cached_input_price_per_million_tokens=Decimal('0.10'),
+        output_price_per_million_tokens=Decimal('6.00'),
     )
 
 
@@ -230,17 +236,19 @@ def test_conversation_model_config_override_changes_resolved_pricing_for_stage()
                 agent=PROFILE_AGENT_MODEL_SCOPE,
                 stage=PLANNER_STAGE,
                 provider=OPENAI_PROVIDER,
-                model='gpt-4o-mini',
+                model='gpt-5.6-luna',
             ),
         ]
     )
 
     assert config.resolve_pricing(PROFILE_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('0.15'),
-        output_price_per_million_tokens=Decimal('0.60'),
+        input_price_per_million_tokens=Decimal('1.00'),
+        cached_input_price_per_million_tokens=Decimal('0.10'),
+        output_price_per_million_tokens=Decimal('6.00'),
     )
     assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
         input_price_per_million_tokens=Decimal('2.50'),
+        cached_input_price_per_million_tokens=Decimal('0.25'),
         output_price_per_million_tokens=Decimal('15.00'),
     )
 
@@ -264,7 +272,7 @@ def test_conversation_model_config_groups_models_by_provider() -> None:
     assert MISTRAL_PROVIDER in grouped
     assert COHERE_PROVIDER in grouped
     assert DEEPSEEK_PROVIDER in grouped
-    assert "gpt-5.4" in grouped[OPENAI_PROVIDER]
+    assert "gpt-5.6-terra" in grouped[OPENAI_PROVIDER]
     assert "o3" in grouped[OPENAI_PROVIDER]
     assert "claude-sonnet-5" in grouped[ANTHROPIC_PROVIDER]
     assert "gemini-3.5-flash" in grouped[GOOGLE_PROVIDER]
@@ -285,14 +293,14 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
                 agent=MAIN_AGENT_MODEL_SCOPE,
                 stage=REQUEST_ANALYSIS_STAGE,
                 provider=OPENAI_PROVIDER,
-                model='gpt-5.4',
+                model='gpt-5.6-terra',
             ),
             ConversationModelConfigEntry(
                 conversation_id=conversation_id,
                 agent=PROFILE_AGENT_MODEL_SCOPE,
                 stage=PLANNER_STAGE,
                 provider=OPENAI_PROVIDER,
-                model='gpt-5.4',
+                model='gpt-5.6-terra',
             ),
         ]
     )
@@ -306,7 +314,7 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
                 model_config=config,
             ),
             agent_profile=MAIN_AGENT_PROFILE,
-            llm=TrackingChatOpenAI(model='gpt-5.4-mini'),
+            llm=TrackingChatOpenAI(model='gpt-5.6-luna'),
         )
 
         request_analysis_llm = build_llm_for_stage(
@@ -315,7 +323,7 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
             agent=MAIN_AGENT_MODEL_SCOPE,
             stage=REQUEST_ANALYSIS_STAGE,
         )
-        assert request_analysis_llm.model == 'gpt-5.4'
+        assert request_analysis_llm.model == 'gpt-5.6-terra'
 
         profile_planner_llm = build_llm_for_stage(
             execution_context=state.execution_context,
@@ -324,7 +332,7 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
             stage=PLANNER_STAGE,
             reuse_llm_for_agent_scope=state.resolve_agent_scope(),
         )
-        assert profile_planner_llm.model == 'gpt-5.4'
+        assert profile_planner_llm.model == 'gpt-5.6-terra'
 
 
 def test_llm_factory_build_llm_for_stage_uses_anthropic_provider() -> None:
@@ -584,7 +592,7 @@ def test_candidate_reranker_uses_shared_conversation_model_from_runtime_context(
                 agent=SHARED_MODEL_SCOPE,
                 stage=RERANKER_STAGE,
                 provider=OPENAI_PROVIDER,
-                model='gpt-5.4',
+                model='gpt-5.6-terra',
             )
         ]
     )
@@ -593,7 +601,7 @@ def test_candidate_reranker_uses_shared_conversation_model_from_runtime_context(
         with bind_runtime_context(conversation_id=str(conversation_id), conversation_model_config=config):
             reranker = CandidateReranker()
 
-    assert reranker.llm.model == 'gpt-5.4'
+    assert reranker.llm.model == 'gpt-5.6-terra'
 
 
 def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> None:
@@ -690,14 +698,14 @@ def test_build_model_config_rows_exposes_effective_models_overrides_and_pricing(
         agent=SHARED_MODEL_SCOPE,
         stage=EVALUATOR_STAGE,
         provider=OPENAI_PROVIDER,
-        model='gpt-4o-mini',
+        model='gpt-5.6-luna',
     )
     reranker_override = ConversationModelConfigEntry(
         conversation_id=conversation_id,
         agent=SHARED_MODEL_SCOPE,
         stage=RERANKER_STAGE,
         provider=OPENAI_PROVIDER,
-        model='gpt-5.4',
+        model='gpt-5.6-terra',
     )
     resolved = resolve_conversation_model_config([evaluator_override, reranker_override])
 
@@ -705,15 +713,15 @@ def test_build_model_config_rows_exposes_effective_models_overrides_and_pricing(
     evaluator_row = next(row for row in rows if row['agent'] == SHARED_MODEL_SCOPE and row['stage'] == EVALUATOR_STAGE)
     reranker_row = next(row for row in rows if row['agent'] == SHARED_MODEL_SCOPE and row['stage'] == RERANKER_STAGE)
 
-    assert evaluator_row['effective_model'] == 'gpt-4o-mini'
-    assert evaluator_row['override_model'] == 'gpt-4o-mini'
+    assert evaluator_row['effective_model'] == 'gpt-5.6-luna'
+    assert evaluator_row['override_model'] == 'gpt-5.6-luna'
     assert evaluator_row['override_provider'] == OPENAI_PROVIDER
-    assert evaluator_row['input_price'] == '$0.15 per 1M'
-    assert evaluator_row['output_price'] == '$0.6 per 1M'
+    assert evaluator_row['input_price'] == '$1 per 1M'
+    assert evaluator_row['output_price'] == '$6 per 1M'
     assert evaluator_row['effective_provider'] == 'OpenAI'
     assert OPENAI_PROVIDER in evaluator_row['provider_options']
-    assert reranker_row['effective_model'] == 'gpt-5.4'
-    assert reranker_row['override_model'] == 'gpt-5.4'
+    assert reranker_row['effective_model'] == 'gpt-5.6-terra'
+    assert reranker_row['override_model'] == 'gpt-5.6-terra'
     assert reranker_row['input_price'] == '$2.5 per 1M'
     assert reranker_row['output_price'] == '$15 per 1M'
 
@@ -724,10 +732,10 @@ def test_build_model_config_rows_reset_to_default_restores_model_and_pricing() -
     rows = build_model_config_rows(resolved, [])
     request_analysis_row = next(row for row in rows if row['agent'] == MAIN_AGENT_MODEL_SCOPE and row['stage'] == REQUEST_ANALYSIS_STAGE)
 
-    assert request_analysis_row['effective_model'] == 'gpt-5.4-mini'
+    assert request_analysis_row['effective_model'] == 'gpt-5.6-luna'
     assert request_analysis_row['override_model'] is None
-    assert request_analysis_row['input_price'] == '$0.75 per 1M'
-    assert request_analysis_row['output_price'] == '$4.5 per 1M'
+    assert request_analysis_row['input_price'] == '$1 per 1M'
+    assert request_analysis_row['output_price'] == '$6 per 1M'
 
 
 def test_build_model_config_rows_exposes_provider_filtered_options() -> None:

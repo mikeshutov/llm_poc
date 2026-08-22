@@ -27,8 +27,8 @@ MISTRAL_PROVIDER = "mistral"
 COHERE_PROVIDER = "cohere"
 DEEPSEEK_PROVIDER = "deepseek"
 
-DEFAULT_MINI_MODEL = "gpt-5.4-mini"
-DEFAULT_MAIN_AGENT_MODEL = os.getenv("LLM_MODEL", "gpt-5.4")
+DEFAULT_MINI_MODEL = "gpt-5.6-luna"
+DEFAULT_MAIN_AGENT_MODEL = os.getenv("LLM_MODEL", "gpt-5.6-terra")
 DEFAULT_MAIN_AGENT_REQUEST_ANALYSIS_MODEL = DEFAULT_MINI_MODEL
 DEFAULT_MAIN_AGENT_PLANNER_MODEL = os.getenv("MAIN_AGENT_PLANNER_MODEL", DEFAULT_MAIN_AGENT_MODEL)
 DEFAULT_MAIN_AGENT_SYNTHESIS_MODEL = os.getenv("MAIN_AGENT_SYNTHESIS_MODEL", DEFAULT_MAIN_AGENT_MODEL)
@@ -40,6 +40,7 @@ DEFAULT_SHARED_RERANKER_MODEL = DEFAULT_MINI_MODEL
 class ModelPricing(BaseModel):
     input_price_per_million_tokens: Decimal
     output_price_per_million_tokens: Decimal
+    cached_input_price_per_million_tokens: Decimal | None = None
 
 
 class ModelSelection(BaseModel):
@@ -152,22 +153,10 @@ class ConversationModelConfig(BaseModel):
     }
     MODEL_PRICING_REGISTRY: ClassVar[dict[str, dict[str, ModelPricing]]] = {
         OPENAI_PROVIDER: {
-            "gpt-5.6": ModelPricing(input_price_per_million_tokens=Decimal("5.00"), output_price_per_million_tokens=Decimal("30.00")),
-            "gpt-5.6-sol": ModelPricing(input_price_per_million_tokens=Decimal("5.00"), output_price_per_million_tokens=Decimal("30.00")),
-            "gpt-5.6-terra": ModelPricing(input_price_per_million_tokens=Decimal("2.50"), output_price_per_million_tokens=Decimal("15.00")),
-            "gpt-5.6-luna": ModelPricing(input_price_per_million_tokens=Decimal("1.00"), output_price_per_million_tokens=Decimal("6.00")),
-            "gpt-5.4": ModelPricing(input_price_per_million_tokens=Decimal("2.50"), output_price_per_million_tokens=Decimal("15.00")),
-            "gpt-5.4-mini": ModelPricing(input_price_per_million_tokens=Decimal("0.75"), output_price_per_million_tokens=Decimal("4.50")),
-            "gpt-5.1": ModelPricing(input_price_per_million_tokens=Decimal("1.25"), output_price_per_million_tokens=Decimal("10.00")),
-            "gpt-5": ModelPricing(input_price_per_million_tokens=Decimal("1.25"), output_price_per_million_tokens=Decimal("10.00")),
-            "gpt-5-mini": ModelPricing(input_price_per_million_tokens=Decimal("0.25"), output_price_per_million_tokens=Decimal("2.00")),
-            "gpt-5-nano": ModelPricing(input_price_per_million_tokens=Decimal("0.05"), output_price_per_million_tokens=Decimal("0.40")),
-            "gpt-5-pro": ModelPricing(input_price_per_million_tokens=Decimal("15.00"), output_price_per_million_tokens=Decimal("120.00")),
-            "gpt-4.1": ModelPricing(input_price_per_million_tokens=Decimal("2.00"), output_price_per_million_tokens=Decimal("8.00")),
-            "gpt-4.1-mini": ModelPricing(input_price_per_million_tokens=Decimal("0.40"), output_price_per_million_tokens=Decimal("1.60")),
-            "gpt-4.1-nano": ModelPricing(input_price_per_million_tokens=Decimal("0.10"), output_price_per_million_tokens=Decimal("0.40")),
-            "gpt-4o": ModelPricing(input_price_per_million_tokens=Decimal("2.50"), output_price_per_million_tokens=Decimal("10.00")),
-            "gpt-4o-mini": ModelPricing(input_price_per_million_tokens=Decimal("0.15"), output_price_per_million_tokens=Decimal("0.60")),
+            "gpt-5.6": ModelPricing(input_price_per_million_tokens=Decimal("5.00"), cached_input_price_per_million_tokens=Decimal("0.50"), output_price_per_million_tokens=Decimal("30.00")),
+            "gpt-5.6-sol": ModelPricing(input_price_per_million_tokens=Decimal("5.00"), cached_input_price_per_million_tokens=Decimal("0.50"), output_price_per_million_tokens=Decimal("30.00")),
+            "gpt-5.6-terra": ModelPricing(input_price_per_million_tokens=Decimal("2.50"), cached_input_price_per_million_tokens=Decimal("0.25"), output_price_per_million_tokens=Decimal("15.00")),
+            "gpt-5.6-luna": ModelPricing(input_price_per_million_tokens=Decimal("1.00"), cached_input_price_per_million_tokens=Decimal("0.10"), output_price_per_million_tokens=Decimal("6.00")),
             "o3": ModelPricing(input_price_per_million_tokens=Decimal("2.00"), output_price_per_million_tokens=Decimal("8.00")),
             "o3-pro": ModelPricing(input_price_per_million_tokens=Decimal("20.00"), output_price_per_million_tokens=Decimal("80.00")),
             "o3-mini": ModelPricing(input_price_per_million_tokens=Decimal("1.10"), output_price_per_million_tokens=Decimal("4.40")),
@@ -227,6 +216,10 @@ class ConversationModelConfig(BaseModel):
     @classmethod
     def default_main_agent_planner_model(cls) -> str:
         return DEFAULT_MAIN_AGENT_PLANNER_MODEL
+
+    @classmethod
+    def default_shared_reranker_model(cls) -> str:
+        return DEFAULT_SHARED_RERANKER_MODEL
 
     @classmethod
     def provider_display_name(cls, provider: str) -> str:

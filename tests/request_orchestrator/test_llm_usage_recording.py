@@ -74,7 +74,7 @@ def _latest_event_payload(
 
 
 class FakeLangChainResponse:
-    def __init__(self, content: str, model_name: str = 'gpt-5.4-mini') -> None:
+    def __init__(self, content: str, model_name: str = 'gpt-5.6-luna') -> None:
         self.content = content
         self.usage_metadata = {
             'input_tokens': 100,
@@ -84,7 +84,7 @@ class FakeLangChainResponse:
 
 
 class FakeInvokeLLM:
-    def __init__(self, content: str, model_name: str = 'gpt-5.4-mini') -> None:
+    def __init__(self, content: str, model_name: str = 'gpt-5.6-luna') -> None:
         self.content = content
         self.model_name = model_name
 
@@ -191,6 +191,9 @@ def test_request_analysis_records_llm_usage() -> None:
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',
         return_value=repo,
+    ), patch(
+        'llm.chat_models.build_chat_model',
+        return_value=state.llm,
     ):
         with bind_runtime_context(**_bind_args_for_main_state(state)):
             analyze_request(state)
@@ -200,7 +203,7 @@ def test_request_analysis_records_llm_usage() -> None:
     assert repo.llm_calls[0]['stage'] == 'request_analysis'
     input_object = repo.llm_calls[0]['metadata']['input_object']
     assert input_object['prompt_token_count'] > 0
-    assert PromptSectionKeys.LATEST_USER_PROMPT in input_object['sections_raw']
+    assert PromptSectionKeys.TASK in input_object['sections_raw']
     assert PromptSectionKeys.USER_PROFILE not in input_object['sections_raw']
     payload = _latest_event_payload(repo, event_type='request_analysis', agent_name='request_orchestrator')
     assert payload['data']['llm_usage']['total_tokens'] == 120
@@ -232,6 +235,9 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',
         return_value=repo,
+    ), patch(
+        'llm.chat_models.build_chat_model',
+        return_value=main_state.llm,
     ):
         with bind_runtime_context(**_bind_args_for_agent_state(main_state)):
             run_planner(main_state)
@@ -316,6 +322,9 @@ def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_retu
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',
         return_value=repo,
+    ), patch(
+        'llm.chat_models.build_chat_model',
+        return_value=state.llm,
     ):
         with bind_runtime_context(**_bind_args_for_agent_state(state)):
             run_planner(state)
@@ -340,24 +349,27 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM('{"result": [{"content": "done", "evidence_ids": []}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.4'),
+        llm=FakeInvokeLLM('{"result": [{"content": "done", "evidence_ids": []}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.6-terra'),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',
         return_value=repo,
+    ), patch(
+        'llm.chat_models.build_chat_model',
+        return_value=state.llm,
     ):
         with bind_runtime_context(**_bind_args_for_main_state(state)):
             run_synthesis(state)
 
     assert len(repo.llm_calls) == 1
     assert repo.llm_calls[0]['stage'] == 'synthesis'
-    assert repo.llm_calls[0]['model'] == 'gpt-5.4'
+    assert repo.llm_calls[0]['model'] == 'gpt-5.6-terra'
     assert repo.llm_calls[0]['metadata']['input_object']['prompt_token_count'] > 0
     assert PromptSectionKeys.LATEST_USER_PROMPT in repo.llm_calls[0]['metadata']['input_object']['sections_raw']
     payload = _latest_event_payload(repo, event_type='synthesis', agent_name='request_orchestrator')
-    assert payload['data']['llm_usage']['model'] == 'gpt-5.4'
+    assert payload['data']['llm_usage']['model'] == 'gpt-5.6-terra'
     assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
 
 
@@ -405,7 +417,7 @@ def test_llm_client_records_tool_calling_and_image_caption_usage() -> None:
             choices=[SimpleNamespace(message=SimpleNamespace(content='caption'))],
         )]
 
-    llm_client = LlmClient(client=client, default_model='gpt-5.4-mini')
+    llm_client = LlmClient(client=client, default_model='gpt-5.6-luna')
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch('builtins.open', mock_open(read_data=b'image-bytes')):
         with bind_runtime_context(conversation_id=str(uuid4()), conversation_model_config=None, roundtrip_id=str(uuid4())):
@@ -425,7 +437,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["P1E1R1"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.4'),
+        llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["P1E1R1"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.6-terra'),
         agent_profile=MAIN_AGENT_PROFILE,
     )
     _set_agent_tool_results(
@@ -445,6 +457,9 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',
         return_value=repo,
+    ), patch(
+        'llm.chat_models.build_chat_model',
+        return_value=state.llm,
     ):
         with bind_runtime_context(**_bind_args_for_agent_state(state)):
             run_evaluator(state)
@@ -452,12 +467,12 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     assert len(repo.llm_calls) == 1
     assert repo.llm_calls[0]['agent'] == 'shared'
     assert repo.llm_calls[0]['stage'] == 'evaluator'
-    assert repo.llm_calls[0]['model'] == 'gpt-5.4'
+    assert repo.llm_calls[0]['model'] == 'gpt-5.6-terra'
     assert PromptSectionKeys.EVIDENCE in repo.llm_calls[0]['metadata']['input_object']['sections_raw']
     assert state.node_states.evaluator.evaluation_status == EVALUATION_STATUS_RETRYABLE
     assert state.inputs.task == 'Find current Canadian pricing and availability for the two shortlisted products.'
     payload = _latest_event_payload(repo, event_type='evaluator', agent_name='main_agent')
-    assert payload['data']['llm_usage']['model'] == 'gpt-5.4'
+    assert payload['data']['llm_usage']['model'] == 'gpt-5.6-terra'
     assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
     assert payload['data']['relevant_evidence'] == ['main_agent:P1E1R1']
     assert payload['data']['missing_information'] == [
@@ -498,7 +513,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["P1E2R1"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.4'),
+        llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["P1E2R1"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.6-terra'),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
     main_agent_state = state.agent_states['main_agent']
@@ -553,6 +568,9 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',
         return_value=repo,
+    ), patch(
+        'llm.chat_models.build_chat_model',
+        return_value=state.llm,
     ):
         with bind_runtime_context(**_bind_args_for_main_state(state)):
             run_synthesis(state)

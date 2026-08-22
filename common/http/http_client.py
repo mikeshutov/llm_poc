@@ -58,3 +58,19 @@ class HttpClient:
             self._cache.put(url, params, payload, self._ttl)
 
         return payload
+
+    def post(self, url: str, json_payload: dict[str, Any]) -> Any:
+        cache_key = {"method": "POST", "body": json_payload}
+        if self._cache:
+            cached = self._cache.get(url, cache_key)
+            if cached is not None:
+                return cached
+
+        resp = requests.post(url, json=json_payload, headers=self._headers, timeout=self._timeout_s)
+        if not resp.ok:
+            raise HttpClientError(f"HTTP {resp.status_code} on {url}: {resp.text[:500]}")
+
+        payload = resp.json()
+        if self._cache:
+            self._cache.put(url, cache_key, payload, self._ttl)
+        return payload

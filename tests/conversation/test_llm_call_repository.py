@@ -48,16 +48,16 @@ def test_create_llm_call_round_trips_decimal_and_nullable_ids() -> None:
         'agent': 'utility',
         'stage': 'image_caption',
         'callsite': 'llm_client.generate_caption_from_image_file',
-        'model': 'gpt-5.4-mini',
+        'model': 'gpt-5.6-luna',
         'input_tokens': 50,
         'output_tokens': 10,
         'total_tokens': 60,
         'cached_input_tokens': 0,
-        'input_price_per_million_tokens': Decimal('0.75'),
-        'output_price_per_million_tokens': Decimal('4.50'),
-        'computed_input_cost': Decimal('0.0000375'),
-        'computed_output_cost': Decimal('0.000045'),
-        'computed_total_cost': Decimal('0.0000825'),
+        'input_price_per_million_tokens': Decimal('1.00'),
+        'output_price_per_million_tokens': Decimal('6.00'),
+        'computed_input_cost': Decimal('0.00005'),
+        'computed_output_cost': Decimal('0.00006'),
+        'computed_total_cost': Decimal('0.00011'),
         'metadata': {'kind': 'caption'},
         'created_at': '2026-08-09T00:00:00Z',
         'updated_at': '2026-08-09T00:00:00Z',
@@ -74,23 +74,23 @@ def test_create_llm_call_round_trips_decimal_and_nullable_ids() -> None:
         agent='utility',
         stage='image_caption',
         callsite='llm_client.generate_caption_from_image_file',
-        model='gpt-5.4-mini',
+        model='gpt-5.6-luna',
         input_tokens=50,
         output_tokens=10,
         total_tokens=60,
         cached_input_tokens=0,
-        input_price_per_million_tokens=Decimal('0.75'),
-        output_price_per_million_tokens=Decimal('4.50'),
-        computed_input_cost=Decimal('0.0000375'),
-        computed_output_cost=Decimal('0.000045'),
-        computed_total_cost=Decimal('0.0000825'),
+        input_price_per_million_tokens=Decimal('1.00'),
+        output_price_per_million_tokens=Decimal('6.00'),
+        computed_input_cost=Decimal('0.00005'),
+        computed_output_cost=Decimal('0.00006'),
+        computed_total_cost=Decimal('0.00011'),
         metadata={'kind': 'caption'},
     )
 
     assert 'INSERT INTO llm_call' in cursor.executed[0][0]
     assert record.conversation_id is None
     assert record.roundtrip_id is None
-    assert record.computed_total_cost == Decimal('0.0000825')
+    assert record.computed_total_cost == Decimal('0.00011')
 
 
 def test_list_llm_calls_for_roundtrip_returns_rows_in_order() -> None:
@@ -103,16 +103,16 @@ def test_list_llm_calls_for_roundtrip_returns_rows_in_order() -> None:
             'agent': 'main_agent',
             'stage': 'request_analysis',
             'callsite': 'request_analysis.analyze_request',
-            'model': 'gpt-5.4-mini',
+            'model': 'gpt-5.6-luna',
             'input_tokens': 100,
             'output_tokens': 20,
             'total_tokens': 120,
             'cached_input_tokens': 0,
-        'input_price_per_million_tokens': Decimal('0.75'),
-            'output_price_per_million_tokens': Decimal('4.50'),
-            'computed_input_cost': Decimal('0.000075'),
-            'computed_output_cost': Decimal('0.00009'),
-            'computed_total_cost': Decimal('0.000165'),
+        'input_price_per_million_tokens': Decimal('1.00'),
+            'output_price_per_million_tokens': Decimal('6.00'),
+            'computed_input_cost': Decimal('0.0001'),
+            'computed_output_cost': Decimal('0.00012'),
+            'computed_total_cost': Decimal('0.00022'),
             'metadata': {},
             'created_at': '2026-08-09T00:00:00Z',
             'updated_at': '2026-08-09T00:00:00Z',
@@ -124,7 +124,7 @@ def test_list_llm_calls_for_roundtrip_returns_rows_in_order() -> None:
             'agent': 'main_agent',
             'stage': 'synthesis',
             'callsite': 'shared_synthesis.run_synthesis',
-            'model': 'gpt-5.4',
+            'model': 'gpt-5.6-terra',
             'input_tokens': 140,
             'output_tokens': 50,
             'total_tokens': 190,
@@ -167,7 +167,7 @@ def test_create_conversation_persists_default_model_config_rows() -> None:
             'agent': spec.agent,
             'stage': spec.stage,
             'provider': OPENAI_PROVIDER,
-            'model': 'gpt-5.4-mini' if spec.stage in {'request_analysis', 'reranker', 'evaluator'} or spec.agent == 'profile_agent' else 'gpt-5.4',
+            'model': 'gpt-5.6-luna' if spec.stage in {'request_analysis', 'reranker', 'evaluator'} or spec.agent == 'profile_agent' else 'gpt-5.6-terra',
             'created_at': '2026-08-09T00:00:00Z',
             'updated_at': '2026-08-09T00:00:00Z',
         })
@@ -193,7 +193,7 @@ def test_resolve_conversation_model_config_backfills_missing_default_rows() -> N
             'agent': 'main_agent',
             'stage': 'planner',
             'provider': OPENAI_PROVIDER,
-            'model': 'gpt-5.4',
+            'model': 'gpt-5.6-terra',
             'created_at': '2026-08-09T00:00:00Z',
             'updated_at': '2026-08-09T00:00:00Z',
         }
@@ -205,7 +205,7 @@ def test_resolve_conversation_model_config_backfills_missing_default_rows() -> N
             'agent': spec.agent,
             'stage': spec.stage,
             'provider': OPENAI_PROVIDER,
-            'model': 'gpt-5.4-mini' if spec.stage in {'request_analysis', 'reranker', 'evaluator'} or spec.agent == 'profile_agent' else 'gpt-5.4',
+            'model': 'gpt-5.6-luna' if spec.stage in {'request_analysis', 'reranker', 'evaluator'} or spec.agent == 'profile_agent' else 'gpt-5.6-terra',
             'created_at': '2026-08-09T00:00:00Z',
             'updated_at': '2026-08-09T00:00:00Z',
         })
@@ -217,10 +217,10 @@ def test_resolve_conversation_model_config_backfills_missing_default_rows() -> N
 
     resolved = repo.resolve(conversation_id)
 
-    assert resolved.main_agent.planner.model == 'gpt-5.4'
-    assert resolved.main_agent.request_analysis.model == 'gpt-5.4-mini'
-    assert resolved.profile_agent.planner.model == 'gpt-5.4-mini'
-    assert resolved.shared.evaluator.model == 'gpt-5.4-mini'
-    assert resolved.shared.reranker.model == 'gpt-5.4-mini'
+    assert resolved.main_agent.planner.model == 'gpt-5.6-terra'
+    assert resolved.main_agent.request_analysis.model == 'gpt-5.6-luna'
+    assert resolved.profile_agent.planner.model == 'gpt-5.6-luna'
+    assert resolved.shared.evaluator.model == 'gpt-5.6-luna'
+    assert resolved.shared.reranker.model == 'gpt-5.6-luna'
     assert len(backfill_cursors) == len(CONVERSATION_MODEL_CONFIG_SPECS) - 1
     assert all('INSERT INTO conversation_model_config' in cursor.executed[0][0] for cursor in backfill_cursors)

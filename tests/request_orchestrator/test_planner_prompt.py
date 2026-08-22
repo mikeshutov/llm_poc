@@ -48,7 +48,6 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
                     title="Example Result",
                     summary="Short evidence summary.",
                     metadata={"kind": "web"},
-                    evidence_object={"detail": "should stay out of planner"},
                 )
             ],
             hydrated_evidence=[
@@ -71,6 +70,5 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
     assert evidence_section[0]["type"] == "web_search_results"
     assert evidence_section[0]["evidence"][0]["title"] == "Example Result"
     assert evidence_section[0]["evidence"][0]["summary"] == "Short evidence summary."
-    assert evidence_section[0]["evidence"][0]["evidence_object"] == {"detail": "should stay out of planner"}
     assert evidence_section[0]["evidence"][0]["metadata"] == {"kind": "web"}
     assert "secret" not in str(evidence_section)

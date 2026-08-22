@@ -22,8 +22,7 @@ DEFAULT_AGENT_LOG_ORDER = [
 
 class RequestAnalysisLogPayload(BaseModel):
     title: str = "Request Analysis"
-    categories: list[str] = Field(default_factory=list)
-    goal: str = ""
+    goals: list[dict] = Field(default_factory=list)
     requested_user_attribute_types: list[str] = Field(default_factory=list)
 
 
@@ -116,9 +115,18 @@ def emit_debug_message(content, content_title: str) -> None:
 
 def _build_request_analysis_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
+    goals = data.get("goals")
+    if not isinstance(goals, list):
+        # Preserve visibility for events written before request analysis supported
+        # one goal per agent.
+        legacy_goal = data.get("goal") or ""
+        legacy_categories = data.get("applicable_tool_categories") or []
+        goals = [] if not legacy_goal and not legacy_categories else [{
+            "goal": legacy_goal,
+            "tool_categories": legacy_categories,
+        }]
     return RequestAnalysisLogPayload(
-        categories=data.get("applicable_tool_categories") or [],
-        goal=data.get("goal") or "",
+        goals=goals,
         requested_user_attribute_types=data.get("requested_user_attribute_types") or [],
     ).model_dump()
 

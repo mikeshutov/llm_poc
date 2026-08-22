@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 
 from integrations.edhrec.models import EdhrecCommanderPage
+from integrations.scryfall.models import ScryfallCard
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.shared.tool_adapter.games.get_commander_cards import get_commander_cards
 from request_orchestrator.shared.tool_adapter.games.get_commander_details import get_commander_details
@@ -86,15 +87,29 @@ def test_get_commander_details_returns_typed_result() -> None:
             assert commander_name == "Uril, the Miststalker"
             return "uril-the-miststalker", _build_page()
 
+    class FakeScryfallClient:
+        def get_card_by_name(self, commander_name: str) -> ScryfallCard:
+            assert commander_name == "Uril, the Miststalker"
+            return ScryfallCard.model_validate(
+                {
+                    "id": "uril-id",
+                    "name": "Uril, the Miststalker",
+                    "oracle_text": "Uril can't be the target of spells or abilities your opponents control.",
+                }
+            )
+
     module = importlib.import_module(
         "request_orchestrator.shared.tool_adapter.games.get_commander_details"
     )
     original_client = module._edhrec_client
+    original_scryfall_client = module._scryfall_client
     module._edhrec_client = FakeEdhrecClient()
+    module._scryfall_client = FakeScryfallClient()
     try:
         result = get_commander_details.invoke({"commander_name": "Uril, the Miststalker"})
     finally:
         module._edhrec_client = original_client
+        module._scryfall_client = original_scryfall_client
 
     assert isinstance(result, ToolResult)
     assert result.result.model_dump() == {
@@ -102,13 +117,14 @@ def test_get_commander_details_returns_typed_result() -> None:
         "commander_name": "Uril, the Miststalker",
         "commander_slug": "uril-the-miststalker",
         "page_url": "https://edhrec.com/commanders/uril-the-miststalker",
-        "title": "Uril, the Miststalker (Commander)",
+        "title": "Uril, the Miststalker",
         "description": "Popular decks and cards for Uril, the Miststalker",
         "top_themes": "Auras, Voltron",
         "combo_highlights": ["Aggravated Assault + Bear Umbra"],
         "similar_commanders": ["Mazzy, Truesword Paladin", "Sigarda, Host of Herons"],
     }
-    assert result.evidence_views[0].evidence_object == result.result.model_dump()
+    assert result.evidence_views[0].summary == "Uril can't be the target of spells or abilities your opponents control."
+    assert "commander_slug" not in result.evidence_views[0].metadata
 
 
 def test_get_commander_cards_returns_reranked_card_evidence() -> None:
@@ -117,17 +133,43 @@ def test_get_commander_cards_returns_reranked_card_evidence() -> None:
             assert commander_name == "Uril, the Miststalker"
             return "uril-the-miststalker", _build_page()
 
+    class FakeScryfallClient:
+        def get_cards_by_names(self, card_names: list[str]) -> list[ScryfallCard]:
+            assert card_names == ["Rancor", "Ethereal Armor"]
+            return [
+                ScryfallCard.model_validate(
+                    {
+                        "id": f"{card_name.lower().replace(' ', '-')}-id",
+                        "name": card_name,
+                        "mana_cost": "{G}",
+                        "cmc": 1,
+                        "type_line": "Enchantment - Aura",
+                        "oracle_text": f"Oracle text for {card_name}.",
+                        "color_identity": ["G"],
+                        "scryfall_uri": f"https://scryfall.com/card/test/1/{card_name.lower().replace(' ', '-')}",
+                        "set_name": "Test Set",
+                        "rarity": "uncommon",
+                        "legalities": {"commander": "legal", "legacy": "legal", "modern": "not_legal"},
+                        "image_uris": {"normal": f"https://images.example/{card_name.lower().replace(' ', '-')}.jpg"},
+                    }
+                )
+                for card_name in card_names
+            ]
+
     module = importlib.import_module(
         "request_orchestrator.shared.tool_adapter.games.get_commander_cards"
     )
     original_client = module._edhrec_client
+    original_scryfall_client = module._scryfall_client
     original_rerank = module.rerank_edhrec_cards
     module._edhrec_client = FakeEdhrecClient()
+    module._scryfall_client = FakeScryfallClient()
     module.rerank_edhrec_cards = lambda cards, **kwargs: [cards[1], cards[0]]
     try:
         result = get_commander_cards.invoke({"commander_name": "Uril, the Miststalker", "limit": 2})
     finally:
         module._edhrec_client = original_client
+        module._scryfall_client = original_scryfall_client
         module.rerank_edhrec_cards = original_rerank
 
     assert isinstance(result, ToolResult)
@@ -161,5 +203,13 @@ def test_get_commander_cards_returns_reranked_card_evidence() -> None:
     }
     assert len(result.evidence_views) == 2
     assert result.evidence_views[0].title == "Rancor"
-    assert result.evidence_views[0].evidence_object == result.result.cards[0].model_dump()
-    assert result.hydrated_evidence[0].urls[0].url == "https://edhrec.com/cards/rancor"
+    assert result.hydrated_evidence[0].urls[0].url == "https://scryfall.com/card/test/1/rancor"
+    assert result.hydrated_evidence[0].image_url == "https://images.example/rancor.jpg"
+    assert result.hydrated_evidence[0].raw_payload.oracle_text == "Oracle text for Rancor."
+    assert result.evidence_views[0].metadata == {
+        "rarity": "uncommon",
+        "mana_cost": "{G}",
+        "type_line": "Enchantment - Aura",
+        "color_identity": ["G"],
+        "legal_formats": ["commander", "legacy"],
+    }

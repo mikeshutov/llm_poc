@@ -4,12 +4,14 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.edhrec import EDHREC_CARD_URL_TEMPLATE, EdhrecCardView, EdhrecClient, EdhrecCommanderPage
+from integrations.scryfall import ScryfallCard, ScryfallClient, ScryfallClientError
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.games.candidate_mapper import rerank_edhrec_cards
 from tool.constants import TOOL_NAME_GET_COMMANDER_CARDS
 from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
 
 _edhrec_client = EdhrecClient()
+_scryfall_client = ScryfallClient()
 
 
 class GetCommanderCardsArgs(BaseModel):
@@ -45,13 +47,16 @@ class CommanderCardsResult(BaseModel):
 
 
 class CommanderCardMetadata(BaseModel):
-    commander_slug: str
-    section: str | None = None
-    synergy: float | None = None
-    num_decks: int | None = None
-    potential_decks: int | None = None
-    trend_zscore: float | None = None
-    returned_count: int
+    rarity: str | None = None
+    mana_cost: str | None = None
+    type_line: str | None = None
+    color_identity: list[str] = []
+    legal_formats: list[str] = []
+
+
+class CommanderCardReference(BaseModel):
+    cmc: float | None = None
+    oracle_text: str | None = None
 
 
 def _flatten_candidate_cards(page: EdhrecCommanderPage) -> list[tuple[str, EdhrecCardView]]:
@@ -78,7 +83,41 @@ def _card_result(section: str, card: EdhrecCardView) -> CommanderCardResult:
     )
 
 
-def _card_summary(card: CommanderCardResult) -> str:
+def _card_oracle_text(card: ScryfallCard) -> str:
+    if card.oracle_text:
+        return card.oracle_text.strip()
+    if not card.card_faces:
+        return ""
+    return " // ".join(face.oracle_text.strip() for face in card.card_faces if face.oracle_text and face.oracle_text.strip())
+
+
+def _legal_formats(card: ScryfallCard) -> list[str]:
+    return sorted(format_name for format_name, status in card.legalities.items() if status == "legal")
+
+
+def _scryfall_cards_by_name(cards: list[CommanderCardResult]) -> dict[str, ScryfallCard]:
+    try:
+        scryfall_cards = _scryfall_client.get_cards_by_names([card.name for card in cards])
+    except (ScryfallClientError, ValueError):
+        return {}
+    return {card.name.casefold(): card for card in scryfall_cards}
+
+
+def _card_summary(card: CommanderCardResult, scryfall_card: ScryfallCard | None) -> str:
+    if scryfall_card is not None:
+        parts = [
+            value
+            for value in (
+                scryfall_card.mana_cost,
+                scryfall_card.type_line,
+                _card_oracle_text(scryfall_card).replace("\n", " "),
+            )
+            if value and value.strip()
+        ]
+        if scryfall_card.set_name:
+            parts.append(f"Set: {scryfall_card.set_name}")
+        if parts:
+            return " | ".join(parts)
     parts = [card.section] if card.section else []
     if card.synergy is not None:
         parts.append(f"Synergy {card.synergy:.3f}")
@@ -92,28 +131,35 @@ def _card_summary(card: CommanderCardResult) -> str:
 def _tool_result(result: CommanderCardsResult) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
+    scryfall_cards_by_name = _scryfall_cards_by_name(result.cards)
     for card in result.cards:
+        scryfall_card = scryfall_cards_by_name.get(card.name.casefold())
         metadata = CommanderCardMetadata(
-            commander_slug=result.commander_slug,
-            section=card.section or None,
-            synergy=card.synergy,
-            num_decks=card.num_decks or None,
-            potential_decks=card.potential_decks or None,
-            trend_zscore=card.trend_zscore,
-            returned_count=result.returned_count,
+            rarity=scryfall_card.rarity if scryfall_card is not None else None,
+            mana_cost=scryfall_card.mana_cost if scryfall_card is not None else None,
+            type_line=scryfall_card.type_line if scryfall_card is not None else None,
+            color_identity=list(scryfall_card.color_identity or []) if scryfall_card is not None else [],
+            legal_formats=_legal_formats(scryfall_card) if scryfall_card is not None else [],
         )
-        evidence_object = card.model_dump()
+        scryfall_url = scryfall_card.scryfall_uri.strip() if scryfall_card is not None else ""
+        edhrec_url = card.card_url.strip()
         hydrated = HydratedEvidence(
-            item_id=card.slug or card.name,
+            item_id=scryfall_card.id if scryfall_card is not None else card.slug or card.name,
             tool_name=TOOL_NAME_GET_COMMANDER_CARDS,
             title=card.name,
-            summary=_card_summary(card),
-            urls=[EvidenceUrl(url=card.card_url, url_type=EvidenceUrlType.WEBSITE)] if card.card_url else [],
+            summary=_card_summary(card, scryfall_card),
+            urls=[
+                *([EvidenceUrl(url=scryfall_url, url_type=EvidenceUrlType.WEBSITE)] if scryfall_url else []),
+                *([EvidenceUrl(url=edhrec_url, url_type=EvidenceUrlType.WEBSITE)] if edhrec_url else []),
+            ],
+            image_url=scryfall_card.image_url() or "" if scryfall_card is not None else "",
             source=TOOL_NAME_GET_COMMANDER_CARDS,
             entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
             metadata=metadata.model_dump(exclude_none=True),
-            evidence_object=evidence_object,
-            raw_payload=card,
+            raw_payload=CommanderCardReference(
+                cmc=scryfall_card.cmc if scryfall_card is not None else None,
+                oracle_text=_card_oracle_text(scryfall_card) if scryfall_card is not None else None,
+            ),
         )
         hydrated_evidence.append(hydrated)
         evidence_views.append(
@@ -122,7 +168,6 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
                 title=hydrated.title,
                 summary=hydrated.summary,
                 metadata=dict(hydrated.metadata),
-                evidence_object=evidence_object,
             )
         )
     return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)

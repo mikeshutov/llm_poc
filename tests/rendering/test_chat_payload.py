@@ -135,7 +135,7 @@ def test_fetch_llm_usage_for_roundtrip_reads_llm_call_events_first() -> None:
                         'owner_agent_name': 'main_agent',
                         'stage': 'planner',
                         'callsite': 'planner',
-                        'model': 'gpt-5.4',
+                        'model': 'gpt-5.6-terra',
                         'input_tokens': 100,
                         'output_tokens': 20,
                         'total_tokens': 120,
@@ -189,7 +189,7 @@ def test_fetch_llm_usage_for_roundtrip_falls_back_to_llm_call_rows_when_event_tr
                         'owner_agent_name': None,
                         'stage': 'synthesis',
                         'callsite': 'shared_synthesis.run_synthesis',
-                        'model': 'gpt-5.4-mini-2026-03-17',
+                        'model': 'gpt-5.6-luna-2026-03-17',
                         'input_tokens': 2059,
                         'output_tokens': 396,
                         'total_tokens': 2455,
@@ -215,7 +215,7 @@ def test_fetch_llm_usage_for_roundtrip_falls_back_to_llm_call_rows_when_event_tr
                     'agent': 'main_agent',
                     'stage': 'synthesis',
                     'callsite': 'shared_synthesis.run_synthesis',
-                    'model': 'gpt-5.4-mini-2026-03-17',
+                    'model': 'gpt-5.6-luna-2026-03-17',
                     'input_tokens': 2059,
                     'output_tokens': 396,
                     'total_tokens': 2455,
@@ -250,7 +250,7 @@ def test_build_log_payload_labels_llm_call_entries() -> None:
         {
             'kind': 'llm_call',
             'model_scope': 'shared',
-            'model': 'gpt-5.4',
+            'model': 'gpt-5.6-terra',
             'stage': 'planner',
             'callsite': 'planner',
             'input_tokens': 100,
@@ -266,9 +266,66 @@ def test_build_log_payload_labels_llm_call_entries() -> None:
     )
 
     assert title == 'LLM Call'
-    assert payload['model'] == 'gpt-5.4'
+    assert payload['model'] == 'gpt-5.6-terra'
     assert payload['total_tokens'] == 120
     assert payload['computed_total_cost'] == '0.000325'
+
+
+def test_build_request_analysis_log_payload_displays_all_agent_goals() -> None:
+    title, payload = _build_log_payload(
+        {
+            'kind': 'request_analysis',
+            'data': {
+                'goals': [
+                    {
+                        'agent': 'main_agent',
+                        'goal': 'Find hiking boots.',
+                        'tool_categories': ['products'],
+                    },
+                    {
+                        'agent': 'profile_management',
+                        'goal': 'Record durable preferences when appropriate.',
+                        'tool_categories': ['user_attributes'],
+                    },
+                ],
+                'requested_user_attribute_types': ['products.likes'],
+            },
+        }
+    )
+
+    assert title == 'Request Analysis'
+    assert payload['goals'] == [
+        {
+            'agent': 'main_agent',
+            'goal': 'Find hiking boots.',
+            'tool_categories': ['products'],
+        },
+        {
+            'agent': 'profile_management',
+            'goal': 'Record durable preferences when appropriate.',
+            'tool_categories': ['user_attributes'],
+        },
+    ]
+    assert payload['requested_user_attribute_types'] == ['products.likes']
+
+
+def test_build_request_analysis_log_payload_supports_legacy_event_shape() -> None:
+    _, payload = _build_log_payload(
+        {
+            'kind': 'request_analysis',
+            'data': {
+                'goal': 'Find hiking boots.',
+                'applicable_tool_categories': ['products'],
+            },
+        }
+    )
+
+    assert payload['goals'] == [
+        {
+            'goal': 'Find hiking boots.',
+            'tool_categories': ['products'],
+        }
+    ]
 
 
 def test_build_llm_call_payload_reads_input_and_output_objects_from_metadata() -> None:
@@ -276,7 +333,7 @@ def test_build_llm_call_payload_reads_input_and_output_objects_from_metadata() -
         {
             'kind': 'llm_call',
             'model_scope': 'shared',
-            'model': 'gpt-5.4',
+            'model': 'gpt-5.6-terra',
             'stage': 'synthesis',
             'callsite': 'shared_synthesis.run_synthesis',
             'input_tokens': 100,

@@ -30,7 +30,6 @@ class HydratedEvidence(BaseModel):
     entity_type: str = ""
     location_name: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
-    evidence_object: Any = None
     raw_payload: Any = None
 
     @property
@@ -53,7 +52,6 @@ class EvidenceView(BaseModel):
     title: str = ""
     summary: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
-    evidence_object: Any = None
 
 
 class EvidenceBundle(BaseModel):
