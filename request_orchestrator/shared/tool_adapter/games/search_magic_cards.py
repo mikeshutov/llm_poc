@@ -1,54 +1,22 @@
 from __future__ import annotations
 
-import re
-
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from integrations.scryfall import ScryfallCard, ScryfallCardFace, ScryfallCardSearchResult, ScryfallClient
+from integrations.scryfall import (
+    MagicCardPriceEntry,
+    ScryfallCard,
+    ScryfallCardFace,
+    ScryfallCardSearchResult,
+    ScryfallClient,
+)
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.shared.tool_adapter.games.mtg_color_identity import apply_commander_color_identity_filter
 from tool.constants import TOOL_NAME_SEARCH_MAGIC_CARDS
 from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
 
 _scryfall_client = ScryfallClient()
-_COMMANDER_COLOR_ALIASES = {
-    "colorless": "c",
-    "white": "w",
-    "blue": "u",
-    "black": "b",
-    "red": "r",
-    "green": "g",
-    "azorius": "wu",
-    "dimir": "ub",
-    "rakdos": "br",
-    "gruul": "rg",
-    "selesnya": "gw",
-    "orzhov": "wb",
-    "izzet": "ur",
-    "golgari": "bg",
-    "boros": "rw",
-    "simic": "ug",
-    "esper": "wub",
-    "grixis": "ubr",
-    "jund": "brg",
-    "naya": "rgw",
-    "bant": "wug",
-    "abzan": "wbg",
-    "jeskai": "wur",
-    "sultai": "ubg",
-    "mardu": "rwb",
-    "temur": "urg",
-    "sanswhite": "ubr",
-    "sansblue": "brg",
-    "sansblack": "rgw",
-    "sansred": "wug",
-    "sansgreen": "wub",
-    "fivecolor": "wubrg",
-    "5color": "wubrg",
-    "wubrg": "wubrg",
-}
-_COMMANDER_IDENTITY_FILTER_PATTERN = re.compile(r"(^|\s)(id|identity|ci)\s*(<=|>=|=|:|<|>)", re.IGNORECASE)
-_COLOR_ORDER = "wubrgc"
+DEFAULT_MAGIC_CARD_PAGE_SIZE = 15
 
 
 class SearchMagicCardsArgs(BaseModel):
@@ -56,15 +24,14 @@ class SearchMagicCardsArgs(BaseModel):
         ...,
         description="Scryfall card search query. Can be a card name or Scryfall search syntax like 'format:commander o:draw type:creature'.",
     )
-    limit: int = Field(
-        default=5,
-        ge=1,
-        le=25,
-        description="Maximum number of card results to return.",
-    )
+    page: int = Field(default=1, ge=1, description="1-based page number for paginating card results.")
     commander_color_identity: str = Field(
         default="",
         description="Optional commander color identity constraint to apply with Scryfall `id<=...`, such as `naya`, `wug`, `abzan`, or `colorless`.",
+    )
+    include_pricing: bool = Field(
+        default=False,
+        description="Whether to include aggregated Scryfall pricing across printings for each returned card.",
     )
 
 
@@ -83,12 +50,12 @@ class MagicCardSearchRecord(BaseModel):
     cmc: float | None = None
     type_line: str | None = None
     oracle_text: str | None = None
-    colors: list[str] | None = None
     color_identity: list[str] | None = None
     image_url: str | None = None
     scryfall_uri: str | None = None
     set_name: str | None = None
     rarity: str | None = None
+    pricing: list[MagicCardPriceEntry] = Field(default_factory=list)
 
 
 class MagicCardSearchMetadata(BaseModel):
@@ -96,8 +63,8 @@ class MagicCardSearchMetadata(BaseModel):
     rarity: str | None = None
     mana_cost: str | None = None
     type_line: str | None = None
-    colors: list[str] = []
     color_identity: list[str] = []
+    pricing: list[dict[str, str | None]] | None = None
 
 
 def _first_face(card: ScryfallCard) -> ScryfallCardFace | None:
@@ -158,90 +125,80 @@ def _card_summary(card: ScryfallCard) -> str:
     return " | ".join(parts) if parts else f"Magic card result for {card.name}."
 
 
-def _search_record_summary(card: MagicCardSearchRecord) -> str:
-    parts: list[str] = []
-    if card.mana_cost:
-        parts.append(card.mana_cost.strip())
-    if card.type_line:
-        parts.append(card.type_line.strip())
-    if card.oracle_text:
-        parts.append(card.oracle_text.replace("\n", " ").strip())
-    if card.set_name:
-        parts.append(f"Set: {card.set_name}")
-    return " | ".join(parts) if parts else f"Magic card result for {card.name}."
+def _has_pricing(entry: MagicCardPriceEntry) -> bool:
+    return any((entry.usd, entry.usd_foil, entry.usd_etched, entry.eur, entry.eur_foil, entry.tix))
 
 
-def _tool_result(result: SearchMagicCardsResult) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
-    for card in result.cards:
-        metadata = MagicCardSearchMetadata(
-            set_name=card.set_name,
-            rarity=card.rarity,
-            mana_cost=card.mana_cost,
-            type_line=card.type_line,
-            colors=list(card.colors or []),
-            color_identity=list(card.color_identity or []),
-        )
-        hydrated = HydratedEvidence(
-            item_id=card.id,
-            tool_name=TOOL_NAME_SEARCH_MAGIC_CARDS,
-            title=card.name.strip(),
-            summary=_search_record_summary(card),
-            urls=[EvidenceUrl(url=(card.scryfall_uri or "").strip(), url_type="website")] if (card.scryfall_uri or "").strip() else [],
-            image_url=(card.image_url or "").strip(),
-            source=TOOL_NAME_SEARCH_MAGIC_CARDS,
-            entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=card,
-        )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(
-        result=result,
-        metadata={
-            "has_more": result.has_more,
-            "returned_count": result.returned_count,
-            "total_cards": result.total_cards,
-            "warnings": list(result.warnings),
-        },
-        evidence_views=evidence_views,
-        hydrated_evidence=hydrated_evidence,
+def _pricing_metadata(pricing: list[MagicCardPriceEntry]) -> list[dict[str, str | None]]:
+    return [
+        {
+            "set": entry.set_name or "",
+            "usd": entry.usd,
+            "usd_foil": entry.usd_foil,
+            "usd_etched": entry.usd_etched,
+            "eur": entry.eur,
+            "eur_foil": entry.eur_foil,
+            "magic_online": entry.tix,
+        }
+        for entry in pricing
+        if _has_pricing(entry)
+    ]
+
+
+def _load_card_pricing(card_name: str) -> list[MagicCardPriceEntry]:
+    search_result = _scryfall_client.search_cards(
+        f'!"{card_name}"',
+        unique="prints",
+        order="released",
+        dir="desc",
+    )
+    return [MagicCardPriceEntry.from_card(card) for card in search_result.data]
+
+
+def _build_card_record(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -> MagicCardSearchRecord:
+    return MagicCardSearchRecord(
+        id=card.id,
+        name=card.name,
+        mana_cost=card.mana_cost,
+        cmc=card.cmc,
+        type_line=card.type_line,
+        oracle_text=card.oracle_text,
+        color_identity=list(card.color_identity or []),
+        image_url=_card_image_url(card) or None,
+        scryfall_uri=card.scryfall_uri,
+        set_name=card.set_name,
+        rarity=card.rarity,
+        pricing=pricing,
     )
 
 
-def _normalize_commander_color_identity(value: str) -> str:
-    normalized = "".join(ch for ch in (value or "").lower() if ch.isalpha() or ch.isdigit())
-    if not normalized:
-        return ""
-    alias = _COMMANDER_COLOR_ALIASES.get(normalized)
-    if alias is not None:
-        return alias
-
-    deduped: list[str] = []
-    for symbol in _COLOR_ORDER:
-        if symbol in normalized:
-            deduped.append(symbol)
-    if deduped:
-        return "".join(deduped)
-    return normalized
+def _build_hydrated_evidence(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -> HydratedEvidence:
+    pricing_metadata = _pricing_metadata(pricing)
+    metadata = MagicCardSearchMetadata(
+        set_name=card.set_name,
+        rarity=card.rarity,
+        mana_cost=_card_mana_cost(card) or None,
+        type_line=_card_type_line(card) or None,
+        color_identity=list(card.color_identity or []),
+        pricing=pricing_metadata or None,
+    )
+    url = _card_url(card)
+    return HydratedEvidence(
+        item_id=card.id,
+        tool_name=TOOL_NAME_SEARCH_MAGIC_CARDS,
+        title=card.name.strip(),
+        summary=_card_summary(card),
+        urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+        image_url=_card_image_url(card) or "",
+        source=TOOL_NAME_SEARCH_MAGIC_CARDS,
+        entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        raw_payload=card,
+    )
 
 
 def _build_search_query(query: str, commander_color_identity: str) -> str:
-    normalized_query = query.strip()
-    if not normalized_query:
-        return normalized_query
-    normalized_identity = _normalize_commander_color_identity(commander_color_identity)
-    if not normalized_identity or _COMMANDER_IDENTITY_FILTER_PATTERN.search(normalized_query):
-        return normalized_query
-    return f"id<={normalized_identity} {normalized_query}"
+    return apply_commander_color_identity_filter(query, commander_color_identity)
 
 
 @tool(
@@ -254,52 +211,79 @@ Required fields:
 - query (string)
 
 Optional fields:
-- limit (integer, 1-25)
+- page (integer, 1-based)
 - commander_color_identity (string, optional)
+- include_pricing (boolean, optional)
 
 Example valid calls:
 {
   "query": "Black Lotus",
-  "limit": 3
+  "page": 1
 }
 {
   "query": "format:commander o:draw type:creature",
-  "limit": 5
+  "page": 1
 }
 {
   "query": "type:instant (o:land or o:graveyard)",
   "commander_color_identity": "abzan",
-  "limit": 5
+  "page": 2
+}
+{
+  "query": "Black Lotus",
+  "include_pricing": true,
+  "page": 1
 }
 """,
 )
-def search_magic_cards(query: str, limit: int = 5, commander_color_identity: str = "") -> ToolResult:
+def search_magic_cards(
+    query: str,
+    page: int = 1,
+    commander_color_identity: str = "",
+    include_pricing: bool = False,
+) -> ToolResult:
     response: ScryfallCardSearchResult = _scryfall_client.search_cards(
         _build_search_query(query, commander_color_identity)
     )
-    cards = [
-        MagicCardSearchRecord(
-            id=card.id,
-            name=card.name,
-            mana_cost=card.mana_cost,
-            cmc=card.cmc,
-            type_line=card.type_line,
-            oracle_text=card.oracle_text,
-            colors=list(card.colors or []),
-            color_identity=list(card.color_identity or []),
-            image_url=_card_image_url(card) or None,
-            scryfall_uri=card.scryfall_uri,
-            set_name=card.set_name,
-            rarity=card.rarity,
+    start_index = (page - 1) * DEFAULT_MAGIC_CARD_PAGE_SIZE
+    selected_cards = response.data[start_index : start_index + DEFAULT_MAGIC_CARD_PAGE_SIZE]
+    pricing_by_name: dict[str, list[MagicCardPriceEntry]] = {}
+    cards: list[MagicCardSearchRecord] = []
+    hydrated_evidence: list[HydratedEvidence] = []
+    evidence_views: list[EvidenceView] = []
+
+    for card in selected_cards:
+        pricing = pricing_by_name.setdefault(card.name, _load_card_pricing(card.name)) if include_pricing else []
+        record = _build_card_record(card, pricing)
+        hydrated = _build_hydrated_evidence(card, pricing)
+        cards.append(record)
+        hydrated_evidence.append(hydrated)
+        evidence_views.append(
+            EvidenceView(
+                item_id=hydrated.item_id,
+                title=hydrated.title,
+                summary=hydrated.summary,
+                metadata=dict(hydrated.metadata),
+            )
         )
-        for card in response.data[:limit]
-    ]
-    return _tool_result(
-        SearchMagicCardsResult(
-            total_cards=response.total_cards,
-            has_more=response.has_more or response.total_cards > len(cards),
-            returned_count=len(cards),
-            warnings=list(response.warnings),
-            cards=cards,
-        )
+
+    result = SearchMagicCardsResult(
+        total_cards=response.total_cards,
+        has_more=response.total_cards > start_index + len(cards),
+        returned_count=len(cards),
+        warnings=list(response.warnings),
+        cards=cards,
+    )
+    return ToolResult(
+        result=result,
+        metadata={
+            "page": page,
+            "page_size": DEFAULT_MAGIC_CARD_PAGE_SIZE,
+            "has_more": result.has_more,
+            "returned_count": result.returned_count,
+            "total_cards": result.total_cards,
+            "warnings": list(result.warnings),
+        },
+        evidence_views=evidence_views,
+        hydrated_evidence=hydrated_evidence,
     )

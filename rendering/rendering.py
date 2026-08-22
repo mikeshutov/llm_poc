@@ -9,15 +9,17 @@ import streamlit as st
 from common.config import CONTENT_KEY, FILES_DIR, IMAGE_MIME_PREFIX, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
 from common.logging import fetch_agent_logs_for_roundtrip, fetch_llm_call_payloads_for_roundtrip
 from llm.usage import build_llm_usage_payload
-from rendering.cards import render_cards
+from rendering.cards import render_cards, render_magic_card_evidence_cards
 from rendering.debug import debug_render_message, render_agent_logs
 from rendering.feedback import render_feedback_controls
 from rendering.replay import render_replay_control
 from request_orchestrator.models.evidence import EvidenceUrl, HydratedEvidence
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
+from tool.constants import TOOL_NAME_SEARCH_MAGIC_CARDS
 from tool.constants import TOOL_NAME_STRUCTURED_FACTS_LOOKUP
 from tool.constants import TOOL_NAME_WIKIPEDIA_SEARCH
+from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
 
@@ -62,6 +64,13 @@ def _is_inline_label_evidence(hydrated: HydratedEvidence) -> bool:
 
 def _is_inline_evidence(hydrated: HydratedEvidence) -> bool:
     return _is_inline_link_evidence(hydrated) or _is_inline_label_evidence(hydrated)
+
+
+def _is_magic_card_evidence(hydrated: HydratedEvidence) -> bool:
+    return (
+        hydrated.tool_name.strip() == TOOL_NAME_SEARCH_MAGIC_CARDS
+        and hydrated.entity_type.strip() == TOOL_RESULT_TYPE_CARD_RESULTS
+    )
 
 
 def format_timestamp(ts) -> str | None:
@@ -249,7 +258,7 @@ def _build_block_cards(
         hydrated = hydrated_evidence_by_id.get(evidence_id)
         if hydrated is None:
             continue
-        if _is_inline_evidence(hydrated):
+        if _is_inline_evidence(hydrated) or _is_magic_card_evidence(hydrated):
             continue
         url = _primary_card_url(hydrated.urls)
         image_url = hydrated.image_url.strip()
@@ -319,6 +328,14 @@ def _render_result_block(
         )
     else:
         st.write(block.content)
+
+    magic_card_evidence = [
+        hydrated
+        for evidence_id in block.evidence_ids
+        if (hydrated := hydrated_evidence_by_id.get(evidence_id)) is not None and _is_magic_card_evidence(hydrated)
+    ]
+    if magic_card_evidence:
+        render_magic_card_evidence_cards(magic_card_evidence)
 
     block_cards = _build_block_cards(block, hydrated_evidence_by_id)
     for label in inline_labels:

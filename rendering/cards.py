@@ -3,7 +3,10 @@ import os
 from pathlib import Path
 from typing import Any, Iterable
 
+import pandas as pd
 import streamlit as st
+
+from request_orchestrator.models.evidence import HydratedEvidence
 
 # messy but fine for now
 def render_cards(
@@ -60,3 +63,104 @@ def render_cards(
                     price = item.get("price")
                     if price is not None:
                         st.caption(f"Price: {price}")
+
+
+def render_magic_card_evidence_cards(items: Iterable[HydratedEvidence]) -> None:
+    items_list = list(items)
+    for start in range(0, len(items_list), 2):
+        row = items_list[start : start + 2]
+        cols = st.columns(2)
+        for col, item in zip(cols, row):
+            with col:
+                _render_magic_card_evidence_card(item)
+
+
+def _render_magic_card_evidence_card(item: HydratedEvidence) -> None:
+    with st.container(border=True):
+        image_url = item.image_url.strip()
+        if image_url:
+            image_col, content_col = st.columns([1, 2])
+        else:
+            image_col, content_col = None, st.container()
+
+        if image_col is not None:
+            with image_col:
+                st.image(image_url, width="stretch")
+
+        with content_col:
+            title = item.title.strip() or "Magic Card"
+            card_url = item.url.strip()
+            if card_url:
+                st.markdown(f"**[{title}]({card_url})**")
+            else:
+                st.markdown(f"**{title}**")
+
+            cmc = _raw_value(item.raw_payload, "cmc")
+            colors = _string_list(_metadata_value(item.metadata, "color_identity"))
+            color_text = ", ".join(colors) if colors else "Colorless"
+            cmc_text = "Unknown" if cmc in (None, "") else str(cmc)
+            st.caption(f"CMC {cmc_text} | {color_text}")
+
+            oracle_text = str(_raw_value(item.raw_payload, "oracle_text") or "").strip()
+            if oracle_text:
+                st.write(oracle_text)
+
+            pricing_rows = _pricing_rows(item.metadata)
+            if pricing_rows:
+                st.dataframe(
+                    pd.DataFrame(pricing_rows).reset_index(drop=True),
+                    hide_index=True,
+                    use_container_width=True,
+                )
+
+            if card_url:
+                st.markdown(
+                    (
+                        "<a "
+                        f'href="{html.escape(card_url, quote=True)}" '
+                        'target="_blank" rel="noopener noreferrer" '
+                        "style=\"display:inline-block;vertical-align:middle;margin-top:0.4rem;"
+                        "padding:0.14rem 0.5rem;border:1px solid rgba(49,51,63,0.2);"
+                        "border-radius:999px;text-decoration:none;font-size:0.82rem;"
+                        "line-height:1.4;color:inherit;background:rgba(255,255,255,0.65);\">"
+                        "↗ Open on Scryfall</a>"
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+
+def _raw_value(raw_payload: Any, key: str) -> Any:
+    if isinstance(raw_payload, dict):
+        return raw_payload.get(key)
+    return getattr(raw_payload, key, None)
+
+
+def _metadata_value(metadata: dict[str, Any], key: str) -> Any:
+    return metadata.get(key)
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _pricing_rows(source: Any) -> list[dict[str, str]]:
+    pricing = _raw_value(source, "pricing")
+    if not isinstance(pricing, list):
+        return []
+
+    rows: list[dict[str, str]] = []
+    for entry in pricing:
+        row = {
+            "Set": str(_raw_value(entry, "set_name") or _raw_value(entry, "set") or "").strip(),
+            "USD": str(_raw_value(entry, "usd") or "").strip(),
+            "USD Foil": str(_raw_value(entry, "usd_foil") or "").strip(),
+            "USD Etched": str(_raw_value(entry, "usd_etched") or "").strip(),
+            "EUR": str(_raw_value(entry, "eur") or "").strip(),
+            "EUR Foil": str(_raw_value(entry, "eur_foil") or "").strip(),
+            "MTGO": str(_raw_value(entry, "tix") or _raw_value(entry, "magic_online") or "").strip(),
+        }
+        if any(value for value in row.values()):
+            rows.append({label: value for label, value in row.items() if value})
+    return rows
