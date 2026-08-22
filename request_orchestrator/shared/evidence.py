@@ -209,7 +209,6 @@ def _build_hydrated_evidence_from_view(
         source=tool_name,
         entity_type=get_tool_result_type(tool_name),
         metadata=dict(evidence_view.metadata),
-        evidence_object=evidence_view.evidence_object,
     )
 
 def _merge_step_metadata(left: dict[str, object], right: dict[str, object]) -> dict[str, object]:

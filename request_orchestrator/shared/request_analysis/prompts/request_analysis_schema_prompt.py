@@ -1,7 +1,7 @@
 REQUEST_ANALYSIS_SCHEMA = """
 Set "goals" to an array of goal objects. Each goal object must contain:
 - "agent": one of the provided available agent names
-- "goal": a self-contained statement of what that agent is trying to accomplish
+- "goal": a self-contained statement of what that particular agent is trying to accomplish
 - "tool_categories": the relevant category names for that agent
 
 Include any relevant conversation-derived constraints, continuity, entities, or references needed by downstream planning and synthesis because the full conversation context will not be passed through later.
@@ -15,7 +15,7 @@ Response JSON shape:
   "goals": [
     {
       "agent": "main_agent",
-      "goal": "Find a good place to eat nearby",
+      "goal": "agent specific goal",
       "tool_categories": ["food"]
     }
   ],

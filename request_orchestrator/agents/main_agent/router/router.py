@@ -26,9 +26,9 @@ def router(state: AgentState) -> str:
         for tool_result in state.result.tool_results
         if tool_result.step_id in current_result_step_ids
     ]
-    if current_results and planner_state.needs_replan:
-        return PLAN_EDGE
     if current_results:
+        # The evaluator owns replanning for this strategy. Do not let a planner
+        # flag bypass it, or repeated tool calls can starve evaluation.
         return EVALUATE_EDGE
 
     return PLAN_EDGE

@@ -27,7 +27,7 @@ class FakeLangChainResponse:
             'output_tokens': 30,
             'total_tokens': 150,
         }
-        self.response_metadata = {'model_name': 'gpt-5.4-mini'}
+        self.response_metadata = {'model_name': 'gpt-5.6-luna'}
 
 
 class FakeOpenAIResponse:
@@ -59,7 +59,7 @@ def test_record_llm_call_uses_base_pricing_for_snapshot_model_name() -> None:
     with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
         record_llm_call(
             raw_response=FakeLangChainResponse(),
-            model_name='gpt-5.4-mini-2026-03-17',
+            model_name='gpt-5.6-luna-2026-03-17',
             conversation_id=None,
             roundtrip_id=None,
             user_id=None,
@@ -69,8 +69,8 @@ def test_record_llm_call_uses_base_pricing_for_snapshot_model_name() -> None:
         )
 
     assert len(fake_repo.calls) == 1
-    assert fake_repo.calls[0]['input_price_per_million_tokens'] == Decimal('0.75')
-    assert fake_repo.calls[0]['output_price_per_million_tokens'] == Decimal('4.50')
+    assert fake_repo.calls[0]['input_price_per_million_tokens'] == Decimal('1.00')
+    assert fake_repo.calls[0]['output_price_per_million_tokens'] == Decimal('6.00')
 
 
 def test_record_llm_call_computes_costs_and_persists() -> None:
@@ -81,7 +81,7 @@ def test_record_llm_call_computes_costs_and_persists() -> None:
     with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
         record_llm_call(
             raw_response=FakeLangChainResponse(),
-            model_name='gpt-5.4-mini',
+            model_name='gpt-5.6-luna',
             conversation_id=str(conversation_id),
             roundtrip_id=str(roundtrip_id),
             user_id='anonymous',
@@ -95,16 +95,43 @@ def test_record_llm_call_computes_costs_and_persists() -> None:
     stored = fake_repo.calls[0]
     assert stored['conversation_id'] == conversation_id
     assert stored['roundtrip_id'] == roundtrip_id
-    assert stored['model'] == 'gpt-5.4-mini'
+    assert stored['model'] == 'gpt-5.6-luna'
     assert stored['input_tokens'] == 120
     assert stored['output_tokens'] == 30
     assert stored['total_tokens'] == 150
-    assert stored['input_price_per_million_tokens'] == Decimal('0.75')
-    assert stored['output_price_per_million_tokens'] == Decimal('4.50')
-    assert stored['computed_input_cost'] == Decimal('0.00009')
-    assert stored['computed_output_cost'] == Decimal('0.000135')
-    assert stored['computed_total_cost'] == Decimal('0.000225')
+    assert stored['input_price_per_million_tokens'] == Decimal('1.00')
+    assert stored['output_price_per_million_tokens'] == Decimal('6.00')
+    assert stored['computed_input_cost'] == Decimal('0.00012')
+    assert stored['computed_output_cost'] == Decimal('0.00018')
+    assert stored['computed_total_cost'] == Decimal('0.00030')
     assert stored['metadata'] == {'kind': 'test'}
+
+
+def test_record_llm_call_charges_cached_luna_tokens_at_the_cached_rate() -> None:
+    fake_repo = FakeRepo()
+    response = FakeLangChainResponse()
+    response.usage_metadata['input_tokens'] = 1_000
+    response.usage_metadata['output_tokens'] = 100
+    response.usage_metadata['total_tokens'] = 1_100
+    response.usage_metadata['input_token_details'] = {'cache_read': 400}
+
+    with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
+        record_llm_call(
+            raw_response=response,
+            model_name='gpt-5.6-luna',
+            conversation_id=None,
+            roundtrip_id=None,
+            user_id=None,
+            agent='main_agent',
+            stage='request_analysis',
+            callsite='request_analysis.analyze_request',
+        )
+
+    stored = fake_repo.calls[0]
+    assert stored['cached_input_tokens'] == 400
+    assert stored['computed_input_cost'] == Decimal('0.00064')
+    assert stored['computed_output_cost'] == Decimal('0.0006')
+    assert stored['computed_total_cost'] == Decimal('0.00124')
 
 
 def test_record_llm_call_raises_when_model_has_no_pricing() -> None:
@@ -132,7 +159,7 @@ def test_record_llm_call_persists_input_and_output_objects() -> None:
     with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
         record_llm_call(
             raw_response=FakeLangChainResponse(),
-            model_name='gpt-5.4-mini',
+            model_name='gpt-5.6-luna',
             conversation_id=None,
             roundtrip_id=None,
             user_id=None,
@@ -156,7 +183,7 @@ def test_record_llm_call_persists_latency_ms_in_metadata() -> None:
     with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
         record_llm_call(
             raw_response=FakeLangChainResponse(),
-            model_name='gpt-5.4-mini',
+            model_name='gpt-5.6-luna',
             conversation_id=None,
             roundtrip_id=None,
             user_id=None,
@@ -176,16 +203,16 @@ def test_serialize_llm_call_record_promotes_input_and_output_objects() -> None:
             'agent': 'main_agent',
             'stage': 'request_analysis',
             'callsite': 'request_analysis.analyze_request',
-            'model': 'gpt-5.4-mini',
+            'model': 'gpt-5.6-luna',
             'input_tokens': 120,
             'output_tokens': 30,
             'total_tokens': 150,
             'cached_input_tokens': 0,
-            'input_price_per_million_tokens': '0.75',
-            'output_price_per_million_tokens': '4.50',
-            'computed_input_cost': '0.00009',
-            'computed_output_cost': '0.000135',
-            'computed_total_cost': '0.000225',
+            'input_price_per_million_tokens': '1.00',
+            'output_price_per_million_tokens': '6.00',
+            'computed_input_cost': '0.00012',
+            'computed_output_cost': '0.00018',
+            'computed_total_cost': '0.00030',
             'metadata': {
                 'latency_ms': 321,
                 'input_object': {'prompt': 'hello'},
@@ -208,23 +235,23 @@ def test_build_llm_usage_payload_sums_latency_ms() -> None:
                 'agent': 'main_agent',
                 'stage': 'planner',
                 'callsite': 'shared_planner.run_planner',
-                'model': 'gpt-5.4-mini',
+                'model': 'gpt-5.6-luna',
                 'input_tokens': 120,
                 'output_tokens': 30,
                 'total_tokens': 150,
                 'cached_input_tokens': 0,
-                'input_price_per_million_tokens': '0.75',
-                'output_price_per_million_tokens': '4.50',
-                'computed_input_cost': '0.00009',
-                'computed_output_cost': '0.000135',
-                'computed_total_cost': '0.000225',
+                'input_price_per_million_tokens': '1.00',
+                'output_price_per_million_tokens': '6.00',
+                'computed_input_cost': '0.00012',
+                'computed_output_cost': '0.00018',
+                'computed_total_cost': '0.00030',
                 'metadata': {'latency_ms': 100},
             },
             {
                 'agent': 'main_agent',
                 'stage': 'synthesis',
                 'callsite': 'shared_synthesis.run_synthesis',
-                'model': 'gpt-5.4',
+                'model': 'gpt-5.6-terra',
                 'input_tokens': 80,
                 'output_tokens': 20,
                 'total_tokens': 100,

@@ -64,6 +64,7 @@ class MagicCardSearchMetadata(BaseModel):
     mana_cost: str | None = None
     type_line: str | None = None
     color_identity: list[str] = []
+    legal_formats: list[str] = []
     pricing: list[MagicCardPriceMetadataEntry] | None = None
 
 
@@ -109,20 +110,15 @@ def _card_mana_cost(card: ScryfallCard) -> str:
     return "" if face is None or not face.mana_cost else face.mana_cost.strip()
 
 
+def _legal_formats(card: ScryfallCard) -> list[str]:
+    return sorted(format_name for format_name, status in card.legalities.items() if status == "legal")
+
+
 def _card_summary(card: ScryfallCard) -> str:
-    parts: list[str] = []
-    mana_cost = _card_mana_cost(card)
-    type_line = _card_type_line(card)
     oracle_text = _card_oracle_text(card)
-    if mana_cost:
-        parts.append(mana_cost)
-    if type_line:
-        parts.append(type_line)
     if oracle_text:
-        parts.append(oracle_text.replace("\n", " ").strip())
-    if card.set_name:
-        parts.append(f"Set: {card.set_name}")
-    return " | ".join(parts) if parts else f"Magic card result for {card.name}."
+        return oracle_text.replace("\n", " ").strip()
+    return f"Magic card result for {card.name}."
 
 
 def _has_pricing(entry: MagicCardPriceEntry) -> bool:
@@ -163,6 +159,7 @@ def _build_hydrated_evidence(card: ScryfallCard, pricing: list[MagicCardPriceEnt
         mana_cost=_card_mana_cost(card) or None,
         type_line=_card_type_line(card) or None,
         color_identity=list(card.color_identity or []),
+        legal_formats=_legal_formats(card),
         pricing=pricing_metadata or None,
     )
     url = _card_url(card)

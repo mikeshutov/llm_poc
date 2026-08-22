@@ -75,6 +75,19 @@ def render_magic_card_evidence_cards(items: Iterable[HydratedEvidence]) -> None:
                 _render_magic_card_evidence_card(item)
 
 
+def render_magic_card_rulings(items: Iterable[HydratedEvidence]) -> None:
+    rows = [
+        {
+            "Published": item.published_at.strip(),
+            "Rule": item.summary.strip(),
+        }
+        for item in items
+        if item.summary.strip()
+    ]
+    if rows:
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+
 def _render_magic_card_evidence_card(item: HydratedEvidence) -> None:
     with st.container(border=True):
         image_url = item.image_url.strip()
@@ -97,9 +110,12 @@ def _render_magic_card_evidence_card(item: HydratedEvidence) -> None:
 
             cmc = _raw_value(item.raw_payload, "cmc")
             colors = _string_list(_metadata_value(item.metadata, "color_identity"))
+            type_line = str(_metadata_value(item.metadata, "type_line") or "").strip()
             color_text = ", ".join(colors) if colors else "Colorless"
             cmc_text = "Unknown" if cmc in (None, "") else str(cmc)
             st.caption(f"CMC {cmc_text} | {color_text}")
+            if type_line:
+                st.caption(type_line)
 
             oracle_text = str(_raw_value(item.raw_payload, "oracle_text") or "").strip()
             if oracle_text:

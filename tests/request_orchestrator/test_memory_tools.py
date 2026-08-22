@@ -23,7 +23,7 @@ def test_get_memory_detail_returns_typed_result() -> None:
                 parsed_query={"topic": "returns"},
                 created_at="2026-08-01T12:00:00+00:00",
                 metadata={"source": "memory"},
-                model="gpt-5.4",
+                model="gpt-5.6-terra",
             )
 
         def get_roundtrip_for_user(self, roundtrip_id, user_id: str | None):
@@ -60,7 +60,7 @@ def test_get_memory_detail_returns_typed_result() -> None:
         "generated_response": "We said we would offer 30-day returns.",
         "roundtrip_summary": "The conversation decided on a 30-day return policy.",
         "created_at": "2026-08-01T12:00:00+00:00",
-        "model": "gpt-5.4",
+        "model": "gpt-5.6-terra",
         "response_payload": {"response": "We said we would offer 30-day returns."},
         "parsed_query": {"topic": "returns"},
         "metadata": {"source": "memory"},

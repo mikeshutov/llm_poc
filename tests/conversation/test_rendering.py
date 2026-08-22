@@ -12,6 +12,7 @@ from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, H
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from tool.constants import TOOL_NAME_GET_CURRENT_WEATHER
 from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
+from tool.constants import TOOL_RESULT_TYPE_RULES
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
 
@@ -210,3 +211,29 @@ def test_render_result_block_renders_weather_as_inline_markdown_link(monkeypatch
     assert "Toronto is warm today." in rendered_value
     assert "https://open-meteo.com/" in rendered_value
     assert rendered_kwargs == {"unsafe_allow_html": True}
+
+
+def test_render_result_block_renders_magic_card_rulings_as_a_table(monkeypatch) -> None:
+    rendered_rulings: list[list[HydratedEvidence]] = []
+    monkeypatch.setattr("rendering.rendering.st.write", lambda value: None)
+    monkeypatch.setattr(
+        "rendering.rendering.render_magic_card_rulings",
+        lambda items: rendered_rulings.append(list(items)),
+    )
+
+    cards = _render_result_block(
+        SynthesisResultBlock(content="Humility rulings", evidence_ids=["P1E1R1"]),
+        {
+            "P1E1R1": HydratedEvidence(
+                evidence_id="P1E1R1",
+                title="Humility Ruling 1",
+                summary="Humility applies in layers 6 and 7b.",
+                entity_type=TOOL_RESULT_TYPE_RULES,
+                published_at="2004-10-04",
+            )
+        },
+    )
+
+    assert cards == []
+    assert len(rendered_rulings) == 1
+    assert rendered_rulings[0][0].published_at == "2004-10-04"

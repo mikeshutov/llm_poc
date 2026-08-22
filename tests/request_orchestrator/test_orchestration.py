@@ -584,45 +584,6 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertNotIn('Earlier user prompt', prompt_text)
         self.assertNotIn('Earlier roundtrip summary', prompt_text)
 
-    def test_synthesis_prompt_includes_evidence_object_when_present(self) -> None:
-        state = AgentState.new(
-            task='Summarize this.',
-            execution_context=AgentExecutionContext.new(
-                conversation_context=ConversationContext(),
-                user_profile=UserProfile(),
-            ),
-            llm=MockLLM([]),
-            agent_profile=MAIN_AGENT_PROFILE,
-        )
-
-        prompt = build_synthesis_prompt(
-            evidence=[
-                EvidenceStep(
-                    type='decks',
-                    evidence=[
-                        EvidenceView(
-                            evidence_id="P1E1R1",
-                            item_id="uril-the-miststalker",
-                            title='Uril, the Miststalker (Commander)',
-                            summary='EDHREC summary.',
-                            evidence_object={
-                                "top_themes": [
-                                    {"value": "Auras", "count": 1218},
-                                ]
-                            },
-                        )
-                    ],
-                )
-            ],
-            state=state,
-        )
-
-        prompt_text = prompt.build()
-
-        self.assertIn('"evidence_object"', prompt_text)
-        self.assertIn('"top_themes"', prompt_text)
-        self.assertIn('"Auras"', prompt_text)
-
     def test_synthesis_prompt_omits_empty_conversation_context_section(self) -> None:
         state = AgentState.new(
             task='Summarize this.',

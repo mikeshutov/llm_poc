@@ -4,11 +4,13 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.edhrec import EDHREC_COMMANDER_URL_TEMPLATE, EdhrecClient, EdhrecCommanderPage, EdhrecComboLink
+from integrations.scryfall import ScryfallCard, ScryfallClient, ScryfallClientError
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_COMMANDER_DETAILS
 from tool.constants import TOOL_RESULT_TYPE_DECKS
 
 _edhrec_client = EdhrecClient()
+_scryfall_client = ScryfallClient()
 
 
 class GetCommanderDetailsArgs(BaseModel):
@@ -43,7 +45,6 @@ class CommanderDetailsResult(BaseModel):
 
 
 class CommanderDetailsMetadata(BaseModel):
-    commander_slug: str
     top_themes: str | None = None
     combo_highlights: list[str] = []
     similar_commanders: list[str] = []
@@ -57,37 +58,41 @@ def _combo_text(combo: EdhrecComboLink) -> str:
     return (combo.value or combo.alt or "").strip()
 
 
-def _summary(result: CommanderDetailsResult) -> str:
-    parts: list[str] = []
-    if result.description.strip():
-        parts.append(result.description.strip())
-    if result.top_themes.strip():
-        parts.append(f"Top themes: {result.top_themes}")
-    if result.combo_highlights:
-        parts.append("Combos: " + ", ".join(result.combo_highlights[:3]))
-    if result.similar_commanders:
-        parts.append("Similar commanders: " + ", ".join(result.similar_commanders[:4]))
-    return " | ".join(parts) if parts else f"Commander details for {result.commander_name}."
+def _oracle_text(card: ScryfallCard) -> str:
+    if card.oracle_text:
+        return card.oracle_text.strip()
+    if not card.card_faces:
+        return ""
+    return " // ".join(
+        face.oracle_text.strip()
+        for face in card.card_faces
+        if face.oracle_text and face.oracle_text.strip()
+    )
+
+
+def _summary(commander_name: str) -> str:
+    try:
+        oracle_text = _oracle_text(_scryfall_client.get_card_by_name(commander_name))
+    except (ScryfallClientError, ValueError):
+        oracle_text = ""
+    return oracle_text or f"Oracle text unavailable for {commander_name}."
 
 
 def _tool_result(result: CommanderDetailsResult) -> ToolResult:
     metadata = CommanderDetailsMetadata(
-        commander_slug=result.commander_slug,
         top_themes=result.top_themes or None,
         combo_highlights=list(result.combo_highlights),
         similar_commanders=list(result.similar_commanders),
     )
-    evidence_object = result.model_dump()
     hydrated = HydratedEvidence(
         item_id=result.commander_slug,
         tool_name=TOOL_NAME_GET_COMMANDER_DETAILS,
         title=result.title.strip() or result.commander_name,
-        summary=_summary(result),
+        summary=_summary(result.commander_name),
         urls=[EvidenceUrl(url=result.page_url, url_type=EvidenceUrlType.WEBSITE)] if result.page_url else [],
         source=TOOL_NAME_GET_COMMANDER_DETAILS,
         entity_type=TOOL_RESULT_TYPE_DECKS,
         metadata=metadata.model_dump(exclude_none=True),
-        evidence_object=evidence_object,
         raw_payload=result,
     )
     return ToolResult(
@@ -98,7 +103,6 @@ def _tool_result(result: CommanderDetailsResult) -> ToolResult:
                 title=hydrated.title,
                 summary=hydrated.summary,
                 metadata=dict(hydrated.metadata),
-                evidence_object=evidence_object,
             )
         ],
         hydrated_evidence=[hydrated],
@@ -133,7 +137,7 @@ def get_commander_details(commander_name: str, theme_limit: int = 5, combo_limit
             commander_name=page.container.title.replace(" (Commander)", "").strip() or commander_name.strip(),
             commander_slug=slug,
             page_url=_page_url(slug),
-            title=page.container.title.strip() or page.header.strip() or commander_name.strip(),
+            title=page.container.title.replace(" (Commander)", "").strip() or page.header.strip() or commander_name.strip(),
             description=(page.container.description or page.description or "").strip(),
             top_themes=top_themes,
             combo_highlights=combo_highlights,

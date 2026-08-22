@@ -511,7 +511,6 @@ def test_build_evidence_bundle_falls_back_to_evidence_views_when_hydrated_record
                             "title": "View-only Ramen Spot",
                             "summary": "Evidence survived as a view only.",
                             "metadata": {"quality": "high"},
-                            "evidence_object": {"source_kind": "view_only"},
                         }
                     ],
                     "hydrated_evidence": [],
@@ -531,7 +530,6 @@ def test_build_evidence_bundle_falls_back_to_evidence_views_when_hydrated_record
     assert record.source == "generic_web_search"
     assert record.entity_type == "web_search_results"
     assert record.metadata == {"quality": "high"}
-    assert record.evidence_object == {"source_kind": "view_only"}
     assert len(evidence_steps) == 1
     assert evidence_steps[0].type == "web_search_results"
     assert [evidence.title for evidence in evidence_steps[0].evidence] == ["View-only Ramen Spot"]

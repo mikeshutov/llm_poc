@@ -13,11 +13,11 @@ The system can use different models for different parts of the loop. Today the c
 That means request analysis, planning, synthesis, evaluation, and reranking do not have to share the same model.
 
 ## Defaults
-The defaults currently live in `conversation/models/conversation_model_config.py`.
+The defaults currently live in `llm/conversation_model_config.py`.
 
 The main pattern is:
-1. Smaller or cheaper models are used by default for request analysis, profile planning, evaluator, and reranker.
-2. The main agent planner and synthesis stages default to the main configured chat model.
+1. `gpt-5.6-luna` is used by default for request analysis, profile planning, evaluator, and reranker.
+2. `gpt-5.6-terra` is used by default for the main agent planner and synthesis stages.
 
 Current default variables include:
 1. `LLM_MODEL`

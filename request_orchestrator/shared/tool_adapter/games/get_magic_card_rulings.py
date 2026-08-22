@@ -36,23 +36,36 @@ class MagicCardReference(BaseModel):
     scryfall_uri: str | None = None
     set_name: str | None = None
     rarity: str | None = None
+    legal_formats: list[str] = []
+
+
+class MagicCardRulingMetadata(BaseModel):
+    legal_formats: list[str] = []
+    ruling_count: int
+
+
+class MagicCardRulingsMetadata(BaseModel):
+    ruling_source: str | None = None
 
 
 def _card_url(card: ScryfallCard) -> str:
     return (card.scryfall_uri or "").strip()
 
 
-def _build_metadata(result: MagicCardRulingsResult, ruling: ScryfallRuling | None = None) -> dict[str, object]:
-    metadata: dict[str, object] = {
-        "card_id": result.resolved_card.id,
-        "card_name": result.resolved_card.name,
-        "set_name": result.resolved_card.set_name,
-        "rarity": result.resolved_card.rarity,
-        "oracle_id": ruling.oracle_id if ruling is not None else None,
-        "ruling_source": ruling.source if ruling is not None else "",
-        "ruling_count": result.ruling_count,
-    }
-    return metadata
+def _build_metadata(
+    result: MagicCardRulingsResult,
+    ruling: ScryfallRuling | None = None,
+) -> MagicCardRulingMetadata:
+    return MagicCardRulingMetadata(
+        legal_formats=list(result.resolved_card.legal_formats),
+        ruling_count=result.ruling_count,
+    )
+
+
+def _tool_metadata(result: MagicCardRulingsResult) -> dict[str, object]:
+    sources = {ruling.source.strip() for ruling in result.rulings if ruling.source.strip()}
+    source = next(iter(sources)) if len(sources) == 1 else None
+    return MagicCardRulingsMetadata(ruling_source=source).model_dump(exclude_none=True)
 
 
 def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
@@ -69,11 +82,12 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
             urls=[EvidenceUrl(url=card_url, url_type=EvidenceUrlType.WEBSITE)] if card_url else [],
             source=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
             entity_type=TOOL_RESULT_TYPE_RULES,
-            metadata=_build_metadata(result),
+            metadata=_build_metadata(result).model_dump(exclude_none=True),
             raw_payload=result.resolved_card,
         )
         return ToolResult(
             result=result,
+            metadata=_tool_metadata(result),
             evidence_views=[
                 EvidenceView(
                     item_id=hydrated.item_id,
@@ -95,7 +109,7 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
             published_at=ruling.published_at,
             source=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
             entity_type=TOOL_RESULT_TYPE_RULES,
-            metadata=_build_metadata(result, ruling),
+            metadata=_build_metadata(result, ruling).model_dump(exclude_none=True),
             raw_payload=ruling,
         )
         hydrated_evidence.append(hydrated)
@@ -108,7 +122,12 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
             )
         )
 
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+    return ToolResult(
+        result=result,
+        metadata=_tool_metadata(result),
+        evidence_views=evidence_views,
+        hydrated_evidence=hydrated_evidence,
+    )
 
 
 @tool(
@@ -146,6 +165,11 @@ def get_magic_card_rulings(card_name: str, fuzzy: bool = True) -> ToolResult:
                 scryfall_uri=resolved_card.scryfall_uri,
                 set_name=resolved_card.set_name,
                 rarity=resolved_card.rarity,
+                legal_formats=sorted(
+                    format_name
+                    for format_name, status in resolved_card.legalities.items()
+                    if status == "legal"
+                ),
             ),
             ruling_count=len(rulings_response.data),
             rulings=list(rulings_response.data),

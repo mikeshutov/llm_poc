@@ -19,9 +19,10 @@ from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_state import AgentState
-from request_orchestrator.models.evidence import ToolResult
+from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
+from request_orchestrator.shared.evidence import build_evidence_bundle_from_tool_results
 from request_orchestrator.shared.executor.executor import run_executor
 from request_orchestrator.shared.runtime_context import bind_runtime_context, get_current_conversation_id, get_current_roundtrip_id, get_current_user_id
 
@@ -143,6 +144,39 @@ def test_run_executor_parallelizes_pending_steps() -> None:
     repo = repo_getter.return_value
     assert len(repo.conversation_events) == 2
     assert all(isinstance(event.get("payload", {}).get("data", {}).get("latency_ms"), int) for event in repo.conversation_events)
+
+
+def test_run_executor_namespaces_second_plan_evidence_under_p2() -> None:
+    profile = AgentProfile(
+        name="test_agent",
+        scope=MAIN_AGENT_MODEL_SCOPE,
+        extra_tools=[SimpleNamespace(name="tool_a")],
+    )
+    state = AgentState.new(task="Run tool", llm=object(), agent_profile=profile)
+    _set_plan_state(
+        state,
+        plan=Plan.model_validate(
+            {"steps": [{"id": "E1", "plan": "Run tool A", "tool": "tool_a", "args": {}}]}
+        ),
+    )
+    state.node_states.planner.plan_count = 2
+
+    with patch(
+        "request_orchestrator.shared.executor.executor.call_tool",
+        return_value=ToolResult(
+            result={"ok": True},
+            evidence_views=[EvidenceView(item_id="result-1", title="Result", summary="Second plan result.")],
+            hydrated_evidence=[HydratedEvidence(item_id="result-1", title="Result", summary="Second plan result.")],
+        ),
+    ):
+        run_executor(state)
+
+    tool_result = state.result.tool_results_by_step_id()["test_agent:P2E1"]
+    evidence_bundle = build_evidence_bundle_from_tool_results([tool_result])
+
+    assert tool_result.iteration == 2
+    assert list(evidence_bundle.evidence_views_by_step_id) == ["test_agent:P2E1"]
+    assert list(evidence_bundle.hydrated_evidence_by_id) == ["test_agent:P2E1R1"]
 
 
 def test_run_executor_leaves_unresolved_refs_unchanged_with_parallel_execution() -> None:
