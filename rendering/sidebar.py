@@ -7,6 +7,7 @@ import streamlit as st
 
 from llm.repository.repo_factory import get_conversation_model_config_repo
 from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig, EVALUATOR_STAGE, PLANNER_STAGE
+from conversation.models.replay_models import PreparedReplayConversation
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 from request_orchestrator.agent_runner.models.agent_profile import AgentExecutionStrategy
@@ -43,13 +44,13 @@ def request_conversation_model_config_dialog(
     conversation_id: str,
     title: str,
     replay_source_roundtrip_id: str | None = None,
-    replay_context: dict[str, object] | None = None,
+    replay_context: PreparedReplayConversation | None = None,
 ) -> None:
     st.session_state[MODEL_CONFIG_DIALOG_KEY] = {
         "conversation_id": conversation_id,
         "title": title,
         "replay_source_roundtrip_id": replay_source_roundtrip_id,
-        "replay_context": {} if replay_context is None else dict(replay_context),
+        "replay_context": None if replay_context is None else replay_context.model_dump(),
     }
 
 
@@ -401,7 +402,7 @@ def render_conversation_model_config_dialog(
     conversation_id: str,
     title: str,
     replay_source_roundtrip_id: str | None = None,
-    replay_context: dict[str, object] | None = None,
+    replay_context: PreparedReplayConversation | None = None,
 ) -> None:
     model_config_repository = get_conversation_model_config_repo()
     resolved_config = model_config_repository.resolve(UUID(conversation_id))
@@ -450,11 +451,9 @@ def render_conversation_model_config_dialog(
             if st.button("Accept replay", use_container_width=True, type="primary"):
                 _apply_model_config_form(model_config_repository, conversation_id, rows)
                 clear_conversation_model_config_dialog()
-                st.session_state[PENDING_REPLAY_PREPARE_KEY] = (
-                    {"conversation_id": conversation_id, "source_roundtrip_id": replay_source_roundtrip_id}
-                    if replay_context is None
-                    else dict(replay_context)
-                )
+                if replay_context is None:
+                    raise ValueError("replay_context is required in replay mode")
+                st.session_state[PENDING_REPLAY_PREPARE_KEY] = replay_context.model_dump()
                 st.rerun()
         with reset_col:
             if st.button("Reset all", use_container_width=True, type="secondary"):
@@ -872,12 +871,13 @@ def render_sidebar(conversation_repository) -> None:
 
     dialog_request = get_conversation_model_config_dialog_request()
     if dialog_request:
+        replay_context = dialog_request.get("replay_context")
         render_conversation_model_config_dialog(
             conversation_repository,
             dialog_request["conversation_id"],
             dialog_request["title"],
             dialog_request.get("replay_source_roundtrip_id"),
-            dialog_request.get("replay_context"),
+            None if replay_context is None else PreparedReplayConversation.model_validate(replay_context),
         )
 
     profile_dialog_request = get_profile_details_dialog_request()

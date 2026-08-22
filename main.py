@@ -166,7 +166,7 @@ if replay_target:
         conversation_id=replay_context.conversation_id,
         title=replay_title,
         replay_source_roundtrip_id=replay_context.source_roundtrip_id,
-        replay_context=replay_context.model_dump(),
+        replay_context=replay_context,
     )
     st.rerun()
 

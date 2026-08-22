@@ -160,5 +160,28 @@ def test_get_magic_card_price_returns_pricing_result() -> None:
         ],
     }
     assert result.evidence_views[0].title == "Black Lotus Price"
-    assert result.evidence_views[0].metadata == {}
+    assert result.evidence_views[0].summary == "Found pricing for 2 printings."
+    assert result.evidence_views[0].metadata == {
+        "pricing": [
+            {
+                "set": "Vintage Masters",
+                "usd": "12345.67",
+                "usd_foil": "23456.78",
+                "usd_etched": None,
+                "eur": "11111.11",
+                "eur_foil": None,
+                "magic_online": "999.99",
+            },
+            {
+                "set": "Collectors' Edition",
+                "usd": "10000.00",
+                "usd_foil": None,
+                "usd_etched": None,
+                "eur": None,
+                "eur_foil": None,
+                "magic_online": None,
+            },
+        ]
+    }
+    assert result.hydrated_evidence[0].metadata == result.evidence_views[0].metadata
     assert result.hydrated_evidence[0].urls[0].url == "https://scryfall.com/card/vma/4/black-lotus"

@@ -10,6 +10,36 @@ from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
 
 _scryfall_client = ScryfallClient()
 
+# Metadata types
+class MagicCardPriceMetadataEntry(BaseModel):
+    set: str = ""
+    usd: str | None = None
+    usd_foil: str | None = None
+    usd_etched: str | None = None
+    eur: str | None = None
+    eur_foil: str | None = None
+    magic_online: str | None = None
+
+
+class MagicCardPriceMetadata(BaseModel):
+    pricing: list[MagicCardPriceMetadataEntry] = Field(default_factory=list)
+
+def _build_pricing_metadata(result: MagicCardPriceResult) -> MagicCardPriceMetadata:
+    pricing_rows = [
+        MagicCardPriceMetadataEntry(
+            set=price.set_name or "",
+            usd=price.usd,
+            usd_foil=price.usd_foil,
+            usd_etched=price.usd_etched,
+            eur=price.eur,
+            eur_foil=price.eur_foil,
+            magic_online=price.tix,
+        )
+        for price in result.pricing
+        if any((price.usd, price.usd_foil, price.usd_etched, price.eur, price.eur_foil, price.tix))
+    ]
+    return MagicCardPriceMetadata(pricing=pricing_rows)
+
 
 class GetMagicCardPriceArgs(BaseModel):
     card_name: str = Field(
@@ -32,10 +62,7 @@ Required fields:
 Optional fields:
 - fuzzy (boolean)
 
-Example valid calls:
-{
-  "card_name": "Black Lotus"
-}
+Example valid call:
 {
   "card_name": "Sol Ring",
   "fuzzy": false
@@ -60,6 +87,7 @@ def get_magic_card_price(card_name: str, fuzzy: bool = True) -> ToolResult:
     summary = "No current price available."
     if priced_printings:
         summary = f"Found pricing for {priced_printings} printings."
+    metadata = _build_pricing_metadata(result)
 
     hydrated = HydratedEvidence(
         item_id=result.id,
@@ -70,7 +98,7 @@ def get_magic_card_price(card_name: str, fuzzy: bool = True) -> ToolResult:
         image_url=result.image_url or "",
         source=TOOL_NAME_GET_MAGIC_CARD_PRICE,
         entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
-        metadata={},
+        metadata=metadata.model_dump(),
         raw_payload=result,
     )
     return ToolResult(
@@ -80,7 +108,7 @@ def get_magic_card_price(card_name: str, fuzzy: bool = True) -> ToolResult:
                 item_id=hydrated.item_id,
                 title=hydrated.title,
                 summary=hydrated.summary,
-                metadata={},
+                metadata=dict(hydrated.metadata),
             )
         ],
         hydrated_evidence=[hydrated],
