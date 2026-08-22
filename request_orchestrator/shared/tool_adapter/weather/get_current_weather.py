@@ -4,13 +4,23 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
-from integrations.open_meteo import OpenMeteoClient
+from integrations.open_meteo import OPEN_METEO_WEBSITE_URL, OpenMeteoClient
 from integrations.open_meteo.models import CurrentWeather, GeocodedLocation
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_CURRENT_WEATHER
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
 _weather_client = OpenMeteoClient()
+
+
+class CurrentWeatherMetadata(BaseModel):
+    country: str | None = None
+    timezone: str | None = None
+    time: str | None = None
+    temperature: float | None = None
+    windspeed: float | None = None
+    weathercode: int | None = None
+    is_day: int | None = None
 
 
 def _tool_result(result) -> ToolResult:
@@ -22,28 +32,25 @@ def _tool_result(result) -> ToolResult:
     location_name = (location.name or "").strip()
     country = (location.country or "").strip()
     summary = f"{weather.temperature} C in {location_name}, {country}, wind {weather.windspeed} km/h, at {weather.time}"
-    metadata = {
-        "country": location.country,
-        "latitude": location.latitude,
-        "longitude": location.longitude,
-        "timezone": location.timezone,
-        "time": weather.time,
-        "temperature": weather.temperature,
-        "windspeed": weather.windspeed,
-        "winddirection": weather.winddirection,
-        "weathercode": weather.weathercode,
-        "is_day": weather.is_day,
-    }
+    metadata = CurrentWeatherMetadata(
+        country=location.country,
+        timezone=location.timezone,
+        time=weather.time,
+        temperature=weather.temperature,
+        windspeed=weather.windspeed,
+        weathercode=weather.weathercode,
+        is_day=weather.is_day,
+    )
     hydrated = HydratedEvidence(
         item_id=location_name,
         tool_name=TOOL_NAME_GET_CURRENT_WEATHER,
         title="Get Current Weather",
         summary=summary,
-        urls=[EvidenceUrl(url="https://open-meteo.com/", url_type="website")],
+        urls=[EvidenceUrl(url=OPEN_METEO_WEBSITE_URL, url_type="website")],
         location_name=location_name,
         source=TOOL_NAME_GET_CURRENT_WEATHER,
         entity_type=TOOL_RESULT_TYPE_WEATHER,
-        metadata=metadata,
+        metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(

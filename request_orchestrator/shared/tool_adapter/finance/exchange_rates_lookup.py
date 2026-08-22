@@ -27,10 +27,23 @@ class ExchangeRatesLookupArgs(BaseModel):
     )
 
 
+class ExchangeRateLookupMetadata(BaseModel):
+    base: str
+    currency: str
+    rate: float
+    date: str
+
+
 def _tool_result(result: ExchangeRatesSnapshot) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for currency_code, rate in result.rates.items():
+        metadata = ExchangeRateLookupMetadata(
+            base=result.base,
+            currency=currency_code,
+            rate=rate,
+            date=result.date,
+        )
         hydrated = HydratedEvidence(
             item_id=currency_code,
             tool_name=TOOL_NAME_EXCHANGE_RATES_LOOKUP,
@@ -39,12 +52,7 @@ def _tool_result(result: ExchangeRatesSnapshot) -> ToolResult:
             published_at=result.date,
             source=TOOL_NAME_EXCHANGE_RATES_LOOKUP,
             entity_type=TOOL_RESULT_TYPE_FINANCE,
-            metadata={
-                "base": result.base,
-                "currency": currency_code,
-                "rate": rate,
-                "date": result.date,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload={"currency": currency_code, "rate": rate, "snapshot": result},
         )
         hydrated_evidence.append(hydrated)

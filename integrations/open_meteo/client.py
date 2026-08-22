@@ -14,13 +14,18 @@ from integrations.open_meteo.errors import (
 )
 from integrations.open_meteo.models import CurrentWeather, DailyWeather, GeocodedLocation, MonthlyWeatherSummary
 
+OPEN_METEO_WEBSITE_URL = "https://open-meteo.com/"
+OPEN_METEO_ARCHIVE_API_BASE_URL = "https://archive-api.open-meteo.com/v1"
+OPEN_METEO_FORECAST_API_BASE_URL = "https://api.open-meteo.com/v1"
+OPEN_METEO_GEOCODING_API_BASE_URL = "https://geocoding-api.open-meteo.com/v1"
+
 
 class OpenMeteoClient:
     def __init__(
         self,
-        base_url_weather: str = "https://archive-api.open-meteo.com/v1",
-        base_url_forecast: str = "https://api.open-meteo.com/v1",
-        base_url_geo: str = "https://geocoding-api.open-meteo.com/v1",
+        base_url_weather: str = OPEN_METEO_ARCHIVE_API_BASE_URL,
+        base_url_forecast: str = OPEN_METEO_FORECAST_API_BASE_URL,
+        base_url_geo: str = OPEN_METEO_GEOCODING_API_BASE_URL,
         timeout_s: float = 20.0,
         ttl: timedelta = DEFAULT_TTL,
     ):

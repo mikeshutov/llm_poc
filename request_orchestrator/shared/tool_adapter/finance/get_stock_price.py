@@ -4,6 +4,7 @@ import yfinance as yf
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
+from integrations.yahoo_finance import YAHOO_FINANCE_QUOTE_URL_TEMPLATE
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_STOCK_PRICE
 from tool.constants import TOOL_RESULT_TYPE_FINANCE
@@ -22,12 +23,23 @@ class StockPrice(BaseModel):
     market_cap: float | None
 
 
+class StockPriceMetadata(BaseModel):
+    current_price: float | None = None
+    previous_close: float | None = None
+    market_cap: float | None = None
+
+
 def _tool_result(result: StockPrice) -> ToolResult:
-    url = f"https://finance.yahoo.com/quote/{result.ticker}".strip()
+    url = YAHOO_FINANCE_QUOTE_URL_TEMPLATE.format(ticker=result.ticker).strip()
     summary = (
         f"{result.ticker} last price {result.current_price}. Previous close {result.previous_close}."
         if result.current_price is not None
         else f"Stock price lookup for {result.ticker}."
+    )
+    metadata = StockPriceMetadata(
+        current_price=result.current_price,
+        previous_close=result.previous_close,
+        market_cap=result.market_cap,
     )
     hydrated = HydratedEvidence(
         item_id=result.ticker,
@@ -37,13 +49,7 @@ def _tool_result(result: StockPrice) -> ToolResult:
         urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
         source=TOOL_NAME_GET_STOCK_PRICE,
         entity_type=TOOL_RESULT_TYPE_FINANCE,
-        metadata={
-            "current_price": result.current_price,
-            "previous_close": result.previous_close,
-            "day_high": result.day_high,
-            "day_low": result.day_low,
-            "market_cap": result.market_cap,
-        },
+        metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(

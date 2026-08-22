@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from integrations.edhrec import EdhrecCardView, EdhrecClient, EdhrecCommanderPage
+from integrations.edhrec import EDHREC_CARD_URL_TEMPLATE, EdhrecCardView, EdhrecClient, EdhrecCommanderPage
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.games.candidate_mapper import rerank_edhrec_cards
 from tool.constants import TOOL_NAME_GET_COMMANDER_CARDS
@@ -44,6 +44,16 @@ class CommanderCardsResult(BaseModel):
     cards: list[CommanderCardResult] = []
 
 
+class CommanderCardMetadata(BaseModel):
+    commander_slug: str
+    section: str | None = None
+    synergy: float | None = None
+    num_decks: int | None = None
+    potential_decks: int | None = None
+    trend_zscore: float | None = None
+    returned_count: int
+
+
 def _flatten_candidate_cards(page: EdhrecCommanderPage) -> list[tuple[str, EdhrecCardView]]:
     flattened: list[tuple[str, EdhrecCardView]] = []
     for cardlist in page.container.json_dict.cardlists:
@@ -59,7 +69,7 @@ def _card_result(section: str, card: EdhrecCardView) -> CommanderCardResult:
     return CommanderCardResult(
         name=card.name.strip(),
         slug=(card.slug or "").strip(),
-        card_url=f"https://edhrec.com{card.url}" if card.url else "",
+        card_url=EDHREC_CARD_URL_TEMPLATE.format(path=card.url).strip() if card.url else "",
         section=section,
         synergy=card.synergy,
         num_decks=card.num_decks,
@@ -83,16 +93,15 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for card in result.cards:
-        metadata = {
-            "query": result.query,
-            "commander_slug": result.commander_slug,
-            "section": card.section,
-            "synergy": card.synergy,
-            "num_decks": card.num_decks,
-            "potential_decks": card.potential_decks,
-            "trend_zscore": card.trend_zscore,
-            "returned_count": result.returned_count,
-        }
+        metadata = CommanderCardMetadata(
+            commander_slug=result.commander_slug,
+            section=card.section or None,
+            synergy=card.synergy,
+            num_decks=card.num_decks or None,
+            potential_decks=card.potential_decks or None,
+            trend_zscore=card.trend_zscore,
+            returned_count=result.returned_count,
+        )
         evidence_object = card.model_dump()
         hydrated = HydratedEvidence(
             item_id=card.slug or card.name,
@@ -102,7 +111,7 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
             urls=[EvidenceUrl(url=card.card_url, url_type="website")] if card.card_url else [],
             source=TOOL_NAME_GET_COMMANDER_CARDS,
             entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
-            metadata=metadata,
+            metadata=metadata.model_dump(exclude_none=True),
             evidence_object=evidence_object,
             raw_payload=card,
         )

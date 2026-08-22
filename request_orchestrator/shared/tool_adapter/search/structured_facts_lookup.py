@@ -19,6 +19,10 @@ class StructuredFactsLookupArgs(BaseModel):
     )
 
 
+class StructuredFactsMetadata(BaseModel):
+    vars: list[str] = []
+
+
 def _binding_value(raw_value: object) -> str:
     if isinstance(raw_value, dict):
         nested = raw_value.get("value")
@@ -53,6 +57,7 @@ def _tool_result(result: SparqlResult) -> ToolResult:
         )
         summary = _binding_summary(binding, result.vars)
         url = _binding_value(binding.get("url"))
+        metadata = StructuredFactsMetadata(vars=list(result.vars))
         hydrated = HydratedEvidence(
             item_id=item_id,
             tool_name=TOOL_NAME_STRUCTURED_FACTS_LOOKUP,
@@ -61,10 +66,7 @@ def _tool_result(result: SparqlResult) -> ToolResult:
             urls=[{"url": url, "url_type": "website"}] if url else [],
             source=TOOL_NAME_STRUCTURED_FACTS_LOOKUP,
             entity_type=TOOL_RESULT_TYPE_STRUCTURED_FACTS,
-            metadata={
-                "vars": list(result.vars),
-                "sparql": result.sparql,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=binding,
         )
         hydrated_evidence.append(hydrated)

@@ -41,6 +41,14 @@ class GenericWebSearchArgs(BaseModel):
     )
 
 
+class GenericNewsSearchMetadata(BaseModel):
+    age: str | None = None
+
+
+class GenericWebResultMetadata(BaseModel):
+    pass
+
+
 def _coerce_search_type(search_type: str) -> SearchType:
     try:
         return SearchType(search_type)
@@ -54,6 +62,7 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
     evidence_views: list[EvidenceView] = []
     for item in result.results:
         url = (item.url or "").strip()
+        metadata = GenericWebResultMetadata()
         hydrated = HydratedEvidence(
             item_id=url or item.title.strip(),
             tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
@@ -63,7 +72,7 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
             image_url=(item.image_url or "").strip(),
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
             entity_type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS,
-            metadata={},
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=item,
         )
         hydrated_evidence.append(hydrated)
@@ -93,6 +102,7 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
     evidence_views: list[EvidenceView] = []
     for item in result.results:
         url = (item.url or "").strip()
+        metadata = GenericNewsSearchMetadata(age=item.age)
         hydrated = HydratedEvidence(
             item_id=url or item.title.strip(),
             tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
@@ -102,9 +112,7 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
             image_url=(item.thumbnail_url or "").strip(),
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
             entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
-            metadata={
-                "age": item.age,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=item,
         )
         hydrated_evidence.append(hydrated)

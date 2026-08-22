@@ -10,16 +10,23 @@ from tool.constants import TOOL_RESULT_TYPE_LOCATION
 _weather_client = OpenMeteoClient()
 
 
+class ResolveCityLocationMetadata(BaseModel):
+    country: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    timezone: str | None = None
+
+
 def _tool_result(result: GeocodedLocation | None) -> ToolResult:
     if result is None:
         return ToolResult(result=None, evidence_views=[], hydrated_evidence=[])
 
-    metadata = {
-        "country": result.country,
-        "latitude": result.latitude,
-        "longitude": result.longitude,
-        "timezone": result.timezone,
-    }
+    metadata = ResolveCityLocationMetadata(
+        country=result.country,
+        latitude=result.latitude,
+        longitude=result.longitude,
+        timezone=result.timezone,
+    )
     hydrated = HydratedEvidence(
         item_id=(result.name or "").strip(),
         tool_name=TOOL_NAME_RESOLVE_CITY_LOCATION,
@@ -28,7 +35,7 @@ def _tool_result(result: GeocodedLocation | None) -> ToolResult:
         location_name=(result.name or "").strip(),
         source=TOOL_NAME_RESOLVE_CITY_LOCATION,
         entity_type=TOOL_RESULT_TYPE_LOCATION,
-        metadata=metadata,
+        metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(

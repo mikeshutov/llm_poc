@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from integrations.edhrec import EdhrecClient, EdhrecCommanderPage, EdhrecComboLink
+from integrations.edhrec import EDHREC_COMMANDER_URL_TEMPLATE, EdhrecClient, EdhrecCommanderPage, EdhrecComboLink
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_COMMANDER_DETAILS
 from tool.constants import TOOL_RESULT_TYPE_DECKS
@@ -42,8 +42,15 @@ class CommanderDetailsResult(BaseModel):
     similar_commanders: list[str] = []
 
 
+class CommanderDetailsMetadata(BaseModel):
+    commander_slug: str
+    top_themes: str | None = None
+    combo_highlights: list[str] = []
+    similar_commanders: list[str] = []
+
+
 def _page_url(slug: str) -> str:
-    return f"https://edhrec.com/commanders/{slug}"
+    return EDHREC_COMMANDER_URL_TEMPLATE.format(slug=slug)
 
 
 def _combo_text(combo: EdhrecComboLink) -> str:
@@ -64,13 +71,12 @@ def _summary(result: CommanderDetailsResult) -> str:
 
 
 def _tool_result(result: CommanderDetailsResult) -> ToolResult:
-    metadata = {
-        "query": result.query,
-        "commander_slug": result.commander_slug,
-        "top_themes": result.top_themes,
-        "combo_highlights": list(result.combo_highlights),
-        "similar_commanders": list(result.similar_commanders),
-    }
+    metadata = CommanderDetailsMetadata(
+        commander_slug=result.commander_slug,
+        top_themes=result.top_themes or None,
+        combo_highlights=list(result.combo_highlights),
+        similar_commanders=list(result.similar_commanders),
+    )
     evidence_object = result.model_dump()
     hydrated = HydratedEvidence(
         item_id=result.commander_slug,
@@ -80,7 +86,7 @@ def _tool_result(result: CommanderDetailsResult) -> ToolResult:
         urls=[EvidenceUrl(url=result.page_url, url_type="website")] if result.page_url else [],
         source=TOOL_NAME_GET_COMMANDER_DETAILS,
         entity_type=TOOL_RESULT_TYPE_DECKS,
-        metadata=metadata,
+        metadata=metadata.model_dump(exclude_none=True),
         evidence_object=evidence_object,
         raw_payload=result,
     )

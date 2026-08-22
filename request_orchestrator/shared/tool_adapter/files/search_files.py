@@ -18,11 +18,18 @@ class SearchFilesArgs(BaseModel):
     file_type: Optional[FileTypeFilter] = None
 
 
+class SearchFilesMetadata(BaseModel):
+    top_chunk: str
+
+
 def _tool_result(result: list[dict]) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
 
     for file_result in result:
+        metadata = SearchFilesMetadata(
+            top_chunk=str(file_result.get("top_chunk", "")),
+        )
         hydrated = HydratedEvidence(
             item_id=str(file_result.get("file_id", "")),
             tool_name=TOOL_NAME_SEARCH_FILES,
@@ -30,11 +37,7 @@ def _tool_result(result: list[dict]) -> ToolResult:
             summary=str(file_result.get("top_chunk", "")).strip() or "Matched uploaded file.",
             source=TOOL_NAME_SEARCH_FILES,
             entity_type=TOOL_RESULT_TYPE_FILE_RESULTS,
-            metadata={
-                "file_name": file_result.get("file_name", ""),
-                "file_path": file_result.get("file_path", ""),
-                "top_chunk": file_result.get("top_chunk", ""),
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=file_result,
         )
         hydrated_evidence.append(hydrated)

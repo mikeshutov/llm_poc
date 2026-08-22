@@ -18,6 +18,17 @@ class CountryLookupArgs(BaseModel):
     )
 
 
+class CountryLookupMetadata(BaseModel):
+    official_name: str | None = None
+    capital: list[str] = []
+    region: str | None = None
+    subregion: str | None = None
+    population: int | None = None
+    currencies: dict[str, object] = {}
+    languages: dict[str, str] = {}
+    flag: str | None = None
+
+
 def _tool_result(result: list[Country]) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
@@ -25,6 +36,16 @@ def _tool_result(result: list[Country]) -> ToolResult:
         capital_text = ", ".join(country.capital)
         summary_parts = [part for part in (capital_text, country.region, country.subregion) if part]
         summary = ". ".join(summary_parts) or f"Country lookup result for {country.common_name}."
+        metadata = CountryLookupMetadata(
+            official_name=country.official_name,
+            capital=list(country.capital),
+            region=country.region,
+            subregion=country.subregion,
+            population=country.population,
+            currencies=dict(country.currencies),
+            languages=dict(country.languages),
+            flag=country.flag,
+        )
         hydrated = HydratedEvidence(
             item_id=country.common_name,
             tool_name=TOOL_NAME_COUNTRY_LOOKUP,
@@ -32,16 +53,7 @@ def _tool_result(result: list[Country]) -> ToolResult:
             summary=summary,
             source=TOOL_NAME_COUNTRY_LOOKUP,
             entity_type=TOOL_RESULT_TYPE_COUNTRY,
-            metadata={
-                "official_name": country.official_name,
-                "capital": list(country.capital),
-                "region": country.region,
-                "subregion": country.subregion,
-                "population": country.population,
-                "currencies": dict(country.currencies),
-                "languages": dict(country.languages),
-                "flag": country.flag,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=country,
         )
         hydrated_evidence.append(hydrated)

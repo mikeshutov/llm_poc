@@ -37,11 +37,18 @@ class WikipediaSearchResponse(BaseModel):
     top_result_summary: Optional[WikipediaPageSummary] = None
 
 
+class WikipediaSearchMetadata(BaseModel):
+    top_result_summary: dict[str, object] | None = None
+
+
 def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     if not result.results and result.top_result_summary is not None:
         summary_url = result.top_result_summary.url.strip()
+        metadata = WikipediaSearchMetadata(
+            top_result_summary=result.top_result_summary.model_dump(),
+        )
         hydrated = HydratedEvidence(
             item_id=summary_url or result.top_result_summary.title.strip(),
             tool_name=TOOL_NAME_WIKIPEDIA_SEARCH,
@@ -50,10 +57,7 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
             urls=[EvidenceUrl(url=summary_url, url_type="website")] if summary_url else [],
             source=TOOL_NAME_WIKIPEDIA_SEARCH,
             entity_type=TOOL_RESULT_TYPE_KNOWLEDGE,
-            metadata={
-                "query": result.query,
-                "top_result_summary": result.top_result_summary.model_dump(),
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=result.top_result_summary,
         )
         return ToolResult(
@@ -74,6 +78,13 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
         if index == 0 and result.top_result_summary is not None and result.top_result_summary.summary.strip():
             summary_text = result.top_result_summary.summary.strip()
         url = item.url.strip()
+        metadata = WikipediaSearchMetadata(
+            top_result_summary=(
+                result.top_result_summary.model_dump()
+                if index == 0 and result.top_result_summary is not None
+                else None
+            ),
+        )
         hydrated = HydratedEvidence(
             item_id=url or item.title.strip(),
             tool_name=TOOL_NAME_WIKIPEDIA_SEARCH,
@@ -82,14 +93,7 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
             urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
             source=TOOL_NAME_WIKIPEDIA_SEARCH,
             entity_type=TOOL_RESULT_TYPE_KNOWLEDGE,
-            metadata={
-                "query": result.query,
-                "top_result_summary": (
-                    result.top_result_summary.model_dump()
-                    if index == 0 and result.top_result_summary is not None
-                    else None
-                ),
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=item,
         )
         hydrated_evidence.append(hydrated)

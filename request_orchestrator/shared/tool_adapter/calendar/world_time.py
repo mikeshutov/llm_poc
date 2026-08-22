@@ -18,7 +18,18 @@ class GetWorldTimeArgs(BaseModel):
     )
 
 
+class WorldTimeMetadata(BaseModel):
+    utc_offset: str
+    day_of_week: int
+    abbreviation: str
+
+
 def _tool_result(result: WorldTime) -> ToolResult:
+    metadata = WorldTimeMetadata(
+        utc_offset=result.utc_offset,
+        day_of_week=result.day_of_week,
+        abbreviation=result.abbreviation,
+    )
     hydrated = HydratedEvidence(
         item_id=result.timezone,
         tool_name=TOOL_NAME_GET_WORLD_TIME,
@@ -27,11 +38,7 @@ def _tool_result(result: WorldTime) -> ToolResult:
         published_at=result.datetime,
         source=TOOL_NAME_GET_WORLD_TIME,
         entity_type=TOOL_RESULT_TYPE_TIME,
-        metadata={
-            "utc_offset": result.utc_offset,
-            "day_of_week": result.day_of_week,
-            "abbreviation": result.abbreviation,
-        },
+        metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(

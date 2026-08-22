@@ -29,19 +29,25 @@ class PublicHolidaysResult(BaseModel):
     holidays: list[PublicHoliday]
 
 
+class PublicHolidayMetadata(BaseModel):
+    date: object
+    local_name: str | None = None
+    counties: list[str] | None = None
+    launch_year: int | None = None
+    types: list[str] = []
+
+
 def _tool_result(result: PublicHolidaysResult) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for holiday in result.holidays:
-        metadata = {
-            "year": result.year,
-            "country_code": result.country_code,
-            "date": holiday.date,
-            "local_name": holiday.local_name,
-            "counties": holiday.counties,
-            "launch_year": holiday.launch_year,
-            "types": holiday.types,
-        }
+        metadata = PublicHolidayMetadata(
+            date=holiday.date,
+            local_name=holiday.local_name,
+            counties=holiday.counties,
+            launch_year=holiday.launch_year,
+            types=list(holiday.types),
+        )
         hydrated = HydratedEvidence(
             item_id=f"{result.country_code}:{holiday.date}:{holiday.name}",
             tool_name=TOOL_NAME_PUBLIC_HOLIDAYS_LOOKUP,
@@ -50,7 +56,7 @@ def _tool_result(result: PublicHolidaysResult) -> ToolResult:
             published_at=str(holiday.date),
             source=TOOL_NAME_PUBLIC_HOLIDAYS_LOOKUP,
             entity_type=TOOL_RESULT_TYPE_CALENDAR,
-            metadata=metadata,
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=holiday,
         )
         hydrated_evidence.append(hydrated)

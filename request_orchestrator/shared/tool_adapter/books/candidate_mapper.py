@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from common.utils import normalize_text
+from integrations.open_library import OPEN_LIBRARY_COVER_IMAGE_URL_TEMPLATE, OPEN_LIBRARY_WORK_URL_TEMPLATE
 from integrations.open_library.models import BookDoc, BookSearchResult
 from request_orchestrator.shared.tool_adapter.books.constants import DEFAULT_BOOK_SEARCH_LIMIT
 from reranker import Candidate, rerank_candidates
@@ -30,8 +31,8 @@ def book_to_candidate(book: BookDoc) -> Candidate:
             "name": normalize_text(book.title),
             "summary": ". ".join(summary_parts) if summary_parts else None,
             "description": ", ".join(subjects) if subjects else None,
-            "url": f"https://openlibrary.org{book.key}" if book.key else None,
-            "image_url": f"https://covers.openlibrary.org/b/id/{book.cover_i}-L.jpg" if book.cover_i is not None else None,
+            "url": OPEN_LIBRARY_WORK_URL_TEMPLATE.format(work_key=book.key) if book.key else None,
+            "image_url": OPEN_LIBRARY_COVER_IMAGE_URL_TEMPLATE.format(cover_id=book.cover_i) if book.cover_i is not None else None,
         },
         attributes={
             "authors": author_names,

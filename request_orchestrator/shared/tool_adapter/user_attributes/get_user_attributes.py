@@ -26,6 +26,16 @@ class GetUserAttributesArgs(BaseModel):
 GET_USER_ATTRIBUTES_DESCRIPTION = "List stored user attributes."
 
 
+class UserAttributeMetadata(BaseModel):
+    group_key: str | None = None
+    source: str | None = None
+    is_active: bool
+    confidence: float | None = None
+    importance: float | None = None
+    created_at: str
+    updated_at: str
+
+
 def _attribute_summary(attribute: UserAttribute) -> str:
     return "; ".join(normalize_string_list(attribute.value)).strip() or "Stored user attribute."
 
@@ -34,6 +44,15 @@ def _tool_result(result: list[UserAttribute]) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for attribute in result:
+        metadata = UserAttributeMetadata(
+            group_key=attribute.group_key,
+            source=attribute.source,
+            is_active=attribute.is_active,
+            confidence=attribute.confidence,
+            importance=attribute.importance,
+            created_at=attribute.created_at,
+            updated_at=attribute.updated_at,
+        )
         hydrated = HydratedEvidence(
             item_id=str(attribute.id),
             tool_name=TOOL_NAME_GET_USER_ATTRIBUTES,
@@ -42,15 +61,7 @@ def _tool_result(result: list[UserAttribute]) -> ToolResult:
             published_at=attribute.updated_at,
             source=TOOL_NAME_GET_USER_ATTRIBUTES,
             entity_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE,
-            metadata={
-                "group_key": attribute.group_key,
-                "source": attribute.source,
-                "is_active": attribute.is_active,
-                "confidence": attribute.confidence,
-                "importance": attribute.importance,
-                "created_at": attribute.created_at,
-                "updated_at": attribute.updated_at,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=attribute,
         )
         hydrated_evidence.append(hydrated)

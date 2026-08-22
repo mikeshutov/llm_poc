@@ -17,6 +17,13 @@ from tool.constants import TOOL_RESULT_TYPE_NEWS_RESULTS
 _hn_client = HnAlgoliaClient()
 
 
+class HnSearchMetadata(BaseModel):
+    author: str | None = None
+    points: int | None = None
+    num_comments: int | None = None
+    tags: list[str] = []
+
+
 def _hit_summary(hit: HnHit) -> str:
     parts: list[str] = []
     if hit.author:
@@ -35,6 +42,12 @@ def _tool_result(result: HnSearchResult) -> ToolResult:
     evidence_views: list[EvidenceView] = []
     for hit in result.hits:
         url = (hit.url or "").strip()
+        metadata = HnSearchMetadata(
+            author=hit.author,
+            points=hit.points,
+            num_comments=hit.num_comments,
+            tags=list(hit.tags or []),
+        )
         hydrated = HydratedEvidence(
             item_id=hit.object_id,
             tool_name=TOOL_NAME_HN_SEARCH,
@@ -44,12 +57,7 @@ def _tool_result(result: HnSearchResult) -> ToolResult:
             published_at=(hit.created_at or "").strip(),
             source=TOOL_NAME_HN_SEARCH,
             entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
-            metadata={
-                "author": hit.author,
-                "points": hit.points,
-                "num_comments": hit.num_comments,
-                "tags": list(hit.tags or []),
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=hit,
         )
         hydrated_evidence.append(hydrated)

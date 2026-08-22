@@ -21,10 +21,21 @@ class LatestExchangeRatesArgs(BaseModel):
     )
 
 
+class LatestExchangeRateMetadata(BaseModel):
+    base: str
+    currency: str
+    rate: float
+
+
 def _tool_result(result: ExchangeRates) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for currency_code, rate in result.rates.items():
+        metadata = LatestExchangeRateMetadata(
+            base=result.base_code,
+            currency=currency_code,
+            rate=rate,
+        )
         hydrated = HydratedEvidence(
             item_id=currency_code,
             tool_name=TOOL_NAME_GET_LATEST_EXCHANGE_RATES,
@@ -33,12 +44,7 @@ def _tool_result(result: ExchangeRates) -> ToolResult:
             published_at=(result.time_last_update_utc or "").strip(),
             source=TOOL_NAME_GET_LATEST_EXCHANGE_RATES,
             entity_type=TOOL_RESULT_TYPE_FINANCE,
-            metadata={
-                "base": result.base_code,
-                "currency": currency_code,
-                "rate": rate,
-                "time_last_update_utc": result.time_last_update_utc,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload={"currency": currency_code, "rate": rate, "exchange_rates": result},
         )
         hydrated_evidence.append(hydrated)

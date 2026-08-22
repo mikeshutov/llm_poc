@@ -7,6 +7,11 @@ import unicodedata
 from common.http import DEFAULT_TTL, HttpClient, HttpClientError
 from integrations.edhrec.models import EdhrecCommanderPage
 
+EDHREC_API_BASE_URL = "https://json.edhrec.com"
+EDHREC_WEBSITE_BASE_URL = "https://edhrec.com"
+EDHREC_COMMANDER_URL_TEMPLATE = "https://edhrec.com/commanders/{slug}"
+EDHREC_CARD_URL_TEMPLATE = "https://edhrec.com{path}"
+
 
 class EdhrecClientError(RuntimeError):
     pass
@@ -25,7 +30,7 @@ def slugify_commander_name(name: str) -> str:
 class EdhrecClient:
     def __init__(
         self,
-        base_url: str = "https://json.edhrec.com",
+        base_url: str = EDHREC_API_BASE_URL,
         timeout_s: float = 20.0,
         ttl: timedelta = DEFAULT_TTL,
     ):

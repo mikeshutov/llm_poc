@@ -17,13 +17,16 @@ class GetFileByIdArgs(BaseModel):
     file_id: str = Field(..., description="The UUID of the file to retrieve.")
 
 
+class GetFileByIdMetadata(BaseModel):
+    file_type: str | None = None
+    uploaded_at: str
+
+
 def _tool_result(result: GetFileByIdResult) -> ToolResult:
-    metadata = {
-        "file_name": result.file_name,
-        "file_type": result.file_type,
-        "uploaded_at": result.uploaded_at,
-        "first_chunk": result.first_chunk,
-    }
+    metadata = GetFileByIdMetadata(
+        file_type=result.file_type,
+        uploaded_at=result.uploaded_at,
+    )
     hydrated = HydratedEvidence(
         item_id=(result.file_id or "").strip(),
         tool_name=TOOL_NAME_GET_FILE_BY_ID,
@@ -31,7 +34,7 @@ def _tool_result(result: GetFileByIdResult) -> ToolResult:
         summary=(result.first_chunk or "").strip() or "Retrieved file metadata and preview.",
         source=TOOL_NAME_GET_FILE_BY_ID,
         entity_type=TOOL_RESULT_TYPE_FILE,
-        metadata=metadata,
+        metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(

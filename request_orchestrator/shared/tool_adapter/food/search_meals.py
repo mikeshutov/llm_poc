@@ -22,6 +22,15 @@ class SearchMealsArgs(BaseModel):
     )
 
 
+class MealSearchMetadata(BaseModel):
+    category: str | None = None
+    area: str | None = None
+    tags: list[str] = []
+    ingredients: list[dict[str, object]] = []
+    retrieved_count: int
+    reranked: bool
+
+
 def _tool_result(result: MealSearchResult) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
@@ -34,6 +43,14 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             urls.append(EvidenceUrl(url=meal.youtube.strip(), url_type="youtube"))
         summary_parts = [part for part in ((meal.category or "").strip(), (meal.area or "").strip()) if part]
         summary = ". ".join(summary_parts) or (meal.instructions or "").strip() or f"Meal result for {meal.name}."
+        metadata = MealSearchMetadata(
+            category=meal.category,
+            area=meal.area,
+            tags=list(meal.tags or []),
+            ingredients=[ingredient.model_dump(exclude_none=True) for ingredient in meal.ingredients],
+            retrieved_count=result.retrieved_count,
+            reranked=result.reranked,
+        )
         hydrated = HydratedEvidence(
             item_id=meal.id,
             tool_name=TOOL_NAME_SEARCH_MEALS,
@@ -43,12 +60,7 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             image_url=(meal.thumbnail or "").strip(),
             source=TOOL_NAME_SEARCH_MEALS,
             entity_type=TOOL_RESULT_TYPE_MEAL_RESULTS,
-            metadata={
-                "category": meal.category,
-                "area": meal.area,
-                "tags": meal.tags,
-                "ingredients": [ingredient.model_dump(exclude_none=True) for ingredient in meal.ingredients],
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=meal,
         )
         hydrated_evidence.append(hydrated)

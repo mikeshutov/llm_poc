@@ -29,6 +29,15 @@ class SearchUserAttributesArgs(BaseModel):
 SEARCH_USER_ATTRIBUTES_DESCRIPTION = "Search persistent user attributes by semantic similarity."
 
 
+class UserAttributeSearchMetadata(BaseModel):
+    group_key: str | None = None
+    source: str | None = None
+    is_active: bool
+    confidence: float | None = None
+    importance: float | None = None
+    relevance_score: float
+
+
 def _attribute_summary(attribute: UserAttributeSearchResult) -> str:
     return "; ".join(normalize_string_list(attribute.value)).strip() or "Matched user attribute."
 
@@ -37,6 +46,14 @@ def _tool_result(result: list[UserAttributeSearchResult]) -> ToolResult:
     hydrated_evidence: list[HydratedEvidence] = []
     evidence_views: list[EvidenceView] = []
     for attribute in result:
+        metadata = UserAttributeSearchMetadata(
+            group_key=attribute.group_key,
+            source=attribute.source,
+            is_active=attribute.is_active,
+            confidence=attribute.confidence,
+            importance=attribute.importance,
+            relevance_score=attribute.relevance_score,
+        )
         hydrated = HydratedEvidence(
             item_id=str(attribute.id),
             tool_name=TOOL_NAME_SEARCH_USER_ATTRIBUTES,
@@ -45,16 +62,7 @@ def _tool_result(result: list[UserAttributeSearchResult]) -> ToolResult:
             published_at=attribute.updated_at,
             source=TOOL_NAME_SEARCH_USER_ATTRIBUTES,
             entity_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE,
-            metadata={
-                "group_key": attribute.group_key,
-                "source": attribute.source,
-                "is_active": attribute.is_active,
-                "confidence": attribute.confidence,
-                "importance": attribute.importance,
-                "created_at": attribute.created_at,
-                "updated_at": attribute.updated_at,
-                "relevance_score": attribute.relevance_score,
-            },
+            metadata=metadata.model_dump(exclude_none=True),
             raw_payload=attribute,
         )
         hydrated_evidence.append(hydrated)
