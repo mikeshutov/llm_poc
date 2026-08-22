@@ -20,6 +20,7 @@ class SearchFileForDetailsArgs(BaseModel):
 
 class SearchFileForDetailsMetadata(BaseModel):
     file_name: str | None = None
+    file_path: str | None = None
 
 
 def _tool_result(result: list[dict]) -> ToolResult:
@@ -28,6 +29,7 @@ def _tool_result(result: list[dict]) -> ToolResult:
     for file_result in result:
         metadata = SearchFileForDetailsMetadata(
             file_name=str(file_result.get("file_name", "")).strip() or None,
+            file_path=str(file_result.get("file_path", "")).strip() or None,
         )
         hydrated = HydratedEvidence(
             item_id=str(file_result.get("file_id", "")),

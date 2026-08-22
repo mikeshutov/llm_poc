@@ -43,6 +43,7 @@ class CommanderDetailsResult(BaseModel):
 
 
 class CommanderDetailsMetadata(BaseModel):
+    commander_slug: str
     top_themes: str | None = None
     combo_highlights: list[str] = []
     similar_commanders: list[str] = []
@@ -71,6 +72,7 @@ def _summary(result: CommanderDetailsResult) -> str:
 
 def _tool_result(result: CommanderDetailsResult) -> ToolResult:
     metadata = CommanderDetailsMetadata(
+        commander_slug=result.commander_slug,
         top_themes=result.top_themes or None,
         combo_highlights=list(result.combo_highlights),
         similar_commanders=list(result.similar_commanders),

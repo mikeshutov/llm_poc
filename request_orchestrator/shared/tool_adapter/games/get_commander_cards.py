@@ -45,11 +45,13 @@ class CommanderCardsResult(BaseModel):
 
 
 class CommanderCardMetadata(BaseModel):
+    commander_slug: str
     section: str | None = None
     synergy: float | None = None
     num_decks: int | None = None
     potential_decks: int | None = None
     trend_zscore: float | None = None
+    returned_count: int
 
 
 def _flatten_candidate_cards(page: EdhrecCommanderPage) -> list[tuple[str, EdhrecCardView]]:
@@ -92,11 +94,13 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
     evidence_views: list[EvidenceView] = []
     for card in result.cards:
         metadata = CommanderCardMetadata(
+            commander_slug=result.commander_slug,
             section=card.section or None,
             synergy=card.synergy,
             num_decks=card.num_decks or None,
             potential_decks=card.potential_decks or None,
             trend_zscore=card.trend_zscore,
+            returned_count=result.returned_count,
         )
         evidence_object = card.model_dump()
         hydrated = HydratedEvidence(

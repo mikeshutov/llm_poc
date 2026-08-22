@@ -27,6 +27,8 @@ class MealSearchMetadata(BaseModel):
     area: str | None = None
     tags: list[str] = []
     ingredients: list[dict[str, object]] = []
+    retrieved_count: int
+    reranked: bool
 
 
 def _tool_result(result: MealSearchResult) -> ToolResult:
@@ -46,6 +48,8 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             area=meal.area,
             tags=list(meal.tags or []),
             ingredients=[ingredient.model_dump(exclude_none=True) for ingredient in meal.ingredients],
+            retrieved_count=result.retrieved_count,
+            reranked=result.reranked,
         )
         hydrated = HydratedEvidence(
             item_id=meal.id,

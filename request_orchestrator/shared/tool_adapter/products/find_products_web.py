@@ -32,7 +32,10 @@ class ProductEvidenceMetadata(BaseModel):
     season: str | None = None
     year: int | None = None
     price: float | None = None
+    score: float | None = None
     product_source: str
+    retrieved_count: int
+    reranked: bool
 
 
 def _product_summary(product: ProductResult) -> str:
@@ -57,7 +60,10 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
             season=product.season,
             year=product.year,
             price=product.price,
+            score=product.score,
             product_source=product.source.value,
+            retrieved_count=result.retrieved_count,
+            reranked=result.reranked,
         )
         hydrated = HydratedEvidence(
             item_id=product.id,

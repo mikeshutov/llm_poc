@@ -26,6 +26,7 @@ class RoundtripMemoryMetadata(BaseModel):
     roundtrip_id: str
     message_index: int
     user_prompt: str | None = None
+    created_at: str | None = None
     relevance_score: float | None = None
 
 
@@ -69,6 +70,7 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
             roundtrip_id=str(memory.roundtrip_id),
             message_index=memory.message_index,
             user_prompt=memory.user_prompt,
+            created_at=memory.created_at,
             relevance_score=memory.relevance_score,
         )
         hydrated = HydratedEvidence(

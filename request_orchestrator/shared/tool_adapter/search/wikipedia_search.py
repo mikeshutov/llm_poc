@@ -38,7 +38,6 @@ class WikipediaSearchResponse(BaseModel):
 
 
 class WikipediaSearchMetadata(BaseModel):
-    query: str
     top_result_summary: dict[str, object] | None = None
 
 
@@ -48,7 +47,6 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
     if not result.results and result.top_result_summary is not None:
         summary_url = result.top_result_summary.url.strip()
         metadata = WikipediaSearchMetadata(
-            query=result.query,
             top_result_summary=result.top_result_summary.model_dump(),
         )
         hydrated = HydratedEvidence(
@@ -81,7 +79,6 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
             summary_text = result.top_result_summary.summary.strip()
         url = item.url.strip()
         metadata = WikipediaSearchMetadata(
-            query=result.query,
             top_result_summary=(
                 result.top_result_summary.model_dump()
                 if index == 0 and result.top_result_summary is not None

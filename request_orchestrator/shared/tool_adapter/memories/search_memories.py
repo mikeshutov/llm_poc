@@ -19,6 +19,7 @@ class SearchMemoriesArgs(BaseModel):
 
 class MemorySearchMetadata(BaseModel):
     conversation_id: str
+    last_used_date: str | None = None
     relevance_score: float | None = None
 
 
@@ -47,6 +48,7 @@ def search_memories(query: str) -> ToolResult:
     for memory in memories:
         metadata = MemorySearchMetadata(
             conversation_id=str(memory.conversation_id),
+            last_used_date=memory.last_used_date,
             relevance_score=memory.relevance_score,
         )
         hydrated = HydratedEvidence(

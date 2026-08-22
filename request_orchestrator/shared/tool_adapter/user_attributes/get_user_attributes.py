@@ -32,6 +32,8 @@ class UserAttributeMetadata(BaseModel):
     is_active: bool
     confidence: float | None = None
     importance: float | None = None
+    created_at: str
+    updated_at: str
 
 
 def _attribute_summary(attribute: UserAttribute) -> str:
@@ -48,6 +50,8 @@ def _tool_result(result: list[UserAttribute]) -> ToolResult:
             is_active=attribute.is_active,
             confidence=attribute.confidence,
             importance=attribute.importance,
+            created_at=attribute.created_at,
+            updated_at=attribute.updated_at,
         )
         hydrated = HydratedEvidence(
             item_id=str(attribute.id),

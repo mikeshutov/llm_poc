@@ -28,6 +28,8 @@ class CocktailSearchMetadata(BaseModel):
     glass: str | None = None
     tags: list[str] = []
     ingredients: list[dict[str, object]] = []
+    retrieved_count: int
+    reranked: bool
 
 
 def _tool_result(result: CocktailSearchResult) -> ToolResult:
@@ -50,6 +52,8 @@ def _tool_result(result: CocktailSearchResult) -> ToolResult:
             glass=cocktail.glass,
             tags=list(cocktail.tags or []),
             ingredients=[ingredient.model_dump(exclude_none=True) for ingredient in cocktail.ingredients],
+            retrieved_count=result.retrieved_count,
+            reranked=result.reranked,
         )
         hydrated = HydratedEvidence(
             item_id=cocktail.id,
