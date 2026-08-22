@@ -33,5 +33,6 @@ def build_request_analysis_prompt(main_state: MainState) -> AgentPrompt:
     prompt.include_section(PromptSectionKeys.USER_PROFILE)
     prompt.include_section(PromptSectionKeys.CONVERSATION_CONTEXT)
     prompt.include_section(PromptSectionKeys.AVAILABLE_AGENTS)
+    prompt.include_section(PromptSectionKeys.TASK)
     prompt.include_section(PromptSectionKeys.SCHEMA)
     return prompt

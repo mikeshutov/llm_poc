@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from llm.conversation_model_config import EVALUATOR_STAGE, ModelSelection, OPENAI_PROVIDER, PLANNER_STAGE
 from tool.tools import TOOL_CATEGORIES
 
 
@@ -22,17 +23,28 @@ class AgentKind(StrEnum):
     USER_AGENT = "user_agent"
 
 
+class AgentExecutionStrategy(StrEnum):
+    PLANNER_EXECUTOR_EVALUATOR = "planner_executor_evaluator"
+
+    def required_model_stages(self) -> tuple[str, ...]:
+        if self == AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR:
+            return (PLANNER_STAGE, EVALUATOR_STAGE)
+        raise KeyError(f"Unsupported agent execution strategy: {self}")
+
+
 @dataclass
 class AgentProfile:
     name: str
     scope: str
     description: str = ""
     kind: AgentKind = AgentKind.BUILTIN
+    execution_strategy: AgentExecutionStrategy = AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR
     allowed_categories: set[str] = field(default_factory=set)
     extra_tools: list[Any] = field(default_factory=list)
     tools_by_name: dict[str, Any] = field(init=False, default_factory=dict)
     tool_categories: dict[str, Any] = field(init=False, default_factory=dict)
     default_stage_models: dict[str, str] = field(default_factory=dict)
+    stage_model_selections: dict[str, ModelSelection] = field(default_factory=dict)
     request_analysis_selectable: bool = True
     max_turns: int = DEFAULT_MAX_TURNS
     request_analysis_goal: str = DEFAULT_REQUEST_ANALYSIS_GOAL
@@ -58,6 +70,15 @@ class AgentProfile:
 
     def default_model_for_stage(self, stage: str) -> str:
         return self.default_stage_models.get(stage, "").strip()
+
+    def model_selection_for_stage(self, stage: str) -> ModelSelection | None:
+        selection = self.stage_model_selections.get(stage)
+        if selection is not None:
+            return selection
+        default_model = self.default_model_for_stage(stage)
+        if not default_model:
+            return None
+        return ModelSelection(provider=OPENAI_PROVIDER, model=default_model)
 
     def allowed_category_names(self) -> set[str]:
         if self.allowed_categories:

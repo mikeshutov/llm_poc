@@ -6,9 +6,12 @@ from uuid import UUID, uuid4
 import streamlit as st
 
 from llm.repository.repo_factory import get_conversation_model_config_repo
-from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig
+from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig, EVALUATOR_STAGE, PLANNER_STAGE
+from conversation.models.replay_models import PreparedReplayConversation
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
+from request_orchestrator.agent_runner.models.agent_profile import AgentExecutionStrategy
+from request_orchestrator.agents.models.user_agent import UserAgentModelConfig
 from request_orchestrator.agents.repository.repo_factory import get_user_agent_repo
 from rendering.feedback import clear_feedback_state
 from rendering.replay import clear_replay_state
@@ -27,6 +30,10 @@ PROFILE_DETAILS_DIALOG_KEY = "profile_details_dialog"
 PROFILE_EDIT_MODE_KEY = "profile_details_edit_mode"
 USER_AGENTS_DIALOG_KEY = "user_agents_dialog"
 USER_AGENTS_CREATE_MODE_KEY = "user_agents_create_mode"
+USER_AGENT_STAGE_TITLES = {
+    PLANNER_STAGE: "Planner",
+    EVALUATOR_STAGE: "Evaluator",
+}
 
 
 def clear_conversation_model_config_dialog() -> None:
@@ -37,11 +44,13 @@ def request_conversation_model_config_dialog(
     conversation_id: str,
     title: str,
     replay_source_roundtrip_id: str | None = None,
+    replay_context: PreparedReplayConversation | None = None,
 ) -> None:
     st.session_state[MODEL_CONFIG_DIALOG_KEY] = {
         "conversation_id": conversation_id,
         "title": title,
         "replay_source_roundtrip_id": replay_source_roundtrip_id,
+        "replay_context": None if replay_context is None else replay_context.model_dump(),
     }
 
 
@@ -159,6 +168,70 @@ def _build_model_option_lookup() -> dict[str, dict[str, str]]:
             for model_name in model_names
         }
     return grouped_options
+
+
+def _default_user_agent_provider() -> str:
+    return ConversationModelConfig.build_default().main_agent.planner.provider
+
+
+def _default_user_agent_model_selection(stage: str) -> tuple[str, str]:
+    default_config = ConversationModelConfig.build_default()
+    if stage == PLANNER_STAGE:
+        selection = default_config.main_agent.planner
+        return selection.provider, selection.model
+    if stage == EVALUATOR_STAGE:
+        selection = default_config.shared.evaluator
+        return selection.provider, selection.model
+    return _default_user_agent_provider(), ""
+
+
+def _build_user_agent_model_config_inputs(
+    *,
+    widget_key_prefix: str,
+    execution_strategy: AgentExecutionStrategy,
+) -> list[UserAgentModelConfig]:
+    provider_options = ConversationModelConfig.model_names_by_provider()
+    model_configs: list[UserAgentModelConfig] = []
+    for stage in execution_strategy.required_model_stages():
+        provider_key = f"{widget_key_prefix}::{stage}::provider"
+        model_key = f"{widget_key_prefix}::{stage}::model"
+        provider_choices = list(provider_options.keys())
+        default_provider, default_model = _default_user_agent_model_selection(stage)
+        if provider_key not in st.session_state or st.session_state[provider_key] not in provider_choices:
+            st.session_state[provider_key] = (
+                default_provider
+                if default_provider in provider_choices
+                else _default_user_agent_provider()
+            )
+        provider_col, model_col = st.columns(2)
+        with provider_col:
+            selected_provider = st.selectbox(
+                f"{USER_AGENT_STAGE_TITLES.get(stage, stage)} provider",
+                provider_choices,
+                key=provider_key,
+                format_func=ConversationModelConfig.provider_display_name,
+            )
+        model_choices = provider_options.get(selected_provider, [])
+        if model_key not in st.session_state or st.session_state[model_key] not in model_choices:
+            st.session_state[model_key] = (
+                default_model
+                if selected_provider == default_provider and default_model in model_choices
+                else (model_choices[0] if model_choices else "")
+            )
+        with model_col:
+            selected_model = st.selectbox(
+                f"{USER_AGENT_STAGE_TITLES.get(stage, stage)} model",
+                model_choices,
+                key=model_key,
+            )
+        model_configs.append(
+            UserAgentModelConfig(
+                stage=stage,
+                provider=selected_provider,
+                model=selected_model,
+            )
+        )
+    return model_configs
 
 
 def _resolve_config_model(config: ConversationModelConfig, agent: str, stage: str) -> str:
@@ -329,6 +402,7 @@ def render_conversation_model_config_dialog(
     conversation_id: str,
     title: str,
     replay_source_roundtrip_id: str | None = None,
+    replay_context: PreparedReplayConversation | None = None,
 ) -> None:
     model_config_repository = get_conversation_model_config_repo()
     resolved_config = model_config_repository.resolve(UUID(conversation_id))
@@ -377,10 +451,9 @@ def render_conversation_model_config_dialog(
             if st.button("Accept replay", use_container_width=True, type="primary"):
                 _apply_model_config_form(model_config_repository, conversation_id, rows)
                 clear_conversation_model_config_dialog()
-                st.session_state[PENDING_REPLAY_PREPARE_KEY] = {
-                    "conversation_id": conversation_id,
-                    "source_roundtrip_id": replay_source_roundtrip_id,
-                }
+                if replay_context is None:
+                    raise ValueError("replay_context is required in replay mode")
+                st.session_state[PENDING_REPLAY_PREPARE_KEY] = replay_context.model_dump()
                 st.rerun()
         with reset_col:
             if st.button("Reset all", use_container_width=True, type="secondary"):
@@ -523,41 +596,69 @@ def render_user_agents_dialog(user_id: str) -> None:
             st.rerun()
 
     if create_mode:
-        with st.form(f"user_agent_create_form::{user_id}"):
-            agent_name = st.text_input("Agent name")
-            agent_description = st.text_area("Description", placeholder="What this agent is for.")
-            allowed_category_names = st.multiselect(
-                "Tool categories",
-                options=sorted(TOOL_CATEGORIES.keys()),
-                help="These categories determine which tools the agent can use.",
+        widget_prefix = f"user_agent_create::{user_id}"
+        agent_name = st.text_input("Agent name", key=f"{widget_prefix}::name")
+        agent_description = st.text_area(
+            "Description",
+            placeholder="What this agent is for.",
+            key=f"{widget_prefix}::description",
+        )
+        execution_strategy = AgentExecutionStrategy(
+            st.selectbox(
+                "Execution strategy",
+                options=[strategy.value for strategy in AgentExecutionStrategy],
+                key=f"{widget_prefix}::execution_strategy",
             )
-            planner_instruction = st.text_area(
-                "Planner instruction",
-                placeholder="Core planner behavior for this user agent.",
-                height=140,
-            )
-            planner_rules = st.text_area(
-                "Planner rules",
-                placeholder="Optional extra rules or constraints.",
-                height=120,
-            )
-            max_turns = st.number_input("Max turns", min_value=1, max_value=20, value=10, step=1)
-            save_col, cancel_col = st.columns(2)
-            with save_col:
-                create_agent = st.form_submit_button("Create agent", type="primary", use_container_width=True)
-            with cancel_col:
-                cancel_create = st.form_submit_button("Cancel", use_container_width=True)
+        )
+        allowed_category_names = st.multiselect(
+            "Tool categories",
+            options=sorted(TOOL_CATEGORIES.keys()),
+            help="These categories determine which tools the agent can use.",
+            key=f"{widget_prefix}::allowed_categories",
+        )
+        planner_instruction = st.text_area(
+            "Planner instruction",
+            placeholder="Core planner behavior for this user agent.",
+            height=140,
+            key=f"{widget_prefix}::planner_instruction",
+        )
+        planner_rules = st.text_area(
+            "Planner rules",
+            placeholder="Optional extra rules or constraints.",
+            height=120,
+            key=f"{widget_prefix}::planner_rules",
+        )
+        max_turns = st.number_input(
+            "Max turns",
+            min_value=1,
+            max_value=20,
+            value=10,
+            step=1,
+            key=f"{widget_prefix}::max_turns",
+        )
+        st.caption("Model config")
+        model_configs = _build_user_agent_model_config_inputs(
+            widget_key_prefix=widget_prefix,
+            execution_strategy=execution_strategy,
+        )
+        save_col, cancel_col = st.columns(2)
+        with save_col:
+            create_agent = st.button("Create agent", type="primary", use_container_width=True)
+        with cancel_col:
+            cancel_create = st.button("Cancel", use_container_width=True)
 
         if create_agent:
             user_agent_repository.upsert(
                 user_id=user_id,
                 name=agent_name,
                 description=agent_description.strip(),
+                execution_strategy=execution_strategy,
                 allowed_categories=allowed_category_names,
                 planner_instruction=planner_instruction,
                 planner_rules=planner_rules.strip(),
                 max_turns=int(max_turns),
                 is_active=True,
+                model_configs=model_configs,
                 metadata={"source": "streamlit"},
             )
             st.session_state[USER_AGENTS_CREATE_MODE_KEY] = False
@@ -606,9 +707,18 @@ def render_user_agents_dialog(user_id: str) -> None:
 
                 if user_agent.description.strip():
                     st.write(user_agent.description)
+                st.caption(f"Strategy: {user_agent.execution_strategy.value}")
                 st.caption(
                     f"Categories: {', '.join(user_agent.allowed_categories) if user_agent.allowed_categories else '-'}"
                 )
+                if user_agent.model_configs:
+                    st.caption(
+                        "Models: "
+                        + ", ".join(
+                            f"{USER_AGENT_STAGE_TITLES.get(config.stage, config.stage)}={ConversationModelConfig.provider_display_name(config.provider)} / {config.model}"
+                            for config in user_agent.model_configs
+                        )
+                    )
                 st.caption(f"Max turns: {user_agent.max_turns}")
 
     if st.button("Close", key=f"close_user_agents_dialog::{user_id}", use_container_width=True):
@@ -761,11 +871,13 @@ def render_sidebar(conversation_repository) -> None:
 
     dialog_request = get_conversation_model_config_dialog_request()
     if dialog_request:
+        replay_context = dialog_request.get("replay_context")
         render_conversation_model_config_dialog(
             conversation_repository,
             dialog_request["conversation_id"],
             dialog_request["title"],
             dialog_request.get("replay_source_roundtrip_id"),
+            None if replay_context is None else PreparedReplayConversation.model_validate(replay_context),
         )
 
     profile_dialog_request = get_profile_details_dialog_request()

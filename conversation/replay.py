@@ -1,15 +1,19 @@
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from common.config import SUMMARY_BATCH_SIZE, SUMMARY_TRIGGER_SIZE
+from conversation.models.replay_models import PopulatedReplayConversation, PreparedReplayConversation
 from conversation.repository.repo_factory import get_conversation_repo
 from conversation.summary_service import rebuild_conversation_summaries
 from tool.repository.tool_call_repository import ToolCallRepository
 
 
-def prepare_replay_conversation(roundtrip_id: str | UUID, user_id: str) -> dict[str, Any]:
+def _resolve_replay_source(
+    roundtrip_id: str | UUID,
+    *,
+    user_id: str | None = None,
+):
     repo = get_conversation_repo()
     parsed_roundtrip_id = UUID(str(roundtrip_id))
     source_roundtrip = repo.get_roundtrip(parsed_roundtrip_id)
@@ -19,10 +23,15 @@ def prepare_replay_conversation(roundtrip_id: str | UUID, user_id: str) -> dict[
     source_conversation = repo.get_conversation(source_roundtrip.conversation_id)
     if source_conversation is None:
         raise ValueError(f"Conversation {source_roundtrip.conversation_id} was not found.")
-    if user_id != source_conversation.user_id:
+    if user_id is not None and user_id != source_conversation.user_id:
         raise ValueError(
             f"Roundtrip {parsed_roundtrip_id} belongs to user {source_conversation.user_id}, not {user_id}"
         )
+    return repo, source_roundtrip, source_conversation
+
+
+def prepare_replay(roundtrip_id: str | UUID, user_id: str) -> PreparedReplayConversation:
+    repo, source_roundtrip, source_conversation = _resolve_replay_source(roundtrip_id, user_id=user_id)
 
     new_conversation = repo.create_conversation(
         user_id=user_id,
@@ -42,25 +51,26 @@ def prepare_replay_conversation(roundtrip_id: str | UUID, user_id: str) -> dict[
         replay_title = source_title if source_title.endswith("(Replay)") else f"{source_title} (Replay)"
         repo.set_conversation_title(str(new_conversation.id), replay_title)
 
-    return {
-        "conversation_id": str(new_conversation.id),
-        "source_roundtrip_id": str(source_roundtrip.id),
-    }
+    return PreparedReplayConversation(
+        conversation_id=str(new_conversation.id),
+        source_roundtrip_id=str(source_roundtrip.id),
+        source_conversation_id=str(source_roundtrip.conversation_id),
+        source_message_index=source_roundtrip.message_index,
+        user_prompt=source_roundtrip.user_prompt,
+    )
 
 
-def populate_replay_conversation(conversation_id: str | UUID, source_roundtrip_id: str | UUID) -> dict[str, Any]:
+def execute_replay(
+    prepared_replay: PreparedReplayConversation,
+) -> PopulatedReplayConversation:
     repo = get_conversation_repo()
-    parsed_roundtrip_id = UUID(str(source_roundtrip_id))
-    parsed_conversation_id = UUID(str(conversation_id))
+    parsed_conversation_id = UUID(prepared_replay.conversation_id)
+    source_conversation_id = UUID(prepared_replay.source_conversation_id)
 
-    source_roundtrip = repo.get_roundtrip(parsed_roundtrip_id)
-    if source_roundtrip is None:
-        raise ValueError(f"Roundtrip {parsed_roundtrip_id} was not found.")
-
-    history_cutoff = source_roundtrip.message_index - 1
+    history_cutoff = prepared_replay.source_message_index - 1
     source_roundtrips = (
         repo.list_roundtrips_through_message_index(
-            source_roundtrip.conversation_id,
+            source_conversation_id,
             history_cutoff,
         )
         if history_cutoff >= 0
@@ -81,7 +91,7 @@ def populate_replay_conversation(conversation_id: str | UUID, source_roundtrip_i
         summary_trigger_size=SUMMARY_TRIGGER_SIZE,
     )
 
-    return {
-        "conversation_id": str(parsed_conversation_id),
-        "user_prompt": source_roundtrip.user_prompt,
-    }
+    return PopulatedReplayConversation(
+        conversation_id=str(parsed_conversation_id),
+        user_prompt=prepared_replay.user_prompt,
+    )

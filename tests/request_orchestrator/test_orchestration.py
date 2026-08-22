@@ -757,7 +757,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(result.answer, ['Stored your food likes as a user attribute.'])
         self.assertGreaterEqual(len(llm.invocations), 2)
-        self.assertIn('"latest_user_prompt": "Please remember that I like pizza and eggs."', llm.prompts[0] or '')
+        self.assertIn('"task": "Please remember that I like pizza and eggs."', llm.prompts[0] or '')
+        self.assertNotIn('"latest_user_prompt":', llm.prompts[0] or '')
         self.assertNotIn('"user_profile":', llm.prompts[0] or '')
         self.assertTrue(any('conversation_context:' not in (prompt or '') for prompt in llm.prompts))
         self.assertNotIn('recent_roundtrip_tool_summaries', llm.prompts[-1] or '')

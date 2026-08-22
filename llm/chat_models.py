@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
@@ -18,6 +18,9 @@ from llm.conversation_model_config import (
     XAI_PROVIDER,
 )
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
+
+if TYPE_CHECKING:
+    from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
 
 
 def default_planner_model_for_agent_scope(agent_scope: str) -> str:
@@ -39,8 +42,14 @@ def resolve_stage_model_name(
     execution_context: AgentExecutionContext,
     agent: str,
     stage: str,
+    agent_profile: AgentProfile | None = None,
 ) -> str:
-    return execution_context.model_config.resolve(agent, stage)
+    return resolve_stage_model_selection(
+        execution_context=execution_context,
+        agent=agent,
+        stage=stage,
+        agent_profile=agent_profile,
+    ).model
 
 
 def resolve_stage_provider_name(
@@ -48,8 +57,28 @@ def resolve_stage_provider_name(
     execution_context: AgentExecutionContext,
     agent: str,
     stage: str,
+    agent_profile: AgentProfile | None = None,
 ) -> str:
-    return execution_context.model_config.resolve_provider(agent, stage)
+    return resolve_stage_model_selection(
+        execution_context=execution_context,
+        agent=agent,
+        stage=stage,
+        agent_profile=agent_profile,
+    ).provider
+
+
+def resolve_stage_model_selection(
+    *,
+    execution_context: AgentExecutionContext,
+    agent: str,
+    stage: str,
+    agent_profile: AgentProfile | None = None,
+):
+    if agent_profile is not None:
+        selection = agent_profile.model_selection_for_stage(stage)
+        if selection is not None:
+            return selection
+    return execution_context.model_config.resolve_selection(agent, stage)
 
 
 def build_chat_model(*, provider: str, model_name: str) -> Any:
@@ -104,17 +133,20 @@ def build_llm_for_stage(
     llm: Any,
     agent: str,
     stage: str,
+    agent_profile: AgentProfile | None = None,
     reuse_llm_for_agent_scope: str | None = None,
 ) -> Any:
     provider = resolve_stage_provider_name(
         execution_context=execution_context,
         agent=agent,
         stage=stage,
+        agent_profile=agent_profile,
     )
     model_name = resolve_stage_model_name(
         execution_context=execution_context,
         agent=agent,
         stage=stage,
+        agent_profile=agent_profile,
     )
     if llm is None:
         return build_chat_model(provider=provider, model_name=model_name)

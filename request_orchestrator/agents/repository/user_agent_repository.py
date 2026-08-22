@@ -7,7 +7,8 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from db.connection import get_connection
-from request_orchestrator.agents.models.user_agent import UserAgent
+from request_orchestrator.agent_runner.models.agent_profile import AgentExecutionStrategy
+from request_orchestrator.agents.models.user_agent import UserAgent, UserAgentModelConfig
 
 
 class UserAgentRepository:
@@ -22,6 +23,37 @@ class UserAgentRepository:
                 normalized[field_name] = field_value.isoformat()
         return normalized
 
+    def _list_model_configs_by_agent_id(self, agent_ids: list[Any]) -> dict[Any, list[UserAgentModelConfig]]:
+        if not agent_ids:
+            return {}
+
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT
+                    user_agent_id,
+                    stage,
+                    provider,
+                    model
+                FROM user_agent_model_config
+                WHERE user_agent_id = ANY(%s)
+                ORDER BY stage ASC
+                """,
+                (agent_ids,),
+            )
+            rows = cur.fetchall()
+
+        grouped: dict[Any, list[UserAgentModelConfig]] = {}
+        for row in rows:
+            grouped.setdefault(row["user_agent_id"], []).append(
+                UserAgentModelConfig(
+                    stage=row["stage"],
+                    provider=row["provider"],
+                    model=row["model"],
+                )
+            )
+        return grouped
+
     def list_for_user(self, user_id: str, *, is_active: bool | None = True) -> list[UserAgent]:
         resolved_user_id = user_id.strip()
         if not resolved_user_id:
@@ -33,6 +65,7 @@ class UserAgentRepository:
                 user_id,
                 name,
                 description,
+                execution_strategy,
                 allowed_categories,
                 planner_instruction,
                 planner_rules,
@@ -53,7 +86,14 @@ class UserAgentRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
-            return [UserAgent(**self._normalize_row(row)) for row in rows]
+        model_configs_by_agent_id = self._list_model_configs_by_agent_id([row["id"] for row in rows])
+        return [
+            UserAgent(
+                **self._normalize_row(row),
+                model_configs=model_configs_by_agent_id.get(row["id"], []),
+            )
+            for row in rows
+        ]
 
     def upsert(
         self,
@@ -61,11 +101,13 @@ class UserAgentRepository:
         user_id: str,
         name: str,
         description: str = "",
+        execution_strategy: AgentExecutionStrategy = AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR,
         allowed_categories: list[str] | None = None,
         planner_instruction: str,
         planner_rules: str = "",
         max_turns: int = 10,
         is_active: bool = True,
+        model_configs: list[UserAgentModelConfig] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> UserAgent:
         resolved_user_id = user_id.strip()
@@ -77,6 +119,22 @@ class UserAgentRepository:
         resolved_planner_instruction = planner_instruction.strip()
         if not resolved_planner_instruction:
             raise ValueError("planner_instruction is required")
+        resolved_execution_strategy = AgentExecutionStrategy(str(execution_strategy).strip())
+        resolved_model_configs = [] if model_configs is None else [
+            UserAgentModelConfig(
+                stage=config.stage.strip(),
+                provider=config.provider.strip(),
+                model=config.model.strip(),
+            )
+            for config in model_configs
+        ]
+        required_stages = set(resolved_execution_strategy.required_model_stages())
+        configured_stages = {config.stage for config in resolved_model_configs}
+        missing_stages = sorted(required_stages - configured_stages)
+        if missing_stages:
+            raise ValueError(
+                f"Missing model configs for execution strategy {resolved_execution_strategy.value!r}: {', '.join(missing_stages)}"
+            )
 
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -85,6 +143,7 @@ class UserAgentRepository:
                     user_id,
                     name,
                     description,
+                    execution_strategy,
                     allowed_categories,
                     planner_instruction,
                     planner_rules,
@@ -92,10 +151,11 @@ class UserAgentRepository:
                     is_active,
                     metadata
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (user_id, name)
                 DO UPDATE SET
                     description = EXCLUDED.description,
+                    execution_strategy = EXCLUDED.execution_strategy,
                     allowed_categories = EXCLUDED.allowed_categories,
                     planner_instruction = EXCLUDED.planner_instruction,
                     planner_rules = EXCLUDED.planner_rules,
@@ -108,6 +168,7 @@ class UserAgentRepository:
                     user_id,
                     name,
                     description,
+                    execution_strategy,
                     allowed_categories,
                     planner_instruction,
                     planner_rules,
@@ -121,6 +182,7 @@ class UserAgentRepository:
                     resolved_user_id,
                     resolved_name,
                     description,
+                    resolved_execution_strategy.value,
                     allowed_categories or [],
                     resolved_planner_instruction,
                     planner_rules,
@@ -131,7 +193,38 @@ class UserAgentRepository:
             )
             row = cur.fetchone()
             assert row is not None
-            return UserAgent(**self._normalize_row(row))
+            cur.execute(
+                """
+                DELETE FROM user_agent_model_config
+                WHERE user_agent_id = %s
+                """,
+                (row["id"],),
+            )
+            if resolved_model_configs:
+                cur.executemany(
+                    """
+                    INSERT INTO user_agent_model_config (
+                        user_agent_id,
+                        stage,
+                        provider,
+                        model
+                    )
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    [
+                        (
+                            row["id"],
+                            config.stage,
+                            config.provider,
+                            config.model,
+                        )
+                        for config in resolved_model_configs
+                    ],
+                )
+            return UserAgent(
+                **self._normalize_row(row),
+                model_configs=resolved_model_configs,
+            )
 
     def set_active(self, user_id: str, name: str, *, is_active: bool) -> bool:
         resolved_user_id = user_id.strip()
