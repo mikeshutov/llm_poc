@@ -9,7 +9,7 @@ from products.models.product_result import ProductResult
 from products.models.product_search_results import ProductSearchResults
 from products.product_retrieval import find_products as catalog_find_products
 from products.models.product_query import ProductQuery
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_FIND_PRODUCTS
 from tool.constants import TOOL_RESULT_TYPE_PRODUCT_RESULTS
 
@@ -84,7 +84,7 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
             tool_name=TOOL_NAME_FIND_PRODUCTS,
             title=product.name,
             summary=_product_summary(product),
-            urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
             image_url=(product.image_url or "").strip(),
             source=TOOL_NAME_FIND_PRODUCTS,
             entity_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS,

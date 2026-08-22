@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from integrations.nasa import NasaClient
 from integrations.nasa.models import AstronomyPicture
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_ASTRONOMY_PICTURE
 from tool.constants import TOOL_RESULT_TYPE_ASTRONOMY_PICTURE
 
@@ -33,7 +33,7 @@ def _tool_result(result: AstronomyPicture) -> ToolResult:
         tool_name=TOOL_NAME_GET_ASTRONOMY_PICTURE,
         title=result.title,
         summary=result.explanation,
-        urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+        urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
         image_url=url if result.media_type == "image" else "",
         published_at=result.date,
         source=TOOL_NAME_GET_ASTRONOMY_PICTURE,

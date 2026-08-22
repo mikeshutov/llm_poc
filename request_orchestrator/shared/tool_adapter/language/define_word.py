@@ -6,7 +6,7 @@ from requests.exceptions import RequestException
 
 from integrations.free_dictionary import FreeDictionaryClient
 from integrations.free_dictionary.models import DictionaryEntry
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_DEFINE_WORD
 from tool.constants import TOOL_RESULT_TYPE_DEFINITION
 
@@ -45,7 +45,7 @@ def _tool_result(result: list[DictionaryEntry]) -> ToolResult:
             tool_name=TOOL_NAME_DEFINE_WORD,
             title=entry.word.strip(),
             summary=_entry_summary(entry),
-            urls=[EvidenceUrl(url=source_url, url_type="website")] if source_url else [],
+            urls=[EvidenceUrl(url=source_url, url_type=EvidenceUrlType.WEBSITE)] if source_url else [],
             source=TOOL_NAME_DEFINE_WORD,
             entity_type=TOOL_RESULT_TYPE_DEFINITION,
             metadata=metadata.model_dump(exclude_none=True),

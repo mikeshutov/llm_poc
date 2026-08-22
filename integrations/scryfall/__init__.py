@@ -1,6 +1,7 @@
 from integrations.scryfall.client import ScryfallClient, ScryfallClientError
 from integrations.scryfall.models import (
     MagicCardPriceEntry,
+    MagicCardPriceMetadataEntry,
     MagicCardPriceResult,
     ScryfallCard,
     ScryfallCardFace,
@@ -12,6 +13,7 @@ from integrations.scryfall.models import (
 
 __all__ = [
     "MagicCardPriceEntry",
+    "MagicCardPriceMetadataEntry",
     "MagicCardPriceResult",
     "ScryfallCard",
     "ScryfallCardFace",

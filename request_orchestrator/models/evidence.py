@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
+class EvidenceUrlType(StrEnum):
+    WEBSITE = "website"
+    YOUTUBE = "youtube"
+
+
 class EvidenceUrl(BaseModel):
     url: str = ""
-    url_type: str = "website"
+    url_type: EvidenceUrlType = EvidenceUrlType.WEBSITE
 
 
 class HydratedEvidence(BaseModel):
@@ -29,7 +35,7 @@ class HydratedEvidence(BaseModel):
 
     @property
     def url(self) -> str:
-        for preferred_type in ("website", "youtube"):
+        for preferred_type in (EvidenceUrlType.WEBSITE, EvidenceUrlType.YOUTUBE):
             for entry in self.urls:
                 cleaned_url = entry.url.strip()
                 if entry.url_type == preferred_type and cleaned_url:

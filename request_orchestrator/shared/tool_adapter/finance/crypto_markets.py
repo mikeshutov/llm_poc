@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
 from integrations.coingecko import COINGECKO_WEBSITE_COIN_URL_TEMPLATE, CoinGeckoClient, CoinMarket
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_CRYPTO_MARKETS
 from tool.constants import TOOL_RESULT_TYPE_CRYPTO_MARKET
 
@@ -57,7 +57,7 @@ def _tool_result(result: list[CoinMarket]) -> ToolResult:
             tool_name=TOOL_NAME_GET_CRYPTO_MARKETS,
             title=market.name,
             summary=summary,
-            urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
             image_url=(market.image or "").strip(),
             source=TOOL_NAME_GET_CRYPTO_MARKETS,
             entity_type=TOOL_RESULT_TYPE_CRYPTO_MARKET,

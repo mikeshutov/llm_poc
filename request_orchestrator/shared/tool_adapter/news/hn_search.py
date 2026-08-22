@@ -8,7 +8,7 @@ from requests.exceptions import RequestException
 
 from integrations.hn_algolia import HnAlgoliaClient
 from integrations.hn_algolia.models import HnHit, HnSearchResult
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.news.candidate_mapper import rerank_hn_search_result
 from request_orchestrator.shared.tool_adapter.news.constants import DEFAULT_HN_SEARCH_LIMIT
 from tool.constants import TOOL_NAME_HN_SEARCH
@@ -53,7 +53,7 @@ def _tool_result(result: HnSearchResult) -> ToolResult:
             tool_name=TOOL_NAME_HN_SEARCH,
             title=(hit.title or hit.url or hit.object_id or "").strip(),
             summary=_hit_summary(hit),
-            urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
             published_at=(hit.created_at or "").strip(),
             source=TOOL_NAME_HN_SEARCH,
             entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,

@@ -5,7 +5,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.yahoo_finance import YAHOO_FINANCE_QUOTE_URL_TEMPLATE
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_STOCK_PRICE
 from tool.constants import TOOL_RESULT_TYPE_FINANCE
 
@@ -46,7 +46,7 @@ def _tool_result(result: StockPrice) -> ToolResult:
         tool_name=TOOL_NAME_GET_STOCK_PRICE,
         title=result.ticker,
         summary=summary,
-        urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+        urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
         source=TOOL_NAME_GET_STOCK_PRICE,
         entity_type=TOOL_RESULT_TYPE_FINANCE,
         metadata=metadata.model_dump(exclude_none=True),

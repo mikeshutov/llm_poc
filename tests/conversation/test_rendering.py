@@ -8,7 +8,7 @@ from rendering.rendering import (
     _render_result_block,
     get_renderable_result_blocks,
 )
-from request_orchestrator.models.evidence import EvidenceUrl, HydratedEvidence
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, HydratedEvidence
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from tool.constants import TOOL_NAME_GET_CURRENT_WEATHER
 from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
@@ -52,7 +52,7 @@ def test_build_block_cards_uses_hydrated_evidence_with_links() -> None:
                 evidence_id="P1E1R1",
                 title="Article Title",
                 summary="Article summary",
-                urls=[EvidenceUrl(url="https://example.com/article", url_type="website")],
+                urls=[EvidenceUrl(url="https://example.com/article", url_type=EvidenceUrlType.WEBSITE)],
                 image_url="https://example.com/article.jpg",
                 source="news_search",
             )
@@ -79,7 +79,7 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
                 evidence_id="P1E1R1",
                 title="Article Title",
                 summary="Article summary",
-                urls=[EvidenceUrl(url="https://example.com/article", url_type="website")],
+                urls=[EvidenceUrl(url="https://example.com/article", url_type=EvidenceUrlType.WEBSITE)],
                 image_url="",
                 source="news_search",
             ),
@@ -123,7 +123,7 @@ def test_build_inline_evidence_includes_generic_web_search_results() -> None:
                 evidence_id="P1E1R1",
                 title="Article Title",
                 summary="Article summary",
-                urls=[EvidenceUrl(url="https://example.com/article", url_type="website")],
+                urls=[EvidenceUrl(url="https://example.com/article", url_type=EvidenceUrlType.WEBSITE)],
                 image_url="https://example.com/article.jpg",
                 source=TOOL_NAME_GENERIC_WEB_SEARCH,
                 tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
@@ -143,7 +143,7 @@ def test_build_inline_evidence_includes_generic_web_search_results() -> None:
             evidence_id="P1E1R1",
             title="Article Title",
             summary="Article summary",
-            urls=[EvidenceUrl(url="https://example.com/article", url_type="website")],
+            urls=[EvidenceUrl(url="https://example.com/article", url_type=EvidenceUrlType.WEBSITE)],
             image_url="https://example.com/article.jpg",
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
             tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
@@ -159,7 +159,7 @@ def test_build_inline_evidence_includes_generic_web_search_results_from_source_o
                 evidence_id="P1E1R1",
                 title="Article Title",
                 summary="Article summary",
-                urls=[EvidenceUrl(url="https://example.com/article", url_type="website")],
+                urls=[EvidenceUrl(url="https://example.com/article", url_type=EvidenceUrlType.WEBSITE)],
                 image_url="https://example.com/article.jpg",
                 source=TOOL_NAME_GENERIC_WEB_SEARCH,
                 tool_name="",
@@ -193,7 +193,7 @@ def test_render_result_block_renders_weather_as_inline_markdown_link(monkeypatch
                 evidence_id="P1E1R1",
                 title="Get Current Weather",
                 summary="25.9 C in Toronto",
-                urls=[EvidenceUrl(url="https://open-meteo.com/", url_type="website")],
+                urls=[EvidenceUrl(url="https://open-meteo.com/", url_type=EvidenceUrlType.WEBSITE)],
                 image_url="",
                 source=TOOL_NAME_GET_CURRENT_WEATHER,
                 tool_name=TOOL_NAME_GET_CURRENT_WEATHER,

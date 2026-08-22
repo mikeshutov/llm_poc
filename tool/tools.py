@@ -17,7 +17,6 @@ from request_orchestrator.shared.tool_adapter.fun.get_advice import get_advice
 from request_orchestrator.shared.tool_adapter.fun.get_quote import get_quote
 from request_orchestrator.shared.tool_adapter.games.get_commander_cards import get_commander_cards
 from request_orchestrator.shared.tool_adapter.games.get_commander_details import get_commander_details
-from request_orchestrator.shared.tool_adapter.games.get_magic_card_price import get_magic_card_price
 from request_orchestrator.shared.tool_adapter.games.get_magic_card_rulings import get_magic_card_rulings
 from request_orchestrator.shared.tool_adapter.games.search_magic_cards import search_magic_cards
 from request_orchestrator.shared.tool_adapter.language.define_word import define_word
@@ -129,7 +128,6 @@ MATH_TOOLS = [Tool(calculate, result_type=TOOL_RESULT_TYPE_CALCULATION)]
 GAMES_TOOLS = [
     Tool(get_commander_details, result_type=TOOL_RESULT_TYPE_DECKS),
     Tool(get_commander_cards, result_type=TOOL_RESULT_TYPE_CARD_RESULTS),
-    Tool(get_magic_card_price, result_type=TOOL_RESULT_TYPE_CARD_RESULTS),
     Tool(search_magic_cards, result_type=TOOL_RESULT_TYPE_CARD_RESULTS),
     Tool(get_magic_card_rulings, result_type=TOOL_RESULT_TYPE_RULES),
 ]

@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.edhrec import EDHREC_COMMANDER_URL_TEMPLATE, EdhrecClient, EdhrecCommanderPage, EdhrecComboLink
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_COMMANDER_DETAILS
 from tool.constants import TOOL_RESULT_TYPE_DECKS
 
@@ -83,7 +83,7 @@ def _tool_result(result: CommanderDetailsResult) -> ToolResult:
         tool_name=TOOL_NAME_GET_COMMANDER_DETAILS,
         title=result.title.strip() or result.commander_name,
         summary=_summary(result),
-        urls=[EvidenceUrl(url=result.page_url, url_type="website")] if result.page_url else [],
+        urls=[EvidenceUrl(url=result.page_url, url_type=EvidenceUrlType.WEBSITE)] if result.page_url else [],
         source=TOOL_NAME_GET_COMMANDER_DETAILS,
         entity_type=TOOL_RESULT_TYPE_DECKS,
         metadata=metadata.model_dump(exclude_none=True),
