@@ -9,7 +9,7 @@ from common.logging import create_conversation_event, log_roundtrip_prompt
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models import AgentResult, Plan, PlanningResult
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
-from llm.chat_models import build_llm_for_stage, resolve_stage_model_name
+from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from common.data import repair_common_json_issues, strip_code_fences
 from llm.conversation_model_config import PLANNER_STAGE
@@ -39,6 +39,7 @@ def _invoke_planner(
         llm=agent_state.llm,
         agent=agent_scope,
         stage=PLANNER_STAGE,
+        agent_profile=agent_state.agent_profile,
         reuse_llm_for_agent_scope=agent_scope,
     )
     started_at = perf_counter()
@@ -50,6 +51,13 @@ def _invoke_planner(
             execution_context=execution_context,
             agent=agent_scope,
             stage=PLANNER_STAGE,
+            agent_profile=agent_state.agent_profile,
+        ),
+        provider=resolve_stage_provider_name(
+            execution_context=execution_context,
+            agent=agent_scope,
+            stage=PLANNER_STAGE,
+            agent_profile=agent_state.agent_profile,
         ),
         conversation_id=execution_context.conversation_id,
         roundtrip_id=execution_context.roundtrip_id,

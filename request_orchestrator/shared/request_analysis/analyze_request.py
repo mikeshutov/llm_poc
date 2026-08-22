@@ -11,7 +11,7 @@ from rendering.debug import REQUEST_ANALYSIS_KIND
 from request_orchestrator.constants import REQUEST_ANALYSIS_PROMPT_KIND
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.request_analysis import RequestAnalysis
-from llm.chat_models import build_llm_for_stage, resolve_stage_model_name
+from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
 from request_orchestrator.shared.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
 
 ORCHESTRATOR_AGENT_NAME = "request_orchestrator"
@@ -39,6 +39,11 @@ def analyze_request(main_state: MainState) -> MainState:
     llm_call = record_llm_call(
         raw_response=response,
         model_name=model_name,
+        provider=resolve_stage_provider_name(
+            execution_context=execution_context,
+            agent=MAIN_AGENT_MODEL_SCOPE,
+            stage=REQUEST_ANALYSIS_STAGE,
+        ),
         conversation_id=execution_context.conversation_id,
         roundtrip_id=execution_context.roundtrip_id,
         user_id=execution_context.user_profile.user_id,

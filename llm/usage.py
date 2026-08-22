@@ -268,6 +268,7 @@ def record_llm_call(
     *,
     raw_response: Any,
     model_name: str | None,
+    provider: str | None = None,
     conversation_id: str | UUID | None,
     roundtrip_id: str | UUID | None,
     user_id: str | None,
@@ -288,7 +289,10 @@ def record_llm_call(
     if not resolved_model_name:
         return None
 
-    pricing = ConversationModelConfig.resolve_model_pricing(resolved_model_name)
+    if provider is None:
+        pricing = ConversationModelConfig.resolve_model_pricing(resolved_model_name)
+    else:
+        pricing = ConversationModelConfig.resolve_model_pricing(provider, resolved_model_name)
     input_cost = (Decimal(usage.input_tokens) * pricing.input_price_per_million_tokens) / ONE_MILLION
     output_cost = (Decimal(usage.output_tokens) * pricing.output_price_per_million_tokens) / ONE_MILLION
     total_cost = input_cost + output_cost

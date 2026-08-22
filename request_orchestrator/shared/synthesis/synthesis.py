@@ -16,7 +16,7 @@ from request_orchestrator.shared.evidence import (
     build_evidence_steps_from_tool_results,
     filter_evidence_steps,
 )
-from llm.chat_models import build_llm_for_stage, resolve_stage_model_name
+from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
 from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
 from rendering.debug import SYNTHESIS_KIND
 def _resolve_relevant_evidence_ids(state: MainState) -> set[str]:
@@ -68,6 +68,11 @@ def run_synthesis(state: MainState) -> MainState:
     llm_call = record_llm_call(
         raw_response=response,
         model_name=_resolve_synthesis_model_name(state),
+        provider=resolve_stage_provider_name(
+            execution_context=execution_context,
+            agent=MAIN_AGENT_MODEL_SCOPE,
+            stage=SYNTHESIS_STAGE,
+        ),
         conversation_id=execution_context.conversation_id,
         roundtrip_id=execution_context.roundtrip_id,
         user_id=execution_context.user_profile.user_id,

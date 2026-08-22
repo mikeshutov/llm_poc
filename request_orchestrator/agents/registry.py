@@ -4,14 +4,20 @@ from collections.abc import Callable
 from importlib import import_module
 
 from request_orchestrator.agent_runner import AgentRunner
-from request_orchestrator.agent_runner.models.agent_profile import AgentKind, AgentProfile
+from request_orchestrator.agent_runner.models.agent_profile import (
+    AgentExecutionStrategy,
+    AgentKind,
+    AgentProfile,
+)
 from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.graph import PlannerExecutorEvaluatorStratagy
 from request_orchestrator.agents.main_agent.router.router import router
 
 
 class AgentRegistry:
     def __init__(self) -> None:
-        self._dynamic_strategy = PlannerExecutorEvaluatorStratagy(router)
+        self._strategies = {
+            AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR: PlannerExecutorEvaluatorStratagy(router),
+        }
 
     def get(self, agent_profile: AgentProfile) -> Callable:
         if agent_profile.kind == AgentKind.USER_AGENT:
@@ -23,7 +29,10 @@ class AgentRegistry:
         return runner
 
     def _build_runner(self, agent_profile: AgentProfile) -> Callable:
-        runner = AgentRunner(agent_profile, self._dynamic_strategy)
+        strategy = self._strategies.get(agent_profile.execution_strategy)
+        if strategy is None:
+            raise KeyError(f"No runner strategy registered for {agent_profile.execution_strategy!r}")
+        runner = AgentRunner(agent_profile, strategy)
         return runner.run
 
 

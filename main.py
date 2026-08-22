@@ -8,8 +8,9 @@ import streamlit as st
 
 from request_orchestrator.service import run_request_orchestrator_for_query
 from common.config import CONTENT_KEY, ROLE_KEY, ROLE_USER
+from conversation.models.replay_models import PreparedReplayConversation
 from conversation.repository.repo_factory import get_conversation_repo
-from conversation.replay import populate_replay_conversation, prepare_replay_conversation
+from conversation.replay import execute_replay, prepare_replay
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from rendering.feedback import FEEDBACK_TARGET_KEY, clear_feedback_state, render_feedback_dialog
 from rendering.replay import clear_replay_state, pop_replay_target
@@ -144,27 +145,28 @@ setup_conversation(cid, selected_user_id)
 
 replay_target = pop_replay_target()
 if replay_target:
-    replay_context = prepare_replay_conversation(
+    replay_context = prepare_replay(
         replay_target["roundtrip_id"],
         user_id=selected_user_id,
     )
     clear_feedback_state()
     clear_replay_state()
     clear_sources_panel()
-    st.session_state.conversation_id = replay_context["conversation_id"]
-    st.query_params["cid"] = replay_context["conversation_id"]
+    st.session_state.conversation_id = replay_context.conversation_id
+    st.query_params["cid"] = replay_context.conversation_id
     st.session_state.loaded_cid = None
     st.session_state.messages = []
     st.session_state.debug_turns = []
-    replay_conversation = conversation_repository.get_conversation(UUID(replay_context["conversation_id"]))
+    replay_conversation = conversation_repository.get_conversation(UUID(replay_context.conversation_id))
     if replay_conversation is not None:
         st.session_state.selected_user_id = replay_conversation.user_id
         st.query_params["uid"] = replay_conversation.user_id
     replay_title = (replay_conversation.title or "Replay").strip() if replay_conversation else "Replay"
     request_conversation_model_config_dialog(
-        conversation_id=replay_context["conversation_id"],
+        conversation_id=replay_context.conversation_id,
         title=replay_title,
-        replay_source_roundtrip_id=replay_context["source_roundtrip_id"],
+        replay_source_roundtrip_id=replay_context.source_roundtrip_id,
+        replay_context=replay_context.model_dump(),
     )
     st.rerun()
 
@@ -182,14 +184,13 @@ if pending_replay and pending_replay.get("conversation_id") == st.session_state.
     st.session_state.pop(PENDING_REPLAY_KEY, None)
     clear_conversation_model_config_dialog()
     with st.spinner("Replaying conversation..."):
-        replay_context = populate_replay_conversation(
-            pending_replay["conversation_id"],
-            pending_replay["source_roundtrip_id"],
+        replay_context = execute_replay(
+            PreparedReplayConversation.model_validate(pending_replay)
         )
         st.session_state.loaded_cid = None
         st.session_state.messages = []
         render_messages(conversation_repository, st.session_state.conversation_id, render_message)
-        run_live_turn(replay_context["user_prompt"])
+        run_live_turn(replay_context.user_prompt)
     st.rerun()
 
 with st.sidebar:

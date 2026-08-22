@@ -28,6 +28,7 @@ class CandidateReranker:
         resolved_config = conversation_model_config or get_current_conversation_model_config() or ConversationModelConfig.build_default()
         resolved_provider = resolved_config.resolve_provider(SHARED_MODEL_SCOPE, RERANKER_STAGE)
         resolved_model = resolved_config.resolve(SHARED_MODEL_SCOPE, RERANKER_STAGE)
+        self.provider = resolved_provider
         self.model_name = resolved_model
         self.llm = build_chat_model(provider=resolved_provider, model_name=resolved_model) if llm is None else llm
 
@@ -58,6 +59,7 @@ class CandidateReranker:
         record_llm_call(
             raw_response=response,
             model_name=self.model_name,
+            provider=self.provider,
             conversation_id=get_current_conversation_id(),
             roundtrip_id=get_current_roundtrip_id(),
             user_id=get_current_user_id(),

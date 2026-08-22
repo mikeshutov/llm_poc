@@ -52,11 +52,15 @@ class AgentState:
                     provider=resolved_execution_context.model_config.resolve_provider(
                         agent=resolved_agent_scope,
                         stage="planner",
-                    ),
+                    )
+                    if agent_profile.model_selection_for_stage("planner") is None
+                    else agent_profile.model_selection_for_stage("planner").provider,
                     model_name=resolved_execution_context.model_config.resolve(
                         agent=resolved_agent_scope,
                         stage="planner",
-                    ),
+                    )
+                    if agent_profile.model_selection_for_stage("planner") is None
+                    else agent_profile.model_selection_for_stage("planner").model,
                 )
                 if llm is None
                 else llm

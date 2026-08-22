@@ -22,7 +22,7 @@ from request_orchestrator.shared.evidence import (
     build_evidence_steps_from_tool_results,
 )
 from request_orchestrator.shared.evaluator.prompts import build_evaluator_prompt
-from llm.chat_models import build_llm_for_stage, resolve_stage_model_name
+from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
 
 EVALUATOR_KIND = "evaluator"
 
@@ -63,6 +63,7 @@ def run_evaluator(state: AgentState) -> AgentState:
         llm=state.llm,
         agent=SHARED_MODEL_SCOPE,
         stage=EVALUATOR_STAGE,
+        agent_profile=state.agent_profile,
     )
     started_at = perf_counter()
     response = llm.invoke(prompt_text)
@@ -73,6 +74,13 @@ def run_evaluator(state: AgentState) -> AgentState:
             execution_context=execution_context,
             agent=SHARED_MODEL_SCOPE,
             stage=EVALUATOR_STAGE,
+            agent_profile=state.agent_profile,
+        ),
+        provider=resolve_stage_provider_name(
+            execution_context=execution_context,
+            agent=SHARED_MODEL_SCOPE,
+            stage=EVALUATOR_STAGE,
+            agent_profile=state.agent_profile,
         ),
         conversation_id=execution_context.conversation_id,
         roundtrip_id=execution_context.roundtrip_id,
