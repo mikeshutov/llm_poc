@@ -10,7 +10,7 @@ from integrations.open_library import (
     OpenLibraryClient,
 )
 from integrations.open_library.models import BookDoc, BookSearchResult
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.books.candidate_mapper import rerank_book_search_result
 from request_orchestrator.shared.tool_adapter.books.constants import DEFAULT_BOOK_SEARCH_LIMIT
 from tool.constants import TOOL_NAME_SEARCH_BOOKS
@@ -59,7 +59,7 @@ def _tool_result(result: BookSearchResult) -> ToolResult:
             tool_name=TOOL_NAME_SEARCH_BOOKS,
             title=book.title,
             summary=_book_summary(book),
-            urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
             image_url=image_url,
             source=TOOL_NAME_SEARCH_BOOKS,
             entity_type=TOOL_RESULT_TYPE_BOOK_RESULTS,

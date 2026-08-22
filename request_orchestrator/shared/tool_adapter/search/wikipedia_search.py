@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from integrations.wikipedia import WikipediaClient
 from integrations.wikipedia.models import WikipediaPageSummary, WikipediaSearchResult
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_WIKIPEDIA_SEARCH
 from tool.constants import TOOL_RESULT_TYPE_KNOWLEDGE
 
@@ -54,7 +54,7 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
             tool_name=TOOL_NAME_WIKIPEDIA_SEARCH,
             title=result.top_result_summary.title.strip(),
             summary=result.top_result_summary.summary.strip() or "Wikipedia result.",
-            urls=[EvidenceUrl(url=summary_url, url_type="website")] if summary_url else [],
+            urls=[EvidenceUrl(url=summary_url, url_type=EvidenceUrlType.WEBSITE)] if summary_url else [],
             source=TOOL_NAME_WIKIPEDIA_SEARCH,
             entity_type=TOOL_RESULT_TYPE_KNOWLEDGE,
             metadata=metadata.model_dump(exclude_none=True),
@@ -90,7 +90,7 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
             tool_name=TOOL_NAME_WIKIPEDIA_SEARCH,
             title=item.title.strip(),
             summary=summary_text or "Wikipedia result.",
-            urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
             source=TOOL_NAME_WIKIPEDIA_SEARCH,
             entity_type=TOOL_RESULT_TYPE_KNOWLEDGE,
             metadata=metadata.model_dump(exclude_none=True),

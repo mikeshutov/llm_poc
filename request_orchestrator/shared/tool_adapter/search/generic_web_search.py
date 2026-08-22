@@ -9,7 +9,7 @@ from integrations.brave import BraveSearchClient
 from integrations.brave.models import NewsSearchResponse, WebSearchResponse
 from integrations.brave.search_type import SearchType
 from integrations.brave.web_search_params import WebSearchParams
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.search.candidate_mapper import (
     rerank_news_search_response,
     rerank_web_search_response,
@@ -68,7 +68,7 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
             tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
             title=item.title.strip(),
             summary=item.description.strip() or "Web search result.",
-            urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
             image_url=(item.image_url or "").strip(),
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
             entity_type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS,
@@ -108,7 +108,7 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
             tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
             title=item.title.strip(),
             summary=item.description.strip() or (item.age or "").strip() or "News search result.",
-            urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
             image_url=(item.thumbnail_url or "").strip(),
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
             entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,

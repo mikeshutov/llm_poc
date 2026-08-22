@@ -6,7 +6,7 @@ from requests.exceptions import RequestException
 
 from integrations.meal_db import MealDbClient
 from integrations.meal_db.models import MealSearchResult
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.food.candidate_mapper import rerank_meal_search_result
 from request_orchestrator.shared.tool_adapter.food.constants import DEFAULT_MEAL_RERANK_LIMIT
 from tool.constants import TOOL_NAME_SEARCH_MEALS
@@ -38,9 +38,9 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
         url = (meal.source or meal.youtube or "").strip()
         urls: list[EvidenceUrl] = []
         if meal.source:
-            urls.append(EvidenceUrl(url=meal.source.strip(), url_type="website"))
+            urls.append(EvidenceUrl(url=meal.source.strip(), url_type=EvidenceUrlType.WEBSITE))
         if meal.youtube:
-            urls.append(EvidenceUrl(url=meal.youtube.strip(), url_type="youtube"))
+            urls.append(EvidenceUrl(url=meal.youtube.strip(), url_type=EvidenceUrlType.YOUTUBE))
         summary_parts = [part for part in ((meal.category or "").strip(), (meal.area or "").strip()) if part]
         summary = ". ".join(summary_parts) or (meal.instructions or "").strip() or f"Meal result for {meal.name}."
         metadata = MealSearchMetadata(

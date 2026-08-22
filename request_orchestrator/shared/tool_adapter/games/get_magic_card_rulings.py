@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.scryfall import ScryfallCard, ScryfallClient, ScryfallRuling
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_MAGIC_CARD_RULINGS
 from tool.constants import TOOL_RESULT_TYPE_RULES
 
@@ -66,7 +66,7 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
             tool_name=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
             title=f"{result.resolved_card.name} Rulings",
             summary=f"No published rulings found for {result.resolved_card.name}.",
-            urls=[EvidenceUrl(url=card_url, url_type="website")] if card_url else [],
+            urls=[EvidenceUrl(url=card_url, url_type=EvidenceUrlType.WEBSITE)] if card_url else [],
             source=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
             entity_type=TOOL_RESULT_TYPE_RULES,
             metadata=_build_metadata(result),
@@ -91,7 +91,7 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
             tool_name=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
             title=f"{result.resolved_card.name} Ruling {index}",
             summary=ruling.comment.strip() or f"Ruling {index} for {result.resolved_card.name}.",
-            urls=[EvidenceUrl(url=card_url, url_type="website")] if card_url else [],
+            urls=[EvidenceUrl(url=card_url, url_type=EvidenceUrlType.WEBSITE)] if card_url else [],
             published_at=ruling.published_at,
             source=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
             entity_type=TOOL_RESULT_TYPE_RULES,

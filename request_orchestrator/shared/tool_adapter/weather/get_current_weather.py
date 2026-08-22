@@ -6,7 +6,7 @@ from requests.exceptions import RequestException
 
 from integrations.open_meteo import OPEN_METEO_WEBSITE_URL, OpenMeteoClient
 from integrations.open_meteo.models import CurrentWeather, GeocodedLocation
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from tool.constants import TOOL_NAME_GET_CURRENT_WEATHER
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
@@ -46,7 +46,7 @@ def _tool_result(result) -> ToolResult:
         tool_name=TOOL_NAME_GET_CURRENT_WEATHER,
         title="Get Current Weather",
         summary=summary,
-        urls=[EvidenceUrl(url=OPEN_METEO_WEBSITE_URL, url_type="website")],
+        urls=[EvidenceUrl(url=OPEN_METEO_WEBSITE_URL, url_type=EvidenceUrlType.WEBSITE)],
         location_name=location_name,
         source=TOOL_NAME_GET_CURRENT_WEATHER,
         entity_type=TOOL_RESULT_TYPE_WEATHER,

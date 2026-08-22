@@ -11,7 +11,7 @@ from integrations.scryfall import (
     ScryfallCardSearchResult,
     ScryfallClient,
 )
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.games.mtg_color_identity import apply_commander_color_identity_filter
 from tool.constants import TOOL_NAME_SEARCH_MAGIC_CARDS
 from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
@@ -130,10 +130,6 @@ def _has_pricing(entry: MagicCardPriceEntry) -> bool:
     return any((entry.usd, entry.usd_foil, entry.usd_etched, entry.eur, entry.eur_foil, entry.tix))
 
 
-def _pricing_metadata(pricing: list[MagicCardPriceEntry]) -> list[MagicCardPriceMetadataEntry]:
-    return [MagicCardPriceMetadataEntry.from_price_entry(entry) for entry in pricing if _has_pricing(entry)]
-
-
 def _load_card_pricing(card_name: str) -> list[MagicCardPriceEntry]:
     search_result = _scryfall_client.search_cards(
         f'!"{card_name}"',
@@ -162,7 +158,7 @@ def _build_card_record(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -
 
 
 def _build_hydrated_evidence(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -> HydratedEvidence:
-    pricing_metadata = _pricing_metadata(pricing)
+    pricing_metadata = [MagicCardPriceMetadataEntry.from_price_entry(entry) for entry in pricing if _has_pricing(entry)]
     metadata = MagicCardSearchMetadata(
         set_name=card.set_name,
         rarity=card.rarity,
@@ -177,7 +173,7 @@ def _build_hydrated_evidence(card: ScryfallCard, pricing: list[MagicCardPriceEnt
         tool_name=TOOL_NAME_SEARCH_MAGIC_CARDS,
         title=card.name.strip(),
         summary=_card_summary(card),
-        urls=[EvidenceUrl(url=url, url_type="website")] if url else [],
+        urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
         image_url=_card_image_url(card) or "",
         source=TOOL_NAME_SEARCH_MAGIC_CARDS,
         entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,

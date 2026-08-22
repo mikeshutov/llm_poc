@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.edhrec import EDHREC_CARD_URL_TEMPLATE, EdhrecCardView, EdhrecClient, EdhrecCommanderPage
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
 from request_orchestrator.shared.tool_adapter.games.candidate_mapper import rerank_edhrec_cards
 from tool.constants import TOOL_NAME_GET_COMMANDER_CARDS
 from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
@@ -108,7 +108,7 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
             tool_name=TOOL_NAME_GET_COMMANDER_CARDS,
             title=card.name,
             summary=_card_summary(card),
-            urls=[EvidenceUrl(url=card.card_url, url_type="website")] if card.card_url else [],
+            urls=[EvidenceUrl(url=card.card_url, url_type=EvidenceUrlType.WEBSITE)] if card.card_url else [],
             source=TOOL_NAME_GET_COMMANDER_CARDS,
             entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
             metadata=metadata.model_dump(exclude_none=True),
