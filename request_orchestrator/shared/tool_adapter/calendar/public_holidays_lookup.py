@@ -47,7 +47,7 @@ def _tool_result(result: PublicHolidaysResult) -> ToolResult:
             launch_year=holiday.launch_year,
             types=list(holiday.types),
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=f"{result.country_code}:{holiday.date}:{holiday.name}",
             tool_name=TOOL_NAME_PUBLIC_HOLIDAYS_LOOKUP,
             title=(holiday.name or "").strip() or "Public Holiday",
@@ -58,7 +58,7 @@ def _tool_result(result: PublicHolidaysResult) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=holiday,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

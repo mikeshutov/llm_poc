@@ -84,7 +84,7 @@ def _tool_result(result: CommanderDetailsResult) -> ToolResult:
         combo_highlights=list(result.combo_highlights),
         similar_commanders=list(result.similar_commanders),
     )
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=result.commander_slug,
         tool_name=TOOL_NAME_GET_COMMANDER_DETAILS,
         title=result.title.strip() or result.commander_name,
@@ -97,7 +97,7 @@ def _tool_result(result: CommanderDetailsResult) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

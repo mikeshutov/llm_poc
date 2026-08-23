@@ -33,7 +33,7 @@ def _tool_result(result: MonthlyWeatherSummary | None) -> ToolResult:
         temperature_min=result.temperature_min,
         precipitation_sum=result.precipitation_sum,
     )
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=location_name or f"{result.year}-{result.month:02d}",
         tool_name=TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER,
         title="Historical Monthly Weather",
@@ -47,7 +47,7 @@ def _tool_result(result: MonthlyWeatherSummary | None) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

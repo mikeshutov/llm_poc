@@ -30,7 +30,7 @@ def _tool_result(result: AdviceSlip | list[AdviceSlip]) -> ToolResult:
     advice_items = _normalize_advice(result)
     evidence: list[EvidenceView] = []
     for advice in advice_items:
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=str(advice.id),
             tool_name=TOOL_NAME_GET_ADVICE,
             title="Advice Slip",
@@ -39,7 +39,7 @@ def _tool_result(result: AdviceSlip | list[AdviceSlip]) -> ToolResult:
             entity_type=TOOL_RESULT_TYPE_ADVICE,
             raw_payload=advice,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

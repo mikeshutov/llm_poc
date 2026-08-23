@@ -19,7 +19,7 @@ def _tool_result(result: list[str]) -> ToolResult:
     evidence: list[EvidenceView] = []
     for category in result:
         title = category.strip()
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=title,
             tool_name=TOOL_NAME_LIST_PRODUCT_CATEGORIES,
             title=title,
@@ -29,7 +29,7 @@ def _tool_result(result: list[str]) -> ToolResult:
             llm_metadata={},
             raw_payload=category,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

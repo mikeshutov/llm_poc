@@ -54,7 +54,7 @@ def _tool_result(result: CocktailSearchResult) -> ToolResult:
             retrieved_count=result.retrieved_count,
             reranked=result.reranked,
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=cocktail.id,
             tool_name=TOOL_NAME_SEARCH_COCKTAILS,
             title=cocktail.name,
@@ -65,7 +65,7 @@ def _tool_result(result: CocktailSearchResult) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=cocktail,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

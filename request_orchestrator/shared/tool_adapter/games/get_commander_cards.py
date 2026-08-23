@@ -142,7 +142,7 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
         )
         scryfall_url = scryfall_card.scryfall_uri.strip() if scryfall_card is not None else ""
         edhrec_url = card.card_url.strip()
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=scryfall_card.id if scryfall_card is not None else card.slug or card.name,
             tool_name=TOOL_NAME_GET_COMMANDER_CARDS,
             title=card.name,
@@ -160,7 +160,7 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
                 oracle_text=_card_oracle_text(scryfall_card) if scryfall_card is not None else None,
             ),
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

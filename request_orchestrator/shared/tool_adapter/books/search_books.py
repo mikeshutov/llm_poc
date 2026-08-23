@@ -53,7 +53,7 @@ def _tool_result(result: BookSearchResult) -> ToolResult:
             subjects=list(book.subject or []),
             languages=list(book.language or []),
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=book.key,
             tool_name=TOOL_NAME_SEARCH_BOOKS,
             title=book.title,
@@ -65,7 +65,7 @@ def _tool_result(result: BookSearchResult) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=book,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

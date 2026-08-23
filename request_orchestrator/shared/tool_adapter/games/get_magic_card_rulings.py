@@ -73,7 +73,7 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
     card_url = _card_url(result.resolved_card)
 
     if not result.rulings:
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=result.resolved_card.id,
             tool_name=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
             title=f"{result.resolved_card.name} Rulings",
@@ -87,11 +87,11 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
         return ToolResult(
             result=result,
             metadata=_tool_metadata(result),
-            evidence=[hydrated],
+            evidence=[evidence_view],
         )
 
     for index, ruling in enumerate(result.rulings, start=1):
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=f"{result.resolved_card.id}:ruling:{index}",
             tool_name=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
             title=f"{result.resolved_card.name} Ruling {index}",
@@ -103,7 +103,7 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
             llm_metadata=_build_metadata(result, ruling).model_dump(exclude_none=True),
             raw_payload=ruling,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
 
     return ToolResult(
         result=result,

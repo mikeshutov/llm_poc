@@ -26,6 +26,8 @@ class StockPrice(BaseModel):
 class StockPriceMetadata(BaseModel):
     current_price: float | None = None
     previous_close: float | None = None
+    day_high: float | None = None
+    day_low: float | None = None
     market_cap: float | None = None
 
 
@@ -39,9 +41,11 @@ def _tool_result(result: StockPrice) -> ToolResult:
     metadata = StockPriceMetadata(
         current_price=result.current_price,
         previous_close=result.previous_close,
+        day_high=result.day_high,
+        day_low=result.day_low,
         market_cap=result.market_cap,
     )
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=result.ticker,
         tool_name=TOOL_NAME_GET_STOCK_PRICE,
         title=result.ticker,
@@ -54,7 +58,7 @@ def _tool_result(result: StockPrice) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

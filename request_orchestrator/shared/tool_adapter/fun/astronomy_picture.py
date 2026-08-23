@@ -28,7 +28,7 @@ class AstronomyPictureMetadata(BaseModel):
 def _tool_result(result: AstronomyPicture) -> ToolResult:
     url = result.url.strip()
     metadata = AstronomyPictureMetadata(media_type=result.media_type)
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=f"{result.date}:{result.title}",
         tool_name=TOOL_NAME_GET_ASTRONOMY_PICTURE,
         title=result.title,
@@ -43,7 +43,7 @@ def _tool_result(result: AstronomyPicture) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

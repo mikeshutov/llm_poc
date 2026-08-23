@@ -41,7 +41,7 @@ def _tool_result(result) -> ToolResult:
         weathercode=weather.weathercode,
         is_day=weather.is_day,
     )
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=location_name,
         tool_name=TOOL_NAME_GET_CURRENT_WEATHER,
         title="Get Current Weather",
@@ -55,7 +55,7 @@ def _tool_result(result) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

@@ -62,7 +62,7 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
     for item in result.results:
         url = (item.url or "").strip()
         metadata = GenericWebResultMetadata()
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=url or item.title.strip(),
             tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
             title=item.title.strip(),
@@ -74,11 +74,10 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=item,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(
         result=result,
         metadata={
-            "query": result.query,
             "retrieved_count": result.retrieved_count,
             "reranked": result.reranked,
             "search_type": SearchType.WEB_SEARCH.value,
@@ -93,7 +92,7 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
     for item in result.results:
         url = (item.url or "").strip()
         metadata = GenericNewsSearchMetadata(age=item.age)
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=url or item.title.strip(),
             tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
             title=item.title.strip(),
@@ -105,11 +104,10 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=item,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(
         result=result,
         metadata={
-            "query": result.query.model_dump(),
             "retrieved_count": result.retrieved_count,
             "reranked": result.reranked,
             "search_type": SearchType.NEWS_SEARCH.value,

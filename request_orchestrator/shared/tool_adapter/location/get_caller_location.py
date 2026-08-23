@@ -32,7 +32,7 @@ def _tool_result(result: IpLocation) -> ToolResult:
         lon=result.lon,
         timezone=result.timezone,
     )
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=(result.query or result.city or result.country or "").strip(),
         tool_name=TOOL_NAME_GET_CALLER_LOCATION,
         title=location_name or "Caller Location",
@@ -45,7 +45,7 @@ def _tool_result(result: IpLocation) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

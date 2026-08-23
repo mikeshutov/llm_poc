@@ -108,6 +108,19 @@ build_evidence_bundle = _build_evidence_bundle
 build_evidence_steps = _build_evidence_steps
 
 
+def test_build_evidence_steps_uses_latest_current_page_for_card_results() -> None:
+    tool_results = [
+        ToolResult(step_id="P1E1", tool_name="search_magic_cards", metadata={"current_page": 1}),
+        ToolResult(step_id="P2E1", tool_name="search_magic_cards", metadata={"current_page": 2}),
+    ]
+
+    evidence_steps = build_evidence_steps_from_tool_results(tool_results, {})
+
+    assert len(evidence_steps) == 1
+    assert evidence_steps[0].type == "card_results"
+    assert evidence_steps[0].metadata == {"current_page": 2}
+
+
 def test_build_evidence_bundle_creates_canonical_news_records() -> None:
     iteration = IterationState(
         plan=Plan.model_validate(
@@ -824,7 +837,6 @@ def test_build_evidence_steps_puts_wrapper_search_metadata_on_parent_step() -> N
 
     assert len(evidence_steps) == 1
     assert evidence_steps[0].metadata == {
-        "query": "Toronto transit fares service major routes status TTC GO Transit Toronto",
         "retrieved_count": 20,
         "reranked": True,
         "search_type": "web_search",

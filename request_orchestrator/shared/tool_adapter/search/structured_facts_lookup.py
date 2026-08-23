@@ -57,7 +57,7 @@ def _tool_result(result: SparqlResult) -> ToolResult:
         summary = _binding_summary(binding, result.vars)
         url = _binding_value(binding.get("url"))
         metadata = StructuredFactsMetadata(vars=list(result.vars))
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=item_id,
             tool_name=TOOL_NAME_STRUCTURED_FACTS_LOOKUP,
             title=title,
@@ -68,7 +68,7 @@ def _tool_result(result: SparqlResult) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=binding,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

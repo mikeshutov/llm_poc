@@ -16,6 +16,10 @@ READ_ONLY_PROFILE_AND_MEMORY_TOOLS = [
 MAIN_AGENT_PROFILE = AgentProfile(
     name='main_agent',
     scope=MAIN_AGENT_MODEL_SCOPE,
+    description=(
+        "Handle the user's primary request by researching, reasoning over evidence, "
+        "and providing the final response."
+    ),
     allowed_categories=set(TOOL_CATEGORIES.keys()) - {'games', 'memories', 'user_attributes'},
     extra_tools=READ_ONLY_PROFILE_AND_MEMORY_TOOLS,
 )

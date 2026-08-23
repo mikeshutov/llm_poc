@@ -135,19 +135,17 @@ class ToolCallRepository:
         cur.executemany(
             """
             INSERT INTO evidence_views (
-                id, tool_call_id, evidence_id, step_id, item_id, tool_name, title,
+                id, tool_call_id, item_id, tool_name, title,
                 summary, urls, image_url, published_at, source, entity_type,
                 location_name, hash, llm_metadata, raw_payload
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (tool_call_id, evidence_id) DO NOTHING
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
             """,
             [
                 (
                     evidence_view.id,
                     tool_call_id,
-                    str(evidence_view.id),
-                    evidence_view.step_id,
                     evidence_view.item_id,
                     evidence_view.tool_name,
                     evidence_view.title,
@@ -213,7 +211,7 @@ class ToolCallRepository:
             evidence_by_tool_call_id.setdefault(row["tool_call_id"], []).append(
                 EvidenceView(
                     id=row["id"],
-                    step_id=row["step_id"],
+                    tool_call_id=row["tool_call_id"],
                     item_id=row["item_id"],
                     tool_name=row["tool_name"],
                     title=row["title"],
@@ -241,6 +239,8 @@ class ToolCallRepository:
             results.append(
                 result.model_copy(
                     update={
+                        "tool_call_id": tool_call.id,
+                        "plan_step_id": tool_call.plan_step_id,
                         "tool_name": tool_call.tool_name,
                         "evidence": evidence_by_tool_call_id.get(tool_call.id, []),
                     }
@@ -299,12 +299,12 @@ class ToolCallRepository:
                     cur.execute(
                         """
                         INSERT INTO evidence_views (
-                            tool_call_id, evidence_id, step_id, item_id, tool_name, title,
+                            tool_call_id, item_id, tool_name, title,
                             summary, urls, image_url, published_at, source, entity_type,
                             location_name, hash, llm_metadata, raw_payload, created_at
                         )
                         SELECT
-                            %s, evidence_id, step_id, item_id, tool_name, title,
+                            %s, item_id, tool_name, title,
                             summary, urls, image_url, published_at, source, entity_type,
                             location_name, hash, llm_metadata, raw_payload, created_at
                         FROM evidence_views

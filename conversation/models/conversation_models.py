@@ -86,7 +86,6 @@ class ConversationEvent:
     source: str
     agent_name: str
     node_name: str
-    step_id: str
     iteration: Optional[int]
     payload: dict[str, Any]
     created_at: str

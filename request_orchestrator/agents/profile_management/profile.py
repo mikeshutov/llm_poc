@@ -23,6 +23,11 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
     return AgentProfile(
         name=PROFILE_MANAGEMENT_AGENT_NAME,
         scope=PROFILE_AGENT_MODEL_SCOPE,
+        description=(
+            "Maintain durable user profile fields and attributes. Use this whenever "
+            "the user states or hints at likes, dislikes, preferences, or other durable "
+            "personal details that should update their user attributes."
+        ),
         allowed_categories={'user_attributes'},
         extra_tools=extra_tools,
         request_analysis_selectable=True,

@@ -53,11 +53,10 @@ def test_search_magic_cards_returns_typed_result() -> None:
 
     assert isinstance(result, ToolResult)
     assert result.metadata == {
-        "page": 1,
+        "current_page": 1,
         "page_size": 15,
         "has_more": False,
         "returned_count": 1,
-        "total_cards": 1,
         "warnings": [],
     }
     assert result.result.model_dump() == {
@@ -125,11 +124,10 @@ def test_search_magic_cards_applies_commander_color_identity_filter() -> None:
 
     assert isinstance(result, ToolResult)
     assert result.metadata == {
-        "page": 1,
+        "current_page": 1,
         "page_size": 15,
         "has_more": False,
         "returned_count": 0,
-        "total_cards": 0,
         "warnings": [],
     }
     assert result.result.cards == []
@@ -300,11 +298,10 @@ def test_search_magic_cards_supports_internal_pagination() -> None:
         module._scryfall_client = original_client
 
     assert result.metadata == {
-        "page": 2,
+        "current_page": 2,
         "page_size": 15,
         "has_more": False,
         "returned_count": 5,
-        "total_cards": 20,
         "warnings": [],
     }
     assert [card.id for card in result.result.cards] == [

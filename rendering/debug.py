@@ -69,7 +69,6 @@ class ToolCallLogPayload(BaseModel):
     title: str = "Tool Call"
     step_plan: str = ""
     tool_name: str = ""
-    step_id: str = ""
     iteration: int | None = None
     request: object | None = None
     response: object | None = None
@@ -193,7 +192,6 @@ def _build_tool_call_payload(entry: dict) -> dict:
     return ToolCallLogPayload(
         step_plan=data.get("step_plan") or entry.get("summary") or "",
         tool_name=entry.get("tool_name") or data.get("tool_name") or "",
-        step_id=entry.get("step_id") or data.get("step_id") or "",
         iteration=entry.get("iteration"),
         request=entry.get("request"),
         response=entry.get("response"),

@@ -96,7 +96,7 @@ def _tool_result(result: UpdateUserToneResult) -> ToolResult:
         tone=tone_metadata,
     )
     summary = result.reason.strip() or f"Tone preferences {status_text}."
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=(result.user_id or "").strip() or "current-user",
         tool_name=TOOL_NAME_UPDATE_USER_TONE,
         title="User Tone Preferences",
@@ -108,7 +108,7 @@ def _tool_result(result: UpdateUserToneResult) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

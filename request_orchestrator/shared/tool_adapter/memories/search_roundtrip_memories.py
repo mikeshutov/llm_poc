@@ -72,7 +72,7 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
             created_at=memory.created_at,
             relevance_score=memory.relevance_score,
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=str(memory.roundtrip_id),
             tool_name=TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES,
             title=f"Memory from message {memory.message_index}",
@@ -83,5 +83,5 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=memory,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=memories, evidence=evidence)

@@ -35,7 +35,7 @@ def _tool_result(result: Quote | list[Quote]) -> ToolResult:
     for quote in quotes:
         summary = f"\"{quote.content}\""
         metadata = QuoteMetadata(tags=list(quote.tags))
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=f"{quote.author}:{quote.content[:40]}",
             tool_name=TOOL_NAME_GET_QUOTE,
             title=quote.author,
@@ -45,7 +45,7 @@ def _tool_result(result: Quote | list[Quote]) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=quote,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

@@ -64,7 +64,7 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
             retrieved_count=result.retrieved_count,
             reranked=result.reranked,
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=product.id,
             tool_name=TOOL_NAME_FIND_PRODUCTS_WEB,
             title=product.name,
@@ -76,7 +76,7 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=product,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

@@ -43,7 +43,7 @@ def _tool_result(result: ExchangeRatesSnapshot) -> ToolResult:
             rate=rate,
             date=result.date,
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=currency_code,
             tool_name=TOOL_NAME_EXCHANGE_RATES_LOOKUP,
             title=f"{result.base} to {currency_code}",
@@ -54,7 +54,7 @@ def _tool_result(result: ExchangeRatesSnapshot) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload={"currency": currency_code, "rate": rate, "snapshot": result},
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

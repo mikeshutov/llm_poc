@@ -27,7 +27,7 @@ def _tool_result(result: GetFileByIdResult) -> ToolResult:
         file_type=result.file_type,
         uploaded_at=result.uploaded_at,
     )
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=(result.file_id or "").strip(),
         tool_name=TOOL_NAME_GET_FILE_BY_ID,
         title=(result.file_name or "").strip() or "File",
@@ -39,7 +39,7 @@ def _tool_result(result: GetFileByIdResult) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

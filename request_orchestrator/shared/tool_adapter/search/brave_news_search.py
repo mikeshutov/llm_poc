@@ -30,7 +30,7 @@ def _tool_result(result: NewsSearchResponse) -> ToolResult:
     for news_item in result.results:
         url = (news_item.url or "").strip()
         metadata = BraveNewsSearchMetadata(age=news_item.age)
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=url or (news_item.title or "").strip(),
             tool_name=TOOL_NAME_NEWS_SEARCH,
             title=(news_item.title or "").strip(),
@@ -42,7 +42,7 @@ def _tool_result(result: NewsSearchResponse) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=news_item,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
 
     return ToolResult(
         result=result,

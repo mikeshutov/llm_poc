@@ -27,8 +27,6 @@ def normalize_conversation_event(event: ConversationEvent) -> tuple[str, dict[st
     payload.setdefault("kind", event.event_type)
     if event.node_name.strip():
         payload.setdefault("node_name", event.node_name)
-    if event.step_id.strip():
-        payload.setdefault("step_id", event.step_id)
     if event.iteration is not None:
         payload.setdefault("iteration", event.iteration)
     return agent_name, payload

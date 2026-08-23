@@ -47,7 +47,7 @@ def _tool_result(result: HnSearchResult) -> ToolResult:
             num_comments=hit.num_comments,
             tags=list(hit.tags or []),
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=hit.object_id,
             tool_name=TOOL_NAME_HN_SEARCH,
             title=(hit.title or hit.url or hit.object_id or "").strip(),
@@ -59,7 +59,7 @@ def _tool_result(result: HnSearchResult) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=hit,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

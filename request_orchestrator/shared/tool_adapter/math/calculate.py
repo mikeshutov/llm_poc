@@ -11,7 +11,7 @@ from tool.constants import TOOL_RESULT_TYPE_CALCULATION
 
 
 def _tool_result(result: str) -> ToolResult:
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=result,
         tool_name=TOOL_NAME_CALCULATE,
         title="Calculation Result",
@@ -22,7 +22,7 @@ def _tool_result(result: str) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

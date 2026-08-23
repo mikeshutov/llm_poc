@@ -48,7 +48,7 @@ def _tool_result(result: ExchangeRatesSeries) -> ToolResult:
                 rate=rate,
                 date=date_key,
             )
-            hydrated = EvidenceView(
+            evidence_view = EvidenceView(
                 item_id=f"{date_key}:{currency_code}",
                 tool_name=TOOL_NAME_EXCHANGE_RATES_TIME_SERIES,
                 title=f"{result.base} to {currency_code}",
@@ -64,7 +64,7 @@ def _tool_result(result: ExchangeRatesSeries) -> ToolResult:
                     "series": result,
                 },
             )
-            evidence.append(hydrated)
+            evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

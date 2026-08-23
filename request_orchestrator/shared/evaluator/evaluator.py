@@ -51,7 +51,7 @@ def run_evaluator(state: AgentState) -> AgentState:
     evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
     evidence_steps = build_evidence_steps_from_tool_results(
         tool_results,
-        evidence_bundle.evidence_views_by_step_id,
+        evidence_bundle.evidence_views_by_tool_call_id,
     )
     prompt = build_evaluator_prompt(state=state, evidence=evidence_steps)
     prompt_text = prompt.build()

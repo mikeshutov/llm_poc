@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from request_orchestrator.models.agent_prompt import EvidenceStep
 from request_orchestrator.models.evidence import EvidenceBundle, EvidenceView, ToolResult
 from tool.tools import get_tool_result_type
 
 
-def _resolve_step_id(
+def _resolve_tool_call_id(
     tool_result: ToolResult,
-    *,
-    fallback_step_id: str,
-) -> str:
-    return tool_result.step_id.strip() or fallback_step_id
+) -> UUID | None:
+    return tool_result.tool_call_id
 
 
 def _resolve_tool_name(
@@ -29,45 +29,44 @@ def _resolve_tool_name(
 
 
 def build_evidence_bundle_from_tool_results(tool_results: list[ToolResult]) -> EvidenceBundle:
-    hydrated_evidence_by_id: dict[str, EvidenceView] = {}
-    evidence_views_by_step_id: dict[str, list[EvidenceView]] = {}
+    evidence_by_id: dict[str, EvidenceView] = {}
+    evidence_views_by_tool_call_id: dict[UUID, list[EvidenceView]] = {}
 
     for tool_result in tool_results:
-        resolved_step_id = _resolve_step_id(tool_result, fallback_step_id="")
-        if not resolved_step_id:
+        tool_call_id = _resolve_tool_call_id(tool_result)
+        if tool_call_id is None:
             continue
         resolved_tool_name = _resolve_tool_name(tool_result, fallback_tool_name="")
         evidence, evidence_views = _rehydrate_tool_result_records(
             tool_result,
-            step_id=resolved_step_id,
             tool_name=resolved_tool_name,
         )
         if not evidence:
             continue
-        evidence_views_by_step_id[resolved_step_id] = evidence_views
+        evidence_views_by_tool_call_id[tool_call_id] = evidence_views
         for evidence in evidence:
-            hydrated_evidence_by_id[str(evidence.id)] = evidence
+            evidence_by_id[str(evidence.id)] = evidence
 
     return EvidenceBundle(
-        hydrated_evidence_by_id=hydrated_evidence_by_id,
-        evidence_views_by_step_id=evidence_views_by_step_id,
+        evidence_by_id=evidence_by_id,
+        evidence_views_by_tool_call_id=evidence_views_by_tool_call_id,
     )
 
 
 def build_evidence_steps_from_tool_results(
     tool_results: list[ToolResult],
-    evidence_views_by_step_id: dict[str, list[EvidenceView]],
+    evidence_views_by_tool_call_id: dict[UUID, list[EvidenceView]],
 ) -> list[EvidenceStep]:
     evidence_steps: list[EvidenceStep] = []
     evidence_step_by_type: dict[str, EvidenceStep] = {}
     for tool_result in tool_results:
-        resolved_step_id = _resolve_step_id(tool_result, fallback_step_id="")
-        if not resolved_step_id:
+        tool_call_id = _resolve_tool_call_id(tool_result)
+        if tool_call_id is None:
             continue
         resolved_tool_name = _resolve_tool_name(tool_result, fallback_tool_name="")
         step_type = get_tool_result_type(resolved_tool_name)
         step_metadata = dict(tool_result.metadata)
-        step_evidence = list(evidence_views_by_step_id.get(resolved_step_id, []))
+        step_evidence = list(evidence_views_by_tool_call_id.get(tool_call_id, []))
         existing_step = evidence_step_by_type.get(step_type)
         if existing_step is None:
             evidence_step = EvidenceStep(
@@ -112,13 +111,12 @@ def filter_evidence_steps(
 def _rehydrate_tool_result_records(
     tool_result: ToolResult,
     *,
-    step_id: str,
     tool_name: str,
 ) -> tuple[list[EvidenceView], list[EvidenceView]]:
     evidence = [
         _rehydrate_evidence_item(
             evidence,
-            step_id=step_id,
+            tool_call_id=tool_result.tool_call_id,
             tool_name=tool_name,
         )
         for evidence in tool_result.evidence
@@ -129,11 +127,11 @@ def _rehydrate_tool_result_records(
 def _rehydrate_evidence_item(
     evidence: EvidenceView,
     *,
-    step_id: str,
+    tool_call_id: UUID | None,
     tool_name: str,
 ) -> EvidenceView:
     merged = evidence.model_copy(deep=True)
-    merged.step_id = step_id
+    merged.tool_call_id = tool_call_id
     if not merged.tool_name:
         merged.tool_name = tool_name
     if not merged.source:
@@ -151,6 +149,11 @@ def _merge_step_metadata(left: dict[str, object], right: dict[str, object]) -> d
 
     merged = dict(left)
     for key, value in right.items():
+        # Evidence steps combine repeated tool calls. Pagination should report
+        # the latest page, not a list of every page included in the evidence.
+        if key == "current_page":
+            merged[key] = value
+            continue
         if key not in merged:
             merged[key] = value
             continue

@@ -44,7 +44,7 @@ def run_synthesis(state: MainState) -> MainState:
     evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
     all_evidence_steps = build_evidence_steps_from_tool_results(
         tool_results,
-        evidence_bundle.evidence_views_by_step_id,
+        evidence_bundle.evidence_views_by_tool_call_id,
     )
     evidence_steps = filter_evidence_steps(all_evidence_steps, relevant_evidence_ids)
     if not evidence_steps:

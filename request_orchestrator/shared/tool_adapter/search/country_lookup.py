@@ -45,7 +45,7 @@ def _tool_result(result: list[Country]) -> ToolResult:
             languages=dict(country.languages),
             flag=country.flag,
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=country.common_name,
             tool_name=TOOL_NAME_COUNTRY_LOOKUP,
             title=country.common_name,
@@ -55,7 +55,7 @@ def _tool_result(result: list[Country]) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=country,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

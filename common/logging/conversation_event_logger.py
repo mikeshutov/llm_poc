@@ -18,7 +18,6 @@ def create_conversation_event(
     roundtrip_id: UUID | str | None = None,
     agent_name: str = "",
     node_name: str = "",
-    step_id: str = "",
     iteration: int | None = None,
     payload: dict[str, Any] | None = None,
 ) -> None:
@@ -42,7 +41,6 @@ def create_conversation_event(
             source=source,
             agent_name=agent_name,
             node_name=node_name,
-            step_id=step_id,
             iteration=iteration,
             payload={} if payload is None else dict(payload),
         )

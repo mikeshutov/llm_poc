@@ -30,7 +30,7 @@ def _tool_result(result: list[dict]) -> ToolResult:
             file_name=str(file_result.get("file_name", "")).strip() or None,
             file_path=str(file_result.get("file_path", "")).strip() or None,
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=str(file_result.get("file_id", "")),
             tool_name=TOOL_NAME_SEARCH_FILE_FOR_DETAILS,
             title=str(file_result.get("file_name", "")).strip() or "File Detail",
@@ -40,7 +40,7 @@ def _tool_result(result: list[dict]) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=file_result,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

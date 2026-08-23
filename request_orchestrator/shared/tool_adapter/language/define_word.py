@@ -39,7 +39,7 @@ def _tool_result(result: list[DictionaryEntry]) -> ToolResult:
             phonetic=entry.phonetic,
             meaning_count=len(entry.meanings),
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=entry.word.strip(),
             tool_name=TOOL_NAME_DEFINE_WORD,
             title=entry.word.strip(),
@@ -50,7 +50,7 @@ def _tool_result(result: list[DictionaryEntry]) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=entry,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

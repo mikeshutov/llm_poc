@@ -27,7 +27,7 @@ def _tool_result(result: GeocodedLocation | None) -> ToolResult:
         longitude=result.longitude,
         timezone=result.timezone,
     )
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=(result.name or "").strip(),
         tool_name=TOOL_NAME_RESOLVE_CITY_LOCATION,
         title=(result.name or "").strip() or "Resolved City",
@@ -40,7 +40,7 @@ def _tool_result(result: GeocodedLocation | None) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

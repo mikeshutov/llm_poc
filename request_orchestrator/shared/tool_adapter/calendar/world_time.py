@@ -30,7 +30,7 @@ def _tool_result(result: WorldTime) -> ToolResult:
         day_of_week=result.day_of_week,
         abbreviation=result.abbreviation,
     )
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=result.timezone,
         tool_name=TOOL_NAME_GET_WORLD_TIME,
         title=result.timezone,
@@ -43,7 +43,7 @@ def _tool_result(result: WorldTime) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

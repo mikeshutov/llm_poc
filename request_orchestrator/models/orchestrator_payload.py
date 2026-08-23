@@ -12,7 +12,7 @@ class OrchestratorPayload(BaseModel):
     tool_results: list[dict] = Field(default_factory=list)
     relevant_evidence_ids: list[str] = Field(default_factory=list)
     result: list[OrchestratorPayloadResultBlock] = Field(default_factory=list)
-    hydrated_evidence_by_id: dict[str, dict] = Field(default_factory=dict)
+    evidence_by_id: dict[str, dict] = Field(default_factory=dict)
     used_evidence_ids: list[str] = Field(default_factory=list)
     next_question: str = ""
     roundtrip_summary: str = ""

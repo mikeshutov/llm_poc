@@ -29,7 +29,7 @@ def _tool_result(result: list[dict]) -> ToolResult:
         metadata = SearchFilesMetadata(
             top_chunk=str(file_result.get("top_chunk", "")),
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=str(file_result.get("file_id", "")),
             tool_name=TOOL_NAME_SEARCH_FILES,
             title=str(file_result.get("file_name", "")).strip() or "File Search Result",
@@ -39,7 +39,7 @@ def _tool_result(result: list[dict]) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=file_result,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
 
     return ToolResult(
         result=result,

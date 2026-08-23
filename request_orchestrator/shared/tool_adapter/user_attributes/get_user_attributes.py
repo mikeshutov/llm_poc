@@ -3,7 +3,6 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from common.data import normalize_string_list
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
@@ -28,16 +27,7 @@ GET_USER_ATTRIBUTES_DESCRIPTION = "List stored user attributes."
 
 class UserAttributeMetadata(BaseModel):
     group_key: str | None = None
-    source: str | None = None
-    is_active: bool
-    confidence: float | None = None
-    importance: float | None = None
-    created_at: str
-    updated_at: str
-
-
-def _attribute_summary(attribute: UserAttribute) -> str:
-    return "; ".join(normalize_string_list(attribute.value)).strip() or "Stored user attribute."
+    attribute_values: list[str] = Field(default_factory=list)
 
 
 def _tool_result(result: list[UserAttribute]) -> ToolResult:
@@ -45,25 +35,20 @@ def _tool_result(result: list[UserAttribute]) -> ToolResult:
     for attribute in result:
         metadata = UserAttributeMetadata(
             group_key=attribute.group_key,
-            source=attribute.source,
-            is_active=attribute.is_active,
-            confidence=attribute.confidence,
-            importance=attribute.importance,
-            created_at=attribute.created_at,
-            updated_at=attribute.updated_at,
+            attribute_values=list(attribute.value),
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=str(attribute.id),
             tool_name=TOOL_NAME_GET_USER_ATTRIBUTES,
             title=attribute.attribute_type,
-            summary=_attribute_summary(attribute),
+            summary="Stored user attribute.",
             published_at=attribute.updated_at,
             source=TOOL_NAME_GET_USER_ATTRIBUTES,
             entity_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE,
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=attribute,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

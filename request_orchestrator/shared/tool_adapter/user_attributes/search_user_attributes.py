@@ -3,7 +3,6 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from common.data import normalize_string_list
 from llm.clients.embeddings import embed_text
 from personalization.user_attributes.models.user_attribute_models import UserAttributeSearchResult
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
@@ -31,40 +30,27 @@ SEARCH_USER_ATTRIBUTES_DESCRIPTION = "Search persistent user attributes by seman
 
 class UserAttributeSearchMetadata(BaseModel):
     group_key: str | None = None
-    source: str | None = None
-    is_active: bool
-    confidence: float | None = None
-    importance: float | None = None
-    relevance_score: float
-
-
-def _attribute_summary(attribute: UserAttributeSearchResult) -> str:
-    return "; ".join(normalize_string_list(attribute.value)).strip() or "Matched user attribute."
-
+    attribute_values: list[str] = Field(default_factory=list)
 
 def _tool_result(result: list[UserAttributeSearchResult]) -> ToolResult:
     evidence: list[EvidenceView] = []
     for attribute in result:
         metadata = UserAttributeSearchMetadata(
             group_key=attribute.group_key,
-            source=attribute.source,
-            is_active=attribute.is_active,
-            confidence=attribute.confidence,
-            importance=attribute.importance,
-            relevance_score=attribute.relevance_score,
+            attribute_values=list(attribute.value),
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=str(attribute.id),
             tool_name=TOOL_NAME_SEARCH_USER_ATTRIBUTES,
             title=attribute.attribute_type,
-            summary=_attribute_summary(attribute),
+            summary="Stored user attribute.",
             published_at=attribute.updated_at,
             source=TOOL_NAME_SEARCH_USER_ATTRIBUTES,
             entity_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE,
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=attribute,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

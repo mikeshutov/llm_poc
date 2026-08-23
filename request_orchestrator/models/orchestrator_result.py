@@ -14,9 +14,9 @@ from request_orchestrator.shared.evidence import build_evidence_bundle_from_tool
 
 def _normalize_evidence_ids(
     evidence_ids: list[str],
-    hydrated_evidence_by_id: dict[str, dict[str, object]],
+    evidence_by_id: dict[str, dict[str, object]],
 ) -> list[str]:
-    if not evidence_ids or not hydrated_evidence_by_id:
+    if not evidence_ids or not evidence_by_id:
         return [
             evidence_id.strip()
             for evidence_id in evidence_ids
@@ -30,7 +30,7 @@ def _normalize_evidence_ids(
         normalized = evidence_id.strip()
         if not normalized:
             continue
-        if normalized in hydrated_evidence_by_id:
+        if normalized in evidence_by_id:
             normalized_ids.append(normalized)
             continue
         normalized_ids.append(normalized)
@@ -103,9 +103,9 @@ class OrchestratorResult:
 
         tool_results = ToolCallRepository().get_tool_results(self.agent_result.tool_call_ids)
         evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
-        hydrated_evidence_by_id = {
+        evidence_by_id = {
             evidence_id: evidence.model_dump()
-            for evidence_id, evidence in evidence_bundle.hydrated_evidence_by_id.items()
+            for evidence_id, evidence in evidence_bundle.evidence_by_id.items()
         }
         result_blocks = self.result_blocks
         if not result_blocks:
@@ -119,7 +119,7 @@ class OrchestratorResult:
                 content=block.content,
                 evidence_ids=_normalize_evidence_ids(
                     block.evidence_ids,
-                    hydrated_evidence_by_id,
+                    evidence_by_id,
                 ),
             )
             for block in result_blocks
@@ -134,10 +134,10 @@ class OrchestratorResult:
                 )
                 for block in normalized_result_blocks
             ],
-            hydrated_evidence_by_id=hydrated_evidence_by_id,
+            evidence_by_id=evidence_by_id,
             used_evidence_ids=_normalize_evidence_ids(
                 self.used_evidence_ids,
-                hydrated_evidence_by_id,
+                evidence_by_id,
             ),
             next_question=self.next_question,
             roundtrip_summary=self.roundtrip_summary,

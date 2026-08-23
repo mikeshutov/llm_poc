@@ -28,10 +28,7 @@ CREATE_USER_ATTRIBUTE_DESCRIPTION = "Create a persistent user attribute."
 
 class UserAttributeMetadata(BaseModel):
     group_key: str | None = None
-    source: str | None = None
-    is_active: bool
-    confidence: float | None = None
-    importance: float | None = None
+    attribute_values: list[str] = Field(default_factory=list)
 
 
 def _value_text(value: list[str]) -> str:
@@ -39,19 +36,15 @@ def _value_text(value: list[str]) -> str:
 
 
 def _tool_result(result: UserAttribute) -> ToolResult:
-    summary = _value_text(result.value).strip() or "Stored user attribute."
     metadata = UserAttributeMetadata(
         group_key=result.group_key,
-        source=result.source,
-        is_active=result.is_active,
-        confidence=result.confidence,
-        importance=result.importance,
+        attribute_values=list(result.value),
     )
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=str(result.id),
         tool_name=TOOL_NAME_CREATE_USER_ATTRIBUTE,
         title=result.attribute_type,
-        summary=summary,
+        summary="Stored user attribute.",
         published_at=result.updated_at,
         source=TOOL_NAME_CREATE_USER_ATTRIBUTE,
         entity_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE,
@@ -60,7 +53,7 @@ def _tool_result(result: UserAttribute) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

@@ -50,7 +50,7 @@ def search_memories(query: str) -> ToolResult:
             last_used_date=memory.last_used_date,
             relevance_score=memory.relevance_score,
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=str(memory.conversation_id),
             tool_name=TOOL_NAME_SEARCH_MEMORIES,
             title="Conversation Memory",
@@ -61,5 +61,5 @@ def search_memories(query: str) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=memory,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=memories, evidence=evidence)

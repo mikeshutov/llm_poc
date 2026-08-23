@@ -48,7 +48,7 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             "tags": list(meal.tags) if meal.tags else None,
             "ingredients": [ingredient.model_dump(exclude_none=True) for ingredient in meal.ingredients],
         }
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=meal.id,
             tool_name=TOOL_NAME_SEARCH_MEALS,
             title=meal.name,
@@ -60,7 +60,7 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             llm_metadata=metadata,
             raw_payload=meal,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(
         result=result,
         metadata={

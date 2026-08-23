@@ -16,8 +16,7 @@ That means request analysis, planning, synthesis, evaluation, and reranking do n
 The defaults currently live in `llm/conversation_model_config.py`.
 
 The main pattern is:
-1. `gpt-5.6-luna` is used by default for request analysis, profile planning, evaluator, and reranker.
-2. `gpt-5.6-terra` is used by default for the main agent planner and synthesis stages.
+1. `gpt-5.6-luna` is used by default for every stage.
 
 Current default variables include:
 1. `LLM_MODEL`

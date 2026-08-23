@@ -17,7 +17,6 @@ from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan import PlanStep
-from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
 from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context
 from tool.registry import call_tool
 from tool.repository.tool_call_repository import ToolCallRepository
@@ -34,20 +33,19 @@ class StepExecutionResult:
     latency_ms: int = 0
 
 
-def _substitute_refs(obj, results: dict, *, iteration_number: int):
+def _substitute_refs(obj, results: dict):
     if isinstance(obj, str):
         if obj.startswith("#E"):
             raw_step_id = obj[1:]
-            qualified_step_id = format_plan_step_id(iteration_number, raw_step_id)
-            referenced = results.get(qualified_step_id, obj)
+            referenced = results.get(raw_step_id, obj)
             if isinstance(referenced, ToolResult):
                 return referenced.result
             return referenced
         return obj
     if isinstance(obj, list):
-        return [_substitute_refs(x, results, iteration_number=iteration_number) for x in obj]
+        return [_substitute_refs(x, results) for x in obj]
     if isinstance(obj, dict):
-        return {k: _substitute_refs(v, results, iteration_number=iteration_number) for k, v in obj.items()}
+        return {k: _substitute_refs(v, results) for k, v in obj.items()}
     return obj
 
 
@@ -56,18 +54,16 @@ def _tool_results_by_local_step_id(agent_state: AgentState) -> dict[str, ToolRes
     plan = planner_state.plan
     if plan is None:
         return {}
-    results_by_step_id = {
-        tool_result.step_id: tool_result
+    results_by_plan_step_id = {
+        tool_result.plan_step_id: tool_result
         for tool_result in agent_state.gather_tool_results()
-        if tool_result.step_id.strip()
+        if tool_result.plan_step_id is not None
     }
     tool_results_by_local_step_id: dict[str, ToolResult] = {}
     for step in plan.steps:
-        local_step_id = format_plan_step_id(planner_state.plan_count, step.id)
-        namespaced_step_id = namespace_step_id(agent_state.agent_profile.name, local_step_id)
-        tool_result = results_by_step_id.get(namespaced_step_id)
+        tool_result = results_by_plan_step_id.get(step.db_id)
         if tool_result is not None:
-            tool_results_by_local_step_id[local_step_id] = tool_result
+            tool_results_by_local_step_id[step.id] = tool_result
     return tool_results_by_local_step_id
 
 
@@ -75,12 +71,11 @@ def _execute_step(
     step: PlanStep,
     *,
     tool_results_by_step_id: dict[str, ToolResult],
-    iteration_number: int,
     allowed_tool_names: set[str] | None,
     resolved_args: dict[str, Any] | None = None,
     rejection_reason: str = "",
 ) -> StepExecutionResult:
-    args = resolved_args if resolved_args is not None else _substitute_refs(step.args, tool_results_by_step_id, iteration_number=iteration_number)
+    args = resolved_args if resolved_args is not None else _substitute_refs(step.args, tool_results_by_step_id)
     started_at = perf_counter()
     if rejection_reason:
         return StepExecutionResult(
@@ -126,13 +121,10 @@ def _record_step_result(
 ) -> None:
     execution_context = agent_state.execution_context
     step = execution_result.step
-    local_step_id = format_plan_step_id(iteration_number, step.id)
-    qualified_step_id = namespace_step_id(agent_state.agent_profile.name, local_step_id)
     output = execution_result.output
     if isinstance(output, ToolResult):
         output = output.model_copy(
             update={
-                "step_id": qualified_step_id,
                 "tool_name": step.tool,
                 "iteration": iteration_number,
             }
@@ -141,7 +133,6 @@ def _record_step_result(
         "agent_name": agent_state.agent_profile.name,
         "kind": TOOL_CALL_KIND,
         "tool_name": step.tool,
-        "step_id": local_step_id,
         "iteration": iteration_number,
         "request": sanitize_for_json_storage(execution_result.args),
         "response": sanitize_for_json_storage(output),
@@ -159,7 +150,6 @@ def _record_step_result(
         source=agent_state.agent_profile.name,
         agent_name=agent_state.agent_profile.name,
         node_name="tool_call",
-        step_id=local_step_id,
         iteration=iteration_number,
         payload=payload,
     )
@@ -206,7 +196,6 @@ def run_executor(agent_state: AgentState) -> AgentState:
                 resolved_args = _substitute_refs(
                     step.args,
                     tool_results_by_step_id,
-                    iteration_number=iteration_number,
                 )
                 resolved_args_by_step_id[step.id] = resolved_args
                 if step.tool not in allowed_tool_names:
@@ -229,7 +218,6 @@ def run_executor(agent_state: AgentState) -> AgentState:
                         _execute_step,
                         step,
                         tool_results_by_step_id=tool_results_by_step_id,
-                        iteration_number=iteration_number,
                         allowed_tool_names=allowed_tool_names,
                         resolved_args=resolved_args_by_step_id[step.id],
                         rejection_reason=rejection_reason_by_step_id.get(step.id, ""),

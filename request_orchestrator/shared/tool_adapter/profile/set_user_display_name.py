@@ -19,7 +19,7 @@ class SetUserDisplayNameArgs(BaseModel):
 
 
 def _tool_result(result: UserProfileUpdateResult) -> ToolResult:
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=str(result.user_id or ""),
         tool_name=TOOL_NAME_SET_USER_DISPLAY_NAME,
         title="User Profile",
@@ -31,7 +31,7 @@ def _tool_result(result: UserProfileUpdateResult) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

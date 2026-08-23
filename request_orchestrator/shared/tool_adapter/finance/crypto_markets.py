@@ -51,7 +51,7 @@ def _tool_result(result: list[CoinMarket]) -> ToolResult:
             market_cap_rank=market.market_cap_rank,
             price_change_percentage_24h=market.price_change_percentage_24h,
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=market.id,
             tool_name=TOOL_NAME_GET_CRYPTO_MARKETS,
             title=market.name,
@@ -63,7 +63,7 @@ def _tool_result(result: list[CoinMarket]) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=market,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 

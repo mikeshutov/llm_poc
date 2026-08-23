@@ -98,7 +98,7 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
             "model": result.model,
         }
     )
-    hydrated = EvidenceView(
+    evidence_view = EvidenceView(
         item_id=result.roundtrip_id,
         tool_name=TOOL_NAME_GET_MEMORY_DETAIL,
         title=result.title.strip() or "Memory Detail",
@@ -111,5 +111,5 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence=[hydrated],
+        evidence=[evidence_view],
     )

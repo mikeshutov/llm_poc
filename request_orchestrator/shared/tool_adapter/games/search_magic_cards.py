@@ -152,7 +152,7 @@ def _build_card_record(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -
     )
 
 
-def _build_hydrated_evidence(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -> EvidenceView:
+def _build_evidence(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -> EvidenceView:
     pricing_metadata = [MagicCardPriceMetadataEntry.from_price_entry(entry) for entry in pricing if _has_pricing(entry)]
     metadata = MagicCardSearchMetadata(
         rarity=card.rarity,
@@ -234,9 +234,9 @@ def search_magic_cards(
     for card in selected_cards:
         pricing = pricing_by_name.setdefault(card.name, _load_card_pricing(card.name)) if include_pricing else []
         record = _build_card_record(card, pricing)
-        hydrated = _build_hydrated_evidence(card, pricing)
+        evidence_view = _build_evidence(card, pricing)
         cards.append(record)
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
 
     result = SearchMagicCardsResult(
         total_cards=response.total_cards,
@@ -248,11 +248,10 @@ def search_magic_cards(
     return ToolResult(
         result=result,
         metadata={
-            "page": page,
+            "current_page": page,
             "page_size": DEFAULT_MAGIC_CARD_PAGE_SIZE,
             "has_more": result.has_more,
             "returned_count": result.returned_count,
-            "total_cards": result.total_cards,
             "warnings": list(result.warnings),
         },
 

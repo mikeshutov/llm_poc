@@ -48,7 +48,7 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
         metadata = WikipediaSearchMetadata(
             top_result_summary=result.top_result_summary.model_dump(),
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=summary_url or result.top_result_summary.title.strip(),
             tool_name=TOOL_NAME_WIKIPEDIA_SEARCH,
             title=result.top_result_summary.title.strip(),
@@ -61,7 +61,7 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
         )
         return ToolResult(
             result=result,
-            evidence=[hydrated],
+            evidence=[evidence_view],
         )
 
     for index, item in enumerate(result.results):
@@ -76,7 +76,7 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
                 else None
             ),
         )
-        hydrated = EvidenceView(
+        evidence_view = EvidenceView(
             item_id=url or item.title.strip(),
             tool_name=TOOL_NAME_WIKIPEDIA_SEARCH,
             title=item.title.strip(),
@@ -87,7 +87,7 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
             llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=item,
         )
-        evidence.append(hydrated)
+        evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
 
