@@ -60,7 +60,7 @@ def test_run_single_agent_returns_agent_update() -> None:
                     result={"items": ["result"]},
                 )
             ],
-            relevant_evidence_ids=["P1E1R1"],
+            relevant_evidence_ids=["25a4bcc1-2b18-5a36-940c-29c535bae654"],
         )
         return updated_state
 
@@ -76,7 +76,7 @@ def test_run_single_agent_returns_agent_update() -> None:
     updated_agent_state = updates["main_agent"]
     assert len(updated_agent_state.result.tool_results) == 1
     assert updated_agent_state.result.tool_results[0].step_id == "P1E1"
-    assert updated_agent_state.result.relevant_evidence_ids == ["P1E1R1"]
+    assert updated_agent_state.result.relevant_evidence_ids == ["25a4bcc1-2b18-5a36-940c-29c535bae654"]
 
 
 def test_apply_agent_updates_merges_returned_agent_state_into_main_state() -> None:
@@ -103,7 +103,7 @@ def test_apply_agent_updates_merges_returned_agent_state_into_main_state() -> No
                 result={"items": ["result"]},
             )
         ],
-        relevant_evidence_ids=["P1E1R1"],
+        relevant_evidence_ids=["25a4bcc1-2b18-5a36-940c-29c535bae654"],
     )
 
     payload = apply_agent_updates_node(
@@ -118,7 +118,7 @@ def test_apply_agent_updates_merges_returned_agent_state_into_main_state() -> No
     merged_main_state = payload["main_state"]
     assert len(merged_main_state.agent_states["main_agent"].result.tool_results) == 1
     assert merged_main_state.agent_states["main_agent"].result.tool_results[0].step_id == "P1E1"
-    assert merged_main_state.agent_states["main_agent"].result.relevant_evidence_ids == ["P1E1R1"]
+    assert merged_main_state.agent_states["main_agent"].result.relevant_evidence_ids == ["25a4bcc1-2b18-5a36-940c-29c535bae654"]
 
 
 def test_orchestrator_graph_is_compiled() -> None:

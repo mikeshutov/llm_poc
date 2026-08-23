@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 from integrations.open_meteo import OpenMeteoClient
 from integrations.open_meteo.models import GeocodedLocation
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_RESOLVE_CITY_LOCATION
 from tool.constants import TOOL_RESULT_TYPE_LOCATION
 
@@ -19,7 +19,7 @@ class ResolveCityLocationMetadata(BaseModel):
 
 def _tool_result(result: GeocodedLocation | None) -> ToolResult:
     if result is None:
-        return ToolResult(result=None, evidence_views=[], hydrated_evidence=[])
+        return ToolResult(result=None, evidence=[])
 
     metadata = ResolveCityLocationMetadata(
         country=result.country,
@@ -27,7 +27,7 @@ def _tool_result(result: GeocodedLocation | None) -> ToolResult:
         longitude=result.longitude,
         timezone=result.timezone,
     )
-    hydrated = HydratedEvidence(
+    hydrated = EvidenceView(
         item_id=(result.name or "").strip(),
         tool_name=TOOL_NAME_RESOLVE_CITY_LOCATION,
         title=(result.name or "").strip() or "Resolved City",
@@ -35,20 +35,12 @@ def _tool_result(result: GeocodedLocation | None) -> ToolResult:
         location_name=(result.name or "").strip(),
         source=TOOL_NAME_RESOLVE_CITY_LOCATION,
         entity_type=TOOL_RESULT_TYPE_LOCATION,
-        metadata=metadata.model_dump(exclude_none=True),
+        llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[hydrated],
     )
 
 

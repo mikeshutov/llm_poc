@@ -34,7 +34,7 @@ from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep, 
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.request_analysis import RequestAnalysis, RequestAnalysisGoal
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan_step_ids import namespace_step_id
@@ -239,7 +239,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     type='web_search_results',
                     evidence=[
                         EvidenceView(
-                            evidence_id="P1E1R1",
+                            evidence_id="25a4bcc1-2b18-5a36-940c-29c535bae654",
                             item_id="known-result",
                             title='Known Result',
                             summary='Known evidence result.',
@@ -264,7 +264,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     type='web_search_results',
                     evidence=[
                         EvidenceView(
-                            evidence_id="P1E1R1",
+                            evidence_id="25a4bcc1-2b18-5a36-940c-29c535bae654",
                             item_id="known-result",
                             title='Known Result',
                             summary='Known evidence result.',
@@ -373,17 +373,9 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     tool_name='get_current_weather',
                     iteration=1,
                     result={'temperature': 21.2},
-                    evidence_views=[
+                    evidence=[
                         EvidenceView(
-                            evidence_id='profile_management:P1E1R1',
-                            item_id='Toronto',
-                            title='Weather Result',
-                            summary='21.2 C in Toronto.',
-                        )
-                    ],
-                    hydrated_evidence=[
-                        HydratedEvidence(
-                            evidence_id='profile_management:P1E1R1',
+                            evidence_id='f822ca3a-bd48-50c5-9293-a4b7d512ecc8',
                             item_id='Toronto',
                             title='Weather Result',
                             summary='21.2 C in Toronto.',
@@ -403,17 +395,9 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     tool_name='generic_web_search',
                     iteration=1,
                     result={'items': ['ramen']},
-                    evidence_views=[
+                    evidence=[
                         EvidenceView(
-                            evidence_id='main_agent:P1E1R1',
-                            item_id='ramen-1',
-                            title='Ramen Result',
-                            summary='Popular ramen shop.',
-                        )
-                    ],
-                    hydrated_evidence=[
-                        HydratedEvidence(
-                            evidence_id='main_agent:P1E1R1',
+                            evidence_id='c8271821-2d4c-51a1-bc00-1f4932d052d7',
                             item_id='ramen-1',
                             title='Ramen Result',
                             summary='Popular ramen shop.',
@@ -423,7 +407,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     ],
                 )
             ],
-            relevant_evidence_ids=['main_agent:P1E1R1'],
+            relevant_evidence_ids=['c8271821-2d4c-51a1-bc00-1f4932d052d7'],
         )
 
         tool_results = main_state.gather_tool_results()
@@ -435,14 +419,14 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         self.assertEqual(len(tool_results), 2)
         self.assertEqual(
-            [tool_result.evidence_views[0].title for tool_result in tool_results],
+            [tool_result.evidence[0].title for tool_result in tool_results],
             ['Weather Result', 'Ramen Result'],
         )
         self.assertEqual(
             sorted(evidence_bundle.hydrated_evidence_by_id.keys()),
-            ['main_agent:P1E1R1', 'profile_management:P1E1R1'],
+            ['c8271821-2d4c-51a1-bc00-1f4932d052d7', 'f822ca3a-bd48-50c5-9293-a4b7d512ecc8'],
         )
-        self.assertEqual(main_state.gather_relevant_evidence_ids(), ['main_agent:P1E1R1'])
+        self.assertEqual(main_state.gather_relevant_evidence_ids(), ['c8271821-2d4c-51a1-bc00-1f4932d052d7'])
         self.assertEqual(len(evidence_steps), 2)
         self.assertEqual(
             [step.evidence[0].title for step in evidence_steps],
@@ -517,7 +501,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     type='generic',
                     evidence=[
                         EvidenceView(
-                            evidence_id="P1E1R1",
+                            evidence_id="25a4bcc1-2b18-5a36-940c-29c535bae654",
                             item_id='https://example.com/soba',
                             title='Soba Noodles',
                             summary='Authentic soba noodles',
@@ -534,7 +518,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         prompt_text = prompt.build()
 
         self.assertIn('"title": "Soba Noodles"', prompt_text)
-        self.assertIn('"evidence_id": "P1E1R1"', prompt_text)
+        self.assertIn('"evidence_id": "25a4bcc1-2b18-5a36-940c-29c535bae654"', prompt_text)
         self.assertIn('"item_id": "https://example.com/soba"', prompt_text)
         self.assertIn('"summary": "Authentic soba noodles"', prompt_text)
         self.assertNotIn('image_url', prompt_text)
@@ -568,7 +552,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     type='web_search_results',
                     evidence=[
                         EvidenceView(
-                            evidence_id="P1E1R1",
+                            evidence_id="25a4bcc1-2b18-5a36-940c-29c535bae654",
                             item_id="result-1",
                             title='Result',
                             summary='Evidence result.',
@@ -607,7 +591,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     type='web_search_results',
                     evidence=[
                         EvidenceView(
-                            evidence_id="P1E1R1",
+                            evidence_id="25a4bcc1-2b18-5a36-940c-29c535bae654",
                             item_id="result-1",
                             title='Result',
                             summary='Evidence result.',

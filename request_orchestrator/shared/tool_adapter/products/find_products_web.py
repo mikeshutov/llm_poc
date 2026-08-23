@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from products.models.product_result import ProductResult
 from products.models.product_search_results import ProductSearchResults
 from products.product_retrieval import find_products_web as web_find_products
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_FIND_PRODUCTS_WEB
 from tool.constants import TOOL_RESULT_TYPE_PRODUCT_RESULTS
 
@@ -48,8 +48,7 @@ def _product_summary(product: ProductResult) -> str:
 
 
 def _tool_result(result: ProductSearchResults) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for product in [*result.internal_results, *result.external_results]:
         url = (product.url or "").strip()
         metadata = ProductEvidenceMetadata(
@@ -65,7 +64,7 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
             retrieved_count=result.retrieved_count,
             reranked=result.reranked,
         )
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=product.id,
             tool_name=TOOL_NAME_FIND_PRODUCTS_WEB,
             title=product.name,
@@ -74,19 +73,11 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
             image_url=(product.image_url or "").strip(),
             source=TOOL_NAME_FIND_PRODUCTS_WEB,
             entity_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=product,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(hydrated)
+    return ToolResult(result=result, evidence=evidence)
 
 
 @tool(

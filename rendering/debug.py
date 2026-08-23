@@ -11,6 +11,7 @@ PLAN_KIND = "plan"
 EVALUATOR_KIND = "evaluator"
 TOOL_CALL_KIND = "tool_call"
 SYNTHESIS_KIND = "synthesis"
+EXECUTION_RESULT_KIND = "execution_result"
 LLM_CALL_KIND = "llm_call"
 ORCHESTRATOR_AGENT_NAME = "request_orchestrator"
 DEFAULT_AGENT_LOG_ORDER = [
@@ -46,6 +47,13 @@ class SynthesisLogPayload(BaseModel):
     answer_preview: list[str] = Field(default_factory=list)
     next_question: str = ""
     relevant_evidence_ids: list[str] = Field(default_factory=list)
+
+
+class ExecutionResultLogPayload(BaseModel):
+    title: str = "Execution Result"
+    status: str = ""
+    reason: str = ""
+    rejected_call_count: int = 0
 
 
 class EvaluatorLogPayload(BaseModel):
@@ -159,6 +167,16 @@ def _build_synthesis_payload(entry: dict) -> dict:
     ).model_dump()
 
 
+def _build_execution_result_payload(entry: dict) -> dict:
+    data = entry.get("data") or {}
+    return ExecutionResultLogPayload(
+        title=data.get("title") or "Execution Result",
+        status=data.get("status") or "",
+        reason=data.get("reason") or "",
+        rejected_call_count=data.get("rejected_call_count") or 0,
+    ).model_dump()
+
+
 def _build_evaluator_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
     return EvaluatorLogPayload(
@@ -219,6 +237,8 @@ def _build_log_payload(entry: dict) -> tuple[str, dict]:
         payload = _build_evaluator_payload(entry)
     elif kind == SYNTHESIS_KIND:
         payload = _build_synthesis_payload(entry)
+    elif kind == EXECUTION_RESULT_KIND:
+        payload = _build_execution_result_payload(entry)
     elif kind == TOOL_CALL_KIND:
         payload = _build_tool_call_payload(entry)
     elif kind == LLM_CALL_KIND:

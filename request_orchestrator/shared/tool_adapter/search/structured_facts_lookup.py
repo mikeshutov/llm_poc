@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from integrations.wikidata import WikidataSparqlClient
 from integrations.wikidata.models import SparqlResult
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_STRUCTURED_FACTS_LOOKUP
 from tool.constants import TOOL_RESULT_TYPE_STRUCTURED_FACTS
 
@@ -40,8 +40,7 @@ def _binding_summary(binding: dict[str, object], vars_list: list[str]) -> str:
 
 
 def _tool_result(result: SparqlResult) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for index, binding in enumerate(result.bindings, start=1):
         item_id = (
             _binding_value(binding.get("qid"))
@@ -58,7 +57,7 @@ def _tool_result(result: SparqlResult) -> ToolResult:
         summary = _binding_summary(binding, result.vars)
         url = _binding_value(binding.get("url"))
         metadata = StructuredFactsMetadata(vars=list(result.vars))
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=item_id,
             tool_name=TOOL_NAME_STRUCTURED_FACTS_LOOKUP,
             title=title,
@@ -66,19 +65,11 @@ def _tool_result(result: SparqlResult) -> ToolResult:
             urls=[{"url": url, "url_type": "website"}] if url else [],
             source=TOOL_NAME_STRUCTURED_FACTS_LOOKUP,
             entity_type=TOOL_RESULT_TYPE_STRUCTURED_FACTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=binding,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(hydrated)
+    return ToolResult(result=result, evidence=evidence)
 
 
 @tool(

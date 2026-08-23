@@ -87,10 +87,10 @@ def test_get_magic_card_rulings_returns_typed_result() -> None:
             },
         ],
     }
-    assert len(result.evidence_views) == 2
-    assert result.evidence_views[0].title == "Humility Ruling 1"
-    assert "query" not in result.evidence_views[0].metadata
-    assert result.evidence_views[0].metadata["legal_formats"] == ["commander", "legacy"]
-    assert not {"card_id", "card_name", "set_name", "rarity", "oracle_id"} & result.evidence_views[0].metadata.keys()
-    assert result.hydrated_evidence[0].published_at == "2004-10-04"
-    assert result.hydrated_evidence[0].urls[0].url == "https://scryfall.com/card/tmp/14/humility"
+    assert len(result.evidence) == 2
+    assert result.evidence[0].title == "Humility Ruling 1"
+    assert "query" not in result.evidence[0].llm_metadata
+    assert result.evidence[0].llm_metadata["legal_formats"] == ["commander", "legacy"]
+    assert not {"card_id", "card_name", "set_name", "rarity", "oracle_id"} & result.evidence[0].llm_metadata.keys()
+    assert result.evidence[0].published_at == "2004-10-04"
+    assert result.evidence[0].urls[0].url == "https://scryfall.com/card/tmp/14/humility"

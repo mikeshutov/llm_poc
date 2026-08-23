@@ -219,7 +219,7 @@ class AgentPrompt:
                     {
                         "type": step.type,
                         "metadata": dict(step.metadata),
-                        "evidence": [evidence.model_dump() for evidence in step.evidence],
+                        "evidence": [evidence.for_llm() for evidence in step.evidence],
                     }
                 )
             )

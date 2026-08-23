@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.world_time import WorldTimeClient, WorldTime
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_GET_WORLD_TIME
 from tool.constants import TOOL_RESULT_TYPE_TIME
 
@@ -30,7 +30,7 @@ def _tool_result(result: WorldTime) -> ToolResult:
         day_of_week=result.day_of_week,
         abbreviation=result.abbreviation,
     )
-    hydrated = HydratedEvidence(
+    hydrated = EvidenceView(
         item_id=result.timezone,
         tool_name=TOOL_NAME_GET_WORLD_TIME,
         title=result.timezone,
@@ -38,20 +38,12 @@ def _tool_result(result: WorldTime) -> ToolResult:
         published_at=result.datetime,
         source=TOOL_NAME_GET_WORLD_TIME,
         entity_type=TOOL_RESULT_TYPE_TIME,
-        metadata=metadata.model_dump(exclude_none=True),
+        llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[hydrated],
     )
 
 

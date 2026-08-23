@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from uuid import UUID
 
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.orchestrator_payload import (
@@ -31,14 +32,6 @@ def _normalize_evidence_ids(
             continue
         if normalized in hydrated_evidence_by_id:
             normalized_ids.append(normalized)
-            continue
-        suffix_matches = [
-            candidate_id
-            for candidate_id in hydrated_evidence_by_id
-            if candidate_id == normalized or candidate_id.endswith(f":{normalized}")
-        ]
-        if len(suffix_matches) == 1:
-            normalized_ids.append(suffix_matches[0])
             continue
         normalized_ids.append(normalized)
     return normalized_ids
@@ -106,7 +99,10 @@ class OrchestratorResult:
         )
 
     def to_payload_model(self) -> OrchestratorPayload:
-        evidence_bundle = build_evidence_bundle_from_tool_results(self.agent_result.tool_results)
+        from tool.repository.tool_call_repository import ToolCallRepository
+
+        tool_results = ToolCallRepository().get_tool_results(self.agent_result.tool_call_ids)
+        evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
         hydrated_evidence_by_id = {
             evidence_id: evidence.model_dump()
             for evidence_id, evidence in evidence_bundle.hydrated_evidence_by_id.items()
@@ -129,8 +125,8 @@ class OrchestratorResult:
             for block in result_blocks
         ]
         return OrchestratorPayload(
-            tool_results=[tool_result.model_dump() for tool_result in self.agent_result.tool_results],
-            relevant_evidence_ids=list(self.agent_result.relevant_evidence_ids),
+            tool_results=[tool_result.model_dump() for tool_result in tool_results],
+            relevant_evidence_ids=[str(evidence_id) for evidence_id in self.agent_result.relevant_evidence_ids],
             result=[
                 OrchestratorPayloadResultBlock(
                     content=block.content,

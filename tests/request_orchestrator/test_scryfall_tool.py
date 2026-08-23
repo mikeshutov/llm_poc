@@ -82,16 +82,16 @@ def test_search_magic_cards_returns_typed_result() -> None:
             }
         ],
     }
-    assert result.evidence_views[0].item_id == "card-1"
-    assert result.evidence_views[0].title == "Black Lotus"
-    assert result.evidence_views[0].summary == "{T}, Sacrifice Black Lotus: Add three mana of any one color."
-    assert "prices" not in result.evidence_views[0].metadata
-    assert result.evidence_views[0].metadata["legal_formats"] == ["commander", "legacy"]
-    assert "legalities" not in result.evidence_views[0].metadata
-    assert "games" not in result.evidence_views[0].metadata
-    assert "query" not in result.evidence_views[0].metadata
-    assert result.hydrated_evidence[0].item_id == "card-1"
-    assert result.hydrated_evidence[0].urls[0].url == "https://scryfall.com/card/vma/4/black-lotus"
+    assert result.evidence[0].item_id == "card-1"
+    assert result.evidence[0].title == "Black Lotus"
+    assert result.evidence[0].summary == "{T}, Sacrifice Black Lotus: Add three mana of any one color."
+    assert "prices" not in result.evidence[0].llm_metadata
+    assert result.evidence[0].llm_metadata["legal_formats"] == ["commander", "legacy"]
+    assert "legalities" not in result.evidence[0].llm_metadata
+    assert "games" not in result.evidence[0].llm_metadata
+    assert "query" not in result.evidence[0].llm_metadata
+    assert result.evidence[0].item_id == "card-1"
+    assert result.evidence[0].urls[0].url == "https://scryfall.com/card/vma/4/black-lotus"
 
 
 def test_search_magic_cards_applies_commander_color_identity_filter() -> None:
@@ -250,7 +250,7 @@ def test_search_magic_cards_can_include_pricing() -> None:
             tix=None,
         ),
     ]
-    assert result.evidence_views[0].metadata["pricing"] == [
+    assert result.evidence[0].llm_metadata["pricing"] == [
         {
             "set": "Vintage Masters",
             "usd": "12345.67",

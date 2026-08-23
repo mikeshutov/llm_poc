@@ -13,7 +13,7 @@ from rendering.cards import render_cards, render_magic_card_evidence_cards, rend
 from rendering.debug import debug_render_message, render_agent_logs
 from rendering.feedback import render_feedback_controls
 from rendering.replay import render_replay_control
-from request_orchestrator.models.evidence import EvidenceUrl, HydratedEvidence
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
 from tool.constants import TOOL_NAME_GET_COMMANDER_CARDS
@@ -53,29 +53,29 @@ INLINE_EVIDENCE_TOOL_NAMES: set[str] = {
 }
 
 
-def _is_inline_link_evidence(hydrated: HydratedEvidence) -> bool:
+def _is_inline_link_evidence(hydrated: EvidenceView) -> bool:
     return (
         hydrated.tool_name.strip() in INLINE_EVIDENCE_TOOL_NAMES
         or hydrated.source.strip() in INLINE_EVIDENCE_TOOL_NAMES
     )
 
 
-def _is_inline_label_evidence(hydrated: HydratedEvidence) -> bool:
+def _is_inline_label_evidence(hydrated: EvidenceView) -> bool:
     return hydrated.entity_type.strip() in INLINE_EVIDENCE_TYPES
 
 
-def _is_inline_evidence(hydrated: HydratedEvidence) -> bool:
+def _is_inline_evidence(hydrated: EvidenceView) -> bool:
     return _is_inline_link_evidence(hydrated) or _is_inline_label_evidence(hydrated)
 
 
-def _is_magic_card_evidence(hydrated: HydratedEvidence) -> bool:
+def _is_magic_card_evidence(hydrated: EvidenceView) -> bool:
     return (
         hydrated.tool_name.strip() in {TOOL_NAME_SEARCH_MAGIC_CARDS, TOOL_NAME_GET_COMMANDER_CARDS}
         and hydrated.entity_type.strip() == TOOL_RESULT_TYPE_CARD_RESULTS
     )
 
 
-def _is_magic_card_ruling_evidence(hydrated: HydratedEvidence) -> bool:
+def _is_magic_card_ruling_evidence(hydrated: EvidenceView) -> bool:
     return hydrated.entity_type.strip() == TOOL_RESULT_TYPE_RULES
 
 
@@ -149,18 +149,18 @@ def fetch_llm_usage_for_roundtrip(roundtrip_id: str | None) -> dict[str, Any] | 
     return build_llm_usage_payload(llm_calls)
 
 
-def _get_hydrated_evidence_by_id(payload: dict | None) -> dict[str, HydratedEvidence]:
+def _get_hydrated_evidence_by_id(payload: dict | None) -> dict[str, EvidenceView]:
     if not isinstance(payload, dict):
         return {}
     raw_hydrated_evidence_by_id = payload.get("hydrated_evidence_by_id")
     if not isinstance(raw_hydrated_evidence_by_id, dict):
         return {}
-    hydrated_evidence_by_id: dict[str, HydratedEvidence] = {}
+    hydrated_evidence_by_id: dict[str, EvidenceView] = {}
     for evidence_id, evidence in raw_hydrated_evidence_by_id.items():
         if not isinstance(evidence_id, str) or not isinstance(evidence, dict):
             continue
         try:
-            hydrated_evidence_by_id[evidence_id] = HydratedEvidence.model_validate(evidence)
+            hydrated_evidence_by_id[evidence_id] = EvidenceView.model_validate(evidence)
         except Exception:
             continue
     return hydrated_evidence_by_id
@@ -168,7 +168,7 @@ def _get_hydrated_evidence_by_id(payload: dict | None) -> dict[str, HydratedEvid
 
 def _normalize_block_evidence_ids(
     evidence_ids: list[str],
-    hydrated_evidence_by_id: dict[str, HydratedEvidence],
+    hydrated_evidence_by_id: dict[str, EvidenceView],
 ) -> list[str]:
     if not evidence_ids or not hydrated_evidence_by_id:
         return evidence_ids
@@ -180,14 +180,6 @@ def _normalize_block_evidence_ids(
             continue
         if normalized in hydrated_evidence_by_id:
             normalized_ids.append(normalized)
-            continue
-        suffix_matches = [
-            candidate_id
-            for candidate_id in hydrated_evidence_by_id
-            if candidate_id == normalized or candidate_id.endswith(f":{normalized}")
-        ]
-        if len(suffix_matches) == 1:
-            normalized_ids.append(suffix_matches[0])
             continue
         normalized_ids.append(normalized)
     return normalized_ids
@@ -236,7 +228,7 @@ def get_renderable_result_blocks(content: str, payload: dict | None) -> list[Syn
 
 def _build_inline_evidence(
     block: SynthesisResultBlock,
-    hydrated_evidence_by_id: dict[str, HydratedEvidence],
+    hydrated_evidence_by_id: dict[str, EvidenceView],
 ) -> list[InlineEvidenceReference]:
     inline_evidence: list[InlineEvidenceReference] = []
     for evidence_id in block.evidence_ids:
@@ -257,7 +249,7 @@ def _build_inline_evidence(
 
 def _build_block_cards(
     block: SynthesisResultBlock,
-    hydrated_evidence_by_id: dict[str, HydratedEvidence],
+    hydrated_evidence_by_id: dict[str, EvidenceView],
 ) -> list[EvidenceCard]:
     cards: list[EvidenceCard] = []
     for evidence_id in block.evidence_ids:
@@ -296,7 +288,7 @@ def _primary_card_url(urls: list[EvidenceUrl]) -> str:
 
 def _render_result_block(
     block: SynthesisResultBlock,
-    hydrated_evidence_by_id: dict[str, HydratedEvidence],
+    hydrated_evidence_by_id: dict[str, EvidenceView],
 ) -> list[EvidenceCard]:
     inline_evidence = _build_inline_evidence(block, hydrated_evidence_by_id)
     inline_links: list[tuple[str, str]] = []

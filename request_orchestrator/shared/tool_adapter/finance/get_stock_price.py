@@ -5,7 +5,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.yahoo_finance import YAHOO_FINANCE_QUOTE_URL_TEMPLATE
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_GET_STOCK_PRICE
 from tool.constants import TOOL_RESULT_TYPE_FINANCE
 
@@ -41,7 +41,7 @@ def _tool_result(result: StockPrice) -> ToolResult:
         previous_close=result.previous_close,
         market_cap=result.market_cap,
     )
-    hydrated = HydratedEvidence(
+    hydrated = EvidenceView(
         item_id=result.ticker,
         tool_name=TOOL_NAME_GET_STOCK_PRICE,
         title=result.ticker,
@@ -49,20 +49,12 @@ def _tool_result(result: StockPrice) -> ToolResult:
         urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
         source=TOOL_NAME_GET_STOCK_PRICE,
         entity_type=TOOL_RESULT_TYPE_FINANCE,
-        metadata=metadata.model_dump(exclude_none=True),
+        llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[hydrated],
     )
 
 

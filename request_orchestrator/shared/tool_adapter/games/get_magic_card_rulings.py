@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.scryfall import ScryfallCard, ScryfallClient, ScryfallRuling
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_GET_MAGIC_CARD_RULINGS
 from tool.constants import TOOL_RESULT_TYPE_RULES
 
@@ -69,12 +69,11 @@ def _tool_metadata(result: MagicCardRulingsResult) -> dict[str, object]:
 
 
 def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     card_url = _card_url(result.resolved_card)
 
     if not result.rulings:
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=result.resolved_card.id,
             tool_name=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
             title=f"{result.resolved_card.name} Rulings",
@@ -82,25 +81,17 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
             urls=[EvidenceUrl(url=card_url, url_type=EvidenceUrlType.WEBSITE)] if card_url else [],
             source=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
             entity_type=TOOL_RESULT_TYPE_RULES,
-            metadata=_build_metadata(result).model_dump(exclude_none=True),
+            llm_metadata=_build_metadata(result).model_dump(exclude_none=True),
             raw_payload=result.resolved_card,
         )
         return ToolResult(
             result=result,
             metadata=_tool_metadata(result),
-            evidence_views=[
-                EvidenceView(
-                    item_id=hydrated.item_id,
-                    title=hydrated.title,
-                    summary=hydrated.summary,
-                    metadata=dict(hydrated.metadata),
-                )
-            ],
-            hydrated_evidence=[hydrated],
+            evidence=[hydrated],
         )
 
     for index, ruling in enumerate(result.rulings, start=1):
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=f"{result.resolved_card.id}:ruling:{index}",
             tool_name=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
             title=f"{result.resolved_card.name} Ruling {index}",
@@ -109,24 +100,16 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
             published_at=ruling.published_at,
             source=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
             entity_type=TOOL_RESULT_TYPE_RULES,
-            metadata=_build_metadata(result, ruling).model_dump(exclude_none=True),
+            llm_metadata=_build_metadata(result, ruling).model_dump(exclude_none=True),
             raw_payload=ruling,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
+        evidence.append(hydrated)
 
     return ToolResult(
         result=result,
         metadata=_tool_metadata(result),
-        evidence_views=evidence_views,
-        hydrated_evidence=hydrated_evidence,
+
+        evidence=evidence,
     )
 
 

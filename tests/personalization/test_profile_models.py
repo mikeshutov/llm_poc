@@ -328,7 +328,7 @@ def test_repair_common_json_issues_replaces_semicolon_between_fields() -> None:
 def test_synthesis_result_accepts_next_question_and_result_blocks() -> None:
     result = SynthesisResult.model_validate(
         {
-            "result": [{"content": "done", "evidence_ids": ["P1E1R1"]}],
+            "result": [{"content": "done", "evidence_ids": ["25a4bcc1-2b18-5a36-940c-29c535bae654"]}],
             "next_question": "Do you want more detail?",
             "roundtrip_summary": "summary",
             "tool_summary": {},
@@ -337,7 +337,7 @@ def test_synthesis_result_accepts_next_question_and_result_blocks() -> None:
 
     assert result.next_question == "Do you want more detail?"
     assert result.result[0].content == "done"
-    assert result.result[0].evidence_ids == ["P1E1R1"]
+    assert result.result[0].evidence_ids == ["25a4bcc1-2b18-5a36-940c-29c535bae654"]
 
 
 def test_synthesis_result_falls_back_when_next_question_is_empty() -> None:

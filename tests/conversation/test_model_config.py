@@ -303,6 +303,13 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
                 provider=OPENAI_PROVIDER,
                 model='gpt-5.6-terra',
             ),
+            ConversationModelConfigEntry(
+                conversation_id=conversation_id,
+                agent=MAIN_AGENT_MODEL_SCOPE,
+                stage=PLANNER_STAGE,
+                provider=OPENAI_PROVIDER,
+                model='gpt-5.6-luna',
+            ),
         ]
     )
 
@@ -334,6 +341,16 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
             reuse_llm_for_agent_scope=state.resolve_agent_scope(),
         )
         assert profile_planner_llm.model == 'gpt-5.6-terra'
+
+        main_planner_llm = build_llm_for_stage(
+            execution_context=state.execution_context,
+            llm=state.llm,
+            agent=MAIN_AGENT_MODEL_SCOPE,
+            stage=PLANNER_STAGE,
+            agent_profile=MAIN_AGENT_PROFILE,
+            reuse_llm_for_agent_scope=state.resolve_agent_scope(),
+        )
+        assert main_planner_llm.model == 'gpt-5.6-luna'
 
 
 def test_llm_factory_build_llm_for_stage_uses_anthropic_provider() -> None:

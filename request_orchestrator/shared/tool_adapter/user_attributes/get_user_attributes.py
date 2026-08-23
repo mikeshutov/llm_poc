@@ -7,7 +7,7 @@ from common.data import normalize_string_list
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from tool.constants import TOOL_NAME_GET_USER_ATTRIBUTES
 from tool.constants import TOOL_RESULT_TYPE_USER_ATTRIBUTE
@@ -41,8 +41,7 @@ def _attribute_summary(attribute: UserAttribute) -> str:
 
 
 def _tool_result(result: list[UserAttribute]) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for attribute in result:
         metadata = UserAttributeMetadata(
             group_key=attribute.group_key,
@@ -53,7 +52,7 @@ def _tool_result(result: list[UserAttribute]) -> ToolResult:
             created_at=attribute.created_at,
             updated_at=attribute.updated_at,
         )
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=str(attribute.id),
             tool_name=TOOL_NAME_GET_USER_ATTRIBUTES,
             title=attribute.attribute_type,
@@ -61,19 +60,11 @@ def _tool_result(result: list[UserAttribute]) -> ToolResult:
             published_at=attribute.updated_at,
             source=TOOL_NAME_GET_USER_ATTRIBUTES,
             entity_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=attribute,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(hydrated)
+    return ToolResult(result=result, evidence=evidence)
 
 
 @tool(

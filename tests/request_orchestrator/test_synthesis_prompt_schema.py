@@ -15,8 +15,8 @@ from request_orchestrator.shared.synthesis.prompts.synthesis_rules import BASE_R
 
 def test_synthesis_schema_forbids_displaying_evidence_ids_in_content() -> None:
     assert "never expose internal IDs in content" in SYNTHESIS_SCHEMA
-    assert "including its agent prefix" in SYNTHESIS_SCHEMA
-    assert '"main_agent:P1E1R1"' in SYNTHESIS_SCHEMA
+    assert "Use each UUID exactly as it appears in EVIDENCE" in SYNTHESIS_SCHEMA
+    assert '"2f70c491-bcd8-5e2e-a520-1e0d3e8768c2"' in SYNTHESIS_SCHEMA
 
 
 def test_synthesis_rules_do_not_include_legacy_file_path_rendering_rule() -> None:

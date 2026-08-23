@@ -6,7 +6,7 @@ from requests.exceptions import RequestException
 
 from integrations.ip_api import IpApiClient
 from integrations.ip_api.models import IpLocation
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_GET_CALLER_LOCATION
 from tool.constants import TOOL_RESULT_TYPE_LOCATION
 
@@ -32,7 +32,7 @@ def _tool_result(result: IpLocation) -> ToolResult:
         lon=result.lon,
         timezone=result.timezone,
     )
-    hydrated = HydratedEvidence(
+    hydrated = EvidenceView(
         item_id=(result.query or result.city or result.country or "").strip(),
         tool_name=TOOL_NAME_GET_CALLER_LOCATION,
         title=location_name or "Caller Location",
@@ -40,20 +40,12 @@ def _tool_result(result: IpLocation) -> ToolResult:
         location_name=(result.city or "").strip(),
         source=TOOL_NAME_GET_CALLER_LOCATION,
         entity_type=TOOL_RESULT_TYPE_LOCATION,
-        metadata=metadata.model_dump(exclude_none=True),
+        llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[hydrated],
     )
 
 

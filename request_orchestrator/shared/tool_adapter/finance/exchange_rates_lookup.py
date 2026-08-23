@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 from integrations.frankfurter import FrankfurterClient
 from integrations.frankfurter.models import ExchangeRatesSnapshot
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_EXCHANGE_RATES_LOOKUP
 from tool.constants import TOOL_RESULT_TYPE_FINANCE
 
@@ -35,8 +35,7 @@ class ExchangeRateLookupMetadata(BaseModel):
 
 
 def _tool_result(result: ExchangeRatesSnapshot) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for currency_code, rate in result.rates.items():
         metadata = ExchangeRateLookupMetadata(
             base=result.base,
@@ -44,7 +43,7 @@ def _tool_result(result: ExchangeRatesSnapshot) -> ToolResult:
             rate=rate,
             date=result.date,
         )
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=currency_code,
             tool_name=TOOL_NAME_EXCHANGE_RATES_LOOKUP,
             title=f"{result.base} to {currency_code}",
@@ -52,19 +51,11 @@ def _tool_result(result: ExchangeRatesSnapshot) -> ToolResult:
             published_at=result.date,
             source=TOOL_NAME_EXCHANGE_RATES_LOOKUP,
             entity_type=TOOL_RESULT_TYPE_FINANCE,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload={"currency": currency_code, "rate": rate, "snapshot": result},
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(hydrated)
+    return ToolResult(result=result, evidence=evidence)
 
 
 @tool(

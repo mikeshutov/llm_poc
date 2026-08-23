@@ -11,7 +11,7 @@ from integrations.scryfall import (
     ScryfallCardSearchResult,
     ScryfallClient,
 )
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from request_orchestrator.shared.tool_adapter.games.mtg_color_identity import apply_commander_color_identity_filter
 from tool.constants import TOOL_NAME_SEARCH_MAGIC_CARDS
 from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
@@ -152,7 +152,7 @@ def _build_card_record(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -
     )
 
 
-def _build_hydrated_evidence(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -> HydratedEvidence:
+def _build_hydrated_evidence(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -> EvidenceView:
     pricing_metadata = [MagicCardPriceMetadataEntry.from_price_entry(entry) for entry in pricing if _has_pricing(entry)]
     metadata = MagicCardSearchMetadata(
         rarity=card.rarity,
@@ -163,7 +163,7 @@ def _build_hydrated_evidence(card: ScryfallCard, pricing: list[MagicCardPriceEnt
         pricing=pricing_metadata or None,
     )
     url = _card_url(card)
-    return HydratedEvidence(
+    return EvidenceView(
         item_id=card.id,
         tool_name=TOOL_NAME_SEARCH_MAGIC_CARDS,
         title=card.name.strip(),
@@ -172,7 +172,7 @@ def _build_hydrated_evidence(card: ScryfallCard, pricing: list[MagicCardPriceEnt
         image_url=_card_image_url(card) or "",
         source=TOOL_NAME_SEARCH_MAGIC_CARDS,
         entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
-        metadata=metadata.model_dump(exclude_none=True),
+        llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=card,
     )
 
@@ -229,23 +229,14 @@ def search_magic_cards(
     selected_cards = response.data[start_index : start_index + DEFAULT_MAGIC_CARD_PAGE_SIZE]
     pricing_by_name: dict[str, list[MagicCardPriceEntry]] = {}
     cards: list[MagicCardSearchRecord] = []
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
 
     for card in selected_cards:
         pricing = pricing_by_name.setdefault(card.name, _load_card_pricing(card.name)) if include_pricing else []
         record = _build_card_record(card, pricing)
         hydrated = _build_hydrated_evidence(card, pricing)
         cards.append(record)
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
+        evidence.append(hydrated)
 
     result = SearchMagicCardsResult(
         total_cards=response.total_cards,
@@ -264,6 +255,6 @@ def search_magic_cards(
             "total_cards": result.total_cards,
             "warnings": list(result.warnings),
         },
-        evidence_views=evidence_views,
-        hydrated_evidence=hydrated_evidence,
+
+        evidence=evidence,
     )

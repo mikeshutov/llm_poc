@@ -6,7 +6,7 @@ from requests.exceptions import RequestException
 
 from integrations.cocktail_db import CocktailDbClient
 from integrations.cocktail_db.models import CocktailSearchResult
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.tool_adapter.food.candidate_mapper import rerank_cocktail_search_result
 from request_orchestrator.shared.tool_adapter.food.constants import DEFAULT_MEAL_RERANK_LIMIT
 from tool.constants import TOOL_NAME_SEARCH_COCKTAILS
@@ -33,8 +33,7 @@ class CocktailSearchMetadata(BaseModel):
 
 
 def _tool_result(result: CocktailSearchResult) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for cocktail in result.drinks:
         summary_parts = [
             part
@@ -55,7 +54,7 @@ def _tool_result(result: CocktailSearchResult) -> ToolResult:
             retrieved_count=result.retrieved_count,
             reranked=result.reranked,
         )
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=cocktail.id,
             tool_name=TOOL_NAME_SEARCH_COCKTAILS,
             title=cocktail.name,
@@ -63,19 +62,11 @@ def _tool_result(result: CocktailSearchResult) -> ToolResult:
             image_url=(cocktail.thumbnail or "").strip(),
             source=TOOL_NAME_SEARCH_COCKTAILS,
             entity_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=cocktail,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(hydrated)
+    return ToolResult(result=result, evidence=evidence)
 
 
 

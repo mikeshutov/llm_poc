@@ -8,7 +8,7 @@ from requests.exceptions import RequestException
 
 from integrations.advice_slip import AdviceSlipClient
 from integrations.advice_slip.models import AdviceSlip
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_GET_ADVICE
 from tool.constants import TOOL_RESULT_TYPE_ADVICE
 
@@ -28,10 +28,9 @@ def _normalize_advice(result: AdviceSlip | list[AdviceSlip]) -> list[AdviceSlip]
 
 def _tool_result(result: AdviceSlip | list[AdviceSlip]) -> ToolResult:
     advice_items = _normalize_advice(result)
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for advice in advice_items:
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=str(advice.id),
             tool_name=TOOL_NAME_GET_ADVICE,
             title="Advice Slip",
@@ -40,16 +39,8 @@ def _tool_result(result: AdviceSlip | list[AdviceSlip]) -> ToolResult:
             entity_type=TOOL_RESULT_TYPE_ADVICE,
             raw_payload=advice,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata={},
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(hydrated)
+    return ToolResult(result=result, evidence=evidence)
 
 
 

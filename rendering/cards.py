@@ -6,7 +6,7 @@ from typing import Any, Iterable
 import pandas as pd
 import streamlit as st
 
-from request_orchestrator.models.evidence import HydratedEvidence
+from request_orchestrator.models.evidence import EvidenceView
 
 # messy but fine for now
 def render_cards(
@@ -65,7 +65,7 @@ def render_cards(
                         st.caption(f"Price: {price}")
 
 
-def render_magic_card_evidence_cards(items: Iterable[HydratedEvidence]) -> None:
+def render_magic_card_evidence_cards(items: Iterable[EvidenceView]) -> None:
     items_list = list(items)
     for start in range(0, len(items_list), 2):
         row = items_list[start : start + 2]
@@ -75,7 +75,7 @@ def render_magic_card_evidence_cards(items: Iterable[HydratedEvidence]) -> None:
                 _render_magic_card_evidence_card(item)
 
 
-def render_magic_card_rulings(items: Iterable[HydratedEvidence]) -> None:
+def render_magic_card_rulings(items: Iterable[EvidenceView]) -> None:
     rows = [
         {
             "Published": item.published_at.strip(),
@@ -88,7 +88,7 @@ def render_magic_card_rulings(items: Iterable[HydratedEvidence]) -> None:
         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
 
-def _render_magic_card_evidence_card(item: HydratedEvidence) -> None:
+def _render_magic_card_evidence_card(item: EvidenceView) -> None:
     with st.container(border=True):
         image_url = item.image_url.strip()
         if image_url:
@@ -109,8 +109,8 @@ def _render_magic_card_evidence_card(item: HydratedEvidence) -> None:
                 st.markdown(f"**{title}**")
 
             cmc = _raw_value(item.raw_payload, "cmc")
-            colors = _string_list(_metadata_value(item.metadata, "color_identity"))
-            type_line = str(_metadata_value(item.metadata, "type_line") or "").strip()
+            colors = _string_list(_metadata_value(item.llm_metadata, "color_identity"))
+            type_line = str(_metadata_value(item.llm_metadata, "type_line") or "").strip()
             color_text = ", ".join(colors) if colors else "Colorless"
             cmc_text = "Unknown" if cmc in (None, "") else str(cmc)
             st.caption(f"CMC {cmc_text} | {color_text}")
@@ -121,7 +121,7 @@ def _render_magic_card_evidence_card(item: HydratedEvidence) -> None:
             if oracle_text:
                 st.write(oracle_text)
 
-            pricing_rows = _pricing_rows(item.metadata)
+            pricing_rows = _pricing_rows(item.llm_metadata)
             if pricing_rows:
                 st.dataframe(
                     pd.DataFrame(pricing_rows).reset_index(drop=True),

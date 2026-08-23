@@ -31,7 +31,7 @@ def router(state: AgentState) -> str:
     }
     current_results = {
         tool_result.step_id: tool_result
-        for tool_result in state.result.tool_results
+        for tool_result in state.gather_tool_results()
         if tool_result.step_id in current_result_step_ids
     }
     has_pending_steps = any(

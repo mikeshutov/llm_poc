@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from integrations.edhrec import EDHREC_CARD_URL_TEMPLATE, EdhrecCardView, EdhrecClient, EdhrecCommanderPage
 from integrations.scryfall import ScryfallCard, ScryfallClient, ScryfallClientError
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from request_orchestrator.shared.tool_adapter.games.candidate_mapper import rerank_edhrec_cards
 from tool.constants import TOOL_NAME_GET_COMMANDER_CARDS
 from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
@@ -129,8 +129,7 @@ def _card_summary(card: CommanderCardResult, scryfall_card: ScryfallCard | None)
 
 
 def _tool_result(result: CommanderCardsResult) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     scryfall_cards_by_name = _scryfall_cards_by_name(result.cards)
     for card in result.cards:
         scryfall_card = scryfall_cards_by_name.get(card.name.casefold())
@@ -143,7 +142,7 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
         )
         scryfall_url = scryfall_card.scryfall_uri.strip() if scryfall_card is not None else ""
         edhrec_url = card.card_url.strip()
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=scryfall_card.id if scryfall_card is not None else card.slug or card.name,
             tool_name=TOOL_NAME_GET_COMMANDER_CARDS,
             title=card.name,
@@ -155,22 +154,14 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
             image_url=scryfall_card.image_url() or "" if scryfall_card is not None else "",
             source=TOOL_NAME_GET_COMMANDER_CARDS,
             entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=CommanderCardReference(
                 cmc=scryfall_card.cmc if scryfall_card is not None else None,
                 oracle_text=_card_oracle_text(scryfall_card) if scryfall_card is not None else None,
             ),
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(hydrated)
+    return ToolResult(result=result, evidence=evidence)
 
 
 @tool(

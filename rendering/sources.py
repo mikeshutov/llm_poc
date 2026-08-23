@@ -4,7 +4,7 @@ from typing import Any
 
 import streamlit as st
 
-from request_orchestrator.models.evidence import EvidenceUrl, HydratedEvidence
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView
 
 SOURCES_DIALOG_KEY = "sources_dialog"
 
@@ -65,7 +65,7 @@ def render_sources_panel() -> None:
         st.rerun()
 
 
-def _get_panel_sources(payload: dict[str, Any]) -> list[HydratedEvidence]:
+def _get_panel_sources(payload: dict[str, Any]) -> list[EvidenceView]:
     hydrated_evidence_by_id = _get_hydrated_evidence_by_id(payload)
     if not hydrated_evidence_by_id:
         return []
@@ -90,16 +90,16 @@ def _get_panel_sources(payload: dict[str, Any]) -> list[HydratedEvidence]:
     return list(hydrated_evidence_by_id.values())
 
 
-def _get_hydrated_evidence_by_id(payload: dict[str, Any]) -> dict[str, HydratedEvidence]:
+def _get_hydrated_evidence_by_id(payload: dict[str, Any]) -> dict[str, EvidenceView]:
     raw_hydrated_evidence_by_id = payload.get("hydrated_evidence_by_id")
     if not isinstance(raw_hydrated_evidence_by_id, dict):
         return {}
-    hydrated_evidence_by_id: dict[str, HydratedEvidence] = {}
+    hydrated_evidence_by_id: dict[str, EvidenceView] = {}
     for evidence_id, evidence in raw_hydrated_evidence_by_id.items():
         if not isinstance(evidence_id, str) or not isinstance(evidence, dict):
             continue
         try:
-            hydrated_evidence_by_id[evidence_id] = HydratedEvidence.model_validate(evidence)
+            hydrated_evidence_by_id[evidence_id] = EvidenceView.model_validate(evidence)
         except Exception:
             continue
     return hydrated_evidence_by_id

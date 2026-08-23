@@ -6,7 +6,7 @@ from requests.exceptions import RequestException
 
 from integrations.open_meteo import OPEN_METEO_WEBSITE_URL, OpenMeteoClient
 from integrations.open_meteo.models import CurrentWeather, GeocodedLocation
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_GET_CURRENT_WEATHER
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
@@ -25,7 +25,7 @@ class CurrentWeatherMetadata(BaseModel):
 
 def _tool_result(result) -> ToolResult:
     if result is None:
-        return ToolResult(result=None, evidence_views=[], hydrated_evidence=[])
+        return ToolResult(result=None, evidence=[])
 
     location = result.location
     weather = result.weather
@@ -41,7 +41,7 @@ def _tool_result(result) -> ToolResult:
         weathercode=weather.weathercode,
         is_day=weather.is_day,
     )
-    hydrated = HydratedEvidence(
+    hydrated = EvidenceView(
         item_id=location_name,
         tool_name=TOOL_NAME_GET_CURRENT_WEATHER,
         title="Get Current Weather",
@@ -50,20 +50,12 @@ def _tool_result(result) -> ToolResult:
         location_name=location_name,
         source=TOOL_NAME_GET_CURRENT_WEATHER,
         entity_type=TOOL_RESULT_TYPE_WEATHER,
-        metadata=metadata.model_dump(exclude_none=True),
+        llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[hydrated],
     )
 
 

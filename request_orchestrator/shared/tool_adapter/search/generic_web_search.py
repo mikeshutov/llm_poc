@@ -9,7 +9,7 @@ from integrations.brave import BraveSearchClient
 from integrations.brave.models import NewsSearchResponse, WebSearchResponse
 from integrations.brave.search_type import SearchType
 from integrations.brave.web_search_params import WebSearchParams
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from request_orchestrator.shared.tool_adapter.search.candidate_mapper import (
     rerank_news_search_response,
     rerank_web_search_response,
@@ -58,12 +58,11 @@ def _coerce_search_type(search_type: str) -> SearchType:
 
 
 def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for item in result.results:
         url = (item.url or "").strip()
         metadata = GenericWebResultMetadata()
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=url or item.title.strip(),
             tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
             title=item.title.strip(),
@@ -72,18 +71,10 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
             image_url=(item.image_url or "").strip(),
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
             entity_type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=item,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
+        evidence.append(hydrated)
     return ToolResult(
         result=result,
         metadata={
@@ -92,18 +83,17 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
             "reranked": result.reranked,
             "search_type": SearchType.WEB_SEARCH.value,
         },
-        evidence_views=evidence_views,
-        hydrated_evidence=hydrated_evidence,
+
+        evidence=evidence,
     )
 
 
 def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for item in result.results:
         url = (item.url or "").strip()
         metadata = GenericNewsSearchMetadata(age=item.age)
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=url or item.title.strip(),
             tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
             title=item.title.strip(),
@@ -112,18 +102,10 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
             image_url=(item.thumbnail_url or "").strip(),
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
             entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=item,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
+        evidence.append(hydrated)
     return ToolResult(
         result=result,
         metadata={
@@ -132,8 +114,8 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
             "reranked": result.reranked,
             "search_type": SearchType.NEWS_SEARCH.value,
         },
-        evidence_views=evidence_views,
-        hydrated_evidence=hydrated_evidence,
+
+        evidence=evidence,
     )
 
 

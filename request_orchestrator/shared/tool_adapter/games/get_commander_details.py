@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from integrations.edhrec import EDHREC_COMMANDER_URL_TEMPLATE, EdhrecClient, EdhrecCommanderPage, EdhrecComboLink
 from integrations.scryfall import ScryfallCard, ScryfallClient, ScryfallClientError
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_GET_COMMANDER_DETAILS
 from tool.constants import TOOL_RESULT_TYPE_DECKS
 
@@ -84,7 +84,7 @@ def _tool_result(result: CommanderDetailsResult) -> ToolResult:
         combo_highlights=list(result.combo_highlights),
         similar_commanders=list(result.similar_commanders),
     )
-    hydrated = HydratedEvidence(
+    hydrated = EvidenceView(
         item_id=result.commander_slug,
         tool_name=TOOL_NAME_GET_COMMANDER_DETAILS,
         title=result.title.strip() or result.commander_name,
@@ -92,20 +92,12 @@ def _tool_result(result: CommanderDetailsResult) -> ToolResult:
         urls=[EvidenceUrl(url=result.page_url, url_type=EvidenceUrlType.WEBSITE)] if result.page_url else [],
         source=TOOL_NAME_GET_COMMANDER_DETAILS,
         entity_type=TOOL_RESULT_TYPE_DECKS,
-        metadata=metadata.model_dump(exclude_none=True),
+        llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[hydrated],
     )
 
 

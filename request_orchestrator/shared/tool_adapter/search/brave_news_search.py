@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from integrations.brave import BraveSearchClient
 from integrations.brave.models import NewsSearchResponse
 from integrations.brave.search_type import SearchType
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from request_orchestrator.shared.tool_adapter.search.candidate_mapper import rerank_news_search_response
 from reranker import DEFAULT_TOP_K
 from tool.constants import TOOL_NAME_NEWS_SEARCH
@@ -25,13 +25,12 @@ class BraveNewsSearchMetadata(BaseModel):
 
 
 def _tool_result(result: NewsSearchResponse) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
 
     for news_item in result.results:
         url = (news_item.url or "").strip()
         metadata = BraveNewsSearchMetadata(age=news_item.age)
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=url or (news_item.title or "").strip(),
             tool_name=TOOL_NAME_NEWS_SEARCH,
             title=(news_item.title or "").strip(),
@@ -40,18 +39,10 @@ def _tool_result(result: NewsSearchResponse) -> ToolResult:
             image_url=(news_item.thumbnail_url or "").strip(),
             source=TOOL_NAME_NEWS_SEARCH,
             entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=news_item,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
+        evidence.append(hydrated)
 
     return ToolResult(
         result=result,
@@ -61,8 +52,8 @@ def _tool_result(result: NewsSearchResponse) -> ToolResult:
             "reranked": result.reranked,
             "search_type": SearchType.NEWS_SEARCH.value,
         },
-        evidence_views=evidence_views,
-        hydrated_evidence=hydrated_evidence,
+
+        evidence=evidence,
     )
 
 

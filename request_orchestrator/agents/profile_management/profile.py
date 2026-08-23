@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from llm.conversation_model_config import DEFAULT_PROFILE_AGENT_PLANNER_MODEL, PROFILE_AGENT_MODEL_SCOPE
+from llm.conversation_model_config import PROFILE_AGENT_MODEL_SCOPE
 from personalization.profile.models import UserProfile
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_CATEGORIES, ATTRIBUTE_QUALIFIERS
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile, PROFILE_MANAGEMENT_AGENT_NAME
@@ -25,9 +25,6 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
         scope=PROFILE_AGENT_MODEL_SCOPE,
         allowed_categories={'user_attributes'},
         extra_tools=extra_tools,
-        default_stage_models={
-            "planner": DEFAULT_PROFILE_AGENT_PLANNER_MODEL,
-        },
         request_analysis_selectable=True,
         max_turns=5,
         request_analysis_goal=(

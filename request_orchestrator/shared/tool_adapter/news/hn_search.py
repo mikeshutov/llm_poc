@@ -8,7 +8,7 @@ from requests.exceptions import RequestException
 
 from integrations.hn_algolia import HnAlgoliaClient
 from integrations.hn_algolia.models import HnHit, HnSearchResult
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from request_orchestrator.shared.tool_adapter.news.candidate_mapper import rerank_hn_search_result
 from request_orchestrator.shared.tool_adapter.news.constants import DEFAULT_HN_SEARCH_LIMIT
 from tool.constants import TOOL_NAME_HN_SEARCH
@@ -38,8 +38,7 @@ def _hit_summary(hit: HnHit) -> str:
 
 
 def _tool_result(result: HnSearchResult) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for hit in result.hits:
         url = (hit.url or "").strip()
         metadata = HnSearchMetadata(
@@ -48,7 +47,7 @@ def _tool_result(result: HnSearchResult) -> ToolResult:
             num_comments=hit.num_comments,
             tags=list(hit.tags or []),
         )
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=hit.object_id,
             tool_name=TOOL_NAME_HN_SEARCH,
             title=(hit.title or hit.url or hit.object_id or "").strip(),
@@ -57,19 +56,11 @@ def _tool_result(result: HnSearchResult) -> ToolResult:
             published_at=(hit.created_at or "").strip(),
             source=TOOL_NAME_HN_SEARCH,
             entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=hit,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(hydrated)
+    return ToolResult(result=result, evidence=evidence)
 
 
 

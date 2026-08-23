@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from time import perf_counter
+from uuid import UUID
 
 from langsmith import traceable
 
@@ -13,10 +14,11 @@ from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evaluator_event_payload import EvaluatorEventPayload
 from request_orchestrator.models.evaluation_result import (
     EVALUATION_STATUS_TERMINAL,
+    EVALUATION_STATUS_SATISFIED,
     EvaluationResult,
     TERMINAL_EVALUATION_STATUSES,
 )
-from request_orchestrator.models.plan_step_ids import namespace_evidence_id
+from request_orchestrator.models.agent_result import ResultStatus
 from request_orchestrator.shared.evidence import (
     build_evidence_bundle_from_tool_results,
     build_evidence_steps_from_tool_results,
@@ -27,23 +29,19 @@ from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resol
 EVALUATOR_KIND = "evaluator"
 
 
-def _dedupe_string_list(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    deduped: list[str] = []
+def _dedupe_evidence_ids(values: list[str]) -> list[UUID]:
+    seen: set[UUID] = set()
+    deduped: list[UUID] = []
     for value in values:
-        normalized = value.strip()
-        if not normalized or normalized in seen:
+        try:
+            evidence_id = UUID(value)
+        except (TypeError, ValueError):
             continue
-        seen.add(normalized)
-        deduped.append(normalized)
+        if evidence_id in seen:
+            continue
+        seen.add(evidence_id)
+        deduped.append(evidence_id)
     return deduped
-
-
-def _namespace_relevant_evidence_ids(agent_name: str, evidence_ids: list[str]) -> list[str]:
-    return [
-        namespace_evidence_id(agent_name, evidence_id)
-        for evidence_id in _dedupe_string_list(evidence_ids)
-    ]
 
 
 @traceable(name="Evaluator Node")
@@ -101,7 +99,7 @@ def run_evaluator(state: AgentState) -> AgentState:
     try:
         evaluation = EvaluationResult.model_validate_json(raw)
     except Exception as exc:
-        state.result = state.result.copy(relevant_evidence_ids=[])
+        state.result = state.result.copy(relevant_evidence_ids=[], result_status=ResultStatus.FAILED)
         state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
         state.node_states.evaluator.goal_reached = True
         create_conversation_event(
@@ -120,15 +118,19 @@ def run_evaluator(state: AgentState) -> AgentState:
         )
         return state
 
-    deduped_relevant_evidence = _namespace_relevant_evidence_ids(
-        state.agent_profile.name,
-        evaluation.relevant_evidence,
-    )
+    deduped_relevant_evidence = _dedupe_evidence_ids(evaluation.relevant_evidence)
     state.result = state.result.copy(relevant_evidence_ids=deduped_relevant_evidence)
     state.node_states.evaluator.evaluation_status = evaluation.status
 
     if evaluation.status in TERMINAL_EVALUATION_STATUSES:
         state.node_states.evaluator.goal_reached = True
+        state.result = state.result.copy(
+            result_status=(
+                ResultStatus.SUCCESS
+                if evaluation.status == EVALUATION_STATUS_SATISFIED
+                else ResultStatus.FAILED
+            )
+        )
     else:
         refined_goal = evaluation.refined_goal.strip()
         if refined_goal:
@@ -145,7 +147,7 @@ def run_evaluator(state: AgentState) -> AgentState:
             agent_name=state.agent_profile.name,
             kind=EVALUATOR_KIND,
             status=evaluation.status,
-            relevant_evidence=deduped_relevant_evidence,
+            relevant_evidence=[str(evidence_id) for evidence_id in deduped_relevant_evidence],
             missing_information=evaluation.missing_information,
             refined_goal=evaluation.refined_goal,
             llm_call=llm_call,

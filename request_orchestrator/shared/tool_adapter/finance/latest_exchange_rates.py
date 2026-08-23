@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
 from integrations.open_er import OpenErClient, ExchangeRates
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_GET_LATEST_EXCHANGE_RATES
 from tool.constants import TOOL_RESULT_TYPE_FINANCE
 
@@ -28,15 +28,14 @@ class LatestExchangeRateMetadata(BaseModel):
 
 
 def _tool_result(result: ExchangeRates) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for currency_code, rate in result.rates.items():
         metadata = LatestExchangeRateMetadata(
             base=result.base_code,
             currency=currency_code,
             rate=rate,
         )
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=currency_code,
             tool_name=TOOL_NAME_GET_LATEST_EXCHANGE_RATES,
             title=f"{result.base_code} to {currency_code}",
@@ -44,19 +43,11 @@ def _tool_result(result: ExchangeRates) -> ToolResult:
             published_at=(result.time_last_update_utc or "").strip(),
             source=TOOL_NAME_GET_LATEST_EXCHANGE_RATES,
             entity_type=TOOL_RESULT_TYPE_FINANCE,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload={"currency": currency_code, "rate": rate, "exchange_rates": result},
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(hydrated)
+    return ToolResult(result=result, evidence=evidence)
 
 
 

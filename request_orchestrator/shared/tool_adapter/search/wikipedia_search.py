@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from integrations.wikipedia import WikipediaClient
 from integrations.wikipedia.models import WikipediaPageSummary, WikipediaSearchResult
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_WIKIPEDIA_SEARCH
 from tool.constants import TOOL_RESULT_TYPE_KNOWLEDGE
 
@@ -42,14 +42,13 @@ class WikipediaSearchMetadata(BaseModel):
 
 
 def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     if not result.results and result.top_result_summary is not None:
         summary_url = result.top_result_summary.url.strip()
         metadata = WikipediaSearchMetadata(
             top_result_summary=result.top_result_summary.model_dump(),
         )
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=summary_url or result.top_result_summary.title.strip(),
             tool_name=TOOL_NAME_WIKIPEDIA_SEARCH,
             title=result.top_result_summary.title.strip(),
@@ -57,20 +56,12 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
             urls=[EvidenceUrl(url=summary_url, url_type=EvidenceUrlType.WEBSITE)] if summary_url else [],
             source=TOOL_NAME_WIKIPEDIA_SEARCH,
             entity_type=TOOL_RESULT_TYPE_KNOWLEDGE,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=result.top_result_summary,
         )
         return ToolResult(
             result=result,
-            evidence_views=[
-                EvidenceView(
-                    item_id=hydrated.item_id,
-                    title=hydrated.title,
-                    summary=hydrated.summary,
-                    metadata=dict(hydrated.metadata),
-                )
-            ],
-            hydrated_evidence=[hydrated],
+            evidence=[hydrated],
         )
 
     for index, item in enumerate(result.results):
@@ -85,7 +76,7 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
                 else None
             ),
         )
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=url or item.title.strip(),
             tool_name=TOOL_NAME_WIKIPEDIA_SEARCH,
             title=item.title.strip(),
@@ -93,19 +84,11 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
             urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
             source=TOOL_NAME_WIKIPEDIA_SEARCH,
             entity_type=TOOL_RESULT_TYPE_KNOWLEDGE,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=item,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(hydrated)
+    return ToolResult(result=result, evidence=evidence)
 
 
 @tool(

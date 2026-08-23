@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-from llm.conversation_model_config import (
-    DEFAULT_MAIN_AGENT_PLANNER_MODEL,
-    DEFAULT_MAIN_AGENT_REQUEST_ANALYSIS_MODEL,
-    DEFAULT_MAIN_AGENT_SYNTHESIS_MODEL,
-    MAIN_AGENT_MODEL_SCOPE,
-)
+from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
 from request_orchestrator.shared.tool_adapter.memories.get_memory_detail import get_memory_detail
 from request_orchestrator.shared.tool_adapter.memories.search_memories import search_memories
@@ -23,9 +18,4 @@ MAIN_AGENT_PROFILE = AgentProfile(
     scope=MAIN_AGENT_MODEL_SCOPE,
     allowed_categories=set(TOOL_CATEGORIES.keys()) - {'games', 'memories', 'user_attributes'},
     extra_tools=READ_ONLY_PROFILE_AND_MEMORY_TOOLS,
-    default_stage_models={
-        "request_analysis": DEFAULT_MAIN_AGENT_REQUEST_ANALYSIS_MODEL,
-        "planner": DEFAULT_MAIN_AGENT_PLANNER_MODEL,
-        "synthesis": DEFAULT_MAIN_AGENT_SYNTHESIS_MODEL,
-    },
 )

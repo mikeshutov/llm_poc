@@ -14,7 +14,7 @@ if "pycountry" not in sys.modules:
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.models.agent_prompt import PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan_step_ids import format_plan_step_id
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
@@ -42,23 +42,15 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
             tool_name="generic_web_search",
             iteration=1,
             result={"secret": "raw payload should not be in planner prompt"},
-            evidence_views=[
+            evidence=[
                 EvidenceView(
-                    item_id="item-1",
-                    title="Example Result",
-                    summary="Short evidence summary.",
-                    metadata={"kind": "web"},
-                )
-            ],
-            hydrated_evidence=[
-                HydratedEvidence(
                     item_id="item-1",
                     tool_name="generic_web_search",
                     title="Example Result",
                     summary="Short evidence summary.",
                     source="generic_web_search",
                     entity_type="web_search_results",
-                    metadata={"kind": "web"},
+                    llm_metadata={"kind": "web"},
                 )
             ],
         )

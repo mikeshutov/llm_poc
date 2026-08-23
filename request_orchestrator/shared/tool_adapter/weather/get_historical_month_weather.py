@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 from integrations.open_meteo import OPEN_METEO_WEBSITE_URL, OpenMeteoClient
 from integrations.open_meteo.models import MonthlyWeatherSummary
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
@@ -21,7 +21,7 @@ class HistoricalMonthWeatherMetadata(BaseModel):
 
 def _tool_result(result: MonthlyWeatherSummary | None) -> ToolResult:
     if result is None:
-        return ToolResult(result=None, evidence_views=[], hydrated_evidence=[])
+        return ToolResult(result=None, evidence=[])
 
     location_name = (result.location_name or "").strip()
     summary = f"{location_name} historical weather for {result.year}-{result.month:02d}."
@@ -33,7 +33,7 @@ def _tool_result(result: MonthlyWeatherSummary | None) -> ToolResult:
         temperature_min=result.temperature_min,
         precipitation_sum=result.precipitation_sum,
     )
-    hydrated = HydratedEvidence(
+    hydrated = EvidenceView(
         item_id=location_name or f"{result.year}-{result.month:02d}",
         tool_name=TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER,
         title="Historical Monthly Weather",
@@ -42,20 +42,12 @@ def _tool_result(result: MonthlyWeatherSummary | None) -> ToolResult:
         location_name=location_name,
         source=TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER,
         entity_type=TOOL_RESULT_TYPE_WEATHER,
-        metadata=metadata.model_dump(exclude_none=True),
+        llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[hydrated],
     )
 
 

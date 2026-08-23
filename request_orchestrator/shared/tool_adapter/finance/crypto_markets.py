@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
 from integrations.coingecko import COINGECKO_WEBSITE_COIN_URL_TEMPLATE, CoinGeckoClient, CoinMarket
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_GET_CRYPTO_MARKETS
 from tool.constants import TOOL_RESULT_TYPE_CRYPTO_MARKET
 
@@ -34,8 +34,7 @@ class CryptoMarketMetadata(BaseModel):
 
 
 def _tool_result(result: list[CoinMarket]) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for market in result:
         url = COINGECKO_WEBSITE_COIN_URL_TEMPLATE.format(coin_id=market.id).strip()
         price_text = f"{market.current_price} {market.symbol.upper()}".strip() if market.current_price is not None else ""
@@ -52,7 +51,7 @@ def _tool_result(result: list[CoinMarket]) -> ToolResult:
             market_cap_rank=market.market_cap_rank,
             price_change_percentage_24h=market.price_change_percentage_24h,
         )
-        hydrated = HydratedEvidence(
+        hydrated = EvidenceView(
             item_id=market.id,
             tool_name=TOOL_NAME_GET_CRYPTO_MARKETS,
             title=market.name,
@@ -61,19 +60,11 @@ def _tool_result(result: list[CoinMarket]) -> ToolResult:
             image_url=(market.image or "").strip(),
             source=TOOL_NAME_GET_CRYPTO_MARKETS,
             entity_type=TOOL_RESULT_TYPE_CRYPTO_MARKET,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=market,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(hydrated)
+    return ToolResult(result=result, evidence=evidence)
 
 
 
