@@ -46,6 +46,7 @@ def ensure_messages_loaded(conversation_repository, conversation_id: str, limit:
                     ROLE_KEY: ROLE_ASSISTANT,
                     CONTENT_KEY: rt.generated_response,
                     "payload": payload,
+                    "assistant_follow_up": rt.assistant_follow_up,
                     "timestamp": ts,
                     "roundtrip_id": str(rt.id),
                     "model": rt.model,
@@ -89,6 +90,7 @@ def append_assistant_response(
         ROLE_KEY: ROLE_ASSISTANT,
         CONTENT_KEY: rendered_response,
         "payload": payload,
+        "assistant_follow_up": answer.next_question,
         "timestamp": now,
         "roundtrip_id": str(roundtrip.id),
         "model": roundtrip.model,
@@ -100,6 +102,7 @@ def append_assistant_response(
             rendered_response,
             payload,
             roundtrip_id=str(roundtrip.id),
+            assistant_follow_up=answer.next_question,
         )
         render_feedback_controls(
             roundtrip_id=roundtrip.id,

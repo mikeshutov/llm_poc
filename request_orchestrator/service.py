@@ -96,6 +96,7 @@ def run_request_orchestrator_for_query(
         payload,
         roundtrip_summary=roundtrip_summary,
         roundtrip_summary_embedding=roundtrip_summary_embedding,
+        assistant_follow_up=orchestrator_result.next_question,
     )
     #TODO: enable this once we improve summarization.
     #threading.Thread(target=summarize_tool_calls, args=(roundtrip.id,), daemon=True).start()

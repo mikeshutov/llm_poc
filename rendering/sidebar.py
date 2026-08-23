@@ -30,6 +30,7 @@ PROFILE_DETAILS_DIALOG_KEY = "profile_details_dialog"
 PROFILE_EDIT_MODE_KEY = "profile_details_edit_mode"
 USER_AGENTS_DIALOG_KEY = "user_agents_dialog"
 USER_AGENTS_CREATE_MODE_KEY = "user_agents_create_mode"
+USER_AGENTS_EDIT_AGENT_ID_KEY = "user_agents_edit_agent_id"
 USER_AGENT_STAGE_TITLES = {
     PLANNER_STAGE: "Planner",
     EVALUATOR_STAGE: "Evaluator",
@@ -76,6 +77,7 @@ def get_profile_details_dialog_request() -> dict[str, str] | None:
 def clear_user_agents_dialog() -> None:
     st.session_state.pop(USER_AGENTS_DIALOG_KEY, None)
     st.session_state.pop(USER_AGENTS_CREATE_MODE_KEY, None)
+    st.session_state.pop(USER_AGENTS_EDIT_AGENT_ID_KEY, None)
 
 
 def request_user_agents_dialog(user_id: str) -> None:
@@ -232,6 +234,20 @@ def _build_user_agent_model_config_inputs(
             )
         )
     return model_configs
+
+
+def _initialize_user_agent_edit_form(user_id: str, user_agent) -> None:
+    widget_prefix = f"user_agent_edit::{user_id}::{user_agent.id}"
+    st.session_state[f"{widget_prefix}::name"] = user_agent.name
+    st.session_state[f"{widget_prefix}::description"] = user_agent.description
+    st.session_state[f"{widget_prefix}::execution_strategy"] = user_agent.execution_strategy.value
+    st.session_state[f"{widget_prefix}::allowed_categories"] = list(user_agent.allowed_categories)
+    st.session_state[f"{widget_prefix}::planner_instruction"] = user_agent.planner_instruction
+    st.session_state[f"{widget_prefix}::planner_rules"] = user_agent.planner_rules
+    st.session_state[f"{widget_prefix}::max_turns"] = user_agent.max_turns
+    for model_config in user_agent.model_configs:
+        st.session_state[f"{widget_prefix}::{model_config.stage}::provider"] = model_config.provider
+        st.session_state[f"{widget_prefix}::{model_config.stage}::model"] = model_config.model
 
 
 def _resolve_config_model(config: ConversationModelConfig, agent: str, stage: str) -> str:
@@ -581,23 +597,40 @@ def render_user_agents_dialog(user_id: str) -> None:
     user_agent_repository = get_user_agent_repo()
     user_agents = user_agent_repository.list_for_user(user_id, is_active=None)
     create_mode = bool(st.session_state.get(USER_AGENTS_CREATE_MODE_KEY, False))
+    edit_agent_id = str(st.session_state.get(USER_AGENTS_EDIT_AGENT_ID_KEY, "")).strip()
+    edited_agent = next((agent for agent in user_agents if str(agent.id) == edit_agent_id), None)
+    if edit_agent_id and edited_agent is None:
+        st.session_state.pop(USER_AGENTS_EDIT_AGENT_ID_KEY, None)
+    form_agent = edited_agent
+    form_visible = create_mode or form_agent is not None
 
     header_col, action_col = st.columns([4.5, 1.5], vertical_alignment="center")
     with header_col:
         st.caption(f"Manage planner-only user agents for `{user_id}`.")
     with action_col:
         if st.button(
-            "Create agent" if not create_mode else "Hide form",
+            "Create agent" if not form_visible else "Hide form",
             key=f"user_agents_toggle_create::{user_id}",
             use_container_width=True,
-            type="primary" if not create_mode else "secondary",
+            type="primary" if not form_visible else "secondary",
         ):
-            st.session_state[USER_AGENTS_CREATE_MODE_KEY] = not create_mode
+            st.session_state[USER_AGENTS_CREATE_MODE_KEY] = not form_visible
+            st.session_state.pop(USER_AGENTS_EDIT_AGENT_ID_KEY, None)
             st.rerun()
 
-    if create_mode:
-        widget_prefix = f"user_agent_create::{user_id}"
-        agent_name = st.text_input("Agent name", key=f"{widget_prefix}::name")
+    if form_visible:
+        is_editing = form_agent is not None
+        widget_prefix = (
+            f"user_agent_edit::{user_id}::{form_agent.id}"
+            if is_editing
+            else f"user_agent_create::{user_id}"
+        )
+        agent_name = st.text_input(
+            "Agent name",
+            key=f"{widget_prefix}::name",
+            disabled=is_editing,
+            help="Agent names cannot be changed after creation.",
+        )
         agent_description = st.text_area(
             "Description",
             placeholder="What this agent is for.",
@@ -643,11 +676,15 @@ def render_user_agents_dialog(user_id: str) -> None:
         )
         save_col, cancel_col = st.columns(2)
         with save_col:
-            create_agent = st.button("Create agent", type="primary", use_container_width=True)
+            save_agent = st.button(
+                "Save changes" if is_editing else "Create agent",
+                type="primary",
+                use_container_width=True,
+            )
         with cancel_col:
-            cancel_create = st.button("Cancel", use_container_width=True)
+            cancel_form = st.button("Cancel", use_container_width=True)
 
-        if create_agent:
+        if save_agent:
             user_agent_repository.upsert(
                 user_id=user_id,
                 name=agent_name,
@@ -657,14 +694,20 @@ def render_user_agents_dialog(user_id: str) -> None:
                 planner_instruction=planner_instruction,
                 planner_rules=planner_rules.strip(),
                 max_turns=int(max_turns),
-                is_active=True,
+                is_active=form_agent.is_active if form_agent is not None else True,
                 model_configs=model_configs,
-                metadata={"source": "streamlit"},
+                metadata=(
+                    dict(form_agent.metadata)
+                    if form_agent is not None
+                    else {"source": "streamlit"}
+                ),
             )
             st.session_state[USER_AGENTS_CREATE_MODE_KEY] = False
+            st.session_state.pop(USER_AGENTS_EDIT_AGENT_ID_KEY, None)
             st.rerun()
-        if cancel_create:
+        if cancel_form:
             st.session_state[USER_AGENTS_CREATE_MODE_KEY] = False
+            st.session_state.pop(USER_AGENTS_EDIT_AGENT_ID_KEY, None)
             st.rerun()
 
     if not user_agents:
@@ -672,11 +715,21 @@ def render_user_agents_dialog(user_id: str) -> None:
     else:
         for user_agent in user_agents:
             with st.container(border=True):
-                title_col, status_col, action_col = st.columns([4.5, 1.5, 1.5], vertical_alignment="center")
+                title_col, status_col, edit_col, action_col = st.columns([3.5, 1.2, 1.3, 1.5], vertical_alignment="center")
                 with title_col:
                     st.markdown(f"**{user_agent.name}**")
                 with status_col:
                     st.caption("Active" if user_agent.is_active else "Disabled")
+                with edit_col:
+                    if st.button(
+                        "Edit",
+                        key=f"edit_user_agent::{user_id}::{user_agent.id}",
+                        use_container_width=True,
+                    ):
+                        _initialize_user_agent_edit_form(user_id, user_agent)
+                        st.session_state[USER_AGENTS_CREATE_MODE_KEY] = False
+                        st.session_state[USER_AGENTS_EDIT_AGENT_ID_KEY] = str(user_agent.id)
+                        st.rerun()
                 with action_col:
                     if user_agent.is_active:
                         if st.button(

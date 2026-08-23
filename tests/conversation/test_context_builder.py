@@ -87,8 +87,26 @@ class FakeConversationRepository:
                 metadata={},
                 model=None,
                 feedback_id=None,
+                assistant_follow_up='Would you like more options?',
             ),
         ]
+
+    def get_latest_completed_roundtrip(self, conversation_id):
+        return ConversationRoundtrip(
+            id=uuid4(),
+            conversation_id=conversation_id,
+            message_index=8,
+            user_prompt='user eight',
+            generated_response='assistant eight',
+            roundtrip_summary='summary eight',
+            roundtrip_summary_embedding=None,
+            response_payload={},
+            parsed_query={},
+            created_at='2026-08-05T00:00:00Z',
+            metadata={},
+            model=None,
+            assistant_follow_up='Would you like more options?',
+        )
 
 
 def test_build_roundtrip_context_requests_latest_unsummarized_roundtrips() -> None:
@@ -108,6 +126,9 @@ def test_build_roundtrip_context_requests_latest_unsummarized_roundtrips() -> No
     ]
     assert [roundtrip.message_index for roundtrip in context.recent_roundtrips] == [6, 7, 8]
     assert [roundtrip.user_prompt for roundtrip in context.recent_roundtrips] == ['user six', 'user seven', 'user eight']
+    assert context.recent_roundtrips[-1].assistant_follow_up == 'Would you like more options?'
+    assert context.previous_user_request == 'user eight'
+    assert context.latest_assistant_follow_up == 'Would you like more options?'
 
 
 def test_build_roundtrip_context_uses_completed_roundtrips_from_repository() -> None:
@@ -174,7 +195,14 @@ def test_build_conversation_context_json_prunes_empty_fields() -> None:
         conversation_summary='',
         latest_conversation_summary='',
         tool_summary='',
-        recent_roundtrips=[RecentRoundtrip(message_index=1, user_prompt='hello', roundtrip_summary='')],
+        recent_roundtrips=[
+            RecentRoundtrip(
+                message_index=1,
+                user_prompt='hello',
+                roundtrip_summary='',
+                assistant_follow_up='Would you like another option?',
+            )
+        ],
         recent_roundtrip_tool_summaries=[],
     )
 
@@ -184,3 +212,4 @@ def test_build_conversation_context_json_prunes_empty_fields() -> None:
     assert 'tool_summary' not in rendered
     assert 'roundtrip_summary' not in rendered
     assert 'hello' in rendered
+    assert 'Would you like another option?' in rendered

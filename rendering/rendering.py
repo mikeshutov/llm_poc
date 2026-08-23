@@ -357,9 +357,15 @@ def _render_result_block(
     return block_cards
 
 
-def render_assistant_content(content: str, payload: dict | None, *, roundtrip_id: str | None = None) -> None:
-    next_question = None
-    if isinstance(payload, dict):
+def render_assistant_content(
+    content: str,
+    payload: dict | None,
+    *,
+    roundtrip_id: str | None = None,
+    assistant_follow_up: str | None = None,
+) -> None:
+    next_question = assistant_follow_up
+    if next_question is None and isinstance(payload, dict):
         next_question = payload.get("next_question")
     hydrated_evidence_by_id = _get_hydrated_evidence_by_id(payload)
     result_blocks = get_renderable_result_blocks(content, payload)
@@ -427,6 +433,7 @@ def render_message(msg: dict) -> None:
                     content,
                     msg.get("payload"),
                     roundtrip_id=msg.get("roundtrip_id"),
+                    assistant_follow_up=msg.get("assistant_follow_up"),
                 )
                 render_feedback_controls(
                     roundtrip_id=msg.get("roundtrip_id"),
