@@ -21,12 +21,16 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
         after_message_index=after_index,
         newest_first=True,
     )
+    latest_completed_roundtrip = conversation_repository.get_latest_completed_roundtrip(
+        resolved_conversation_id,
+    )
 
     recent_roundtrips = [
         RecentRoundtrip(
             message_index=rt.message_index,
             user_prompt=rt.user_prompt or "",
             roundtrip_summary=rt.roundtrip_summary or "",
+            assistant_follow_up=rt.assistant_follow_up or "",
         )
         for rt in conversation_roundtrips
         if rt.user_prompt or rt.roundtrip_summary
@@ -51,4 +55,14 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
         tool_summary=latest_summary.tool_summary if latest_summary else "",
         recent_roundtrips=recent_roundtrips,
         recent_roundtrip_tool_summaries=recent_roundtrip_tool_summaries,
+        previous_user_request=(
+            latest_completed_roundtrip.user_prompt
+            if latest_completed_roundtrip is not None
+            else ""
+        ),
+        latest_assistant_follow_up=(
+            latest_completed_roundtrip.assistant_follow_up
+            if latest_completed_roundtrip is not None
+            else ""
+        ),
     )

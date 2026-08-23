@@ -3,17 +3,22 @@ from __future__ import annotations
 from typing import Any
 
 import psycopg
+from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from db.connection import get_connection
+from llm.clients.embeddings import embed_text
 from request_orchestrator.agent_runner.models.agent_profile import AgentExecutionStrategy
 from request_orchestrator.agents.models.user_agent import UserAgent, UserAgentModelConfig
+
+MIN_AGENT_SIMILARITY = 0.35
 
 
 class UserAgentRepository:
     def __init__(self, conn: psycopg.Connection | None = None):
         self._conn = conn or get_connection()
+        register_vector(self._conn)
 
     def _normalize_row(self, row: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(row)
@@ -95,6 +100,58 @@ class UserAgentRepository:
             for row in rows
         ]
 
+    def list_relevant_for_user(
+        self,
+        user_id: str,
+        *,
+        query_embedding: list[float],
+    ) -> list[UserAgent]:
+        resolved_user_id = user_id.strip()
+        if not resolved_user_id:
+            return []
+
+        sql = """
+            SELECT
+                id,
+                user_id,
+                name,
+                description,
+                execution_strategy,
+                allowed_categories,
+                planner_instruction,
+                planner_rules,
+                max_turns,
+                is_active,
+                metadata,
+                created_at,
+                updated_at
+            FROM user_agent
+            WHERE user_id = %s
+              AND is_active = TRUE
+              AND description_embedding IS NOT NULL
+              AND description_embedding <=> (%s)::vector <= 1 - %s
+            ORDER BY description_embedding <=> (%s)::vector ASC, name ASC, created_at ASC
+        """
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                sql,
+                (
+                    resolved_user_id,
+                    query_embedding,
+                    MIN_AGENT_SIMILARITY,
+                    query_embedding,
+                ),
+            )
+            rows = cur.fetchall()
+        model_configs_by_agent_id = self._list_model_configs_by_agent_id([row["id"] for row in rows])
+        return [
+            UserAgent(
+                **self._normalize_row(row),
+                model_configs=model_configs_by_agent_id.get(row["id"], []),
+            )
+            for row in rows
+        ]
+
     def upsert(
         self,
         *,
@@ -120,6 +177,8 @@ class UserAgentRepository:
         if not resolved_planner_instruction:
             raise ValueError("planner_instruction is required")
         resolved_execution_strategy = AgentExecutionStrategy(str(execution_strategy).strip())
+        resolved_description = description.strip()
+        description_embedding = embed_text(resolved_description) if resolved_description else None
         resolved_model_configs = [] if model_configs is None else [
             UserAgentModelConfig(
                 stage=config.stage.strip(),
@@ -143,6 +202,7 @@ class UserAgentRepository:
                     user_id,
                     name,
                     description,
+                    description_embedding,
                     execution_strategy,
                     allowed_categories,
                     planner_instruction,
@@ -151,10 +211,11 @@ class UserAgentRepository:
                     is_active,
                     metadata
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (user_id, name)
                 DO UPDATE SET
                     description = EXCLUDED.description,
+                    description_embedding = EXCLUDED.description_embedding,
                     execution_strategy = EXCLUDED.execution_strategy,
                     allowed_categories = EXCLUDED.allowed_categories,
                     planner_instruction = EXCLUDED.planner_instruction,
@@ -168,6 +229,7 @@ class UserAgentRepository:
                     user_id,
                     name,
                     description,
+                    description_embedding,
                     execution_strategy,
                     allowed_categories,
                     planner_instruction,
@@ -181,7 +243,8 @@ class UserAgentRepository:
                 (
                     resolved_user_id,
                     resolved_name,
-                    description,
+                    resolved_description,
+                    description_embedding,
                     resolved_execution_strategy.value,
                     allowed_categories or [],
                     resolved_planner_instruction,

@@ -29,6 +29,7 @@ class RecentRoundtrip(BaseModel):
     message_index: int
     user_prompt: str = ""
     roundtrip_summary: str = ""
+    assistant_follow_up: str = ""
 
 
 class RecentRoundtripToolSummary(BaseModel):
@@ -42,6 +43,8 @@ class ConversationContext(BaseModel):
     tool_summary: str = ""
     recent_roundtrips: list[RecentRoundtrip] = Field(default_factory=list)
     recent_roundtrip_tool_summaries: list[RecentRoundtripToolSummary] = Field(default_factory=list)
+    previous_user_request: str = ""
+    latest_assistant_follow_up: str = ""
 
 
 @dataclass(frozen=False)
@@ -71,6 +74,7 @@ class ConversationRoundtrip:
     metadata: dict[str, Any]
     model: Optional[str] = None
     feedback_id: Optional[UUID] = None
+    assistant_follow_up: str = ""
 
 
 @dataclass(frozen=False)

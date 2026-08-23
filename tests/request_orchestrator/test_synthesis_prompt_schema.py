@@ -14,9 +14,9 @@ from request_orchestrator.shared.synthesis.prompts.synthesis_rules import BASE_R
 
 
 def test_synthesis_schema_forbids_displaying_evidence_ids_in_content() -> None:
-    assert "Use `evidence_ids` only as structured attribution metadata." in SYNTHESIS_SCHEMA
-    assert "Do not mention evidence IDs" in SYNTHESIS_SCHEMA
-    assert "P1E1R1" in SYNTHESIS_SCHEMA
+    assert "never expose internal IDs in content" in SYNTHESIS_SCHEMA
+    assert "including its agent prefix" in SYNTHESIS_SCHEMA
+    assert '"main_agent:P1E1R1"' in SYNTHESIS_SCHEMA
 
 
 def test_synthesis_rules_do_not_include_legacy_file_path_rendering_rule() -> None:

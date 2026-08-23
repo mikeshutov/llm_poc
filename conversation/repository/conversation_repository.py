@@ -64,7 +64,7 @@ class ConversationRepository:
                 SELECT %s, COALESCE(MAX(message_index), -1) + 1, %s, '', %s, (%s)::vector, '{}'::jsonb, '{}'::jsonb, %s, %s
                 FROM conversation_roundtrip
                 WHERE conversation_id = %s
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model, assistant_follow_up
                 """,
                 (conversation_id, user_prompt, roundtrip_summary, roundtrip_summary_embedding, model, Jsonb(metadata), conversation_id),
             )
@@ -79,6 +79,7 @@ class ConversationRepository:
         payload: dict[str, Any],
         roundtrip_summary: Optional[str] = None,
         roundtrip_summary_embedding: Optional[list[float]] = None,
+        assistant_follow_up: str | None = None,
     ) -> ConversationRoundtrip:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -87,12 +88,13 @@ class ConversationRepository:
                 SET generated_response = %s,
                     roundtrip_summary = COALESCE(%s, roundtrip_summary),
                     roundtrip_summary_embedding = COALESCE((%s)::vector, roundtrip_summary_embedding),
+                    assistant_follow_up = COALESCE(%s, assistant_follow_up),
                     response_payload = %s,
                     updated_at = now()
                 WHERE id = %s
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model, assistant_follow_up
                 """,
-                (response, roundtrip_summary, roundtrip_summary_embedding, Jsonb(payload), roundtrip_id),
+                (response, roundtrip_summary, roundtrip_summary_embedding, assistant_follow_up, Jsonb(payload), roundtrip_id),
             )
             row = cur.fetchone()
             assert row is not None
@@ -113,10 +115,11 @@ class ConversationRepository:
         metadata = metadata or {}
         response_payload = response_payload or {}
         parsed_query = parsed_query or {}
+        assistant_follow_up = str(response_payload.get("next_question") or "").strip()
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO conversation_roundtrip (conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, model, metadata)
+                INSERT INTO conversation_roundtrip (conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, assistant_follow_up, response_payload, parsed_query, model, metadata)
                 SELECT
                     %s,
                     COALESCE(MAX(message_index), -1) + 1,
@@ -131,9 +134,9 @@ class ConversationRepository:
                     %s
                 FROM conversation_roundtrip
                 WHERE conversation_id = %s
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model, assistant_follow_up
                 """,
-                (conversation_id, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, Jsonb(response_payload), Jsonb(parsed_query), model, Jsonb(metadata), conversation_id),
+                (conversation_id, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, assistant_follow_up, Jsonb(response_payload), Jsonb(parsed_query), model, Jsonb(metadata), conversation_id),
             )
             row = cur.fetchone()
             assert row is not None
@@ -527,6 +530,7 @@ class ConversationRepository:
                     rt.generated_response,
                     rt.roundtrip_summary,
                     rt.roundtrip_summary_embedding,
+                    rt.assistant_follow_up,
                     rt.response_payload,
                     rt.parsed_query,
                     rt.created_at,
@@ -554,6 +558,7 @@ class ConversationRepository:
                     rt.generated_response,
                     rt.roundtrip_summary,
                     rt.roundtrip_summary_embedding,
+                    rt.assistant_follow_up,
                     rt.response_payload,
                     rt.parsed_query,
                     rt.created_at,
@@ -567,6 +572,35 @@ class ConversationRepository:
                   AND (CAST(%s AS text) IS NULL OR c.user_id = %s)
                 """,
                 (roundtrip_id, user_id, user_id),
+            )
+            row = cur.fetchone()
+            return ConversationRoundtrip(**row) if row else None
+
+    def get_latest_completed_roundtrip(self, conversation_id: UUID) -> Optional[ConversationRoundtrip]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    conversation_id,
+                    message_index,
+                    user_prompt,
+                    generated_response,
+                    roundtrip_summary,
+                    roundtrip_summary_embedding,
+                    assistant_follow_up,
+                    response_payload,
+                    parsed_query,
+                    created_at,
+                    metadata,
+                    model
+                FROM conversation_roundtrip
+                WHERE conversation_id = %s
+                  AND BTRIM(COALESCE(generated_response, '')) <> ''
+                ORDER BY message_index DESC
+                LIMIT 1
+                """,
+                (conversation_id,),
             )
             row = cur.fetchone()
             return ConversationRoundtrip(**row) if row else None
@@ -604,6 +638,7 @@ class ConversationRepository:
                         rt.generated_response,
                         rt.roundtrip_summary,
                         rt.roundtrip_summary_embedding,
+                        rt.assistant_follow_up,
                         rt.response_payload,
                         rt.parsed_query,
                         rt.created_at,
@@ -630,6 +665,7 @@ class ConversationRepository:
                         rt.generated_response,
                         rt.roundtrip_summary,
                         rt.roundtrip_summary_embedding,
+                        rt.assistant_follow_up,
                         rt.response_payload,
                         rt.parsed_query,
                         rt.created_at,
@@ -668,6 +704,7 @@ class ConversationRepository:
                     rt.generated_response,
                     rt.roundtrip_summary,
                     rt.roundtrip_summary_embedding,
+                    rt.assistant_follow_up,
                     rt.response_payload,
                     rt.parsed_query,
                     rt.created_at,
@@ -743,6 +780,7 @@ class ConversationRepository:
                     generated_response,
                     roundtrip_summary,
                     roundtrip_summary_embedding,
+                    assistant_follow_up,
                     response_payload,
                     parsed_query,
                     created_at,
@@ -750,8 +788,8 @@ class ConversationRepository:
                     model,
                     metadata
                 )
-                VALUES (%s, %s, %s, %s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s)
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model
+                VALUES (%s, %s, %s, %s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model, assistant_follow_up
                 """,
                 (
                     conversation_id,
@@ -760,6 +798,7 @@ class ConversationRepository:
                     source_roundtrip.generated_response,
                     source_roundtrip.roundtrip_summary,
                     source_roundtrip.roundtrip_summary_embedding,
+                    source_roundtrip.assistant_follow_up,
                     Jsonb(source_roundtrip.response_payload or {}),
                     Jsonb(source_roundtrip.parsed_query or {}),
                     source_roundtrip.created_at,

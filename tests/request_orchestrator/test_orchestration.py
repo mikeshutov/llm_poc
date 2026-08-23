@@ -94,6 +94,9 @@ class FakeUserAgentRepository:
             return list(self.agents)
         return [agent for agent in self.agents if agent.is_active == is_active]
 
+    def list_relevant_for_user(self, user_id: str, *, query_embedding: list[float]) -> list[UserAgent]:
+        return self.list_for_user(user_id)
+
 
 def _agent_profiles_for(user_profile: UserProfile) -> list:
     return [
@@ -338,6 +341,9 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         with patch(
             "request_orchestrator.shared.agents.load_user_agents.get_user_agent_repo",
             return_value=FakeUserAgentRepository([custom_agent]),
+        ), patch(
+            "request_orchestrator.shared.agents.load_user_agents.embed_text",
+            return_value=[0.1] * 1536,
         ):
             from request_orchestrator.shared.agents import load_user_agents
 
