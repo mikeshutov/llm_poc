@@ -90,7 +90,7 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
     evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
     evidence_steps = build_evidence_steps_from_tool_results(
         tool_results,
-        evidence_bundle.evidence_views_by_step_id,
+        evidence_bundle.evidence_views_by_tool_call_id,
     )
 
     compiled_rules = build_planner_rules(context.rules)

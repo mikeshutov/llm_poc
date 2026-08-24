@@ -6,7 +6,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from files.repository.file_repository import FileRepository
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from request_orchestrator.shared.tool_adapter.files.result_models import GetFileByIdResult
 from tool.constants import TOOL_NAME_GET_FILE_BY_ID
@@ -27,27 +27,19 @@ def _tool_result(result: GetFileByIdResult) -> ToolResult:
         file_type=result.file_type,
         uploaded_at=result.uploaded_at,
     )
-    hydrated = HydratedEvidence(
+    evidence_view = EvidenceView(
         item_id=(result.file_id or "").strip(),
         tool_name=TOOL_NAME_GET_FILE_BY_ID,
         title=(result.file_name or "").strip() or "File",
         summary=(result.first_chunk or "").strip() or "Retrieved file metadata and preview.",
         source=TOOL_NAME_GET_FILE_BY_ID,
         entity_type=TOOL_RESULT_TYPE_FILE,
-        metadata=metadata.model_dump(exclude_none=True),
+        llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

@@ -5,6 +5,8 @@ from typing import Any
 
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
 from request_orchestrator.models.agent_inputs import AgentInputs
+from uuid import UUID
+
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_state import AgentState
@@ -74,17 +76,23 @@ class MainState:
             goals_by_agent[normalized_agent_name] = goal.model_copy(deep=True)
         return goals_by_agent
 
-    def gather_relevant_evidence_ids(self) -> list[str]:
-        relevant_evidence_ids: list[str] = []
-        seen_evidence_ids: set[str] = set()
+    def gather_relevant_evidence_ids(self) -> list[UUID]:
+        relevant_evidence_ids: list[UUID] = []
+        seen_evidence_ids: set[UUID] = set()
         for agent_state in self.agent_states.values():
             for evidence_id in agent_state.result.relevant_evidence_ids:
-                normalized = evidence_id.strip()
-                if not normalized or normalized in seen_evidence_ids:
+                if evidence_id in seen_evidence_ids:
                     continue
-                seen_evidence_ids.add(normalized)
-                relevant_evidence_ids.append(normalized)
+                seen_evidence_ids.add(evidence_id)
+                relevant_evidence_ids.append(evidence_id)
         return relevant_evidence_ids
+
+    def gather_tool_call_ids(self) -> list[UUID]:
+        return [
+            tool_call_id
+            for agent_state in self.agent_states.values()
+            for tool_call_id in agent_state.result.tool_call_ids
+        ]
 
     def gather_tool_results(self) -> list[ToolResult]:
         gathered: list[ToolResult] = []

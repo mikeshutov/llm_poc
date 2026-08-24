@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from langgraph.graph import END, StateGraph
 
 from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.validator import validator
+from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.result_validator import execution_result_router, run_execution_result_validator
 from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.evaluator import evaluator_router
@@ -25,6 +26,7 @@ class PlannerExecutorEvaluatorStratagy:
         builder.add_node(PLAN_EDGE, run_planner)
         builder.add_node(EVALUATE_EDGE, run_evaluator)
         builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
+        builder.add_node("validate_execution_result", run_execution_result_validator)
         builder.set_entry_point(PLAN_EDGE)
 
         builder.add_conditional_edges(
@@ -45,9 +47,10 @@ class PlannerExecutorEvaluatorStratagy:
             },
         )
 
+        builder.add_edge(EXECUTE_TOOLS_EDGE, "validate_execution_result")
         builder.add_conditional_edges(
-            EXECUTE_TOOLS_EDGE,
-            self.execute_router,
+            "validate_execution_result",
+            execution_result_router,
             {
                 PLAN_EDGE: PLAN_EDGE,
                 EVALUATE_EDGE: EVALUATE_EDGE,

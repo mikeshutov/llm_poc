@@ -7,7 +7,7 @@ from request_orchestrator.models.evaluation_result import (
 EVALUATOR_SCHEMA = f"""Return a single JSON object with this shape:
 {{
   "status": "{EVALUATION_STATUS_RETRYABLE}",
-  "relevant_evidence": ["P1E1R1", "P1E3R1"],
+  "relevant_evidence": ["2f70c491-bcd8-5e2e-a520-1e0d3e8768c2"],
   "missing_information": [
     "Need current pricing for the top two products",
     "Need shipping availability in Canada"

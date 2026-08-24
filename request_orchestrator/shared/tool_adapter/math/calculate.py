@@ -5,13 +5,13 @@ import math
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_CALCULATE
 from tool.constants import TOOL_RESULT_TYPE_CALCULATION
 
 
 def _tool_result(result: str) -> ToolResult:
-    hydrated = HydratedEvidence(
+    evidence_view = EvidenceView(
         item_id=result,
         tool_name=TOOL_NAME_CALCULATE,
         title="Calculation Result",
@@ -22,8 +22,7 @@ def _tool_result(result: str) -> ToolResult:
     )
     return ToolResult(
         result=result,
-        evidence_views=[EvidenceView(item_id=hydrated.item_id, title=hydrated.title, summary=hydrated.summary, metadata={})],
-        hydrated_evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

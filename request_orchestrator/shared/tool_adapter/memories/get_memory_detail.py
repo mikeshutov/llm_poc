@@ -7,7 +7,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from conversation.repository.repo_factory import get_conversation_repo
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from tool.constants import TOOL_NAME_GET_MEMORY_DETAIL
 from tool.constants import TOOL_RESULT_TYPE_MEMORY_DETAIL
@@ -55,8 +55,8 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
     except ValueError:
         return ToolResult(
             result=GetMemoryDetailResult(error=f"Invalid roundtrip_id '{roundtrip_id}'."),
-            evidence_views=[],
-            hydrated_evidence=[],
+
+            evidence=[],
         )
 
     roundtrip = get_conversation_repo().get_roundtrip_for_user(
@@ -66,8 +66,8 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
     if roundtrip is None:
         return ToolResult(
             result=GetMemoryDetailResult(error=f"No memory found with roundtrip_id '{roundtrip_id}'."),
-            evidence_views=[],
-            hydrated_evidence=[],
+
+            evidence=[],
         )
 
     roundtrip_summary = (roundtrip.roundtrip_summary or "").strip()
@@ -98,7 +98,7 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
             "model": result.model,
         }
     )
-    hydrated = HydratedEvidence(
+    evidence_view = EvidenceView(
         item_id=result.roundtrip_id,
         tool_name=TOOL_NAME_GET_MEMORY_DETAIL,
         title=result.title.strip() or "Memory Detail",
@@ -106,18 +106,10 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         published_at=result.created_at.strip(),
         source=TOOL_NAME_GET_MEMORY_DETAIL,
         entity_type=TOOL_RESULT_TYPE_MEMORY_DETAIL,
-        metadata=metadata,
+        llm_metadata=metadata,
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[evidence_view],
     )

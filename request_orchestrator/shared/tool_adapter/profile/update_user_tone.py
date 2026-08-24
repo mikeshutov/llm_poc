@@ -13,7 +13,7 @@ from personalization.tone.models import (
     ToneTechnicalDepth,
     ToneVerbosity,
 )
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from tool.constants import TOOL_NAME_UPDATE_USER_TONE
 from tool.constants import TOOL_RESULT_TYPE_TONE
@@ -96,27 +96,19 @@ def _tool_result(result: UpdateUserToneResult) -> ToolResult:
         tone=tone_metadata,
     )
     summary = result.reason.strip() or f"Tone preferences {status_text}."
-    hydrated = HydratedEvidence(
+    evidence_view = EvidenceView(
         item_id=(result.user_id or "").strip() or "current-user",
         tool_name=TOOL_NAME_UPDATE_USER_TONE,
         title="User Tone Preferences",
         summary=summary,
         source=TOOL_NAME_UPDATE_USER_TONE,
         entity_type=TOOL_RESULT_TYPE_TONE,
-        metadata=metadata.model_dump(exclude_none=True),
+        llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

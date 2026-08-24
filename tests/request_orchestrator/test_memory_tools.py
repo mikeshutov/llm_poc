@@ -65,10 +65,10 @@ def test_get_memory_detail_returns_typed_result() -> None:
         "parsed_query": {"topic": "returns"},
         "metadata": {"source": "memory"},
     }
-    assert result.evidence_views[0].item_id == str(fake_repo.roundtrip.id)
-    assert result.evidence_views[0].title == "Memory detail for message 7"
-    assert result.evidence_views[0].summary == "The conversation decided on a 30-day return policy."
-    assert result.hydrated_evidence[0].item_id == str(fake_repo.roundtrip.id)
+    assert result.evidence[0].item_id == str(fake_repo.roundtrip.id)
+    assert result.evidence[0].title == "Memory detail for message 7"
+    assert result.evidence[0].summary == "The conversation decided on a 30-day return policy."
+    assert result.evidence[0].item_id == str(fake_repo.roundtrip.id)
 
 
 def test_get_memory_detail_rejects_invalid_roundtrip_id() -> None:
@@ -91,5 +91,5 @@ def test_get_memory_detail_rejects_invalid_roundtrip_id() -> None:
         "parsed_query": {},
         "metadata": {},
     }
-    assert result.evidence_views == []
-    assert result.hydrated_evidence == []
+    assert result.evidence == []
+    assert result.evidence == []

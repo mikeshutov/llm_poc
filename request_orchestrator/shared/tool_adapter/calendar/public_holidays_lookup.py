@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 from integrations.nager import NagerDateClient
 from integrations.nager.models import PublicHoliday
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_PUBLIC_HOLIDAYS_LOOKUP
 from tool.constants import TOOL_RESULT_TYPE_CALENDAR
 
@@ -38,8 +38,7 @@ class PublicHolidayMetadata(BaseModel):
 
 
 def _tool_result(result: PublicHolidaysResult) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for holiday in result.holidays:
         metadata = PublicHolidayMetadata(
             date=holiday.date,
@@ -48,7 +47,7 @@ def _tool_result(result: PublicHolidaysResult) -> ToolResult:
             launch_year=holiday.launch_year,
             types=list(holiday.types),
         )
-        hydrated = HydratedEvidence(
+        evidence_view = EvidenceView(
             item_id=f"{result.country_code}:{holiday.date}:{holiday.name}",
             tool_name=TOOL_NAME_PUBLIC_HOLIDAYS_LOOKUP,
             title=(holiday.name or "").strip() or "Public Holiday",
@@ -56,19 +55,11 @@ def _tool_result(result: PublicHolidaysResult) -> ToolResult:
             published_at=str(holiday.date),
             source=TOOL_NAME_PUBLIC_HOLIDAYS_LOOKUP,
             entity_type=TOOL_RESULT_TYPE_CALENDAR,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=holiday,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(evidence_view)
+    return ToolResult(result=result, evidence=evidence)
 
 
 @tool(

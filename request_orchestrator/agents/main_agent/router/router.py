@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.constants import EVALUATE_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
-from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
 
 
 def router(state: AgentState) -> str:
@@ -15,16 +14,12 @@ def router(state: AgentState) -> str:
         return SYNTHESIZE_EDGE
 
     current_result_step_ids = {
-        namespace_step_id(
-            state.agent_profile.name,
-            format_plan_step_id(planner_state.plan_count, step.id),
-        )
-        for step in planner_state.plan.steps
+        step.db_id for step in planner_state.plan.steps
     } if planner_state.plan is not None else set()
     current_results = [
         tool_result
-        for tool_result in state.result.tool_results
-        if tool_result.step_id in current_result_step_ids
+        for tool_result in state.gather_tool_results()
+        if tool_result.plan_step_id in current_result_step_ids
     ]
     if current_results:
         # The evaluator owns replanning for this strategy. Do not let a planner

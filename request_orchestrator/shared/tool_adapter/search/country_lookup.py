@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.rest_countries import RestCountriesClient, Country
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_COUNTRY_LOOKUP
 from tool.constants import TOOL_RESULT_TYPE_COUNTRY
 
@@ -30,8 +30,7 @@ class CountryLookupMetadata(BaseModel):
 
 
 def _tool_result(result: list[Country]) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for country in result:
         capital_text = ", ".join(country.capital)
         summary_parts = [part for part in (capital_text, country.region, country.subregion) if part]
@@ -46,26 +45,18 @@ def _tool_result(result: list[Country]) -> ToolResult:
             languages=dict(country.languages),
             flag=country.flag,
         )
-        hydrated = HydratedEvidence(
+        evidence_view = EvidenceView(
             item_id=country.common_name,
             tool_name=TOOL_NAME_COUNTRY_LOOKUP,
             title=country.common_name,
             summary=summary,
             source=TOOL_NAME_COUNTRY_LOOKUP,
             entity_type=TOOL_RESULT_TYPE_COUNTRY,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=country,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(evidence_view)
+    return ToolResult(result=result, evidence=evidence)
 
 
 

@@ -19,7 +19,7 @@ from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_state import AgentState
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
 from request_orchestrator.shared.evidence import build_evidence_bundle_from_tool_results
@@ -165,8 +165,7 @@ def test_run_executor_namespaces_second_plan_evidence_under_p2() -> None:
         "request_orchestrator.shared.executor.executor.call_tool",
         return_value=ToolResult(
             result={"ok": True},
-            evidence_views=[EvidenceView(item_id="result-1", title="Result", summary="Second plan result.")],
-            hydrated_evidence=[HydratedEvidence(item_id="result-1", title="Result", summary="Second plan result.")],
+            evidence=[EvidenceView(item_id="result-1", title="Result", summary="Second plan result.")],
         ),
     ):
         run_executor(state)
@@ -176,7 +175,7 @@ def test_run_executor_namespaces_second_plan_evidence_under_p2() -> None:
 
     assert tool_result.iteration == 2
     assert list(evidence_bundle.evidence_views_by_step_id) == ["test_agent:P2E1"]
-    assert list(evidence_bundle.hydrated_evidence_by_id) == ["test_agent:P2E1R1"]
+    assert list(evidence_bundle.hydrated_evidence_by_id) == ["66e3ca0d-a275-5857-8c08-134cb3f93abd"]
 
 
 def test_run_executor_leaves_unresolved_refs_unchanged_with_parallel_execution() -> None:

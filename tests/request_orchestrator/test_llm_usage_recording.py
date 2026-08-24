@@ -29,7 +29,7 @@ from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.models.request_analysis import RequestAnalysis, RequestAnalysisGoal
 from request_orchestrator.models.main_state import MainState
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
@@ -437,7 +437,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["P1E1R1"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.6-terra'),
+        llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["25a4bcc1-2b18-5a36-940c-29c535bae654"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.6-terra'),
         agent_profile=MAIN_AGENT_PROFILE,
     )
     _set_agent_tool_results(
@@ -474,7 +474,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     payload = _latest_event_payload(repo, event_type='evaluator', agent_name='main_agent')
     assert payload['data']['llm_usage']['model'] == 'gpt-5.6-terra'
     assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
-    assert payload['data']['relevant_evidence'] == ['main_agent:P1E1R1']
+    assert payload['data']['relevant_evidence'] == ['25a4bcc1-2b18-5a36-940c-29c535bae654']
     assert payload['data']['missing_information'] == [
         'Need current pricing for the top two products',
         'Need shipping availability in Canada']
@@ -513,7 +513,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["P1E2R1"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.6-terra'),
+        llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["e5cf297f-8f55-55a7-b1b2-7fb389482919"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.6-terra'),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
     main_agent_state = state.agent_states['main_agent']
@@ -527,16 +527,8 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
         results={
             'P1E1': ToolResult(
                 result={'value': 'a'},
-                evidence_views=[
+                evidence=[
                     EvidenceView(
-                        evidence_id='',
-                        item_id='item-a',
-                        title='Item A',
-                        summary='First item',
-                    )
-                ],
-                hydrated_evidence=[
-                    HydratedEvidence(
                         item_id='item-a',
                         title='Item A',
                         summary='First item',
@@ -545,16 +537,8 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
             ),
             'P1E2': ToolResult(
                 result={'value': 'b'},
-                evidence_views=[
+                evidence=[
                     EvidenceView(
-                        evidence_id='',
-                        item_id='item-b',
-                        title='Item B',
-                        summary='Second item',
-                    )
-                ],
-                hydrated_evidence=[
-                    HydratedEvidence(
                         item_id='item-b',
                         title='Item B',
                         summary='Second item',
@@ -563,7 +547,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
             ),
         },
     )
-    main_agent_state.result = main_agent_state.result.copy(relevant_evidence_ids=['main_agent:P1E2R1'])
+    main_agent_state.result = main_agent_state.result.copy(relevant_evidence_ids=['e5cf297f-8f55-55a7-b1b2-7fb389482919'])
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',
@@ -576,7 +560,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
             run_synthesis(state)
 
     prompt_text = str(captured_prompt['text'])
-    assert '"evidence_id": "main_agent:P1E2R1"' in prompt_text
-    assert '"evidence_id": "main_agent:P1E1R1"' not in prompt_text
+    assert '"evidence_id": "e5cf297f-8f55-55a7-b1b2-7fb389482919"' in prompt_text
+    assert '"evidence_id": "c8271821-2d4c-51a1-bc00-1f4932d052d7"' not in prompt_text
     payload = _latest_event_payload(repo, event_type='synthesis', agent_name='request_orchestrator')
-    assert payload['data']['relevant_evidence_ids'] == ['P1E2R1']
+    assert payload['data']['relevant_evidence_ids'] == ['e5cf297f-8f55-55a7-b1b2-7fb389482919']

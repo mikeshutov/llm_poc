@@ -10,7 +10,7 @@ from llm.clients.embeddings import embed_text
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from tool.constants import TOOL_NAME_UPDATE_USER_ATTRIBUTE
 from tool.constants import TOOL_RESULT_TYPE_USER_ATTRIBUTE
@@ -32,10 +32,7 @@ UPDATE_USER_ATTRIBUTE_DESCRIPTION = "Update an existing persistent user attribut
 
 class UserAttributeMetadata(BaseModel):
     group_key: str | None = None
-    source: str | None = None
-    is_active: bool
-    confidence: float | None = None
-    importance: float | None = None
+    attribute_values: list[str] = Field(default_factory=list)
 
 
 def _value_text(value: list[str]) -> str:
@@ -43,36 +40,24 @@ def _value_text(value: list[str]) -> str:
 
 
 def _tool_result(result: UserAttribute) -> ToolResult:
-    summary = _value_text(result.value).strip() or "Updated user attribute."
     metadata = UserAttributeMetadata(
         group_key=result.group_key,
-        source=result.source,
-        is_active=result.is_active,
-        confidence=result.confidence,
-        importance=result.importance,
+        attribute_values=list(result.value),
     )
-    hydrated = HydratedEvidence(
+    evidence_view = EvidenceView(
         item_id=str(result.id),
         tool_name=TOOL_NAME_UPDATE_USER_ATTRIBUTE,
         title=result.attribute_type,
-        summary=summary,
+        summary="Stored user attribute.",
         published_at=result.updated_at,
         source=TOOL_NAME_UPDATE_USER_ATTRIBUTE,
         entity_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE,
-        metadata=metadata.model_dump(exclude_none=True),
+        llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

@@ -180,7 +180,6 @@ class ConversationRepository:
         source: str,
         agent_name: str = "",
         node_name: str = "",
-        step_id: str = "",
         iteration: int | None = None,
         payload: Optional[dict[str, Any]] = None,
     ) -> ConversationEvent:
@@ -195,11 +194,10 @@ class ConversationRepository:
                     source,
                     agent_name,
                     node_name,
-                    step_id,
                     iteration,
                     payload
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING
                     id,
                     conversation_id,
@@ -208,7 +206,6 @@ class ConversationRepository:
                     source,
                     agent_name,
                     node_name,
-                    step_id,
                     iteration,
                     payload,
                     created_at
@@ -220,7 +217,6 @@ class ConversationRepository:
                     source,
                     agent_name,
                     node_name,
-                    step_id,
                     iteration,
                     Jsonb(payload),
                 ),
@@ -241,7 +237,6 @@ class ConversationRepository:
                     source,
                     agent_name,
                     node_name,
-                    step_id,
                     iteration,
                     payload,
                     created_at

@@ -6,7 +6,7 @@ from requests.exceptions import RequestException
 
 from integrations.meal_db import MealDbClient
 from integrations.meal_db.models import MealSearchResult
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from request_orchestrator.shared.tool_adapter.food.candidate_mapper import rerank_meal_search_result
 from request_orchestrator.shared.tool_adapter.food.constants import DEFAULT_MEAL_RERANK_LIMIT
 from tool.constants import TOOL_NAME_SEARCH_MEALS
@@ -32,8 +32,7 @@ class MealSearchMetadata(BaseModel):
 
 
 def _tool_result(result: MealSearchResult) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for meal in result.meals:
         url = (meal.source or meal.youtube or "").strip()
         urls: list[EvidenceUrl] = []
@@ -43,15 +42,13 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             urls.append(EvidenceUrl(url=meal.youtube.strip(), url_type=EvidenceUrlType.YOUTUBE))
         summary_parts = [part for part in ((meal.category or "").strip(), (meal.area or "").strip()) if part]
         summary = ". ".join(summary_parts) or (meal.instructions or "").strip() or f"Meal result for {meal.name}."
-        metadata = MealSearchMetadata(
-            category=meal.category,
-            area=meal.area,
-            tags=list(meal.tags or []),
-            ingredients=[ingredient.model_dump(exclude_none=True) for ingredient in meal.ingredients],
-            retrieved_count=result.retrieved_count,
-            reranked=result.reranked,
-        )
-        hydrated = HydratedEvidence(
+        metadata = {
+            "category": meal.category,
+            "area": meal.area,
+            "tags": list(meal.tags) if meal.tags else None,
+            "ingredients": [ingredient.model_dump(exclude_none=True) for ingredient in meal.ingredients],
+        }
+        evidence_view = EvidenceView(
             item_id=meal.id,
             tool_name=TOOL_NAME_SEARCH_MEALS,
             title=meal.name,
@@ -60,26 +57,18 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             image_url=(meal.thumbnail or "").strip(),
             source=TOOL_NAME_SEARCH_MEALS,
             entity_type=TOOL_RESULT_TYPE_MEAL_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata,
             raw_payload=meal,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
+        evidence.append(evidence_view)
     return ToolResult(
         result=result,
         metadata={
             "retrieved_count": result.retrieved_count,
             "reranked": result.reranked,
         },
-        evidence_views=evidence_views,
-        hydrated_evidence=hydrated_evidence,
+
+        evidence=evidence,
     )
 
 

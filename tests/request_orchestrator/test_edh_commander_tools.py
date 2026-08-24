@@ -123,8 +123,8 @@ def test_get_commander_details_returns_typed_result() -> None:
         "combo_highlights": ["Aggravated Assault + Bear Umbra"],
         "similar_commanders": ["Mazzy, Truesword Paladin", "Sigarda, Host of Herons"],
     }
-    assert result.evidence_views[0].summary == "Uril can't be the target of spells or abilities your opponents control."
-    assert "commander_slug" not in result.evidence_views[0].metadata
+    assert result.evidence[0].summary == "Uril can't be the target of spells or abilities your opponents control."
+    assert "commander_slug" not in result.evidence[0].llm_metadata
 
 
 def test_get_commander_cards_returns_reranked_card_evidence() -> None:
@@ -201,12 +201,12 @@ def test_get_commander_cards_returns_reranked_card_evidence() -> None:
             },
         ],
     }
-    assert len(result.evidence_views) == 2
-    assert result.evidence_views[0].title == "Rancor"
-    assert result.hydrated_evidence[0].urls[0].url == "https://scryfall.com/card/test/1/rancor"
-    assert result.hydrated_evidence[0].image_url == "https://images.example/rancor.jpg"
-    assert result.hydrated_evidence[0].raw_payload.oracle_text == "Oracle text for Rancor."
-    assert result.evidence_views[0].metadata == {
+    assert len(result.evidence) == 2
+    assert result.evidence[0].title == "Rancor"
+    assert result.evidence[0].urls[0].url == "https://scryfall.com/card/test/1/rancor"
+    assert result.evidence[0].image_url == "https://images.example/rancor.jpg"
+    assert result.evidence[0].raw_payload.oracle_text == "Oracle text for Rancor."
+    assert result.evidence[0].llm_metadata == {
         "rarity": "uncommon",
         "mana_cost": "{G}",
         "type_line": "Enchantment - Aura",

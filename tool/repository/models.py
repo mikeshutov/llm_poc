@@ -14,6 +14,7 @@ class ToolCall(BaseModel):
     plan_step_id: Optional[UUID] = None
     step_index: Optional[int] = None
     tool_name: str
+    request_hash: str
     status: str
     input_payload: dict[str, Any] = {}
     output_payload: Any | None = None

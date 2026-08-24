@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from integrations.quotable import QuotableClient
 from integrations.quotable.models import Quote
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_GET_QUOTE
 from tool.constants import TOOL_RESULT_TYPE_QUOTE
 
@@ -31,31 +31,22 @@ def _normalize_quotes(result: Quote | list[Quote]) -> list[Quote]:
 
 def _tool_result(result: Quote | list[Quote]) -> ToolResult:
     quotes = _normalize_quotes(result)
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for quote in quotes:
         summary = f"\"{quote.content}\""
         metadata = QuoteMetadata(tags=list(quote.tags))
-        hydrated = HydratedEvidence(
+        evidence_view = EvidenceView(
             item_id=f"{quote.author}:{quote.content[:40]}",
             tool_name=TOOL_NAME_GET_QUOTE,
             title=quote.author,
             summary=summary,
             source=TOOL_NAME_GET_QUOTE,
             entity_type=TOOL_RESULT_TYPE_QUOTE,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=quote,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(evidence_view)
+    return ToolResult(result=result, evidence=evidence)
 
 
 

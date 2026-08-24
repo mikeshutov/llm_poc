@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from personalization.profile.repository.repo_factory import get_user_profile_repo
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from request_orchestrator.shared.tool_adapter.profile.result_models import UserProfileUpdateResult
 from tool.constants import TOOL_NAME_SET_USER_FIRST_NAME
@@ -19,27 +19,19 @@ class SetUserFirstNameArgs(BaseModel):
 
 
 def _tool_result(result: UserProfileUpdateResult) -> ToolResult:
-    hydrated = HydratedEvidence(
+    evidence_view = EvidenceView(
         item_id=str(result.user_id or ""),
         tool_name=TOOL_NAME_SET_USER_FIRST_NAME,
         title="User Profile",
         summary=f"First name set to {(result.first_name or '').strip() or 'unknown'}.",
         source=TOOL_NAME_SET_USER_FIRST_NAME,
         entity_type=TOOL_RESULT_TYPE_PROFILE,
-        metadata={},
+        llm_metadata={},
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

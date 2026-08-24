@@ -6,7 +6,7 @@ from requests.exceptions import RequestException
 
 from integrations.free_dictionary import FreeDictionaryClient
 from integrations.free_dictionary.models import DictionaryEntry
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_DEFINE_WORD
 from tool.constants import TOOL_RESULT_TYPE_DEFINITION
 
@@ -32,15 +32,14 @@ def _entry_summary(entry: DictionaryEntry) -> str:
 
 
 def _tool_result(result: list[DictionaryEntry]) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for entry in result:
         source_url = entry.source_urls[0].strip() if entry.source_urls else ""
         metadata = DictionaryEntryMetadata(
             phonetic=entry.phonetic,
             meaning_count=len(entry.meanings),
         )
-        hydrated = HydratedEvidence(
+        evidence_view = EvidenceView(
             item_id=entry.word.strip(),
             tool_name=TOOL_NAME_DEFINE_WORD,
             title=entry.word.strip(),
@@ -48,19 +47,11 @@ def _tool_result(result: list[DictionaryEntry]) -> ToolResult:
             urls=[EvidenceUrl(url=source_url, url_type=EvidenceUrlType.WEBSITE)] if source_url else [],
             source=TOOL_NAME_DEFINE_WORD,
             entity_type=TOOL_RESULT_TYPE_DEFINITION,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=entry,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(evidence_view)
+    return ToolResult(result=result, evidence=evidence)
 
 
 

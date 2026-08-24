@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from llm.conversation_model_config import EVALUATOR_STAGE, ModelSelection, OPENAI_PROVIDER, PLANNER_STAGE
+from llm.conversation_model_config import EVALUATOR_STAGE, ModelSelection, PLANNER_STAGE
 from tool.tools import TOOL_CATEGORIES
 
 
@@ -43,7 +43,6 @@ class AgentProfile:
     extra_tools: list[Any] = field(default_factory=list)
     tools_by_name: dict[str, Any] = field(init=False, default_factory=dict)
     tool_categories: dict[str, Any] = field(init=False, default_factory=dict)
-    default_stage_models: dict[str, str] = field(default_factory=dict)
     stage_model_selections: dict[str, ModelSelection] = field(default_factory=dict)
     request_analysis_selectable: bool = True
     max_turns: int = DEFAULT_MAX_TURNS
@@ -68,17 +67,15 @@ class AgentProfile:
         self.tool_categories = resolved_categories
         self.tools_by_name = tools_by_name
 
-    def default_model_for_stage(self, stage: str) -> str:
-        return self.default_stage_models.get(stage, "").strip()
-
     def model_selection_for_stage(self, stage: str) -> ModelSelection | None:
+        # Built-in profiles use the conversation-level model configuration.
+        # Only user agents carry explicit, per-agent model overrides.
+        if self.kind != AgentKind.USER_AGENT:
+            return None
         selection = self.stage_model_selections.get(stage)
         if selection is not None:
             return selection
-        default_model = self.default_model_for_stage(stage)
-        if not default_model:
-            return None
-        return ModelSelection(provider=OPENAI_PROVIDER, model=default_model)
+        return None
 
     def allowed_category_names(self) -> set[str]:
         if self.allowed_categories:

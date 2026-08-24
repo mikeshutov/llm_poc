@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from integrations.nasa import NasaClient
 from integrations.nasa.models import AstronomyPicture
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_GET_ASTRONOMY_PICTURE
 from tool.constants import TOOL_RESULT_TYPE_ASTRONOMY_PICTURE
 
@@ -28,7 +28,7 @@ class AstronomyPictureMetadata(BaseModel):
 def _tool_result(result: AstronomyPicture) -> ToolResult:
     url = result.url.strip()
     metadata = AstronomyPictureMetadata(media_type=result.media_type)
-    hydrated = HydratedEvidence(
+    evidence_view = EvidenceView(
         item_id=f"{result.date}:{result.title}",
         tool_name=TOOL_NAME_GET_ASTRONOMY_PICTURE,
         title=result.title,
@@ -38,20 +38,12 @@ def _tool_result(result: AstronomyPicture) -> ToolResult:
         published_at=result.date,
         source=TOOL_NAME_GET_ASTRONOMY_PICTURE,
         entity_type=TOOL_RESULT_TYPE_ASTRONOMY_PICTURE,
-        metadata=metadata.model_dump(exclude_none=True),
+        llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(
         result=result,
-        evidence_views=[
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        ],
-        hydrated_evidence=[hydrated],
+        evidence=[evidence_view],
     )
 
 

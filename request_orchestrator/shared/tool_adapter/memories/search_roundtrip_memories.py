@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from conversation.models.conversation_models import RoundtripMemory
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.clients.embeddings import embed_text
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from request_orchestrator.shared.tool_adapter.memories.constants import DEFAULT_MEMORY_RESULT_LIMIT
 from tool.constants import TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES
@@ -53,7 +53,7 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
             continue
 
     if not parsed_ids:
-        return ToolResult(result=[], evidence_views=[], hydrated_evidence=[])
+        return ToolResult(result=[], evidence=[])
 
     query_embedding = embed_text(query)
     memories = get_conversation_repo().search_roundtrip_memories(
@@ -62,8 +62,7 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
         limit=limit,
         user_id=get_current_user_id(),
     )
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for memory in memories:
         metadata = RoundtripMemoryMetadata(
             conversation_id=str(memory.conversation_id),
@@ -73,7 +72,7 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
             created_at=memory.created_at,
             relevance_score=memory.relevance_score,
         )
-        hydrated = HydratedEvidence(
+        evidence_view = EvidenceView(
             item_id=str(memory.roundtrip_id),
             tool_name=TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES,
             title=f"Memory from message {memory.message_index}",
@@ -81,16 +80,8 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
             published_at=memory.created_at,
             source=TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES,
             entity_type=TOOL_RESULT_TYPE_MEMORY_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=memory,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=memories, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(evidence_view)
+    return ToolResult(result=memories, evidence=evidence)

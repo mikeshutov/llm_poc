@@ -12,7 +12,13 @@ from conversation.repository.repo_factory import get_conversation_repo
 from conversation.summary_service import rebuild_conversation_summaries
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from rendering.feedback import render_feedback_controls
-from rendering.rendering import render_assistant_content, format_timestamp, _format_roundtrip_usage_summary, fetch_llm_usage_for_roundtrip
+from rendering.rendering import (
+    _format_roundtrip_duration,
+    _format_roundtrip_usage_summary,
+    fetch_llm_usage_for_roundtrip,
+    format_timestamp,
+    render_assistant_content,
+)
 from common.config import (
     CONTENT_KEY,
     ROLE_ASSISTANT,
@@ -86,6 +92,8 @@ def append_assistant_response(
     rendered_response = str(answer.raw_response or roundtrip.generated_response or "")
 
     now = datetime.now(timezone.utc)
+    duration = _format_roundtrip_duration(payload)
+    footer_timestamp = " | ".join(part for part in [duration, format_timestamp(now)] if part) or None
     assistant_message = {
         ROLE_KEY: ROLE_ASSISTANT,
         CONTENT_KEY: rendered_response,
@@ -109,7 +117,7 @@ def append_assistant_response(
             model=roundtrip.model,
             sources_payload=payload,
             feedback_id=None,
-            timestamp=format_timestamp(now),
+            timestamp=footer_timestamp,
             usage_summary=_format_roundtrip_usage_summary(fetch_llm_usage_for_roundtrip(str(roundtrip.id))),
         )
 

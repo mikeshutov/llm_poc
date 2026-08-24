@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from llm.chat_models import build_chat_model
+from llm.chat_models import build_chat_model, resolve_stage_model_selection
 from llm.conversation_model_config import ConversationModelConfig
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
 from request_orchestrator.models.agent_inputs import AgentInputs
@@ -43,24 +43,20 @@ class AgentState:
             else execution_context
         )
         resolved_agent_scope = agent_profile.scope
+        planner_selection = resolve_stage_model_selection(
+            execution_context=resolved_execution_context,
+            agent=resolved_agent_scope,
+            stage="planner",
+            agent_profile=agent_profile,
+        )
         return cls(
             inputs=AgentInputs.new(task=task) if inputs is None else inputs,
             execution_context=resolved_execution_context,
             agent_profile=agent_profile,
             llm=(
                 build_chat_model(
-                    provider=resolved_execution_context.model_config.resolve_provider(
-                        agent=resolved_agent_scope,
-                        stage="planner",
-                    )
-                    if agent_profile.model_selection_for_stage("planner") is None
-                    else agent_profile.model_selection_for_stage("planner").provider,
-                    model_name=resolved_execution_context.model_config.resolve(
-                        agent=resolved_agent_scope,
-                        stage="planner",
-                    )
-                    if agent_profile.model_selection_for_stage("planner") is None
-                    else agent_profile.model_selection_for_stage("planner").model,
+                    provider=planner_selection.provider,
+                    model_name=planner_selection.model,
                 )
                 if llm is None
                 else llm
@@ -84,7 +80,18 @@ class AgentState:
         return self.agent_profile.scope
 
     def gather_tool_results(self) -> list[ToolResult]:
-        return [tool_result.model_copy(deep=True) for tool_result in self.result.tool_results]
+        if not self.result.tool_call_ids:
+            return []
+        from tool.repository.tool_call_repository import ToolCallRepository
+
+        return ToolCallRepository().get_tool_results(self.result.tool_call_ids)
+
+    def gather_tool_calls(self):
+        if not self.result.tool_call_ids:
+            return []
+        from tool.repository.tool_call_repository import ToolCallRepository
+
+        return ToolCallRepository().get_tool_calls(self.result.tool_call_ids)
 
     def gather_used_tools(self) -> list[str]:
         used_tools: list[str] = []

@@ -178,8 +178,8 @@ def test_conversation_model_config_resolves_partial_overrides_with_defaults() ->
 
     assert config.main_agent.request_analysis.provider == OPENAI_PROVIDER
     assert config.main_agent.request_analysis.model == 'gpt-5.6-terra'
-    assert config.main_agent.planner.model == 'gpt-5.6-terra'
-    assert config.main_agent.synthesis.model == 'gpt-5.6-terra'
+    assert config.main_agent.planner.model == 'gpt-5.6-luna'
+    assert config.main_agent.synthesis.model == 'gpt-5.6-luna'
     assert config.profile_agent.planner.model == 'gpt-5.6-luna'
     assert config.shared.evaluator.model == 'gpt-5.6-luna'
     assert config.shared.reranker.model == 'gpt-5.6-terra'
@@ -190,8 +190,8 @@ def test_conversation_model_config_build_default_returns_defaults() -> None:
 
     assert config.main_agent.request_analysis.provider == OPENAI_PROVIDER
     assert config.main_agent.request_analysis.model == 'gpt-5.6-luna'
-    assert config.main_agent.planner.model == 'gpt-5.6-terra'
-    assert config.main_agent.synthesis.model == 'gpt-5.6-terra'
+    assert config.main_agent.planner.model == 'gpt-5.6-luna'
+    assert config.main_agent.synthesis.model == 'gpt-5.6-luna'
     assert config.profile_agent.planner.model == 'gpt-5.6-luna'
     assert config.shared.evaluator.model == 'gpt-5.6-luna'
     assert config.shared.reranker.model == 'gpt-5.6-luna'
@@ -207,9 +207,9 @@ def test_conversation_model_config_build_default_resolves_pricing_for_every_stag
         output_price_per_million_tokens=Decimal('6.00'),
     )
     assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('2.50'),
-        cached_input_price_per_million_tokens=Decimal('0.25'),
-        output_price_per_million_tokens=Decimal('15.00'),
+        input_price_per_million_tokens=Decimal('1.00'),
+        cached_input_price_per_million_tokens=Decimal('0.10'),
+        output_price_per_million_tokens=Decimal('6.00'),
     )
     assert config.resolve_pricing(PROFILE_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
         input_price_per_million_tokens=Decimal('1.00'),
@@ -248,9 +248,9 @@ def test_conversation_model_config_override_changes_resolved_pricing_for_stage()
         output_price_per_million_tokens=Decimal('6.00'),
     )
     assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('2.50'),
-        cached_input_price_per_million_tokens=Decimal('0.25'),
-        output_price_per_million_tokens=Decimal('15.00'),
+        input_price_per_million_tokens=Decimal('1.00'),
+        cached_input_price_per_million_tokens=Decimal('0.10'),
+        output_price_per_million_tokens=Decimal('6.00'),
     )
 
 
@@ -303,6 +303,13 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
                 provider=OPENAI_PROVIDER,
                 model='gpt-5.6-terra',
             ),
+            ConversationModelConfigEntry(
+                conversation_id=conversation_id,
+                agent=MAIN_AGENT_MODEL_SCOPE,
+                stage=PLANNER_STAGE,
+                provider=OPENAI_PROVIDER,
+                model='gpt-5.6-luna',
+            ),
         ]
     )
 
@@ -334,6 +341,16 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
             reuse_llm_for_agent_scope=state.resolve_agent_scope(),
         )
         assert profile_planner_llm.model == 'gpt-5.6-terra'
+
+        main_planner_llm = build_llm_for_stage(
+            execution_context=state.execution_context,
+            llm=state.llm,
+            agent=MAIN_AGENT_MODEL_SCOPE,
+            stage=PLANNER_STAGE,
+            agent_profile=MAIN_AGENT_PROFILE,
+            reuse_llm_for_agent_scope=state.resolve_agent_scope(),
+        )
+        assert main_planner_llm.model == 'gpt-5.6-luna'
 
 
 def test_llm_factory_build_llm_for_stage_uses_anthropic_provider() -> None:

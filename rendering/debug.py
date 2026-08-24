@@ -11,6 +11,7 @@ PLAN_KIND = "plan"
 EVALUATOR_KIND = "evaluator"
 TOOL_CALL_KIND = "tool_call"
 SYNTHESIS_KIND = "synthesis"
+EXECUTION_RESULT_KIND = "execution_result"
 LLM_CALL_KIND = "llm_call"
 ORCHESTRATOR_AGENT_NAME = "request_orchestrator"
 DEFAULT_AGENT_LOG_ORDER = [
@@ -48,6 +49,13 @@ class SynthesisLogPayload(BaseModel):
     relevant_evidence_ids: list[str] = Field(default_factory=list)
 
 
+class ExecutionResultLogPayload(BaseModel):
+    title: str = "Execution Result"
+    status: str = ""
+    reason: str = ""
+    rejected_call_count: int = 0
+
+
 class EvaluatorLogPayload(BaseModel):
     title: str = "Evaluation"
     status: str = EVALUATION_STATUS_RETRYABLE
@@ -61,7 +69,6 @@ class ToolCallLogPayload(BaseModel):
     title: str = "Tool Call"
     step_plan: str = ""
     tool_name: str = ""
-    step_id: str = ""
     iteration: int | None = None
     request: object | None = None
     response: object | None = None
@@ -159,6 +166,16 @@ def _build_synthesis_payload(entry: dict) -> dict:
     ).model_dump()
 
 
+def _build_execution_result_payload(entry: dict) -> dict:
+    data = entry.get("data") or {}
+    return ExecutionResultLogPayload(
+        title=data.get("title") or "Execution Result",
+        status=data.get("status") or "",
+        reason=data.get("reason") or "",
+        rejected_call_count=data.get("rejected_call_count") or 0,
+    ).model_dump()
+
+
 def _build_evaluator_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
     return EvaluatorLogPayload(
@@ -175,7 +192,6 @@ def _build_tool_call_payload(entry: dict) -> dict:
     return ToolCallLogPayload(
         step_plan=data.get("step_plan") or entry.get("summary") or "",
         tool_name=entry.get("tool_name") or data.get("tool_name") or "",
-        step_id=entry.get("step_id") or data.get("step_id") or "",
         iteration=entry.get("iteration"),
         request=entry.get("request"),
         response=entry.get("response"),
@@ -219,6 +235,8 @@ def _build_log_payload(entry: dict) -> tuple[str, dict]:
         payload = _build_evaluator_payload(entry)
     elif kind == SYNTHESIS_KIND:
         payload = _build_synthesis_payload(entry)
+    elif kind == EXECUTION_RESULT_KIND:
+        payload = _build_execution_result_payload(entry)
     elif kind == TOOL_CALL_KIND:
         payload = _build_tool_call_payload(entry)
     elif kind == LLM_CALL_KIND:

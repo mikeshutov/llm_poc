@@ -1,5 +1,6 @@
 from __future__ import annotations
 from time import perf_counter
+from uuid import UUID
 
 from langsmith import traceable
 
@@ -20,12 +21,7 @@ from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resol
 from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
 from rendering.debug import SYNTHESIS_KIND
 def _resolve_relevant_evidence_ids(state: MainState) -> set[str]:
-    values = state.gather_relevant_evidence_ids()
-    return {
-        evidence_id
-        for evidence_id in values
-        if isinstance(evidence_id, str) and evidence_id.strip()
-    }
+    return {str(evidence_id) for evidence_id in state.gather_relevant_evidence_ids()}
 
 
 def _resolve_agent_name(state: MainState) -> str:
@@ -48,7 +44,7 @@ def run_synthesis(state: MainState) -> MainState:
     evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
     all_evidence_steps = build_evidence_steps_from_tool_results(
         tool_results,
-        evidence_bundle.evidence_views_by_step_id,
+        evidence_bundle.evidence_views_by_tool_call_id,
     )
     evidence_steps = filter_evidence_steps(all_evidence_steps, relevant_evidence_ids)
     if not evidence_steps:
@@ -106,7 +102,7 @@ def run_synthesis(state: MainState) -> MainState:
     ]
     if not used_evidence_ids:
         used_evidence_ids = [
-            evidence.evidence_id
+            str(evidence.id)
             for step in evidence_steps
             for evidence in step.evidence
         ]
@@ -132,8 +128,8 @@ def run_synthesis(state: MainState) -> MainState:
 
     state.result = OrchestratorResult(
         agent_result=state.result.agent_result.copy(
-            tool_results=tool_results,
-            relevant_evidence_ids=list(relevant_evidence_ids),
+            tool_call_ids=state.gather_tool_call_ids(),
+            relevant_evidence_ids=[UUID(evidence_id) for evidence_id in relevant_evidence_ids],
         ),
         result_blocks=[
             block.model_copy(deep=True)

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from files.repository.file_chunk_repository import FileChunkRepository, FileTypeFilter
 from llm.clients.embeddings import embed_text
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from tool.constants import TOOL_NAME_SEARCH_FILES
 from tool.constants import TOOL_RESULT_TYPE_FILE_RESULTS
@@ -23,37 +23,28 @@ class SearchFilesMetadata(BaseModel):
 
 
 def _tool_result(result: list[dict]) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
 
     for file_result in result:
         metadata = SearchFilesMetadata(
             top_chunk=str(file_result.get("top_chunk", "")),
         )
-        hydrated = HydratedEvidence(
+        evidence_view = EvidenceView(
             item_id=str(file_result.get("file_id", "")),
             tool_name=TOOL_NAME_SEARCH_FILES,
             title=str(file_result.get("file_name", "")).strip() or "File Search Result",
             summary=str(file_result.get("top_chunk", "")).strip() or "Matched uploaded file.",
             source=TOOL_NAME_SEARCH_FILES,
             entity_type=TOOL_RESULT_TYPE_FILE_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=file_result,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
+        evidence.append(evidence_view)
 
     return ToolResult(
         result=result,
-        evidence_views=evidence_views,
-        hydrated_evidence=hydrated_evidence,
+
+        evidence=evidence,
     )
 
 

@@ -14,7 +14,7 @@ if 'pycountry' not in sys.modules:
     sys.modules['pycountry'] = pycountry_module
 
 from request_orchestrator.models.agent_result import AgentResult
-from request_orchestrator.models.evidence import HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from conversation.models.conversation_models import ConversationEvent
@@ -44,8 +44,8 @@ def test_build_answer_payload_preserves_result_block_evidence_ids() -> None:
                     ToolResult(
                         step_id="P1E1",
                         tool_name="generic_web_search",
-                        hydrated_evidence=[
-                            HydratedEvidence(
+                        evidence=[
+                            EvidenceView(
                                 title="Example",
                                 summary="Summary",
                                 source="generic_web_search",
@@ -57,7 +57,7 @@ def test_build_answer_payload_preserves_result_block_evidence_ids() -> None:
             result_blocks=[
                 SynthesisResultBlock(
                     content="Paragraph with evidence.",
-                    evidence_ids=["P1E1R1"],
+                    evidence_ids=["25a4bcc1-2b18-5a36-940c-29c535bae654"],
                 )
             ],
             answer=["Paragraph with evidence."],
@@ -67,14 +67,14 @@ def test_build_answer_payload_preserves_result_block_evidence_ids() -> None:
     assert payload["result"] == [
         {
             "content": "Paragraph with evidence.",
-            "evidence_ids": ["P1E1R1"],
+            "evidence_ids": ["25a4bcc1-2b18-5a36-940c-29c535bae654"],
         }
     ]
-    assert payload["used_evidence_ids"] == ["P1E1R1"]
-    assert "P1E1R1" in payload["hydrated_evidence_by_id"]
+    assert payload["used_evidence_ids"] == ["25a4bcc1-2b18-5a36-940c-29c535bae654"]
+    assert "25a4bcc1-2b18-5a36-940c-29c535bae654" in payload["hydrated_evidence_by_id"]
 
 
-def test_build_answer_payload_normalizes_result_block_evidence_ids_to_namespaced_keys() -> None:
+def test_build_answer_payload_preserves_uuid_evidence_ids_across_agents() -> None:
     payload = _build_answer_payload(
         OrchestratorResult(
             agent_result=AgentResult(
@@ -82,8 +82,8 @@ def test_build_answer_payload_normalizes_result_block_evidence_ids_to_namespaced
                     ToolResult(
                         step_id="main_agent:P1E1",
                         tool_name="generic_web_search",
-                        hydrated_evidence=[
-                            HydratedEvidence(
+                        evidence=[
+                            EvidenceView(
                                 title="Example",
                                 summary="Summary",
                                 source="generic_web_search",
@@ -95,7 +95,7 @@ def test_build_answer_payload_normalizes_result_block_evidence_ids_to_namespaced
             result_blocks=[
                 SynthesisResultBlock(
                     content="Paragraph with evidence.",
-                    evidence_ids=["P1E1R1"],
+                    evidence_ids=["c8271821-2d4c-51a1-bc00-1f4932d052d7"],
                 )
             ],
             answer=["Paragraph with evidence."],
@@ -105,11 +105,11 @@ def test_build_answer_payload_normalizes_result_block_evidence_ids_to_namespaced
     assert payload["result"] == [
         {
             "content": "Paragraph with evidence.",
-            "evidence_ids": ["main_agent:P1E1R1"],
+            "evidence_ids": ["c8271821-2d4c-51a1-bc00-1f4932d052d7"],
         }
     ]
-    assert payload["used_evidence_ids"] == ["main_agent:P1E1R1"]
-    assert "main_agent:P1E1R1" in payload["hydrated_evidence_by_id"]
+    assert payload["used_evidence_ids"] == ["c8271821-2d4c-51a1-bc00-1f4932d052d7"]
+    assert "c8271821-2d4c-51a1-bc00-1f4932d052d7" in payload["hydrated_evidence_by_id"]
 
 
 def test_fetch_llm_usage_for_roundtrip_reads_llm_call_events_first() -> None:

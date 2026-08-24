@@ -3,12 +3,11 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from common.data import normalize_string_list
 from llm.clients.embeddings import embed_text
 from personalization.user_attributes.models.user_attribute_models import UserAttributeSearchResult
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from tool.constants import TOOL_NAME_SEARCH_USER_ATTRIBUTES
 from tool.constants import TOOL_RESULT_TYPE_USER_ATTRIBUTE
@@ -31,50 +30,28 @@ SEARCH_USER_ATTRIBUTES_DESCRIPTION = "Search persistent user attributes by seman
 
 class UserAttributeSearchMetadata(BaseModel):
     group_key: str | None = None
-    source: str | None = None
-    is_active: bool
-    confidence: float | None = None
-    importance: float | None = None
-    relevance_score: float
-
-
-def _attribute_summary(attribute: UserAttributeSearchResult) -> str:
-    return "; ".join(normalize_string_list(attribute.value)).strip() or "Matched user attribute."
-
+    attribute_values: list[str] = Field(default_factory=list)
 
 def _tool_result(result: list[UserAttributeSearchResult]) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for attribute in result:
         metadata = UserAttributeSearchMetadata(
             group_key=attribute.group_key,
-            source=attribute.source,
-            is_active=attribute.is_active,
-            confidence=attribute.confidence,
-            importance=attribute.importance,
-            relevance_score=attribute.relevance_score,
+            attribute_values=list(attribute.value),
         )
-        hydrated = HydratedEvidence(
+        evidence_view = EvidenceView(
             item_id=str(attribute.id),
             tool_name=TOOL_NAME_SEARCH_USER_ATTRIBUTES,
             title=attribute.attribute_type,
-            summary=_attribute_summary(attribute),
+            summary="Stored user attribute.",
             published_at=attribute.updated_at,
             source=TOOL_NAME_SEARCH_USER_ATTRIBUTES,
             entity_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=attribute,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(evidence_view)
+    return ToolResult(result=result, evidence=evidence)
 
 
 @tool(

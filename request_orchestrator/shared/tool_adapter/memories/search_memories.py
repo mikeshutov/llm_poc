@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from conversation.models.conversation_models import ConversationMemory
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.clients.embeddings import embed_text
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from request_orchestrator.shared.tool_adapter.memories.constants import DEFAULT_MEMORY_RESULT_LIMIT
 from tool.constants import TOOL_NAME_SEARCH_MEMORIES
@@ -43,15 +43,14 @@ def search_memories(query: str) -> ToolResult:
         limit=DEFAULT_MEMORY_RESULT_LIMIT,
         user_id=get_current_user_id(),
     )
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for memory in memories:
         metadata = MemorySearchMetadata(
             conversation_id=str(memory.conversation_id),
             last_used_date=memory.last_used_date,
             relevance_score=memory.relevance_score,
         )
-        hydrated = HydratedEvidence(
+        evidence_view = EvidenceView(
             item_id=str(memory.conversation_id),
             tool_name=TOOL_NAME_SEARCH_MEMORIES,
             title="Conversation Memory",
@@ -59,16 +58,8 @@ def search_memories(query: str) -> ToolResult:
             published_at=memory.last_used_date,
             source=TOOL_NAME_SEARCH_MEMORIES,
             entity_type=TOOL_RESULT_TYPE_MEMORY_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=memory,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=memories, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(evidence_view)
+    return ToolResult(result=memories, evidence=evidence)

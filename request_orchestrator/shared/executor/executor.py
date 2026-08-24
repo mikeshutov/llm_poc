@@ -11,13 +11,12 @@ from langsmith import traceable
 from pydantic import ValidationError
 
 from common.data import sanitize_for_json_storage
+from common.signatures import build_signature
 from common.logging import create_conversation_event
-from request_orchestrator.agent_runner.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan import PlanStep
-from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
 from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context
 from tool.registry import call_tool
 from tool.repository.tool_call_repository import ToolCallRepository
@@ -30,23 +29,23 @@ class StepExecutionResult:
     args: dict[str, Any]
     output: Any
     error_text: str = ""
+    rejection_reason: str = ""
     latency_ms: int = 0
 
 
-def _substitute_refs(obj, results: dict, *, iteration_number: int):
+def _substitute_refs(obj, results: dict):
     if isinstance(obj, str):
         if obj.startswith("#E"):
             raw_step_id = obj[1:]
-            qualified_step_id = format_plan_step_id(iteration_number, raw_step_id)
-            referenced = results.get(qualified_step_id, obj)
+            referenced = results.get(raw_step_id, obj)
             if isinstance(referenced, ToolResult):
                 return referenced.result
             return referenced
         return obj
     if isinstance(obj, list):
-        return [_substitute_refs(x, results, iteration_number=iteration_number) for x in obj]
+        return [_substitute_refs(x, results) for x in obj]
     if isinstance(obj, dict):
-        return {k: _substitute_refs(v, results, iteration_number=iteration_number) for k, v in obj.items()}
+        return {k: _substitute_refs(v, results) for k, v in obj.items()}
     return obj
 
 
@@ -55,14 +54,16 @@ def _tool_results_by_local_step_id(agent_state: AgentState) -> dict[str, ToolRes
     plan = planner_state.plan
     if plan is None:
         return {}
-    results_by_step_id = agent_state.result.tool_results_by_step_id()
+    results_by_plan_step_id = {
+        tool_result.plan_step_id: tool_result
+        for tool_result in agent_state.gather_tool_results()
+        if tool_result.plan_step_id is not None
+    }
     tool_results_by_local_step_id: dict[str, ToolResult] = {}
     for step in plan.steps:
-        local_step_id = format_plan_step_id(planner_state.plan_count, step.id)
-        namespaced_step_id = namespace_step_id(agent_state.agent_profile.name, local_step_id)
-        tool_result = results_by_step_id.get(namespaced_step_id)
+        tool_result = results_by_plan_step_id.get(step.db_id)
         if tool_result is not None:
-            tool_results_by_local_step_id[local_step_id] = tool_result
+            tool_results_by_local_step_id[step.id] = tool_result
     return tool_results_by_local_step_id
 
 
@@ -70,11 +71,20 @@ def _execute_step(
     step: PlanStep,
     *,
     tool_results_by_step_id: dict[str, ToolResult],
-    iteration_number: int,
     allowed_tool_names: set[str] | None,
+    resolved_args: dict[str, Any] | None = None,
+    rejection_reason: str = "",
 ) -> StepExecutionResult:
-    args = _substitute_refs(step.args, tool_results_by_step_id, iteration_number=iteration_number)
+    args = resolved_args if resolved_args is not None else _substitute_refs(step.args, tool_results_by_step_id)
     started_at = perf_counter()
+    if rejection_reason:
+        return StepExecutionResult(
+            step=step,
+            args=args,
+            output=ToolResult.error(rejection_reason),
+            error_text=rejection_reason,
+            rejection_reason=rejection_reason,
+        )
     try:
         output = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)
         error_text = ""
@@ -82,15 +92,13 @@ def _execute_step(
         error_text = f"Invalid arguments for tool '{step.tool}': {e.errors(include_url=False)}"
         output = ToolResult(
             result={"error": error_text},
-            evidence_views=[],
-            hydrated_evidence=[],
+            evidence=[],
         )
     except Exception as e:
         error_text = f"Tool '{step.tool}' failed: {e}"
         output = ToolResult(
             result={"error": error_text, "tool": step.tool},
-            evidence_views=[],
-            hydrated_evidence=[],
+            evidence=[],
         )
     latency_ms = int((perf_counter() - started_at) * 1000)
 
@@ -113,25 +121,18 @@ def _record_step_result(
 ) -> None:
     execution_context = agent_state.execution_context
     step = execution_result.step
-    local_step_id = format_plan_step_id(iteration_number, step.id)
-    qualified_step_id = namespace_step_id(agent_state.agent_profile.name, local_step_id)
     output = execution_result.output
     if isinstance(output, ToolResult):
         output = output.model_copy(
             update={
-                "step_id": qualified_step_id,
                 "tool_name": step.tool,
                 "iteration": iteration_number,
             }
         )
-    if isinstance(output, ToolResult):
-        agent_state.result = agent_state.result.with_recorded_tool_result(output)
-
     payload = {
         "agent_name": agent_state.agent_profile.name,
         "kind": TOOL_CALL_KIND,
         "tool_name": step.tool,
-        "step_id": local_step_id,
         "iteration": iteration_number,
         "request": sanitize_for_json_storage(execution_result.args),
         "response": sanitize_for_json_storage(output),
@@ -149,21 +150,23 @@ def _record_step_result(
         source=agent_state.agent_profile.name,
         agent_name=agent_state.agent_profile.name,
         node_name="tool_call",
-        step_id=local_step_id,
         iteration=iteration_number,
         payload=payload,
     )
 
     if tool_repo and execution_context.roundtrip_id:
-        tool_repo.append_tool_call(
+        tool_call_id = tool_repo.append_tool_call(
             execution_context.roundtrip_id,
             plan,
             step,
             input_payload=execution_result.args,
             output_payload=output,
+            evidence=output.evidence if isinstance(output, ToolResult) else [],
             error_message=execution_result.error_text or None,
             duration_ms=execution_result.latency_ms,
+            status="rejected" if execution_result.rejection_reason else None,
         )
+        agent_state.result = agent_state.result.with_recorded_tool_call(tool_call_id)
 
 
 @traceable(name="Executor Node")
@@ -172,12 +175,7 @@ def run_executor(agent_state: AgentState) -> AgentState:
     plan = planner_state.plan
     if plan is None:
         return agent_state
-    tool_repo = (
-        ToolCallRepository()
-        if isinstance(agent_state.execution_context.roundtrip_id, UUID)
-        and agent_state.agent_profile.name != PROFILE_MANAGEMENT_AGENT_NAME
-        else None
-    )
+    tool_repo = ToolCallRepository() if isinstance(agent_state.execution_context.roundtrip_id, UUID) else None
     allowed_tool_names = set(agent_state.agent_profile.tool_names)
     iteration_number = planner_state.plan_count
 
@@ -191,6 +189,27 @@ def run_executor(agent_state: AgentState) -> AgentState:
             if plan is None or not plan.steps:
                 return agent_state
             tool_results_by_step_id = _tool_results_by_local_step_id(agent_state)
+            resolved_args_by_step_id: dict[str, dict[str, Any]] = {}
+            rejection_reason_by_step_id: dict[str, str] = {}
+            seen_request_hashes: set[str] = set()
+            for step in plan.steps:
+                resolved_args = _substitute_refs(
+                    step.args,
+                    tool_results_by_step_id,
+                )
+                resolved_args_by_step_id[step.id] = resolved_args
+                if step.tool not in allowed_tool_names:
+                    rejection_reason_by_step_id[step.id] = f"Tool '{step.tool}' is not allowed for this agent."
+                    continue
+                request_hash = build_signature({"tool_name": step.tool, "input": resolved_args})
+                if request_hash in seen_request_hashes or (
+                    tool_repo is not None
+                    and agent_state.execution_context.roundtrip_id is not None
+                    and tool_repo.has_request_hash(agent_state.execution_context.roundtrip_id, request_hash)
+                ):
+                    rejection_reason_by_step_id[step.id] = f"Tool request for '{step.tool}' was already made in this roundtrip."
+                    continue
+                seen_request_hashes.add(request_hash)
 
             with ThreadPoolExecutor(max_workers=len(plan.steps)) as executor:
                 futures_by_step_id = {
@@ -199,8 +218,9 @@ def run_executor(agent_state: AgentState) -> AgentState:
                         _execute_step,
                         step,
                         tool_results_by_step_id=tool_results_by_step_id,
-                        iteration_number=iteration_number,
                         allowed_tool_names=allowed_tool_names,
+                        resolved_args=resolved_args_by_step_id[step.id],
+                        rejection_reason=rejection_reason_by_step_id.get(step.id, ""),
                     )
                     for step in plan.steps
                 }

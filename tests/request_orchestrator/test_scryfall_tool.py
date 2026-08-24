@@ -53,11 +53,10 @@ def test_search_magic_cards_returns_typed_result() -> None:
 
     assert isinstance(result, ToolResult)
     assert result.metadata == {
-        "page": 1,
+        "current_page": 1,
         "page_size": 15,
         "has_more": False,
         "returned_count": 1,
-        "total_cards": 1,
         "warnings": [],
     }
     assert result.result.model_dump() == {
@@ -82,16 +81,16 @@ def test_search_magic_cards_returns_typed_result() -> None:
             }
         ],
     }
-    assert result.evidence_views[0].item_id == "card-1"
-    assert result.evidence_views[0].title == "Black Lotus"
-    assert result.evidence_views[0].summary == "{T}, Sacrifice Black Lotus: Add three mana of any one color."
-    assert "prices" not in result.evidence_views[0].metadata
-    assert result.evidence_views[0].metadata["legal_formats"] == ["commander", "legacy"]
-    assert "legalities" not in result.evidence_views[0].metadata
-    assert "games" not in result.evidence_views[0].metadata
-    assert "query" not in result.evidence_views[0].metadata
-    assert result.hydrated_evidence[0].item_id == "card-1"
-    assert result.hydrated_evidence[0].urls[0].url == "https://scryfall.com/card/vma/4/black-lotus"
+    assert result.evidence[0].item_id == "card-1"
+    assert result.evidence[0].title == "Black Lotus"
+    assert result.evidence[0].summary == "{T}, Sacrifice Black Lotus: Add three mana of any one color."
+    assert "prices" not in result.evidence[0].llm_metadata
+    assert result.evidence[0].llm_metadata["legal_formats"] == ["commander", "legacy"]
+    assert "legalities" not in result.evidence[0].llm_metadata
+    assert "games" not in result.evidence[0].llm_metadata
+    assert "query" not in result.evidence[0].llm_metadata
+    assert result.evidence[0].item_id == "card-1"
+    assert result.evidence[0].urls[0].url == "https://scryfall.com/card/vma/4/black-lotus"
 
 
 def test_search_magic_cards_applies_commander_color_identity_filter() -> None:
@@ -125,11 +124,10 @@ def test_search_magic_cards_applies_commander_color_identity_filter() -> None:
 
     assert isinstance(result, ToolResult)
     assert result.metadata == {
-        "page": 1,
+        "current_page": 1,
         "page_size": 15,
         "has_more": False,
         "returned_count": 0,
-        "total_cards": 0,
         "warnings": [],
     }
     assert result.result.cards == []
@@ -250,7 +248,7 @@ def test_search_magic_cards_can_include_pricing() -> None:
             tix=None,
         ),
     ]
-    assert result.evidence_views[0].metadata["pricing"] == [
+    assert result.evidence[0].llm_metadata["pricing"] == [
         {
             "set": "Vintage Masters",
             "usd": "12345.67",
@@ -300,11 +298,10 @@ def test_search_magic_cards_supports_internal_pagination() -> None:
         module._scryfall_client = original_client
 
     assert result.metadata == {
-        "page": 2,
+        "current_page": 2,
         "page_size": 15,
         "has_more": False,
         "returned_count": 5,
-        "total_cards": 20,
         "warnings": [],
     }
     assert [card.id for card in result.result.cards] == [

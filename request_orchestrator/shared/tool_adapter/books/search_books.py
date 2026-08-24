@@ -10,7 +10,7 @@ from integrations.open_library import (
     OpenLibraryClient,
 )
 from integrations.open_library.models import BookDoc, BookSearchResult
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from request_orchestrator.shared.tool_adapter.books.candidate_mapper import rerank_book_search_result
 from request_orchestrator.shared.tool_adapter.books.constants import DEFAULT_BOOK_SEARCH_LIMIT
 from tool.constants import TOOL_NAME_SEARCH_BOOKS
@@ -44,8 +44,7 @@ def _book_summary(book: BookDoc) -> str:
 
 
 def _tool_result(result: BookSearchResult) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for book in result.docs:
         url = OPEN_LIBRARY_WORK_URL_TEMPLATE.format(work_key=book.key).strip() if book.key else ""
         image_url = OPEN_LIBRARY_COVER_IMAGE_URL_TEMPLATE.format(cover_id=book.cover_i).strip() if book.cover_i is not None else ""
@@ -54,7 +53,7 @@ def _tool_result(result: BookSearchResult) -> ToolResult:
             subjects=list(book.subject or []),
             languages=list(book.language or []),
         )
-        hydrated = HydratedEvidence(
+        evidence_view = EvidenceView(
             item_id=book.key,
             tool_name=TOOL_NAME_SEARCH_BOOKS,
             title=book.title,
@@ -63,19 +62,11 @@ def _tool_result(result: BookSearchResult) -> ToolResult:
             image_url=image_url,
             source=TOOL_NAME_SEARCH_BOOKS,
             entity_type=TOOL_RESULT_TYPE_BOOK_RESULTS,
-            metadata=metadata.model_dump(exclude_none=True),
+            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=book,
         )
-        hydrated_evidence.append(hydrated)
-        evidence_views.append(
-            EvidenceView(
-                item_id=hydrated.item_id,
-                title=hydrated.title,
-                summary=hydrated.summary,
-                metadata=dict(hydrated.metadata),
-            )
-        )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+        evidence.append(evidence_view)
+    return ToolResult(result=result, evidence=evidence)
 
 
 

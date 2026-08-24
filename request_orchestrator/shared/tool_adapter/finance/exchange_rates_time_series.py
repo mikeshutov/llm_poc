@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 from integrations.frankfurter import FrankfurterClient
 from integrations.frankfurter.models import ExchangeRatesSeries
-from request_orchestrator.models.evidence import EvidenceView, HydratedEvidence, ToolResult
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from tool.constants import TOOL_NAME_EXCHANGE_RATES_TIME_SERIES
 from tool.constants import TOOL_RESULT_TYPE_FINANCE
 
@@ -39,8 +39,7 @@ class ExchangeRateTimeSeriesMetadata(BaseModel):
 
 
 def _tool_result(result: ExchangeRatesSeries) -> ToolResult:
-    hydrated_evidence: list[HydratedEvidence] = []
-    evidence_views: list[EvidenceView] = []
+    evidence: list[EvidenceView] = []
     for date_key, day_rates in result.rates.items():
         for currency_code, rate in day_rates.items():
             metadata = ExchangeRateTimeSeriesMetadata(
@@ -49,7 +48,7 @@ def _tool_result(result: ExchangeRatesSeries) -> ToolResult:
                 rate=rate,
                 date=date_key,
             )
-            hydrated = HydratedEvidence(
+            evidence_view = EvidenceView(
                 item_id=f"{date_key}:{currency_code}",
                 tool_name=TOOL_NAME_EXCHANGE_RATES_TIME_SERIES,
                 title=f"{result.base} to {currency_code}",
@@ -57,7 +56,7 @@ def _tool_result(result: ExchangeRatesSeries) -> ToolResult:
                 published_at=date_key,
                 source=TOOL_NAME_EXCHANGE_RATES_TIME_SERIES,
                 entity_type=TOOL_RESULT_TYPE_FINANCE,
-                metadata=metadata.model_dump(exclude_none=True),
+                llm_metadata=metadata.model_dump(exclude_none=True),
                 raw_payload={
                     "date": date_key,
                     "currency": currency_code,
@@ -65,16 +64,8 @@ def _tool_result(result: ExchangeRatesSeries) -> ToolResult:
                     "series": result,
                 },
             )
-            hydrated_evidence.append(hydrated)
-            evidence_views.append(
-                EvidenceView(
-                    item_id=hydrated.item_id,
-                    title=hydrated.title,
-                    summary=hydrated.summary,
-                    metadata=dict(hydrated.metadata),
-                )
-            )
-    return ToolResult(result=result, evidence_views=evidence_views, hydrated_evidence=hydrated_evidence)
+            evidence.append(evidence_view)
+    return ToolResult(result=result, evidence=evidence)
 
 
 @tool(
