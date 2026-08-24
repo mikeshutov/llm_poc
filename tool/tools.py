@@ -1,50 +1,60 @@
 from common.config import get_env_bool, get_env_float, get_env_int
-from request_orchestrator.shared.tool_adapter.books.search_books import search_books
-from request_orchestrator.shared.tool_adapter.calendar.public_holidays_lookup import public_holidays_lookup
-from request_orchestrator.shared.tool_adapter.calendar.world_time import get_world_time
-from request_orchestrator.shared.tool_adapter.files.get_file_by_id import get_file_by_id
-from request_orchestrator.shared.tool_adapter.files.search_file_for_details import search_file_for_details
-from request_orchestrator.shared.tool_adapter.files.search_files import search_files
-from request_orchestrator.shared.tool_adapter.finance.crypto_markets import get_crypto_markets
-from request_orchestrator.shared.tool_adapter.finance.exchange_rates_lookup import exchange_rates_lookup
-from request_orchestrator.shared.tool_adapter.finance.exchange_rates_time_series import exchange_rates_time_series
-from request_orchestrator.shared.tool_adapter.finance.get_stock_price import get_stock_price
-from request_orchestrator.shared.tool_adapter.finance.latest_exchange_rates import get_latest_exchange_rates
-from request_orchestrator.shared.tool_adapter.food.search_cocktails import search_cocktails
-from request_orchestrator.shared.tool_adapter.food.search_meals import search_meals
-from request_orchestrator.shared.tool_adapter.fun.astronomy_picture import get_astronomy_picture
-from request_orchestrator.shared.tool_adapter.fun.get_advice import get_advice
-from request_orchestrator.shared.tool_adapter.fun.get_quote import get_quote
-from request_orchestrator.shared.tool_adapter.games.get_commander_cards import get_commander_cards
-from request_orchestrator.shared.tool_adapter.games.get_commander_details import get_commander_details
-from request_orchestrator.shared.tool_adapter.games.get_magic_card_rulings import get_magic_card_rulings
-from request_orchestrator.shared.tool_adapter.games.search_magic_cards import search_magic_cards
-from request_orchestrator.shared.tool_adapter.language.define_word import define_word
-from request_orchestrator.shared.tool_adapter.location.get_caller_location import get_caller_location
-from request_orchestrator.shared.tool_adapter.math.calculate import calculate
-from request_orchestrator.shared.tool_adapter.memories.get_memory_detail import get_memory_detail
-from request_orchestrator.shared.tool_adapter.memories.search_memories import search_memories
-from request_orchestrator.shared.tool_adapter.memories.search_roundtrip_memories import search_roundtrip_memories
-from request_orchestrator.shared.tool_adapter.news.hn_search import hn_search
-from request_orchestrator.shared.tool_adapter.user_attributes.create_user_attribute import create_user_attribute
-from request_orchestrator.shared.tool_adapter.user_attributes.get_user_attributes import get_user_attributes
-from request_orchestrator.shared.tool_adapter.user_attributes.search_user_attributes import search_user_attributes
-from request_orchestrator.shared.tool_adapter.user_attributes.update_user_attribute import update_user_attribute
-from request_orchestrator.shared.tool_adapter.products.find_products import find_products
-from request_orchestrator.shared.tool_adapter.profile.set_user_display_name import set_user_display_name
-from request_orchestrator.shared.tool_adapter.profile.set_user_first_name import set_user_first_name
-from request_orchestrator.shared.tool_adapter.profile.set_user_last_name import set_user_last_name
-from request_orchestrator.shared.tool_adapter.profile.update_user_tone import update_user_tone
-from request_orchestrator.shared.tool_adapter.products.find_products_web import find_products_web
-from request_orchestrator.shared.tool_adapter.products.list_product_categories import list_product_categories
-from request_orchestrator.shared.tool_adapter.search.brave_news_search import news_search
-from request_orchestrator.shared.tool_adapter.search.country_lookup import country_lookup
-from request_orchestrator.shared.tool_adapter.search.generic_web_search import generic_web_search
-from request_orchestrator.shared.tool_adapter.search.structured_facts_lookup import structured_facts_lookup
-from request_orchestrator.shared.tool_adapter.search.wikipedia_search import wikipedia_search
-from request_orchestrator.shared.tool_adapter.weather.get_current_weather import get_current_weather
-from request_orchestrator.shared.tool_adapter.weather.get_historical_month_weather import get_historical_month_weather
-from request_orchestrator.shared.tool_adapter.weather.resolve_city_location import resolve_city_location
+from request_orchestrator.shared.tool_adapter.books import search_books
+from request_orchestrator.shared.tool_adapter.calendar import get_world_time, public_holidays_lookup
+from request_orchestrator.shared.tool_adapter.files import get_file_by_id, search_file_for_details, search_files
+from request_orchestrator.shared.tool_adapter.finance import (
+    exchange_rates_lookup,
+    exchange_rates_time_series,
+    get_crypto_markets,
+    get_latest_exchange_rates,
+    get_stock_price,
+)
+from request_orchestrator.shared.tool_adapter.food import search_cocktails, search_meals
+from request_orchestrator.shared.tool_adapter.fun import get_advice, get_astronomy_picture, get_quote
+from request_orchestrator.shared.tool_adapter.games import (
+    get_commander_cards,
+    get_commander_details,
+    get_magic_card_rulings,
+    search_magic_cards,
+)
+from request_orchestrator.shared.tool_adapter.language import define_word
+from request_orchestrator.shared.tool_adapter.location import get_caller_location
+from request_orchestrator.shared.tool_adapter.math import calculate
+from request_orchestrator.shared.tool_adapter.memories import (
+    get_memory_detail,
+    search_memories,
+    search_roundtrip_memories,
+)
+from request_orchestrator.shared.tool_adapter.news import hn_search
+from request_orchestrator.shared.tool_adapter.products import (
+    find_products,
+    find_products_web,
+    list_product_categories,
+)
+from request_orchestrator.shared.tool_adapter.profile import (
+    set_user_display_name,
+    set_user_first_name,
+    set_user_last_name,
+    update_user_tone,
+)
+from request_orchestrator.shared.tool_adapter.search import (
+    country_lookup,
+    generic_web_search,
+    news_search,
+    structured_facts_lookup,
+    wikipedia_search,
+)
+from request_orchestrator.shared.tool_adapter.user_attributes import (
+    create_user_attribute,
+    get_user_attributes,
+    search_user_attributes,
+    update_user_attribute,
+)
+from request_orchestrator.shared.tool_adapter.weather import (
+    get_current_weather,
+    get_historical_month_weather,
+    resolve_city_location,
+)
 from tool.constants import TOOL_RESULT_TYPE_ADVICE
 from tool.constants import TOOL_RESULT_TYPE_ASTRONOMY_PICTURE
 from tool.constants import TOOL_RESULT_TYPE_BOOK_RESULTS

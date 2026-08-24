@@ -4,10 +4,12 @@ from llm.conversation_model_config import PROFILE_AGENT_MODEL_SCOPE
 from personalization.profile.models import UserProfile
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_CATEGORIES, ATTRIBUTE_QUALIFIERS
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile, PROFILE_MANAGEMENT_AGENT_NAME
-from request_orchestrator.shared.tool_adapter.profile.set_user_display_name import set_user_display_name
-from request_orchestrator.shared.tool_adapter.profile.set_user_first_name import set_user_first_name
-from request_orchestrator.shared.tool_adapter.profile.set_user_last_name import set_user_last_name
-from request_orchestrator.shared.tool_adapter.profile.update_user_tone import update_user_tone
+from request_orchestrator.shared.tool_adapter.profile import (
+    set_user_display_name,
+    set_user_first_name,
+    set_user_last_name,
+    update_user_tone,
+)
 
 
 def build_profile_management_profile(user_profile: UserProfile | None = None) -> AgentProfile:
