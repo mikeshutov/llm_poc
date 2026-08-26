@@ -657,17 +657,15 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
         run_request_orchestrator_for_query(str(conversation_id), 'hello world', user_id='anonymous')
 
     assert fake_repo.pending_calls[0]['model'] == config.main_agent.planner.model
-    assert fake_repo.pending_calls[0]['metadata'] == {
-        'resolved_model_config': config.to_metadata_payload(),
-    }
+    assert fake_repo.pending_calls[0]['metadata'].resolved_model_config == config
     assert captured_context_kwargs == {
         'conversation_id': str(conversation_id),
         'limit': 5,
     }
     assert 'llm_usage' not in fake_repo.update_calls[0]['payload']
     assert 'agent_logs' not in fake_repo.update_calls[0]['payload']
-    assert isinstance(fake_repo.update_calls[0]['payload']['roundtrip_latency_ms'], int)
-    assert fake_repo.update_calls[0]['payload']['roundtrip_latency_ms'] >= 0
+    assert isinstance(fake_repo.update_calls[0]['payload'].roundtrip_latency_ms, int)
+    assert fake_repo.update_calls[0]['payload'].roundtrip_latency_ms >= 0
 
 
 def test_run_request_orchestrator_passes_geometadata_to_user_profile_builder() -> None:

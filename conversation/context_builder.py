@@ -38,9 +38,8 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
 
     recent_roundtrip_tool_summaries = []
     for rt in conversation_roundtrips:
-        payload = rt.response_payload if isinstance(rt.response_payload, dict) else {}
-        tool_summary = payload.get("tool_summary")
-        if not tool_summary:
+        tool_summary = rt.response_payload.tool_summary
+        if not tool_summary.evidence_produced:
             continue
         recent_roundtrip_tool_summaries.append(
             RecentRoundtripToolSummary(

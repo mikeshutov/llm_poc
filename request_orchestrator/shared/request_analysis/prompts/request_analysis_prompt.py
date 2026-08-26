@@ -14,7 +14,7 @@ def build_request_analysis_prompt(main_state: MainState) -> AgentPrompt:
             "Each goal should capture the actual objective plus any relevant conversation-derived constraints, references, or continuity needed for planning and synthesis. "
             "Name the concrete topic, subject, entity, or item in each goal instead of using vague placeholders like topic, subject, it, them, or the above. "
             "For lookup or search requests, explicitly state what should be searched for so downstream steps do not need the original conversation to know the target. "
-            "Use recent_roundtrip_tool_summaries as helpful context about prior tool usage, entities, produced fields, and freshness. "
+            "Use recent_roundtrip_tool_summaries as helpful context about prior tool usage, evidence produced, and freshness. "
             "Use recent_roundtrips when the user refers to something said in a recent prior message or to a recent turn summary. "
             "If the user is asking about something previously discussed, suggested, decided, or mentioned, include the memories category in the relevant agent goal. "
             "The profile is included attributes are not loaded. "

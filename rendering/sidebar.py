@@ -7,6 +7,7 @@ import streamlit as st
 
 from llm.repository.repo_factory import get_conversation_model_config_repo
 from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig, EVALUATOR_STAGE, PLANNER_STAGE
+from conversation.models.conversation_models import ConversationMetadata
 from conversation.models.replay_models import PreparedReplayConversation
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
@@ -114,7 +115,7 @@ def _switch_user(conversation_repository, user_id: str) -> None:
         st.session_state.conversation_id = str(
             conversation_repository.create_conversation(
                 user_id=user_id,
-                metadata={"source": "streamlit"},
+                metadata=ConversationMetadata(source="streamlit"),
             ).id
         )
     st.query_params["uid"] = user_id
@@ -139,7 +140,7 @@ def _delete_conversation(conversation_repository, conversation_id: str) -> None:
         st.session_state.conversation_id = str(
             conversation_repository.create_conversation(
                 user_id=selected_user_id,
-                metadata={"source": "streamlit"},
+                metadata=ConversationMetadata(source="streamlit"),
             ).id
         )
     st.query_params["uid"] = selected_user_id
@@ -833,7 +834,7 @@ def render_sidebar(conversation_repository) -> None:
                         first_name=new_first_name.strip() or None,
                         last_name=new_last_name.strip() or None,
                         display_name=new_display_name.strip() or None,
-                        metadata={"source": "streamlit"},
+                        metadata=ConversationMetadata(source="streamlit"),
                     )
                     st.session_state[USER_CREATE_FORM_KEY] = False
                     st.session_state.pop("new_user_first_name_input", None)
@@ -860,7 +861,7 @@ def render_sidebar(conversation_repository) -> None:
             st.session_state.conversation_id = str(
                 conversation_repository.create_conversation(
                     user_id=selected_user_id,
-                    metadata={"source": "streamlit"},
+                    metadata=ConversationMetadata(source="streamlit"),
                 ).id
             )
             st.query_params["uid"] = selected_user_id

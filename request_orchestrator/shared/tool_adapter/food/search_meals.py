@@ -6,7 +6,7 @@ from requests.exceptions import RequestException
 
 from integrations.meal_db import MealDbClient
 from integrations.meal_db.models import MealSearchResult
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolMetadata, ToolResult
 from request_orchestrator.shared.tool_adapter.food.candidate_mapper import rerank_meal_search_result
 from request_orchestrator.shared.tool_adapter.food.constants import DEFAULT_MEAL_RERANK_LIMIT
 from tool.constants import TOOL_NAME_SEARCH_MEALS
@@ -63,10 +63,10 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
         evidence.append(evidence_view)
     return ToolResult(
         result=result,
-        metadata={
-            "retrieved_count": result.retrieved_count,
-            "reranked": result.reranked,
-        },
+        tool_metadata=ToolMetadata(
+            retrieved_count=result.retrieved_count,
+            reranked=result.reranked,
+        ),
 
         evidence=evidence,
     )

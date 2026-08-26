@@ -5,9 +5,13 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 DEFAULT_SYNTHESIS_NEXT_QUESTION = "What would you like to do next?"
 
 
+class SynthesisToolSummaryEvidenceProduced(BaseModel):
+    entity_type: str = ""
+    entity_id: str = ""
+
+
 class SynthesisToolSummary(BaseModel):
-    produced: list[str] = Field(default_factory=list)
-    entities: list[str] = Field(default_factory=list)
+    evidence_produced: list[SynthesisToolSummaryEvidenceProduced] = Field(default_factory=list)
 
 
 class SynthesisResultBlock(BaseModel):

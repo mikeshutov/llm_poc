@@ -9,7 +9,7 @@ from products.models.product_result import ProductResult
 from products.models.product_search_results import ProductSearchResults
 from products.product_retrieval import find_products as catalog_find_products
 from products.models.product_query import ProductQuery
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolMetadata, ToolResult
 from tool.constants import TOOL_NAME_FIND_PRODUCTS
 from tool.constants import TOOL_RESULT_TYPE_PRODUCT_RESULTS
 
@@ -46,10 +46,6 @@ class ProductEvidenceMetadata(BaseModel):
     season: str | None = None
     year: int | None = None
     price: float | None = None
-    score: float | None = None
-    product_source: str
-    retrieved_count: int
-    reranked: bool
 
 
 def _product_summary(product: ProductResult) -> str:
@@ -63,7 +59,19 @@ def _product_summary(product: ProductResult) -> str:
 
 def _tool_result(result: ProductSearchResults) -> ToolResult:
     evidence: list[EvidenceView] = []
-    for product in [*result.internal_results, *result.external_results]:
+    products = [*result.internal_results, *result.external_results]
+    product_sources = sorted({product.source.value for product in products})
+    tool_metadata = ToolMetadata(
+        retrieved_count=result.retrieved_count,
+        reranked=result.reranked,
+        product_source=(
+            product_sources[0] if len(product_sources) == 1 else product_sources
+        )
+        if product_sources
+        else None,
+    )
+
+    for product in products:
         url = (product.url or "").strip()
         metadata = ProductEvidenceMetadata(
             category=product.category,
@@ -73,10 +81,6 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
             season=product.season,
             year=product.year,
             price=product.price,
-            score=product.score,
-            product_source=product.source.value,
-            retrieved_count=result.retrieved_count,
-            reranked=result.reranked,
         )
         evidence_view = EvidenceView(
             item_id=product.id,
@@ -91,7 +95,7 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
             raw_payload=product,
         )
         evidence.append(evidence_view)
-    return ToolResult(result=result, evidence=evidence)
+    return ToolResult(result=result, tool_metadata=tool_metadata, evidence=evidence)
 
 
 @tool(

@@ -46,6 +46,6 @@ def build_synthesis_prompt(evidence: list[EvidenceStep], state: AgentState | Mai
     prompt.include_section(PromptSectionKeys.RULES)
     prompt.include_section(PromptSectionKeys.CONVERSATION_CONTEXT)
     prompt.include_section(PromptSectionKeys.EVIDENCE)
-    prompt.include_section(PromptSectionKeys.LATEST_USER_PROMPT)
+    prompt.include_section(PromptSectionKeys.TASK)
     prompt.include_section(PromptSectionKeys.SCHEMA)
     return prompt

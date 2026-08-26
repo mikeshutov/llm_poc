@@ -21,6 +21,7 @@ from tool.constants import TOOL_NAME_SEARCH_MAGIC_CARDS
 from tool.constants import TOOL_NAME_STRUCTURED_FACTS_LOOKUP
 from tool.constants import TOOL_NAME_WIKIPEDIA_SEARCH
 from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
+from tool.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_RULES
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
@@ -40,6 +41,12 @@ class EvidenceCard:
     url: str
     image_url: str
     source: str
+    entity_type: str
+
+
+CARD_LAYOUTS_BY_EVIDENCE_TYPE: dict[str, dict[str, int]] = {
+    TOOL_RESULT_TYPE_MEAL_RESULTS: {"per_row": 2},
+}
 
 
 INLINE_EVIDENCE_TYPES: set[str] = {
@@ -272,6 +279,7 @@ def _build_block_cards(
                 url=url,
                 image_url=image_url,
                 source=evidence.source.strip(),
+                entity_type=evidence.entity_type.strip(),
             )
         )
     return cards
@@ -284,6 +292,23 @@ def _primary_card_url(urls: list[EvidenceUrl]) -> str:
             if entry.url_type == preferred_type and cleaned_url:
                 return cleaned_url
     return ""
+
+
+def _render_result_content(content: str, links: list[tuple[str, str]]) -> None:
+    chips = "".join(
+        (
+            "<a "
+            f'href="{html.escape(url, quote=True)}" '
+            'target="_blank" rel="noopener noreferrer" '
+            "style=\"display:inline-flex;align-items:center;gap:0.2rem;margin:0 0.25rem 0 0.35rem;"
+            "padding:0.08rem 0.4rem;border:1px solid rgba(49,51,63,0.22);border-radius:999px;"
+            "font-size:0.72rem;line-height:1.25;text-decoration:none;color:inherit;\">"
+            f"<span aria-hidden=\"true\">&#8599;</span> {html.escape(label)}</a>"
+        )
+        for label, url in links
+    )
+    escaped_content = html.escape(content).replace("\n", "<br>")
+    st.html(f'<span style="white-space:pre-wrap">{escaped_content}</span>{chips}')
 
 
 def _render_result_block(
@@ -306,26 +331,7 @@ def _render_result_block(
         source = evidence.source.strip()
         inline_labels.append(f"{label} ({source})" if source else label)
 
-    if inline_links:
-        inline_buttons = " ".join(
-            (
-                "<a "
-                f'href="{html.escape(url, quote=True)}" '
-                'target="_blank" rel="noopener noreferrer" '
-                "style=\"display:inline-block;vertical-align:middle;margin-left:0.35rem;"
-                "padding:0.14rem 0.5rem;border:1px solid rgba(49,51,63,0.2);"
-                "border-radius:999px;text-decoration:none;font-size:0.82rem;"
-                "line-height:1.4;color:inherit;background:rgba(255,255,255,0.65);\">"
-                f"â†— {html.escape(url)}</a>"
-            )
-            for _, url in inline_links
-        )
-        st.markdown(
-            f"<p>{html.escape(block.content)} {inline_buttons}</p>",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.write(block.content)
+    _render_result_content(block.content, inline_links)
 
     magic_card_evidence = [
         evidence
@@ -376,13 +382,21 @@ def render_assistant_content(
                 continue
             seen_card_ids.add(card.id)
             deduped_cards.append(card)
-        render_cards(
-            [card.__dict__ for card in deduped_cards],
-            heading_key="name",
-            description_key="description",
-            image_key="image_url",
-            link_key="url",
-        )
+        cards_by_layout: dict[int, list[EvidenceCard]] = {}
+        for card in deduped_cards:
+            layout = CARD_LAYOUTS_BY_EVIDENCE_TYPE.get(card.entity_type, {})
+            per_row = layout.get("per_row", 3)
+            cards_by_layout.setdefault(per_row, []).append(card)
+
+        for per_row, cards in cards_by_layout.items():
+            render_cards(
+                [card.__dict__ for card in cards],
+                per_row=per_row,
+                heading_key="name",
+                description_key="description",
+                image_key="image_url",
+                link_key="url",
+            )
 
     if has_next_question:
         st.markdown(next_question)

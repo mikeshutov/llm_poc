@@ -1,8 +1,9 @@
 from uuid import UUID
 
-from pydantic import BaseModel
+import pytest
+from pydantic import ValidationError
 
-from request_orchestrator.models.evidence import EvidenceBundle, EvidenceUrl, EvidenceView
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, ToolMetadata, ToolResult
 from common.signatures import build_signature
 
 
@@ -20,7 +21,6 @@ def test_evidence_view_for_llm_excludes_hydrated_fields() -> None:
 
     assert evidence.for_llm() == {
         "evidence_id": "c8271821-2d4c-51a1-bc00-1f4932d052d7",
-        "item_id": "card-1",
         "title": "Knight of the Reliquary",
         "summary": "A creature card.",
         "metadata": {"rarity": "mythic", "legal_formats": ["commander"]},
@@ -29,23 +29,22 @@ def test_evidence_view_for_llm_excludes_hydrated_fields() -> None:
     assert evidence.model_dump()["llm_metadata"] == {"rarity": "mythic", "legal_formats": ["commander"]}
 
 
-def test_evidence_bundle_accepts_reloaded_evidence_view() -> None:
-    class ReloadedEvidenceView(BaseModel):
-        id: UUID
-        item_id: str
-        title: str
-        summary: str
-
-    evidence = ReloadedEvidenceView(
-        id=UUID("c8271821-2d4c-51a1-bc00-1f4932d052d7"),
-        item_id="card-1",
-        title="Knight of the Reliquary",
-        summary="A creature card.",
+def test_tool_result_uses_a_typed_tool_metadata_object() -> None:
+    result = ToolResult(
+        result={"status": "ok"},
+        tool_metadata=ToolMetadata(retrieved_count=20, reranked=True),
     )
 
-    bundle = EvidenceBundle(evidence_by_id={str(evidence.id): evidence})
-
-    assert bundle.evidence_by_id[str(evidence.id)].title == "Knight of the Reliquary"
+    assert result.tool_metadata.model_dump(exclude_none=True) == {
+        "retrieved_count": 20,
+        "reranked": True,
+    }
+    assert result.model_dump(exclude_none=True)["tool_metadata"] == {
+        "retrieved_count": 20,
+        "reranked": True,
+    }
+    with pytest.raises(ValidationError):
+        ToolMetadata(unsupported_metadata=True)
 
 
 def test_request_hash_is_stable_for_equivalent_input() -> None:

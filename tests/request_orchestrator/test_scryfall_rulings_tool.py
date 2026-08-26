@@ -59,7 +59,7 @@ def test_get_magic_card_rulings_returns_typed_result() -> None:
         module._scryfall_client = original_client
 
     assert isinstance(result, ToolResult)
-    assert result.metadata == {"ruling_source": "wotc"}
+    assert result.tool_metadata.model_dump(exclude_none=True) == {"ruling_source": "wotc"}
     assert result.result.model_dump() == {
         "resolved_card": {
             "id": "card-1",

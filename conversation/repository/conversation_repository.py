@@ -11,6 +11,7 @@ from psycopg.types.json import Jsonb
 
 from conversation.models.conversation_models import (
     Conversation,
+    ConversationMetadata,
     ConversationEvent,
     ConversationMemory,
     ConversationRoundtrip,
@@ -18,10 +19,13 @@ from conversation.models.conversation_models import (
     ConversationSummary,
     RoundtripFeedback,
     RoundtripMemory,
+    RoundtripMetadata,
     RoundtripPrompt,
 )
 from db.connection import get_connection
 from llm.repository.conversation_model_config_repository import ConversationModelConfigRepository
+from personalization.tone.models import TonePreferences
+from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
 
 
 class ConversationRepository:
@@ -29,8 +33,12 @@ class ConversationRepository:
         self._conn = conn or get_connection()
         register_vector(self._conn)
 
-    def create_conversation(self, user_id: str, metadata: Optional[dict[str, Any]] = None) -> Conversation:
-        metadata = metadata or {}
+    def create_conversation(
+        self,
+        user_id: str,
+        metadata: ConversationMetadata | None = None,
+    ) -> Conversation:
+        metadata = metadata or ConversationMetadata()
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -38,7 +46,7 @@ class ConversationRepository:
                 VALUES (%s, %s, %s, %s)
                 RETURNING id, user_id, title, created_at, metadata, tone_state, summary
                 """,
-                (user_id, Jsonb(metadata), "Unnamed", Jsonb({})),
+                (user_id, Jsonb(metadata.model_dump(exclude_none=True)), "Unnamed", Jsonb({})),
             )
             row = cur.fetchone()
             assert row is not None
@@ -54,9 +62,9 @@ class ConversationRepository:
         model: Optional[str] = None,
         roundtrip_summary: Optional[str] = None,
         roundtrip_summary_embedding: Optional[list[float]] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: RoundtripMetadata | None = None,
     ) -> ConversationRoundtrip:
-        metadata = metadata or {}
+        metadata = metadata or RoundtripMetadata()
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -66,7 +74,15 @@ class ConversationRepository:
                 WHERE conversation_id = %s
                 RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model, assistant_follow_up
                 """,
-                (conversation_id, user_prompt, roundtrip_summary, roundtrip_summary_embedding, model, Jsonb(metadata), conversation_id),
+                (
+                    conversation_id,
+                    user_prompt,
+                    roundtrip_summary,
+                    roundtrip_summary_embedding,
+                    model,
+                    Jsonb(metadata.model_dump(exclude_none=True)),
+                    conversation_id,
+                ),
             )
             row = cur.fetchone()
             assert row is not None
@@ -76,7 +92,7 @@ class ConversationRepository:
         self,
         roundtrip_id: UUID,
         response: str,
-        payload: dict[str, Any],
+        payload: OrchestratorPayload,
         roundtrip_summary: Optional[str] = None,
         roundtrip_summary_embedding: Optional[list[float]] = None,
         assistant_follow_up: str | None = None,
@@ -94,7 +110,14 @@ class ConversationRepository:
                 WHERE id = %s
                 RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model, assistant_follow_up
                 """,
-                (response, roundtrip_summary, roundtrip_summary_embedding, assistant_follow_up, Jsonb(payload), roundtrip_id),
+                (
+                    response,
+                    roundtrip_summary,
+                    roundtrip_summary_embedding,
+                    assistant_follow_up,
+                    Jsonb(payload.model_dump(exclude_none=True)),
+                    roundtrip_id,
+                ),
             )
             row = cur.fetchone()
             assert row is not None
@@ -105,17 +128,15 @@ class ConversationRepository:
         conversation_id: UUID,
         user_prompt: str,
         generated_response: str,
-        response_payload: Optional[dict[str, Any]] = None,
-        parsed_query: Optional[dict[str, Any]] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        response_payload: OrchestratorPayload | None = None,
+        metadata: RoundtripMetadata | None = None,
         model: Optional[str] = None,
         roundtrip_summary: Optional[str] = None,
         roundtrip_summary_embedding: Optional[list[float]] = None,
     ) -> ConversationRoundtrip:
-        metadata = metadata or {}
-        response_payload = response_payload or {}
-        parsed_query = parsed_query or {}
-        assistant_follow_up = str(response_payload.get("next_question") or "").strip()
+        metadata = metadata or RoundtripMetadata()
+        response_payload = response_payload or OrchestratorPayload()
+        assistant_follow_up = response_payload.next_question.strip()
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -136,7 +157,19 @@ class ConversationRepository:
                 WHERE conversation_id = %s
                 RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model, assistant_follow_up
                 """,
-                (conversation_id, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, assistant_follow_up, Jsonb(response_payload), Jsonb(parsed_query), model, Jsonb(metadata), conversation_id),
+                (
+                    conversation_id,
+                    user_prompt,
+                    generated_response,
+                    roundtrip_summary,
+                    roundtrip_summary_embedding,
+                    assistant_follow_up,
+                    Jsonb(response_payload.model_dump(exclude_none=True)),
+                    Jsonb({}),
+                    model,
+                    Jsonb(metadata.model_dump(exclude_none=True)),
+                    conversation_id,
+                ),
             )
             row = cur.fetchone()
             assert row is not None
@@ -794,12 +827,12 @@ class ConversationRepository:
                     source_roundtrip.roundtrip_summary,
                     source_roundtrip.roundtrip_summary_embedding,
                     source_roundtrip.assistant_follow_up,
-                    Jsonb(source_roundtrip.response_payload or {}),
-                    Jsonb(source_roundtrip.parsed_query or {}),
+                    Jsonb(source_roundtrip.response_payload.model_dump(exclude_none=True)),
+                    Jsonb({}),
                     source_roundtrip.created_at,
                     source_roundtrip.created_at,
                     source_roundtrip.model,
-                    Jsonb(source_roundtrip.metadata or {}),
+                    Jsonb(source_roundtrip.metadata.model_dump(exclude_none=True)),
                 ),
             )
             row = cur.fetchone()
@@ -915,7 +948,7 @@ class ConversationRepository:
             row = cur.fetchone()
             return Conversation(**row) if row else None
 
-    def update_tone_state(self, conversation_id: UUID, tone_state: dict[str, Any]) -> None:
+    def update_tone_state(self, conversation_id: UUID, tone_state: TonePreferences) -> None:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -923,7 +956,7 @@ class ConversationRepository:
                 SET tone_state = %s, updated_at = now()
                 WHERE id = %s;
                 """,
-                (Jsonb(tone_state), conversation_id),
+                (Jsonb(tone_state.model_dump(exclude_none=True)), conversation_id),
             )
 
     def set_conversation_title(self, conversation_id: str, title: str) -> bool:

@@ -50,6 +50,14 @@ def repair_common_json_issues(s: str) -> str:
                 repaired.append(",")
                 continue
 
+        if char in "}]":
+            trailing_whitespace: list[str] = []
+            while repaired and repaired[-1].isspace():
+                trailing_whitespace.append(repaired.pop())
+            if repaired and repaired[-1] == ",":
+                repaired.pop()
+            repaired.extend(reversed(trailing_whitespace))
+
         repaired.append(char)
 
     return "".join(repaired)

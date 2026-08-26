@@ -5,11 +5,12 @@ from typing import Any, Literal
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
+from common.html_text import html_to_plain_text
 from integrations.brave import BraveSearchClient
 from integrations.brave.models import NewsSearchResponse, WebSearchResponse
 from integrations.brave.search_type import SearchType
 from integrations.brave.web_search_params import WebSearchParams
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolMetadata, ToolResult
 from request_orchestrator.shared.tool_adapter.search.candidate_mapper import (
     rerank_news_search_response,
     rerank_web_search_response,
@@ -66,7 +67,7 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
             item_id=url or item.title.strip(),
             tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
             title=item.title.strip(),
-            summary=item.description.strip() or "Web search result.",
+            summary=html_to_plain_text(item.description) or "Web search result.",
             urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
             image_url=(item.image_url or "").strip(),
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
@@ -77,11 +78,11 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
         evidence.append(evidence_view)
     return ToolResult(
         result=result,
-        metadata={
-            "retrieved_count": result.retrieved_count,
-            "reranked": result.reranked,
-            "search_type": SearchType.WEB_SEARCH.value,
-        },
+        tool_metadata=ToolMetadata(
+            retrieved_count=result.retrieved_count,
+            reranked=result.reranked,
+            search_type=SearchType.WEB_SEARCH.value,
+        ),
 
         evidence=evidence,
     )
@@ -96,7 +97,7 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
             item_id=url or item.title.strip(),
             tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
             title=item.title.strip(),
-            summary=item.description.strip() or (item.age or "").strip() or "News search result.",
+            summary=html_to_plain_text(item.description) or (item.age or "").strip() or "News search result.",
             urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
             image_url=(item.thumbnail_url or "").strip(),
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
@@ -107,11 +108,11 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
         evidence.append(evidence_view)
     return ToolResult(
         result=result,
-        metadata={
-            "retrieved_count": result.retrieved_count,
-            "reranked": result.reranked,
-            "search_type": SearchType.NEWS_SEARCH.value,
-        },
+        tool_metadata=ToolMetadata(
+            retrieved_count=result.retrieved_count,
+            reranked=result.reranked,
+            search_type=SearchType.NEWS_SEARCH.value,
+        ),
 
         evidence=evidence,
     )

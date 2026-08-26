@@ -3,7 +3,16 @@ from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from llm.conversation_model_config import ConversationModelConfig
+from personalization.tone.models import TonePreferences
+from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
+
+
+class ToolSummaryEvidenceProduced(BaseModel):
+    entity_type: str = ""
+    entity_id: str = ""
 
 
 class ConversationSummaryResponse(BaseModel):
@@ -20,8 +29,7 @@ class ConversationSummaryResponse(BaseModel):
 
 class ToolSummaryContext(BaseModel):
     used_tools: list[str] = Field(default_factory=list)
-    produced: list[str] = Field(default_factory=list)
-    entities: list[str] = Field(default_factory=list)
+    evidence_produced: list[ToolSummaryEvidenceProduced] = Field(default_factory=list)
     freshness: str = ""
 
 
@@ -47,16 +55,41 @@ class ConversationContext(BaseModel):
     latest_assistant_follow_up: str = ""
 
 
+class ConversationMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = ""
+    source_conversation_id: UUID | None = None
+    source_roundtrip_id: UUID | None = None
+    source_message_index: int | None = None
+
+
+class RoundtripMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resolved_model_config: ConversationModelConfig | None = None
+
+
+class ParsedQuery(BaseModel):
+    """Retained only while the legacy JSONB column exists; no data is written to it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
 @dataclass(frozen=False)
 class Conversation:
     id: UUID
     user_id: str
     title: Optional[str]
     created_at: str
-    metadata: dict[str, Any]
-    tone_state: dict[str, Any]
+    metadata: ConversationMetadata
+    tone_state: TonePreferences
     summary: str = ""
     summary_embedding: Optional[list[float]] = None
+
+    def __post_init__(self) -> None:
+        self.metadata = ConversationMetadata.model_validate(self.metadata)
+        self.tone_state = TonePreferences.model_validate(self.tone_state)
 
 
 @dataclass(frozen=False)
@@ -68,13 +101,18 @@ class ConversationRoundtrip:
     generated_response: str
     roundtrip_summary: Optional[str]
     roundtrip_summary_embedding: Optional[list[float]]
-    response_payload: dict[str, Any]
-    parsed_query: dict[str, Any]
+    response_payload: OrchestratorPayload
+    parsed_query: ParsedQuery
     created_at: str
-    metadata: dict[str, Any]
+    metadata: RoundtripMetadata
     model: Optional[str] = None
     feedback_id: Optional[UUID] = None
     assistant_follow_up: str = ""
+
+    def __post_init__(self) -> None:
+        self.response_payload = OrchestratorPayload.model_validate(self.response_payload)
+        self.parsed_query = ParsedQuery.model_validate(self.parsed_query)
+        self.metadata = RoundtripMetadata.model_validate(self.metadata)
 
 
 @dataclass(frozen=False)

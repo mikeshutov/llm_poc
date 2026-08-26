@@ -153,7 +153,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         return result, llm, repo, roundtrip_id
 
-    def test_profile_management_subagent_uses_profile_goal_and_raw_user_prompt(self) -> None:
+    def test_profile_management_subagent_uses_profile_goal(self) -> None:
         parent_state = AgentState.new(
             task='Please remember that I like pizza and eggs.',
             execution_context=AgentExecutionContext.new(
@@ -177,7 +177,6 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertEqual(profile_state.agent_profile.max_turns, 5)
         self.assertIn('ROLE / RULES', prompt_text)
         self.assertIn('INPUT', prompt_text)
-        self.assertIn('"latest_user_prompt": "Please remember that I like pizza and eggs."', prompt_text)
         self.assertIn('Please remember that I like pizza and eggs.', prompt_text)
         self.assertNotIn('Use recent_roundtrip_tool_summaries', prompt_text)
         self.assertNotIn('Use recent_roundtrips when the user refers', prompt_text)
@@ -186,7 +185,6 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertNotIn('Evidence references must be defined before use.', prompt_text)
         self.assertIn("Do not make one planned tool step depend on another step's output.", prompt_text)
         self.assertIn('You may use already-available tool results from previous work', prompt_text)
-        self.assertEqual(prompt.latest_user_prompt, 'Please remember that I like pizza and eggs.')
         self.assertEqual(prompt.task, 'Please remember that I like pizza and eggs.')
         self.assertIn('attribute_type (required): Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.', prompt_text)
         self.assertIn('Available attribute prefixes:', prompt_text)
@@ -669,11 +667,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "result": [{"content": "Stored your food likes as a user attribute.", "evidence_ids": []}],
           "next_question": "Do you want me to remember any other food preferences?",
-          "roundtrip_summary": "Stored the user's stated food likes as a persistent user attribute and confirmed the profile state.",
-          "tool_summary": {
-            "produced": ["current user attribute list"],
-            "entities": ["pizza", "eggs"]
-          }
+          "roundtrip_summary": "Stored the user's stated food likes as a persistent user attribute and confirmed the profile state."
         }
         """
 
@@ -786,11 +780,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "result": [{"content": "I used your stored food preferences while looking up a meal idea.", "evidence_ids": []}],
           "next_question": "Do you want a few more options based on those preferences?",
-          "roundtrip_summary": "Loaded the user's stored food likes and used them while planning a meal-related response.",
-          "tool_summary": {
-            "produced": ["meal ideas"],
-            "entities": ["pizza"]
-          }
+          "roundtrip_summary": "Loaded the user's stored food likes and used them while planning a meal-related response."
         }
         """
 
@@ -889,11 +879,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "result": [{"content": "The result is 47.0.", "evidence_ids": []}],
           "next_question": "Do you want me to show the calculation steps too?",
-          "roundtrip_summary": "Calculated the requested expression using the math tool and returned the numeric result.",
-          "tool_summary": {
-            "produced": ["numeric result"],
-            "entities": ["(15 * 8) / 3 + 7"]
-          }
+          "roundtrip_summary": "Calculated the requested expression using the math tool and returned the numeric result."
         }
         """
 
@@ -974,11 +960,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "result": [{"content": "The current time in Tokyo is 2026-08-04T21:30:00+09:00.", "evidence_ids": []}],
           "next_question": "Do you want the current date there as well?",
-          "roundtrip_summary": "Looked up the current time in Tokyo using the world time tool and returned the reported local datetime.",
-          "tool_summary": {
-            "produced": ["local datetime", "UTC offset"],
-            "entities": ["Asia/Tokyo"]
-          }
+          "roundtrip_summary": "Looked up the current time in Tokyo using the world time tool and returned the reported local datetime."
         }
         """
 
@@ -1045,11 +1027,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "result": [{"content": "I can help with that.", "evidence_ids": []}],
           "next_question": "Which product category do you want to focus on?",
-          "roundtrip_summary": "The request was underspecified, so the response preserved the clarifying question and dropped the follow-up variant.",
-          "tool_summary": {
-            "produced": [],
-            "entities": []
-          }
+          "roundtrip_summary": "The request was underspecified, so the response preserved the clarifying question and dropped the follow-up variant."
         }
         """
 

@@ -19,7 +19,7 @@ from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.models.evidence import EvidenceView
 from request_orchestrator.shared.tool_adapter.search.wikipedia_search import WikipediaSearchResponse
 from integrations.wikipedia.models import WikipediaPageSummary, WikipediaSearchResult
-from request_orchestrator.models.evidence import ToolResult
+from request_orchestrator.models.evidence import ToolMetadata, ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.evidence import (
     build_evidence_bundle_from_tool_results,
@@ -110,8 +110,8 @@ build_evidence_steps = _build_evidence_steps
 
 def test_build_evidence_steps_uses_latest_current_page_for_card_results() -> None:
     tool_results = [
-        ToolResult(step_id="P1E1", tool_name="search_magic_cards", metadata={"current_page": 1}),
-        ToolResult(step_id="P2E1", tool_name="search_magic_cards", metadata={"current_page": 2}),
+        ToolResult(step_id="P1E1", tool_name="search_magic_cards", tool_metadata=ToolMetadata(current_page=1)),
+        ToolResult(step_id="P2E1", tool_name="search_magic_cards", tool_metadata=ToolMetadata(current_page=2)),
     ]
 
     evidence_steps = build_evidence_steps_from_tool_results(tool_results, {})

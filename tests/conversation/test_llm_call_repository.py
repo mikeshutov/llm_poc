@@ -7,6 +7,7 @@ from uuid import uuid4
 from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, OPENAI_PROVIDER
 from llm.repository.conversation_model_config_repository import ConversationModelConfigRepository
 from conversation.repository.conversation_repository import ConversationRepository
+from conversation.models.conversation_models import ConversationMetadata
 
 
 class FakeCursor:
@@ -177,7 +178,10 @@ def test_create_conversation_persists_default_model_config_rows() -> None:
     with patch('conversation.repository.conversation_repository.register_vector', lambda conn: None):
         repo = ConversationRepository(conn=FakeConnection([create_cursor, FakeCursor(fetchall_rows=[]), *config_cursors]))
 
-    conversation = repo.create_conversation(user_id='anonymous', metadata={'source': 'streamlit'})
+    conversation = repo.create_conversation(
+        user_id='anonymous',
+        metadata=ConversationMetadata(source='streamlit'),
+    )
 
     assert conversation.id == row['id']
     assert 'INSERT INTO conversation' in create_cursor.executed[0][0]

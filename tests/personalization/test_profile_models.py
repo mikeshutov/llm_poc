@@ -325,6 +325,14 @@ def test_repair_common_json_issues_replaces_semicolon_between_fields() -> None:
     assert repaired == '{"result":["a"], "clarifying_question":"","follow_up":""}'
 
 
+def test_repair_common_json_issues_removes_trailing_commas() -> None:
+    raw = '{"result":[{"content":"done","evidence_ids":[],},],}'
+
+    repaired = repair_common_json_issues(raw)
+
+    assert repaired == '{"result":[{"content":"done","evidence_ids":[]}]}'
+
+
 def test_synthesis_result_accepts_next_question_and_result_blocks() -> None:
     result = SynthesisResult.model_validate(
         {
@@ -423,7 +431,7 @@ def test_agent_prompt_exposes_prompt_text_sections_and_token_count() -> None:
         user_profile=UserProfile(user_id='user-123', display_name='Mike'),
         task='Find boots.',
     )
-    prompt.include_section(PromptSectionKeys.USER_PROFILE).include_section(PromptSectionKeys.LATEST_USER_PROMPT).include_section(PromptSectionKeys.TASK)
+    prompt.include_section(PromptSectionKeys.USER_PROFILE).include_section(PromptSectionKeys.TASK)
 
     prompt_text = prompt.build()
     prompt_token_count = prompt.prompt_token_count()
@@ -435,13 +443,11 @@ def test_agent_prompt_exposes_prompt_text_sections_and_token_count() -> None:
     assert 'INPUT' in prompt_text
     assert list(sections_raw.keys()) == [
         PromptSectionKeys.USER_PROFILE,
-        PromptSectionKeys.LATEST_USER_PROMPT,
         PromptSectionKeys.TASK,
     ]
     assert "user_id" not in sections_raw[PromptSectionKeys.USER_PROFILE]
     assert sections_raw[PromptSectionKeys.USER_PROFILE]["display_name"] == "Mike"
     assert sections_raw[PromptSectionKeys.TASK] == 'Find boots.'
-    assert '"latest_user_prompt": "Find boots."' in prompt_text
     assert '"task": "Find boots."' in prompt_text
 
 

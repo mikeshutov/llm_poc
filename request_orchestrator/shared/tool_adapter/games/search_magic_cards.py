@@ -11,7 +11,7 @@ from integrations.scryfall import (
     ScryfallCardSearchResult,
     ScryfallClient,
 )
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolMetadata, ToolResult
 from request_orchestrator.shared.tool_adapter.games.mtg_color_identity import apply_commander_color_identity_filter
 from tool.constants import TOOL_NAME_SEARCH_MAGIC_CARDS
 from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
@@ -247,13 +247,13 @@ def search_magic_cards(
     )
     return ToolResult(
         result=result,
-        metadata={
-            "current_page": page,
-            "page_size": DEFAULT_MAGIC_CARD_PAGE_SIZE,
-            "has_more": result.has_more,
-            "returned_count": result.returned_count,
-            "warnings": list(result.warnings),
-        },
+        tool_metadata=ToolMetadata(
+            current_page=page,
+            page_size=DEFAULT_MAGIC_CARD_PAGE_SIZE,
+            has_more=result.has_more,
+            returned_count=result.returned_count,
+            warnings=list(result.warnings),
+        ),
 
         evidence=evidence,
     )

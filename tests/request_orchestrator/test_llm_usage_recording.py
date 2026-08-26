@@ -349,7 +349,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM('{"result": [{"content": "done", "evidence_ids": []}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.6-terra'),
+        llm=FakeInvokeLLM('{"result": [{"content": "done", "evidence_ids": []}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary"}', 'gpt-5.6-terra'),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
 
@@ -367,7 +367,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
     assert repo.llm_calls[0]['stage'] == 'synthesis'
     assert repo.llm_calls[0]['model'] == 'gpt-5.6-terra'
     assert repo.llm_calls[0]['metadata']['input_object']['prompt_token_count'] > 0
-    assert PromptSectionKeys.LATEST_USER_PROMPT in repo.llm_calls[0]['metadata']['input_object']['sections_raw']
+    assert PromptSectionKeys.TASK in repo.llm_calls[0]['metadata']['input_object']['sections_raw']
     payload = _latest_event_payload(repo, event_type='synthesis', agent_name='request_orchestrator')
     assert payload['data']['llm_usage']['model'] == 'gpt-5.6-terra'
     assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
@@ -513,7 +513,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["e5cf297f-8f55-55a7-b1b2-7fb389482919"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.6-terra'),
+        llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["e5cf297f-8f55-55a7-b1b2-7fb389482919"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary"}', 'gpt-5.6-terra'),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
     main_agent_state = state.agent_states['main_agent']

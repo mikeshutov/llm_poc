@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+from common.html_text import html_to_plain_text
 
 
 class CandidateContent(BaseModel):
@@ -14,6 +16,11 @@ class CandidateContent(BaseModel):
     text: str | None = None
     url: str | None = None
     image_url: str | None = None
+
+    @field_validator("name", "summary", "description", "text", mode="before")
+    @classmethod
+    def normalize_reranker_text(cls, value: object) -> object:
+        return html_to_plain_text(value) if isinstance(value, str) else value
 
     def get(self, key: str, default: Any = None) -> Any:
         if hasattr(self, key):

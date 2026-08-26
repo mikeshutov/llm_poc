@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
+from conversation.models.conversation_models import RoundtripMetadata
 from conversation.repository.repo_factory import get_conversation_repo
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
+from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from tool.constants import TOOL_NAME_GET_MEMORY_DETAIL
 from tool.constants import TOOL_RESULT_TYPE_MEMORY_DETAIL
@@ -30,9 +31,8 @@ class GetMemoryDetailResult(BaseModel):
     roundtrip_summary: str = ""
     created_at: str = ""
     model: str = ""
-    response_payload: dict[str, Any] = Field(default_factory=dict)
-    parsed_query: dict[str, Any] = Field(default_factory=dict)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    response_payload: OrchestratorPayload = Field(default_factory=OrchestratorPayload)
+    metadata: RoundtripMetadata = Field(default_factory=RoundtripMetadata)
 
 
 @tool(
@@ -84,11 +84,10 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         roundtrip_summary=roundtrip.roundtrip_summary or "",
         created_at=str(roundtrip.created_at),
         model=roundtrip.model or "",
-        response_payload=roundtrip.response_payload or {},
-        parsed_query=roundtrip.parsed_query or {},
-        metadata=roundtrip.metadata or {},
+        response_payload=roundtrip.response_payload,
+        metadata=roundtrip.metadata,
     )
-    metadata = dict(result.metadata)
+    metadata = result.metadata.model_dump(exclude_none=True)
     metadata.update(
         {
             "conversation_id": result.conversation_id,

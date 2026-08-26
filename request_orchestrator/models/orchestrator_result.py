@@ -4,9 +4,12 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from request_orchestrator.models.agent_result import AgentResult
+from request_orchestrator.models.evidence import EvidenceView
 from request_orchestrator.models.orchestrator_payload import (
     OrchestratorPayload,
     OrchestratorPayloadResultBlock,
+    OrchestratorPayloadToolSummary,
+    OrchestratorPayloadToolSummaryItem,
 )
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from request_orchestrator.shared.evidence import build_evidence_bundle_from_tool_results
@@ -14,7 +17,7 @@ from request_orchestrator.shared.evidence import build_evidence_bundle_from_tool
 
 def _normalize_evidence_ids(
     evidence_ids: list[str],
-    evidence_by_id: dict[str, dict[str, object]],
+    evidence_by_id: dict[str, EvidenceView],
 ) -> list[str]:
     if not evidence_ids or not evidence_by_id:
         return [
@@ -35,6 +38,33 @@ def _normalize_evidence_ids(
             continue
         normalized_ids.append(normalized)
     return normalized_ids
+
+
+def _build_tool_summary(
+    evidence_by_id: dict[str, EvidenceView],
+) -> OrchestratorPayloadToolSummary:
+    evidence_produced: list[OrchestratorPayloadToolSummaryItem] = []
+    seen_pairs: set[tuple[str, str]] = set()
+
+    for evidence in evidence_by_id.values():
+        entity_type = (evidence.entity_type or evidence.tool_name).strip()
+        entity_id = (evidence.item_id or str(evidence.id)).strip()
+        if not entity_type and not entity_id:
+            continue
+        pair = (entity_type, entity_id)
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        evidence_produced.append(
+            OrchestratorPayloadToolSummaryItem(
+                entity_type=entity_type,
+                entity_id=entity_id,
+            )
+        )
+
+    return OrchestratorPayloadToolSummary(
+        evidence_produced=evidence_produced,
+    )
 
 
 @dataclass(frozen=True)
@@ -103,10 +133,7 @@ class OrchestratorResult:
 
         tool_results = ToolCallRepository().get_tool_results(self.agent_result.tool_call_ids)
         evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
-        evidence_by_id = {
-            evidence_id: evidence.model_dump()
-            for evidence_id, evidence in evidence_bundle.evidence_by_id.items()
-        }
+        evidence_by_id = evidence_bundle.evidence_by_id
         result_blocks = self.result_blocks
         if not result_blocks:
             result_blocks = [
@@ -125,7 +152,7 @@ class OrchestratorResult:
             for block in result_blocks
         ]
         return OrchestratorPayload(
-            tool_results=[tool_result.model_dump() for tool_result in tool_results],
+            tool_results=[tool_result.model_dump(exclude_none=True) for tool_result in tool_results],
             relevant_evidence_ids=[str(evidence_id) for evidence_id in self.agent_result.relevant_evidence_ids],
             result=[
                 OrchestratorPayloadResultBlock(
@@ -141,5 +168,6 @@ class OrchestratorResult:
             ),
             next_question=self.next_question,
             roundtrip_summary=self.roundtrip_summary,
+            tool_summary=_build_tool_summary(evidence_by_id),
             roundtrip_latency_ms=self.roundtrip_latency_ms,
         )

@@ -29,7 +29,6 @@ class PromptSectionKeys:
     AVAILABLE_TOOLS = "available_tools"
     RULES = "rules"
     EVIDENCE = "evidence"
-    LATEST_USER_PROMPT = "latest_user_prompt"
     TASK = "task"
     SCHEMA = "schema"
 
@@ -42,7 +41,6 @@ BUILTIN_SECTION_KEYS = (
     PromptSectionKeys.AVAILABLE_TOOLS,
     PromptSectionKeys.RULES,
     PromptSectionKeys.EVIDENCE,
-    PromptSectionKeys.LATEST_USER_PROMPT,
     PromptSectionKeys.TASK,
     PromptSectionKeys.SCHEMA,
 )
@@ -55,7 +53,6 @@ INPUT_SECTION_KEYS = (
     PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES,
     PromptSectionKeys.AVAILABLE_TOOLS,
     PromptSectionKeys.EVIDENCE,
-    PromptSectionKeys.LATEST_USER_PROMPT,
     PromptSectionKeys.TASK,
 )
 OUTPUT_CONTRACT_SECTION_KEYS = (PromptSectionKeys.SCHEMA,)
@@ -86,7 +83,6 @@ class AgentPrompt:
     conversation_context: ConversationContext | None = None
     user_profile: UserProfile | None = None
     task: str = ""
-    latest_user_prompt: str = ""
     rules: str = ""
     schema: str = ""
     available_agents: Any = ""
@@ -130,8 +126,6 @@ class AgentPrompt:
                 value = self.rules
             elif key == PromptSectionKeys.EVIDENCE:
                 value = self._serialize_evidence_steps()
-            elif key == PromptSectionKeys.LATEST_USER_PROMPT:
-                value = self.latest_user_prompt or self.task
             elif key == PromptSectionKeys.TASK:
                 value = self.task
             elif key == PromptSectionKeys.SCHEMA:

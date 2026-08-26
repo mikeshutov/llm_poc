@@ -20,13 +20,11 @@ def build_evaluator_prompt(state: AgentState, evidence: list[EvidenceStep]) -> A
         instruction=_build_instruction(state),
         user_profile=state.execution_context.user_profile,
         task=state.inputs.task.strip(),
-        latest_user_prompt=state.inputs.task,
         evidence=evidence,
         schema=EVALUATOR_SCHEMA,
     )
     prompt.include_section(PromptSectionKeys.USER_PROFILE)
     prompt.include_section(PromptSectionKeys.EVIDENCE)
-    prompt.include_section(PromptSectionKeys.LATEST_USER_PROMPT)
     prompt.include_section(PromptSectionKeys.SCHEMA)
     prompt.include_section(PromptSectionKeys.TASK)
     return prompt

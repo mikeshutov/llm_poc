@@ -12,6 +12,7 @@ from personalization.user_attributes.models.user_attribute_types import ATTRIBUT
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
+from request_orchestrator.shared.tool_adapter.user_attribute_evidence_metadata import UserAttributeEvidenceMetadata
 from tool.constants import TOOL_NAME_UPDATE_USER_ATTRIBUTE
 from tool.constants import TOOL_RESULT_TYPE_USER_ATTRIBUTE
 
@@ -30,17 +31,13 @@ class UpdateUserAttributeArgs(BaseModel):
 UPDATE_USER_ATTRIBUTE_DESCRIPTION = "Update an existing persistent user attribute."
 
 
-class UserAttributeMetadata(BaseModel):
-    group_key: str | None = None
-    attribute_values: list[str] = Field(default_factory=list)
-
-
 def _value_text(value: list[str]) -> str:
     return "; ".join(normalize_string_list(value))
 
 
 def _tool_result(result: UserAttribute) -> ToolResult:
-    metadata = UserAttributeMetadata(
+    metadata = UserAttributeEvidenceMetadata(
+        operation="updated",
         group_key=result.group_key,
         attribute_values=list(result.value),
     )
