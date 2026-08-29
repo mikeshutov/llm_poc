@@ -13,7 +13,18 @@ def _build_synthesis_context(state: AgentState | MainState) -> ConversationConte
         conversation_summary=conversation_context.conversation_summary,
         latest_conversation_summary=conversation_context.latest_conversation_summary,
         tool_summary=conversation_context.tool_summary,
+        latest_assistant_follow_up=conversation_context.latest_assistant_follow_up,
     )
+
+
+def _has_tone_preferences(state: AgentState | MainState) -> bool:
+    tone = state.execution_context.user_profile.tone
+    return tone is not None and bool(tone.model_dump(exclude_none=True))
+
+
+def _has_profile_information(state: AgentState | MainState) -> bool:
+    profile = state.execution_context.user_profile
+    return bool(profile.to_prompt_dict(include_tone=False))
 
 
 def build_synthesis_prompt(evidence: list[EvidenceStep], state: AgentState | MainState) -> AgentPrompt:
@@ -34,7 +45,11 @@ def build_synthesis_prompt(evidence: list[EvidenceStep], state: AgentState | Mai
         ),
         conversation_context=_build_synthesis_context(state),
         user_profile=state.execution_context.user_profile,
-        rules=build_synthesis_rules(tool_categories),
+        rules=build_synthesis_rules(
+            tool_categories,
+            apply_tone_preferences=_has_tone_preferences(state),
+            apply_profile_personalization=_has_profile_information(state),
+        ),
         evidence=evidence,
         schema=SYNTHESIS_SCHEMA,
         task=state.task if isinstance(state, MainState) else state.inputs.task,

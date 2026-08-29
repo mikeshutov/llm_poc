@@ -1,5 +1,7 @@
 from uuid import UUID
 
+import json
+
 from tool.repository.models import ToolCall
 from conversation.models.conversation_models import ConversationRoundtrip
 from common.config import CONTENT_KEY, ROLE_ASSISTANT, ROLE_KEY, ROLE_USER
@@ -26,5 +28,12 @@ def build_roundtrip_messages(
     for rt in roundtrips:
         tool_calls = (tool_calls_by_roundtrip or {}).get(rt.id, [])
         messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: rt.user_prompt})
-        messages.append({ROLE_KEY: ROLE_ASSISTANT, CONTENT_KEY: format_tool_calls(rt.generated_response, tool_calls)})
+        assistant_content = format_tool_calls(rt.generated_response, tool_calls)
+        relevant_evidence = rt.relevant_evidence.model_dump(mode="json")
+        if relevant_evidence:
+            assistant_content += (
+                "\nRelevant Evidence by Tool:\n"
+                + json.dumps(relevant_evidence, separators=(",", ":"))
+            )
+        messages.append({ROLE_KEY: ROLE_ASSISTANT, CONTENT_KEY: assistant_content})
     return messages

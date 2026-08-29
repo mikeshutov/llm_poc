@@ -19,6 +19,7 @@ from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
+from tool.constants import TOOL_NAME_LOOKUP_EVIDENCE
 
 
 def test_orchestrator_payload_derives_tool_summary_from_evidence() -> None:
@@ -53,11 +54,94 @@ def test_orchestrator_payload_derives_tool_summary_from_evidence() -> None:
             answer=["It is 21 C in Toronto."],
         ).to_payload_model()
 
-    assert payload.tool_summary.model_dump() == {
-        "evidence_produced": [
-            {
-                "entity_type": "weather",
-                "entity_id": "Toronto",
-            }
-        ]
+    assert payload.tool_summary.model_dump(mode="json") == {
+        "evidence_produced": {
+            "get_current_weather": [str(tool_results[0].evidence[0].id)],
+        }
+    }
+
+
+def test_orchestrator_result_groups_relevant_evidence_by_tool() -> None:
+    tool_call_id = uuid4()
+    evidence_id = uuid4()
+    tool_results = [
+        ToolResult(
+            tool_call_id=tool_call_id,
+            tool_name="search_products",
+            evidence=[
+                EvidenceView(
+                    id=evidence_id,
+                    tool_call_id=tool_call_id,
+                    tool_name="search_products",
+                    title="Product",
+                )
+            ],
+        )
+    ]
+    fake_repo = SimpleNamespace(get_tool_results=lambda tool_call_ids: tool_results)
+
+    with patch("tool.repository.tool_call_repository.ToolCallRepository", return_value=fake_repo):
+        _, relevant_evidence = OrchestratorResult(
+            agent_result=AgentResult(
+                tool_call_ids=[tool_call_id],
+                relevant_evidence_ids=[evidence_id],
+            )
+        ).to_persistence_models()
+
+    assert relevant_evidence.model_dump(mode="json") == {
+        "search_products": [str(evidence_id)]
+    }
+
+
+def test_excluded_tool_evidence_is_not_persisted() -> None:
+    lookup_tool_call_id = uuid4()
+    product_tool_call_id = uuid4()
+    lookup_evidence = EvidenceView(
+        tool_call_id=lookup_tool_call_id,
+        tool_name=TOOL_NAME_LOOKUP_EVIDENCE,
+        title="Historical product",
+    )
+    product_evidence = EvidenceView(
+        tool_call_id=product_tool_call_id,
+        tool_name="find_products",
+        title="Current product",
+    )
+    tool_results = [
+        ToolResult(
+            tool_call_id=lookup_tool_call_id,
+            tool_name=TOOL_NAME_LOOKUP_EVIDENCE,
+            evidence=[lookup_evidence],
+        ),
+        ToolResult(
+            tool_call_id=product_tool_call_id,
+            tool_name="find_products",
+            evidence=[product_evidence],
+        ),
+    ]
+    fake_repo = SimpleNamespace(get_tool_results=lambda tool_call_ids: tool_results)
+
+    with patch("tool.repository.tool_call_repository.ToolCallRepository", return_value=fake_repo):
+        payload, relevant_evidence = OrchestratorResult(
+            agent_result=AgentResult(
+                tool_call_ids=[lookup_tool_call_id, product_tool_call_id],
+                relevant_evidence_ids=[lookup_evidence.id, product_evidence.id],
+            ),
+            result_blocks=[
+                SynthesisResultBlock(
+                    content="Current product is available.",
+                    evidence_ids=[str(lookup_evidence.id), str(product_evidence.id)],
+                )
+            ],
+        ).to_persistence_models()
+
+    assert [tool_result["tool_name"] for tool_result in payload.tool_results] == ["find_products"]
+    assert list(payload.evidence_by_id) == [str(product_evidence.id)]
+    assert payload.relevant_evidence_ids == [str(product_evidence.id)]
+    assert payload.result[0].evidence_ids == [str(product_evidence.id)]
+    assert payload.used_evidence_ids == [str(product_evidence.id)]
+    assert payload.tool_summary.model_dump(mode="json") == {
+        "evidence_produced": {"find_products": [str(product_evidence.id)]}
+    }
+    assert relevant_evidence.model_dump(mode="json") == {
+        "find_products": [str(product_evidence.id)]
     }

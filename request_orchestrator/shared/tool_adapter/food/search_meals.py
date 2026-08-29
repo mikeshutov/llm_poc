@@ -25,10 +25,13 @@ class SearchMealsArgs(BaseModel):
 class MealSearchMetadata(BaseModel):
     category: str | None = None
     area: str | None = None
-    tags: list[str] = []
-    ingredients: list[dict[str, object]] = []
-    retrieved_count: int
-    reranked: bool
+    tags: list[str] = Field(default_factory=list)
+    ingredients: list["MealIngredientMetadata"] = Field(default_factory=list)
+
+
+class MealIngredientMetadata(BaseModel):
+    name: str = ""
+    measure: str | None = None
 
 
 def _tool_result(result: MealSearchResult) -> ToolResult:
@@ -42,12 +45,15 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             urls.append(EvidenceUrl(url=meal.youtube.strip(), url_type=EvidenceUrlType.YOUTUBE))
         summary_parts = [part for part in ((meal.category or "").strip(), (meal.area or "").strip()) if part]
         summary = ". ".join(summary_parts) or (meal.instructions or "").strip() or f"Meal result for {meal.name}."
-        metadata = {
-            "category": meal.category,
-            "area": meal.area,
-            "tags": list(meal.tags) if meal.tags else None,
-            "ingredients": [ingredient.model_dump(exclude_none=True) for ingredient in meal.ingredients],
-        }
+        metadata = MealSearchMetadata(
+            category=meal.category,
+            area=meal.area,
+            tags=[tag.strip() for tag in (meal.tags or "").split(",") if tag.strip()],
+            ingredients=[
+                MealIngredientMetadata.model_validate(ingredient.model_dump())
+                for ingredient in meal.ingredients
+            ],
+        )
         evidence_view = EvidenceView(
             item_id=meal.id,
             tool_name=TOOL_NAME_SEARCH_MEALS,
@@ -57,7 +63,7 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             image_url=(meal.thumbnail or "").strip(),
             source=TOOL_NAME_SEARCH_MEALS,
             entity_type=TOOL_RESULT_TYPE_MEAL_RESULTS,
-            llm_metadata=metadata,
+            llm_metadata=metadata.model_dump(mode="json", exclude_none=True),
             raw_payload=meal,
         )
         evidence.append(evidence_view)

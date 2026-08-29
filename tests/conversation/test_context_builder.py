@@ -51,12 +51,13 @@ class FakeConversationRepository:
                 generated_response='assistant six',
                 roundtrip_summary='summary six',
                 roundtrip_summary_embedding=None,
-                response_payload={},
+                response_payload={"used_evidence_ids": ["evidence-six", " ", "evidence-seven"]},
                 parsed_query={},
                 created_at='2026-08-05T00:00:00Z',
                 metadata={},
                 model=None,
                 feedback_id=None,
+                relevant_evidence={"search_products": [uuid4()]},
             ),
             ConversationRoundtrip(
                 id=uuid4(),
@@ -126,6 +127,9 @@ def test_build_roundtrip_context_requests_latest_unsummarized_roundtrips() -> No
     ]
     assert [roundtrip.message_index for roundtrip in context.recent_roundtrips] == [6, 7, 8]
     assert [roundtrip.user_prompt for roundtrip in context.recent_roundtrips] == ['user six', 'user seven', 'user eight']
+    assert context.recent_roundtrips[0].used_evidence_ids == ['evidence-six', 'evidence-seven']
+    assert list(context.recent_roundtrips[0].relevant_evidence.root) == ['search_products']
+    assert context.recent_roundtrips[1].used_evidence_ids == []
     assert context.recent_roundtrips[-1].assistant_follow_up == 'Would you like more options?'
     assert context.previous_user_request == 'user eight'
     assert context.latest_assistant_follow_up == 'Would you like more options?'
@@ -213,3 +217,23 @@ def test_build_conversation_context_json_prunes_empty_fields() -> None:
     assert 'roundtrip_summary' not in rendered
     assert 'hello' in rendered
     assert 'Would you like another option?' in rendered
+
+
+def test_build_conversation_context_json_serializes_relevant_evidence_uuids() -> None:
+    from conversation.models.conversation_models import ConversationContext, RecentRoundtrip
+    from conversation.utils import build_conversation_context_json
+
+    evidence_id = uuid4()
+    rendered = build_conversation_context_json(
+        ConversationContext(
+            recent_roundtrips=[
+                RecentRoundtrip(
+                    message_index=1,
+                    user_prompt="Find products.",
+                    relevant_evidence={"find_products": [evidence_id]},
+                )
+            ]
+        )
+    )
+
+    assert str(evidence_id) in rendered

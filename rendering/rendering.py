@@ -9,11 +9,17 @@ import streamlit as st
 from common.config import CONTENT_KEY, FILES_DIR, IMAGE_MIME_PREFIX, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
 from common.logging import fetch_agent_logs_for_roundtrip, fetch_llm_call_payloads_for_roundtrip
 from llm.usage import build_llm_usage_payload
-from rendering.cards import render_cards, render_magic_card_evidence_cards, render_magic_card_rulings
+from rendering.cards import (
+    render_cards,
+    render_magic_card_evidence_cards,
+    render_magic_card_rulings,
+    render_meal_evidence_cards,
+)
 from rendering.debug import debug_render_message, render_agent_logs
 from rendering.feedback import render_feedback_controls
 from rendering.replay import render_replay_control
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView
+from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
 from tool.constants import TOOL_NAME_GET_COMMANDER_CARDS
@@ -84,6 +90,10 @@ def _is_magic_card_evidence(evidence: EvidenceView) -> bool:
 
 def _is_magic_card_ruling_evidence(evidence: EvidenceView) -> bool:
     return evidence.entity_type.strip() == TOOL_RESULT_TYPE_RULES
+
+
+def _is_meal_evidence(evidence: EvidenceView) -> bool:
+    return evidence.entity_type.strip() == TOOL_RESULT_TYPE_MEAL_RESULTS
 
 
 def format_timestamp(ts) -> str | None:
@@ -171,6 +181,10 @@ def _get_evidence_by_id(payload: dict | None) -> dict[str, EvidenceView]:
         except Exception:
             continue
     return evidence_by_id
+
+
+def serialize_roundtrip_payload(payload: OrchestratorPayload) -> dict:
+    return payload.model_dump(mode="json", exclude_none=True)
 
 
 def _normalize_block_evidence_ids(
@@ -263,7 +277,12 @@ def _build_block_cards(
         evidence = evidence_by_id.get(evidence_id)
         if evidence is None:
             continue
-        if _is_inline_evidence(evidence) or _is_magic_card_evidence(evidence) or _is_magic_card_ruling_evidence(evidence):
+        if (
+            _is_inline_evidence(evidence)
+            or _is_magic_card_evidence(evidence)
+            or _is_magic_card_ruling_evidence(evidence)
+            or _is_meal_evidence(evidence)
+        ):
             continue
         url = _primary_card_url(evidence.urls)
         image_url = evidence.image_url.strip()
@@ -348,6 +367,14 @@ def _render_result_block(
     ]
     if magic_card_rulings:
         render_magic_card_rulings(magic_card_rulings)
+
+    meal_evidence = [
+        evidence
+        for evidence_id in block.evidence_ids
+        if (evidence := evidence_by_id.get(evidence_id)) is not None and _is_meal_evidence(evidence)
+    ]
+    if meal_evidence:
+        render_meal_evidence_cards(meal_evidence)
 
     block_cards = _build_block_cards(block, evidence_by_id)
     for label in inline_labels:

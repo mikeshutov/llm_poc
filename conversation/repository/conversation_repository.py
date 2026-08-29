@@ -25,7 +25,9 @@ from conversation.models.conversation_models import (
 from db.connection import get_connection
 from llm.repository.conversation_model_config_repository import ConversationModelConfigRepository
 from personalization.tone.models import TonePreferences
+from request_orchestrator.models.evidence import EvidenceView
 from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
+from request_orchestrator.models.relevant_evidence import RelevantEvidenceByTool
 
 
 class ConversationRepository:
@@ -46,7 +48,12 @@ class ConversationRepository:
                 VALUES (%s, %s, %s, %s)
                 RETURNING id, user_id, title, created_at, metadata, tone_state, summary
                 """,
-                (user_id, Jsonb(metadata.model_dump(exclude_none=True)), "Unnamed", Jsonb({})),
+                (
+                    user_id,
+                    Jsonb(metadata.model_dump(mode="json", exclude_none=True)),
+                    "Unnamed",
+                    Jsonb({}),
+                ),
             )
             row = cur.fetchone()
             assert row is not None
@@ -68,11 +75,11 @@ class ConversationRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO conversation_roundtrip (conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, model, metadata)
-                SELECT %s, COALESCE(MAX(message_index), -1) + 1, %s, '', %s, (%s)::vector, '{}'::jsonb, '{}'::jsonb, %s, %s
+                INSERT INTO conversation_roundtrip (conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, model, metadata)
+                SELECT %s, COALESCE(MAX(message_index), -1) + 1, %s, '', %s, (%s)::vector, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, %s, %s
                 FROM conversation_roundtrip
                 WHERE conversation_id = %s
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model, assistant_follow_up
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata, model, assistant_follow_up
                 """,
                 (
                     conversation_id,
@@ -80,7 +87,7 @@ class ConversationRepository:
                     roundtrip_summary,
                     roundtrip_summary_embedding,
                     model,
-                    Jsonb(metadata.model_dump(exclude_none=True)),
+                    Jsonb(metadata.model_dump(mode="json", exclude_none=True)),
                     conversation_id,
                 ),
             )
@@ -96,6 +103,7 @@ class ConversationRepository:
         roundtrip_summary: Optional[str] = None,
         roundtrip_summary_embedding: Optional[list[float]] = None,
         assistant_follow_up: str | None = None,
+        relevant_evidence: RelevantEvidenceByTool | None = None,
     ) -> ConversationRoundtrip:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -106,16 +114,18 @@ class ConversationRepository:
                     roundtrip_summary_embedding = COALESCE((%s)::vector, roundtrip_summary_embedding),
                     assistant_follow_up = COALESCE(%s, assistant_follow_up),
                     response_payload = %s,
+                    relevant_evidence = %s,
                     updated_at = now()
                 WHERE id = %s
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model, assistant_follow_up
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata, model, assistant_follow_up
                 """,
                 (
                     response,
                     roundtrip_summary,
                     roundtrip_summary_embedding,
                     assistant_follow_up,
-                    Jsonb(payload.model_dump(exclude_none=True)),
+                    Jsonb(payload.model_dump(mode="json", exclude_none=True)),
+                    Jsonb((relevant_evidence or RelevantEvidenceByTool.empty()).model_dump(mode="json")),
                     roundtrip_id,
                 ),
             )
@@ -140,7 +150,7 @@ class ConversationRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO conversation_roundtrip (conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, assistant_follow_up, response_payload, parsed_query, model, metadata)
+                INSERT INTO conversation_roundtrip (conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, assistant_follow_up, response_payload, relevant_evidence, parsed_query, model, metadata)
                 SELECT
                     %s,
                     COALESCE(MAX(message_index), -1) + 1,
@@ -155,7 +165,7 @@ class ConversationRepository:
                     %s
                 FROM conversation_roundtrip
                 WHERE conversation_id = %s
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model, assistant_follow_up
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata, model, assistant_follow_up
                 """,
                 (
                     conversation_id,
@@ -164,10 +174,11 @@ class ConversationRepository:
                     roundtrip_summary,
                     roundtrip_summary_embedding,
                     assistant_follow_up,
-                    Jsonb(response_payload.model_dump(exclude_none=True)),
+                    Jsonb(response_payload.model_dump(mode="json", exclude_none=True)),
+                    Jsonb(RelevantEvidenceByTool.empty().model_dump(mode="json")),
                     Jsonb({}),
                     model,
-                    Jsonb(metadata.model_dump(exclude_none=True)),
+                    Jsonb(metadata.model_dump(mode="json", exclude_none=True)),
                     conversation_id,
                 ),
             )
@@ -560,6 +571,7 @@ class ConversationRepository:
                     rt.roundtrip_summary_embedding,
                     rt.assistant_follow_up,
                     rt.response_payload,
+                    rt.relevant_evidence,
                     rt.parsed_query,
                     rt.created_at,
                     rt.metadata,
@@ -588,6 +600,7 @@ class ConversationRepository:
                     rt.roundtrip_summary_embedding,
                     rt.assistant_follow_up,
                     rt.response_payload,
+                    rt.relevant_evidence,
                     rt.parsed_query,
                     rt.created_at,
                     rt.metadata,
@@ -604,6 +617,50 @@ class ConversationRepository:
             row = cur.fetchone()
             return ConversationRoundtrip(**row) if row else None
 
+    def get_evidence_by_ids_for_user(
+        self,
+        evidence_ids: Sequence[str],
+        user_id: str | None,
+    ) -> dict[str, EvidenceView]:
+        normalized_ids = list(
+            dict.fromkeys(
+                evidence_id.strip()
+                for evidence_id in evidence_ids
+                if isinstance(evidence_id, str) and evidence_id.strip()
+            )
+        )
+        if not normalized_ids:
+            return {}
+
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT evidence.key AS evidence_id, evidence.value AS evidence
+                FROM conversation_roundtrip rt
+                JOIN conversation c ON c.id = rt.conversation_id
+                CROSS JOIN LATERAL jsonb_each(
+                    COALESCE(rt.response_payload -> 'evidence_by_id', '{}'::jsonb)
+                ) AS evidence(key, value)
+                WHERE evidence.key = ANY(%s)
+                  AND (CAST(%s AS text) IS NULL OR c.user_id = %s)
+                ORDER BY rt.created_at DESC
+                """,
+                (normalized_ids, user_id, user_id),
+            )
+            rows = cur.fetchall()
+
+        evidence_by_id: dict[str, EvidenceView] = {}
+        for row in rows:
+            evidence_id = row.get("evidence_id")
+            raw_evidence = row.get("evidence")
+            if not isinstance(evidence_id, str) or evidence_id in evidence_by_id:
+                continue
+            try:
+                evidence_by_id[evidence_id] = EvidenceView.model_validate(raw_evidence)
+            except Exception:
+                continue
+        return evidence_by_id
+
     def get_latest_completed_roundtrip(self, conversation_id: UUID) -> Optional[ConversationRoundtrip]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -618,6 +675,7 @@ class ConversationRepository:
                     roundtrip_summary_embedding,
                     assistant_follow_up,
                     response_payload,
+                    relevant_evidence,
                     parsed_query,
                     created_at,
                     metadata,
@@ -668,6 +726,7 @@ class ConversationRepository:
                         rt.roundtrip_summary_embedding,
                         rt.assistant_follow_up,
                         rt.response_payload,
+                        rt.relevant_evidence,
                         rt.parsed_query,
                         rt.created_at,
                         rt.metadata,
@@ -695,6 +754,7 @@ class ConversationRepository:
                         rt.roundtrip_summary_embedding,
                         rt.assistant_follow_up,
                         rt.response_payload,
+                        rt.relevant_evidence,
                         rt.parsed_query,
                         rt.created_at,
                         rt.metadata,
@@ -734,6 +794,7 @@ class ConversationRepository:
                     rt.roundtrip_summary_embedding,
                     rt.assistant_follow_up,
                     rt.response_payload,
+                    rt.relevant_evidence,
                     rt.parsed_query,
                     rt.created_at,
                     rt.metadata,
@@ -810,14 +871,15 @@ class ConversationRepository:
                     roundtrip_summary_embedding,
                     assistant_follow_up,
                     response_payload,
+                    relevant_evidence,
                     parsed_query,
                     created_at,
                     updated_at,
                     model,
                     metadata
                 )
-                VALUES (%s, %s, %s, %s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, parsed_query, created_at, metadata, model, assistant_follow_up
+                VALUES (%s, %s, %s, %s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata, model, assistant_follow_up
                 """,
                 (
                     conversation_id,
@@ -827,12 +889,13 @@ class ConversationRepository:
                     source_roundtrip.roundtrip_summary,
                     source_roundtrip.roundtrip_summary_embedding,
                     source_roundtrip.assistant_follow_up,
-                    Jsonb(source_roundtrip.response_payload.model_dump(exclude_none=True)),
+                    Jsonb(source_roundtrip.response_payload.model_dump(mode="json", exclude_none=True)),
+                    Jsonb(source_roundtrip.relevant_evidence.model_dump(mode="json")),
                     Jsonb({}),
                     source_roundtrip.created_at,
                     source_roundtrip.created_at,
                     source_roundtrip.model,
-                    Jsonb(source_roundtrip.metadata.model_dump(exclude_none=True)),
+                    Jsonb(source_roundtrip.metadata.model_dump(mode="json", exclude_none=True)),
                 ),
             )
             row = cur.fetchone()
@@ -956,7 +1019,7 @@ class ConversationRepository:
                 SET tone_state = %s, updated_at = now()
                 WHERE id = %s;
                 """,
-                (Jsonb(tone_state.model_dump(exclude_none=True)), conversation_id),
+                (Jsonb(tone_state.model_dump(mode="json", exclude_none=True)), conversation_id),
             )
 
     def set_conversation_title(self, conversation_id: str, title: str) -> bool:

@@ -33,6 +33,7 @@ TOOL_NAME_GET_COMMANDER_CARDS = "get_commander_cards"
 TOOL_NAME_SEARCH_MEMORIES = "search_memories"
 TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES = "search_roundtrip_memories"
 TOOL_NAME_GET_MEMORY_DETAIL = "get_memory_detail"
+TOOL_NAME_LOOKUP_EVIDENCE = "lookup_evidence"
 TOOL_NAME_CREATE_USER_ATTRIBUTE = "create_user_attribute"
 TOOL_NAME_UPDATE_USER_ATTRIBUTE = "update_user_attribute"
 TOOL_NAME_GET_USER_ATTRIBUTES = "get_user_attributes"
@@ -44,6 +45,9 @@ TOOL_NAME_SET_USER_DISPLAY_NAME = "set_user_display_name"
 TOOL_NAME_SET_USER_FIRST_NAME = "set_user_first_name"
 TOOL_NAME_SET_USER_LAST_NAME = "set_user_last_name"
 TOOL_NAME_UPDATE_USER_TONE = "update_user_tone"
+
+# These tools may run during a turn but must not copy their evidence into its payload.
+EVIDENCE_PERSISTENCE_EXCLUDED_TOOL_NAMES = frozenset({TOOL_NAME_LOOKUP_EVIDENCE})
 
 TOOL_RESULT_TYPE_GENERIC = "generic"
 TOOL_RESULT_TYPE_PRODUCT_RESULTS = "product_results"

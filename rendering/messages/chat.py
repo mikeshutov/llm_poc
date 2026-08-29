@@ -18,6 +18,7 @@ from rendering.rendering import (
     fetch_llm_usage_for_roundtrip,
     format_timestamp,
     render_assistant_content,
+    serialize_roundtrip_payload,
 )
 from common.config import (
     CONTENT_KEY,
@@ -35,6 +36,7 @@ MESSAGE_HISTORY_LIMIT = 10
 def _build_answer_payload(answer: OrchestratorResult) -> dict:
     return sanitize_for_json_storage(answer.to_payload_model().model_dump(exclude_none=True))
 
+
 def ensure_messages_loaded(conversation_repository, conversation_id: str, limit: int = MESSAGE_HISTORY_LIMIT) -> None:
     if "messages" not in st.session_state or st.session_state.get("loaded_cid") != conversation_id:
         roundtrips = conversation_repository.list_roundtrips(
@@ -46,7 +48,7 @@ def ensure_messages_loaded(conversation_repository, conversation_id: str, limit:
         for rt in roundtrips:
             ts = rt.created_at if hasattr(rt, "created_at") else None
             st.session_state.messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: rt.user_prompt, "timestamp": ts, "roundtrip_id": str(rt.id)})
-            payload = rt.response_payload if isinstance(rt.response_payload, dict) else None
+            payload = serialize_roundtrip_payload(rt.response_payload)
             st.session_state.messages.append(
                 {
                     ROLE_KEY: ROLE_ASSISTANT,

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
@@ -7,12 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from llm.conversation_model_config import ConversationModelConfig
 from personalization.tone.models import TonePreferences
-from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
-
-
-class ToolSummaryEvidenceProduced(BaseModel):
-    entity_type: str = ""
-    entity_id: str = ""
+from request_orchestrator.models.orchestrator_payload import EvidenceProducedByTool, OrchestratorPayload
+from request_orchestrator.models.relevant_evidence import RelevantEvidenceByTool
 
 
 class ConversationSummaryResponse(BaseModel):
@@ -29,7 +25,7 @@ class ConversationSummaryResponse(BaseModel):
 
 class ToolSummaryContext(BaseModel):
     used_tools: list[str] = Field(default_factory=list)
-    evidence_produced: list[ToolSummaryEvidenceProduced] = Field(default_factory=list)
+    evidence_produced: EvidenceProducedByTool = Field(default_factory=EvidenceProducedByTool.empty)
     freshness: str = ""
 
 
@@ -38,6 +34,8 @@ class RecentRoundtrip(BaseModel):
     user_prompt: str = ""
     roundtrip_summary: str = ""
     assistant_follow_up: str = ""
+    used_evidence_ids: list[str] = Field(default_factory=list)
+    relevant_evidence: RelevantEvidenceByTool = Field(default_factory=RelevantEvidenceByTool.empty)
 
 
 class RecentRoundtripToolSummary(BaseModel):
@@ -108,11 +106,13 @@ class ConversationRoundtrip:
     model: Optional[str] = None
     feedback_id: Optional[UUID] = None
     assistant_follow_up: str = ""
+    relevant_evidence: RelevantEvidenceByTool = field(default_factory=RelevantEvidenceByTool.empty)
 
     def __post_init__(self) -> None:
         self.response_payload = OrchestratorPayload.model_validate(self.response_payload)
         self.parsed_query = ParsedQuery.model_validate(self.parsed_query)
         self.metadata = RoundtripMetadata.model_validate(self.metadata)
+        self.relevant_evidence = RelevantEvidenceByTool.model_validate(self.relevant_evidence)
 
 
 @dataclass(frozen=False)

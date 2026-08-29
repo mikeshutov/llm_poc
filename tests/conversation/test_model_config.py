@@ -112,13 +112,14 @@ class FakeConversationRepository:
             model=model,
         )
 
-    def update_roundtrip(self, roundtrip_id, response, payload, roundtrip_summary=None, roundtrip_summary_embedding=None, assistant_follow_up=None):
+    def update_roundtrip(self, roundtrip_id, response, payload, roundtrip_summary=None, roundtrip_summary_embedding=None, assistant_follow_up=None, relevant_evidence=None):
         self.update_calls.append(
             {
                 'roundtrip_id': roundtrip_id,
                 'response': response,
                 'payload': payload,
                 'roundtrip_summary': roundtrip_summary,
+                'relevant_evidence': relevant_evidence,
             }
         )
         return ConversationRoundtrip(
@@ -135,6 +136,7 @@ class FakeConversationRepository:
             created_at='2026-08-08T00:00:00Z',
             metadata={},
             model=self.pending_calls[0]['model'],
+            relevant_evidence=relevant_evidence or {},
         )
 
 

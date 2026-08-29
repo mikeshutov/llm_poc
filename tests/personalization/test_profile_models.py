@@ -22,7 +22,7 @@ from personalization.profile.service import build_user_profile, hydrate_user_pro
 from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
-from request_orchestrator.models.synthesized_result import DEFAULT_SYNTHESIS_NEXT_QUESTION, SynthesisResult
+from request_orchestrator.models.synthesized_result import SynthesisResult
 from common.data import repair_common_json_issues
 
 
@@ -348,7 +348,7 @@ def test_synthesis_result_accepts_next_question_and_result_blocks() -> None:
     assert result.result[0].evidence_ids == ["25a4bcc1-2b18-5a36-940c-29c535bae654"]
 
 
-def test_synthesis_result_falls_back_when_next_question_is_empty() -> None:
+def test_synthesis_result_allows_an_empty_next_question() -> None:
     result = SynthesisResult.model_validate(
         {
             "result": [{"content": "done", "evidence_ids": []}],
@@ -358,7 +358,7 @@ def test_synthesis_result_falls_back_when_next_question_is_empty() -> None:
         }
     )
 
-    assert result.next_question == DEFAULT_SYNTHESIS_NEXT_QUESTION
+    assert result.next_question == ""
 
 
 def test_synthesis_result_rejects_legacy_string_result_entries() -> None:

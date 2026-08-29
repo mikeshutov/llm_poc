@@ -7,6 +7,7 @@ CREATE TABLE conversation_roundtrip (
   user_prompt TEXT NOT NULL,
   generated_response TEXT NOT NULL,
   response_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  relevant_evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
   parsed_query JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),

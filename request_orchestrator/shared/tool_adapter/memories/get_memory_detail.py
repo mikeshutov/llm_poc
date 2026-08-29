@@ -35,6 +35,14 @@ class GetMemoryDetailResult(BaseModel):
     metadata: RoundtripMetadata = Field(default_factory=RoundtripMetadata)
 
 
+class MemoryDetailEvidenceMetadata(RoundtripMetadata):
+    conversation_id: str = ""
+    roundtrip_id: str = ""
+    message_index: int = 0
+    created_at: str = ""
+    model: str = ""
+
+
 @tool(
     TOOL_NAME_GET_MEMORY_DETAIL,
     args_schema=GetMemoryDetailArgs,
@@ -87,15 +95,13 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         response_payload=roundtrip.response_payload,
         metadata=roundtrip.metadata,
     )
-    metadata = result.metadata.model_dump(exclude_none=True)
-    metadata.update(
-        {
-            "conversation_id": result.conversation_id,
-            "roundtrip_id": result.roundtrip_id,
-            "message_index": result.message_index,
-            "created_at": result.created_at,
-            "model": result.model,
-        }
+    metadata = MemoryDetailEvidenceMetadata(
+        resolved_model_config=result.metadata.resolved_model_config,
+        conversation_id=result.conversation_id,
+        roundtrip_id=result.roundtrip_id,
+        message_index=result.message_index,
+        created_at=result.created_at,
+        model=result.model,
     )
     evidence_view = EvidenceView(
         item_id=result.roundtrip_id,
@@ -105,7 +111,7 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         published_at=result.created_at.strip(),
         source=TOOL_NAME_GET_MEMORY_DETAIL,
         entity_type=TOOL_RESULT_TYPE_MEMORY_DETAIL,
-        llm_metadata=metadata,
+        llm_metadata=metadata.model_dump(mode="json", exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(

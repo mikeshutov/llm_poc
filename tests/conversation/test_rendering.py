@@ -8,14 +8,42 @@ from rendering.rendering import (
     _render_result_block,
     get_renderable_result_blocks,
     render_assistant_content,
+    serialize_roundtrip_payload,
 )
+from conversation.models.conversation_models import ConversationRoundtrip
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView
+from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from tool.constants import TOOL_NAME_GET_CURRENT_WEATHER
 from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
 from tool.constants import TOOL_RESULT_TYPE_RULES
 from tool.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
+
+
+def test_serialize_roundtrip_payload_preserves_persisted_evidence() -> None:
+    evidence = EvidenceView(title="Pasta Primavera", summary="A recipe")
+    roundtrip = ConversationRoundtrip(
+        id="c8271821-2d4c-51a1-bc00-1f4932d052d7",
+        conversation_id="f822ca3a-bd48-5c36-940c-29c535bae654",
+        message_index=1,
+        user_prompt="Find pasta.",
+        generated_response="Here is pasta.",
+        roundtrip_summary=None,
+        roundtrip_summary_embedding=None,
+        response_payload=OrchestratorPayload(
+            result=[{"content": "Here is pasta.", "evidence_ids": [str(evidence.id)]}],
+            evidence_by_id={str(evidence.id): evidence},
+        ),
+        parsed_query={},
+        created_at="2026-08-27T12:00:00+00:00",
+        metadata={},
+    )
+
+    payload = serialize_roundtrip_payload(roundtrip.response_payload)
+
+    assert payload["result"][0]["evidence_ids"] == [str(evidence.id)]
+    assert payload["evidence_by_id"][str(evidence.id)]["title"] == "Pasta Primavera"
 
 
 def test_get_renderable_result_blocks_prefers_structured_result_payload() -> None:
@@ -119,16 +147,13 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
     )
 
 
-def test_render_assistant_content_renders_meal_cards_two_per_row(monkeypatch) -> None:
-    render_calls: list[tuple[list[dict], int]] = []
+def test_render_assistant_content_renders_meal_recipe_cards(monkeypatch) -> None:
+    rendered_meals: list[EvidenceView] = []
     monkeypatch.setattr("rendering.rendering.st.html", lambda value: None)
     monkeypatch.setattr("rendering.rendering.fetch_llm_usage_for_roundtrip", lambda value: None)
     monkeypatch.setattr("rendering.rendering.fetch_agent_logs_for_roundtrip", lambda value: [])
     monkeypatch.setattr("rendering.rendering.render_agent_logs", lambda value: None)
-    monkeypatch.setattr(
-        "rendering.rendering.render_cards",
-        lambda items, *, per_row=3, **kwargs: render_calls.append((list(items), per_row)),
-    )
+    monkeypatch.setattr("rendering.rendering.render_meal_evidence_cards", rendered_meals.extend)
 
     render_assistant_content(
         "Here are recipes.",
@@ -148,10 +173,8 @@ def test_render_assistant_content_renders_meal_cards_two_per_row(monkeypatch) ->
         },
     )
 
-    assert len(render_calls) == 1
-    rendered_cards, per_row = render_calls[0]
-    assert per_row == 2
-    assert rendered_cards[0]["entity_type"] == TOOL_RESULT_TYPE_MEAL_RESULTS
+    assert len(rendered_meals) == 1
+    assert rendered_meals[0].entity_type == TOOL_RESULT_TYPE_MEAL_RESULTS
 
 
 def test_build_inline_evidence_includes_generic_web_search_results() -> None:

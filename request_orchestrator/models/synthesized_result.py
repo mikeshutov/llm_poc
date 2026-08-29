@@ -2,17 +2,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-DEFAULT_SYNTHESIS_NEXT_QUESTION = "What would you like to do next?"
-
-
-class SynthesisToolSummaryEvidenceProduced(BaseModel):
-    entity_type: str = ""
-    entity_id: str = ""
-
-
-class SynthesisToolSummary(BaseModel):
-    evidence_produced: list[SynthesisToolSummaryEvidenceProduced] = Field(default_factory=list)
-
 
 class SynthesisResultBlock(BaseModel):
     content: str = ""
@@ -23,7 +12,6 @@ class SynthesisResult(BaseModel):
     result: list[SynthesisResultBlock]
     next_question: str = ""
     roundtrip_summary: str = ""
-    tool_summary: SynthesisToolSummary = Field(default_factory=SynthesisToolSummary)
 
     @field_validator("result", mode="before")
     @classmethod
@@ -37,10 +25,8 @@ class SynthesisResult(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def normalize_questions(self) -> "SynthesisResult":
+    def normalize_result(self) -> "SynthesisResult":
         self.next_question = self.next_question.strip()
-        if not self.next_question:
-            self.next_question = DEFAULT_SYNTHESIS_NEXT_QUESTION
         self.result = [
             SynthesisResultBlock(
                 content=block.content.strip(),

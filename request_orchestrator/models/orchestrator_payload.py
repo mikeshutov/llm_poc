@@ -1,17 +1,20 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from uuid import UUID
+
+from pydantic import BaseModel, Field, RootModel
 
 from request_orchestrator.models.evidence import EvidenceView
 
 
-class OrchestratorPayloadToolSummaryItem(BaseModel):
-    entity_type: str = ""
-    entity_id: str = ""
+class EvidenceProducedByTool(RootModel[dict[str, list[UUID]]]):
+    @classmethod
+    def empty(cls) -> "EvidenceProducedByTool":
+        return cls({})
 
 
 class OrchestratorPayloadToolSummary(BaseModel):
-    evidence_produced: list[OrchestratorPayloadToolSummaryItem] = Field(default_factory=list)
+    evidence_produced: EvidenceProducedByTool = Field(default_factory=EvidenceProducedByTool.empty)
 
 
 class OrchestratorPayloadResultBlock(BaseModel):

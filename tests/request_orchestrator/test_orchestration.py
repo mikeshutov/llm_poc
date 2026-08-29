@@ -48,6 +48,10 @@ from request_orchestrator.shared.evidence import (
 from request_orchestrator.shared.evaluator.prompts.evaluator_prompt import build_evaluator_prompt
 from llm.chat_models import build_llm_for_stage
 from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
+from request_orchestrator.shared.synthesis.prompts.synthesis_rules import (
+    PROFILE_PERSONALIZATION_RULE,
+    TONE_ADAPTATION_RULE,
+)
 from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
 
 
@@ -279,6 +283,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertIn('"tone"', synthesis_prompt)
         self.assertIn('"verbosity": "concise"', synthesis_prompt)
         self.assertIn('"directness": "high"', synthesis_prompt)
+        self.assertIn(TONE_ADAPTATION_RULE, synthesis_prompt)
+        self.assertIn(PROFILE_PERSONALIZATION_RULE, synthesis_prompt)
 
         self.assertNotIn('"tone"', request_analysis_prompt)
         self.assertNotIn('"verbosity": "concise"', request_analysis_prompt)
@@ -530,6 +536,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     conversation_summary='User has been comparing pantry noodle options and cares about quick preparation.',
                     latest_conversation_summary='User was comparing noodle options.',
                     tool_summary='Earlier tools found soba, udon, and ramen options.',
+                    latest_assistant_follow_up='Would you like a gluten-free option as well?',
                     recent_roundtrips=[
                         RecentRoundtrip(
                             message_index=4,
@@ -568,6 +575,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertIn('latest_conversation_summary', prompt_text)
         self.assertIn('tool_summary', prompt_text)
         self.assertIn('Earlier tools found soba, udon, and ramen options.', prompt_text)
+        self.assertIn('latest_assistant_follow_up', prompt_text)
+        self.assertIn('Would you like a gluten-free option as well?', prompt_text)
         self.assertNotIn('recent_roundtrips', prompt_text)
         self.assertNotIn('Earlier user prompt', prompt_text)
         self.assertNotIn('Earlier roundtrip summary', prompt_text)

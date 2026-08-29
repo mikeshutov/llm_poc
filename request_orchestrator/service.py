@@ -85,7 +85,7 @@ def run_request_orchestrator_for_query(
 
     roundtrip_latency_ms = int((perf_counter() - started_at) * 1000)
     orchestrator_result = orchestrator_result.with_roundtrip_latency(roundtrip_latency_ms)
-    payload = orchestrator_result.to_payload_model()
+    payload, relevant_evidence = orchestrator_result.to_persistence_models()
     roundtrip_summary = orchestrator_result.roundtrip_summary
 
     roundtrip_summary_embedding = embed_text(roundtrip_summary) if roundtrip_summary else None
@@ -96,6 +96,7 @@ def run_request_orchestrator_for_query(
         roundtrip_summary=roundtrip_summary,
         roundtrip_summary_embedding=roundtrip_summary_embedding,
         assistant_follow_up=orchestrator_result.next_question,
+        relevant_evidence=relevant_evidence,
     )
     #TODO: enable this once we improve summarization.
     #threading.Thread(target=summarize_tool_calls, args=(roundtrip.id,), daemon=True).start()

@@ -72,12 +72,9 @@ def test_build_answer_payload_preserves_result_block_evidence_ids() -> None:
     ]
     assert payload["used_evidence_ids"] == ["25a4bcc1-2b18-5a36-940c-29c535bae654"]
     assert payload["tool_summary"] == {
-        "evidence_produced": [
-            {
-                "entity_type": "",
-                "entity_id": str(next(iter(payload["evidence_by_id"].values()))["id"]),
-            }
-        ]
+        "evidence_produced": {
+            "generic_web_search": [str(next(iter(payload["evidence_by_id"].values()))["id"])],
+        }
     }
     assert "25a4bcc1-2b18-5a36-940c-29c535bae654" in payload["hydrated_evidence_by_id"]
 
@@ -118,12 +115,9 @@ def test_build_answer_payload_preserves_uuid_evidence_ids_across_agents() -> Non
     ]
     assert payload["used_evidence_ids"] == ["c8271821-2d4c-51a1-bc00-1f4932d052d7"]
     assert payload["tool_summary"] == {
-        "evidence_produced": [
-            {
-                "entity_type": "",
-                "entity_id": str(next(iter(payload["evidence_by_id"].values()))["id"]),
-            }
-        ]
+        "evidence_produced": {
+            "generic_web_search": [str(next(iter(payload["evidence_by_id"].values()))["id"])],
+        }
     }
     assert "c8271821-2d4c-51a1-bc00-1f4932d052d7" in payload["hydrated_evidence_by_id"]
 

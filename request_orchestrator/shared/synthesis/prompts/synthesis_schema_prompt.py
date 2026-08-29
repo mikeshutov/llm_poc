@@ -1,13 +1,12 @@
 SYNTHESIS_SCHEMA = """
 Result must be self-contained and final.
 Ensure the `roundtrip_summary` field is a detailed plain-language diagnostic summary of the roundtrip outcome for history and retrieval.
-Set `next_question` to one non-empty question or follow up statement.
+Set `next_question` to a follow-up question or statement only when it is useful; otherwise use an empty string.
 Associate each result block with supporting `evidence_ids`; never expose internal IDs in content. Use each UUID exactly as it appears in EVIDENCE.
 
-Follow the provided response schema:
-
+You Must respond with this JSON schema: 
 {
-  "next_question": "<one follow up or clarifying question>",
+  "next_question": "<optional follow up or empty string>",
   "result": [
     {
       "content": "<paragraph answering some part of the question>",

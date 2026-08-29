@@ -9,8 +9,7 @@ def _build_instruction(state: AgentState) -> str:
     return (
         "You are an evaluator between planning and synthesis. "
         "Decide whether the current evidence is sufficient to answer the user's stated question or goal,"
-        "whether a necessary action remains, or whether the search should terminate without another planning pass "
-        "Do not expand the user's scope or require optional information that was not requested. "
+        "Do not expand the user's scope or require optional information that was not requested unless absolutely necessary. "
         "Return exactly one JSON object matching the provided schema, with the `status` field set to SATISFIED, RETRYABLE, or TERMINAL."
     )
 
@@ -21,6 +20,7 @@ def build_evaluator_prompt(state: AgentState, evidence: list[EvidenceStep]) -> A
         user_profile=state.execution_context.user_profile,
         task=state.inputs.task.strip(),
         evidence=evidence,
+        evidence_view="evaluator",
         schema=EVALUATOR_SCHEMA,
     )
     prompt.include_section(PromptSectionKeys.USER_PROFILE)

@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 from common.html_text import html_to_plain_text, normalize_html_values
 
@@ -17,6 +17,30 @@ class EvidenceUrlType(StrEnum):
 class EvidenceUrl(BaseModel):
     url: str = ""
     url_type: EvidenceUrlType = EvidenceUrlType.WEBSITE
+
+
+class CompactEvidenceView(BaseModel):
+    evidence_id: UUID
+    title: str = ""
+    summary: str = ""
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class HydratedEvidenceView(CompactEvidenceView):
+    item_id: str = ""
+    tool_name: str = ""
+    urls: list[EvidenceUrl] = Field(default_factory=list)
+    image_url: str = ""
+    published_at: str = ""
+    source: str = ""
+    entity_type: str = ""
+    location_name: str = ""
+
+
+class EvaluatorEvidenceView(BaseModel):
+    evidence_id: UUID
+    summary: str = ""
+    present_data: list[str] = Field(default_factory=list)
 
 
 class EvidenceView(BaseModel):
@@ -33,7 +57,7 @@ class EvidenceView(BaseModel):
     source: str = ""
     entity_type: str = ""
     location_name: str = ""
-    llm_metadata: dict[str, Any] = Field(default_factory=dict)
+    llm_metadata: dict[str, JsonValue] = Field(default_factory=dict)
     raw_payload: Any = None
 
     @field_validator("title", "summary", mode="before")
@@ -59,13 +83,49 @@ class EvidenceView(BaseModel):
                 return cleaned_url
         return ""
 
-    def for_llm(self) -> dict[str, Any]:
-        return {
-            "evidence_id": str(self.id),
+    def compact_view(self) -> dict[str, Any]:
+        return CompactEvidenceView(
+            evidence_id=self.id,
+            title=self.title,
+            summary=self.summary,
+            metadata=self.llm_metadata,
+        ).model_dump(mode="json")
+
+    def hydrated_view(self) -> dict[str, Any]:
+        return HydratedEvidenceView(
+            evidence_id=self.id,
+            item_id=self.item_id,
+            tool_name=self.tool_name,
+            title=self.title,
+            summary=self.summary,
+            urls=self.urls,
+            image_url=self.image_url,
+            published_at=self.published_at,
+            source=self.source,
+            entity_type=self.entity_type,
+            location_name=self.location_name,
+            metadata=self.llm_metadata,
+        ).model_dump(mode="json")
+
+    def to_evaluator_view(self) -> dict[str, Any]:
+        hydrated_data = {
             "title": self.title,
             "summary": self.summary,
-            "metadata": dict(self.llm_metadata),
+            "urls": self.urls,
+            "image_url": self.image_url,
+            "published_at": self.published_at,
+            "source": self.source,
+            "entity_type": self.entity_type,
+            "location_name": self.location_name,
         }
+        return EvaluatorEvidenceView(
+            evidence_id=self.id,
+            summary=self.summary,
+            present_data=[
+                *[field_name for field_name, value in hydrated_data.items() if value],
+                *sorted(self.llm_metadata),
+            ],
+        ).model_dump(mode="json")
 
 
 class EvidenceBundle(BaseModel):

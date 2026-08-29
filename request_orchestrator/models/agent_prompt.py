@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 import tiktoken
@@ -89,6 +89,7 @@ class AgentPrompt:
     available_tool_categories: Any = ""
     available_tools: Any = ""
     evidence: list[EvidenceStep] | None = None
+    evidence_view: Literal["compact", "evaluator"] = "compact"
     _enabled_sections: dict[str, dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
 
     def include_section(
@@ -213,7 +214,14 @@ class AgentPrompt:
                     {
                         "type": step.type,
                         "metadata": dict(step.metadata),
-                        "evidence": [evidence.for_llm() for evidence in step.evidence],
+                        "evidence": [
+                            (
+                                evidence.to_evaluator_view()
+                                if self.evidence_view == "evaluator"
+                                else evidence.compact_view()
+                            )
+                            for evidence in step.evidence
+                        ],
                     }
                 )
             )
