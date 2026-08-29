@@ -98,6 +98,17 @@ class ToolCallRepository:
     ) -> None:
         if not evidence_views:
             return
+        cur.execute(
+            """
+            SELECT c.user_id
+            FROM conversation_roundtrip rt
+            JOIN conversation c ON c.id = rt.conversation_id
+            WHERE rt.id = %s
+            """,
+            (roundtrip_id,),
+        )
+        roundtrip_row = cur.fetchone()
+        user_id = roundtrip_row["user_id"] if roundtrip_row else None
         for evidence_view in evidence_views:
             evidence_view.hash = build_signature(
                 {
@@ -135,17 +146,18 @@ class ToolCallRepository:
         cur.executemany(
             """
             INSERT INTO evidence_views (
-                id, tool_call_id, item_id, tool_name, title,
+                id, tool_call_id, user_id, item_id, tool_name, title,
                 summary, urls, image_url, published_at, source, entity_type,
                 location_name, hash, llm_metadata, raw_payload
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO NOTHING
             """,
             [
                 (
                     evidence_view.id,
                     tool_call_id,
+                    user_id,
                     evidence_view.item_id,
                     evidence_view.tool_name,
                     evidence_view.title,
@@ -299,18 +311,22 @@ class ToolCallRepository:
                     cur.execute(
                         """
                         INSERT INTO evidence_views (
-                            tool_call_id, item_id, tool_name, title,
+                            tool_call_id, user_id, item_id, tool_name, title,
                             summary, urls, image_url, published_at, source, entity_type,
                             location_name, hash, llm_metadata, raw_payload, created_at
                         )
                         SELECT
-                            %s, item_id, tool_name, title,
-                            summary, urls, image_url, published_at, source, entity_type,
-                            location_name, hash, llm_metadata, raw_payload, created_at
+                            %s, c.user_id, evidence_views.item_id, evidence_views.tool_name, evidence_views.title,
+                            evidence_views.summary, evidence_views.urls, evidence_views.image_url,
+                            evidence_views.published_at, evidence_views.source, evidence_views.entity_type,
+                            evidence_views.location_name, evidence_views.hash, evidence_views.llm_metadata,
+                            evidence_views.raw_payload, evidence_views.created_at
                         FROM evidence_views
-                        WHERE tool_call_id = %s
+                        JOIN conversation_roundtrip rt ON rt.id = %s
+                        JOIN conversation c ON c.id = rt.conversation_id
+                        WHERE evidence_views.tool_call_id = %s
                         """,
-                        (copied_tool_call["id"], tool_call.id),
+                        (copied_tool_call["id"], copied_roundtrip_id, tool_call.id),
                     )
 
     def _sanitize_for_storage(self, value: Any) -> Any:

@@ -25,7 +25,6 @@ from conversation.models.conversation_models import (
 from db.connection import get_connection
 from llm.repository.conversation_model_config_repository import ConversationModelConfigRepository
 from personalization.tone.models import TonePreferences
-from request_orchestrator.models.evidence import EvidenceView
 from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
 from request_orchestrator.models.relevant_evidence import RelevantEvidenceByTool
 
@@ -616,50 +615,6 @@ class ConversationRepository:
             )
             row = cur.fetchone()
             return ConversationRoundtrip(**row) if row else None
-
-    def get_evidence_by_ids_for_user(
-        self,
-        evidence_ids: Sequence[str],
-        user_id: str | None,
-    ) -> dict[str, EvidenceView]:
-        normalized_ids = list(
-            dict.fromkeys(
-                evidence_id.strip()
-                for evidence_id in evidence_ids
-                if isinstance(evidence_id, str) and evidence_id.strip()
-            )
-        )
-        if not normalized_ids:
-            return {}
-
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT evidence.key AS evidence_id, evidence.value AS evidence
-                FROM conversation_roundtrip rt
-                JOIN conversation c ON c.id = rt.conversation_id
-                CROSS JOIN LATERAL jsonb_each(
-                    COALESCE(rt.response_payload -> 'evidence_by_id', '{}'::jsonb)
-                ) AS evidence(key, value)
-                WHERE evidence.key = ANY(%s)
-                  AND (CAST(%s AS text) IS NULL OR c.user_id = %s)
-                ORDER BY rt.created_at DESC
-                """,
-                (normalized_ids, user_id, user_id),
-            )
-            rows = cur.fetchall()
-
-        evidence_by_id: dict[str, EvidenceView] = {}
-        for row in rows:
-            evidence_id = row.get("evidence_id")
-            raw_evidence = row.get("evidence")
-            if not isinstance(evidence_id, str) or evidence_id in evidence_by_id:
-                continue
-            try:
-                evidence_by_id[evidence_id] = EvidenceView.model_validate(raw_evidence)
-            except Exception:
-                continue
-        return evidence_by_id
 
     def get_latest_completed_roundtrip(self, conversation_id: UUID) -> Optional[ConversationRoundtrip]:
         with self._conn.cursor(row_factory=dict_row) as cur:

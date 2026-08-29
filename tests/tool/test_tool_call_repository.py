@@ -7,7 +7,7 @@ from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, Tool
 from common.signatures import build_signature
 
 
-def test_evidence_view_for_llm_excludes_hydrated_fields() -> None:
+def test_compact_evidence_view_excludes_hydrated_fields() -> None:
     evidence = EvidenceView(
         id=UUID("c8271821-2d4c-51a1-bc00-1f4932d052d7"),
         item_id="card-1",
@@ -19,7 +19,7 @@ def test_evidence_view_for_llm_excludes_hydrated_fields() -> None:
         llm_metadata={"rarity": "mythic", "legal_formats": ["commander"]},
     )
 
-    assert evidence.for_llm() == {
+    assert evidence.compact_view() == {
         "evidence_id": "c8271821-2d4c-51a1-bc00-1f4932d052d7",
         "title": "Knight of the Reliquary",
         "summary": "A creature card.",

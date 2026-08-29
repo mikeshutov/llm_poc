@@ -97,7 +97,7 @@ def setup_conversation(cid_value, user_id: str):
         st.session_state.conversation_id = str(
             conversation_repository.create_conversation(
                 user_id=user_id,
-                metadata=ConversationMetadata(source="streamlit"),
+                metadata=ConversationMetadata(sources=["streamlit"]),
             ).id
         )
     st.query_params["uid"] = user_id

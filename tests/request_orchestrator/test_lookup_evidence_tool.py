@@ -11,8 +11,8 @@ def test_lookup_evidence_returns_a_batch_in_request_order() -> None:
     first = EvidenceView(title="First evidence", summary="First summary")
     second = EvidenceView(title="Second evidence", summary="Second summary")
 
-    class FakeConversationRepo:
-        def get_evidence_by_ids_for_user(self, evidence_ids, user_id):
+    class FakeEvidenceRepository:
+        def get_by_ids(self, evidence_ids, *, user_id=None):
             assert evidence_ids == ["second", "missing", "first"]
             assert user_id == "user-123"
             return {"first": first, "second": second}
@@ -20,8 +20,8 @@ def test_lookup_evidence_returns_a_batch_in_request_order() -> None:
     module = importlib.import_module(
         "request_orchestrator.shared.tool_adapter.memories.lookup_evidence"
     )
-    original_repo_getter = module.get_conversation_repo
-    module.get_conversation_repo = lambda: FakeConversationRepo()
+    original_evidence_repository = module.EvidenceRepository
+    module.EvidenceRepository = FakeEvidenceRepository
     try:
         with bind_runtime_context(
             conversation_id="conversation-1",
@@ -33,7 +33,7 @@ def test_lookup_evidence_returns_a_batch_in_request_order() -> None:
                 {"evidence_ids": ["second", "missing", "first", "second", " "]}
             )
     finally:
-        module.get_conversation_repo = original_repo_getter
+        module.EvidenceRepository = original_evidence_repository
 
     assert [evidence.evidence_id for evidence in result.result.evidence] == [second.id, first.id]
     assert all(not hasattr(evidence, "raw_payload") for evidence in result.result.evidence)

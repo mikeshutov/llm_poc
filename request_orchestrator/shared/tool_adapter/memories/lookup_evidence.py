@@ -3,10 +3,10 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from conversation.repository.repo_factory import get_conversation_repo
 from request_orchestrator.models.evidence import HydratedEvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from tool.constants import TOOL_NAME_LOOKUP_EVIDENCE
+from tool.repository.evidence_repository import EvidenceRepository
 
 
 class LookupEvidenceArgs(BaseModel):
@@ -41,7 +41,7 @@ def lookup_evidence(evidence_ids: list[str]) -> ToolResult:
             if isinstance(evidence_id, str) and evidence_id.strip()
         )
     )
-    evidence_by_id = get_conversation_repo().get_evidence_by_ids_for_user(
+    evidence_by_id = EvidenceRepository().get_by_ids(
         normalized_ids,
         user_id=get_current_user_id(),
     )

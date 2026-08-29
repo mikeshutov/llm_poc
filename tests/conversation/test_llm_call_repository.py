@@ -157,7 +157,7 @@ def test_create_conversation_persists_default_model_config_rows() -> None:
         'user_id': 'anonymous',
         'title': 'anonymous',
         'created_at': '2026-08-09T00:00:00Z',
-        'metadata': {'source': 'streamlit'},
+            'metadata': {'sources': ['streamlit']},
         'tone_state': {},
         'summary': '',
     }
@@ -180,13 +180,14 @@ def test_create_conversation_persists_default_model_config_rows() -> None:
 
     conversation = repo.create_conversation(
         user_id='anonymous',
-        metadata=ConversationMetadata(source='streamlit'),
+        metadata=ConversationMetadata(sources=['streamlit']),
     )
 
     assert conversation.id == row['id']
     assert 'INSERT INTO conversation' in create_cursor.executed[0][0]
     assert len(config_cursors) == len(CONVERSATION_MODEL_CONFIG_SPECS)
     assert all('INSERT INTO conversation_model_config' in cursor.executed[0][0] for cursor in config_cursors)
+
 
 
 def test_resolve_conversation_model_config_backfills_missing_default_rows() -> None:

@@ -37,7 +37,7 @@ def prepare_replay(roundtrip_id: str | UUID, user_id: str) -> PreparedReplayConv
     new_conversation = repo.create_conversation(
         user_id=user_id,
         metadata=ConversationMetadata(
-            source="replay",
+            sources=["replay"],
             source_conversation_id=source_conversation.id,
             source_roundtrip_id=source_roundtrip.id,
             source_message_index=source_roundtrip.message_index,

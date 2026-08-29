@@ -56,7 +56,7 @@ class ConversationContext(BaseModel):
 class ConversationMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    source: str = ""
+    sources: list[str] = Field(default_factory=list)
     source_conversation_id: UUID | None = None
     source_roundtrip_id: UUID | None = None
     source_message_index: int | None = None
