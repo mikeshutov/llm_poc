@@ -34,7 +34,8 @@ MESSAGE_HISTORY_LIMIT = 10
 
 
 def _build_answer_payload(answer: OrchestratorResult) -> dict:
-    return sanitize_for_json_storage(answer.to_payload_model().model_dump(exclude_none=True))
+    payload, _ = answer.to_persistence_models()
+    return sanitize_for_json_storage(payload.model_dump(exclude_none=True))
 
 
 def ensure_messages_loaded(conversation_repository, conversation_id: str, limit: int = MESSAGE_HISTORY_LIMIT) -> None:

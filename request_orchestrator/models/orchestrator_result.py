@@ -183,10 +183,6 @@ class OrchestratorResult:
         ]
         payload = OrchestratorPayload(
             tool_results=[tool_result.model_dump(mode="json", exclude_none=True) for tool_result in persisted_tool_results],
-            relevant_evidence_ids=_normalize_evidence_ids(
-                [str(evidence_id) for evidence_id in self.agent_result.relevant_evidence_ids],
-                evidence_by_id,
-            ),
             result=[
                 OrchestratorPayloadResultBlock(
                     content=block.content,
@@ -211,7 +207,3 @@ class OrchestratorResult:
                 evidence_by_id,
             ),
         )
-
-    def to_payload_model(self) -> OrchestratorPayload:
-        payload, _ = self.to_persistence_models()
-        return payload
