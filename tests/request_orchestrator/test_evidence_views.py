@@ -1,6 +1,11 @@
 from uuid import uuid4
 
-from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep, PromptSectionKeys
+from request_orchestrator.models.agent_prompt import (
+    EVIDENCE_VIEW_EVALUATOR,
+    AgentPrompt,
+    EvidenceStep,
+    PromptSectionKeys,
+)
 from request_orchestrator.models.evidence import EvidenceView
 
 
@@ -74,7 +79,7 @@ def test_agent_prompt_serializes_evaluator_evidence_view() -> None:
     prompt = AgentPrompt(
         instruction="Evaluate the evidence.",
         evidence=[EvidenceStep(type="product_results", evidence=[evidence])],
-        evidence_view="evaluator",
+        evidence_view=EVIDENCE_VIEW_EVALUATOR,
     )
     prompt.include_section(PromptSectionKeys.EVIDENCE)
 

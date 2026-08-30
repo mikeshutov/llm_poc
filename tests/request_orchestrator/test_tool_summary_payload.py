@@ -18,6 +18,8 @@ if "pycountry" not in sys.modules:
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
+from request_orchestrator.models.orchestrator_payload import OrchestratorPayloadToolSummary
+from request_orchestrator.models.relevant_evidence import RelevantEvidenceByTool
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from tool.constants import TOOL_NAME_LOOKUP_EVIDENCE
 
@@ -61,6 +63,23 @@ def test_orchestrator_payload_derives_tool_summary_from_evidence() -> None:
     }
 
 
+def test_tool_summary_builds_from_canonical_evidence() -> None:
+    product_evidence = EvidenceView(tool_name="find_products")
+    ignored_evidence = EvidenceView(tool_name="")
+
+    tool_summary = OrchestratorPayloadToolSummary.build(
+        {
+            str(product_evidence.id): product_evidence,
+            "duplicate": product_evidence,
+            str(ignored_evidence.id): ignored_evidence,
+        }
+    )
+
+    assert tool_summary.model_dump(mode="json") == {
+        "evidence_produced": {"find_products": [str(product_evidence.id)]}
+    }
+
+
 def test_orchestrator_result_groups_relevant_evidence_by_tool() -> None:
     tool_call_id = uuid4()
     evidence_id = uuid4()
@@ -90,6 +109,23 @@ def test_orchestrator_result_groups_relevant_evidence_by_tool() -> None:
 
     assert relevant_evidence.model_dump(mode="json") == {
         "search_products": [str(evidence_id)]
+    }
+
+
+def test_relevant_evidence_by_tool_builds_from_canonical_evidence() -> None:
+    product_evidence = EvidenceView(tool_name="find_products")
+    ignored_evidence = EvidenceView(tool_name="")
+
+    relevant_evidence = RelevantEvidenceByTool.build(
+        [product_evidence.id, product_evidence.id, ignored_evidence.id, uuid4()],
+        {
+            str(product_evidence.id): product_evidence,
+            str(ignored_evidence.id): ignored_evidence,
+        },
+    )
+
+    assert relevant_evidence.model_dump(mode="json") == {
+        "find_products": [str(product_evidence.id)]
     }
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 from pydantic import BaseModel, Field
 import tiktoken
@@ -13,6 +13,10 @@ from common.data import is_meaningful_prompt_value, prune_empty_prompt_values
 from personalization.profile.models import UserProfile
 from conversation.models.conversation_models import ConversationContext
 from request_orchestrator.models.evidence import EvidenceView
+
+EVIDENCE_VIEW_COMPACT = "compact"
+EVIDENCE_VIEW_EVALUATOR = "evaluator"
+EvidenceViewMode: TypeAlias = Literal["compact", "evaluator"]
 
 
 class EvidenceStep(BaseModel):
@@ -89,7 +93,7 @@ class AgentPrompt:
     available_tool_categories: Any = ""
     available_tools: Any = ""
     evidence: list[EvidenceStep] | None = None
-    evidence_view: Literal["compact", "evaluator"] = "compact"
+    evidence_view: EvidenceViewMode = EVIDENCE_VIEW_COMPACT
     _enabled_sections: dict[str, dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
 
     def include_section(
@@ -217,7 +221,7 @@ class AgentPrompt:
                         "evidence": [
                             (
                                 evidence.to_evaluator_view()
-                                if self.evidence_view == "evaluator"
+                                if self.evidence_view == EVIDENCE_VIEW_EVALUATOR
                                 else evidence.compact_view()
                             )
                             for evidence in step.evidence

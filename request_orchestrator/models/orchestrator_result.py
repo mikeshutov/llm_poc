@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from uuid import UUID
 
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.evidence import EvidenceView
 from request_orchestrator.models.orchestrator_payload import (
-    EvidenceProducedByTool,
     OrchestratorPayload,
     OrchestratorPayloadResultBlock,
     OrchestratorPayloadToolSummary,
@@ -48,44 +46,6 @@ def _is_tool_result_excluded_from_persistence(tool_result) -> bool:
         _is_evidence_excluded_from_persistence(evidence)
         for evidence in tool_result.evidence
     )
-
-
-def _build_tool_summary(
-    evidence_by_id: dict[str, EvidenceView],
-) -> OrchestratorPayloadToolSummary:
-    evidence_ids_by_tool: dict[str, list[UUID]] = {}
-    seen_evidence_ids: set[UUID] = set()
-
-    for evidence in evidence_by_id.values():
-        tool_name = evidence.tool_name.strip()
-        if not tool_name or evidence.id in seen_evidence_ids:
-            continue
-        seen_evidence_ids.add(evidence.id)
-        evidence_ids_by_tool.setdefault(tool_name, []).append(evidence.id)
-
-    return OrchestratorPayloadToolSummary(
-        evidence_produced=EvidenceProducedByTool(evidence_ids_by_tool),
-    )
-
-
-def _build_relevant_evidence_by_tool(
-    relevant_evidence_ids: list[UUID],
-    evidence_by_id: dict[str, EvidenceView],
-) -> RelevantEvidenceByTool:
-    evidence_ids_by_tool: dict[str, list[UUID]] = {}
-    seen_evidence_ids: set[UUID] = set()
-
-    for evidence_id in relevant_evidence_ids:
-        if evidence_id in seen_evidence_ids:
-            continue
-        seen_evidence_ids.add(evidence_id)
-        evidence = evidence_by_id.get(str(evidence_id))
-        tool_name = evidence.tool_name.strip() if evidence is not None else ""
-        if not tool_name:
-            continue
-        evidence_ids_by_tool.setdefault(tool_name, []).append(evidence_id)
-
-    return RelevantEvidenceByTool(evidence_ids_by_tool)
 
 
 @dataclass(frozen=True)
@@ -197,12 +157,12 @@ class OrchestratorResult:
             ),
             next_question=self.next_question,
             roundtrip_summary=self.roundtrip_summary,
-            tool_summary=_build_tool_summary(evidence_by_id),
+            tool_summary=OrchestratorPayloadToolSummary.build(evidence_by_id),
             roundtrip_latency_ms=self.roundtrip_latency_ms,
         )
         return (
             payload,
-            _build_relevant_evidence_by_tool(
+            RelevantEvidenceByTool.build(
                 self.agent_result.relevant_evidence_ids,
                 evidence_by_id,
             ),

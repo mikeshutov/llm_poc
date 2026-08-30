@@ -137,7 +137,6 @@ class ToolMetadata(BaseModel):
     """Shared, result-level metadata emitted by tool adapters."""
 
     model_config = ConfigDict(extra="forbid")
-
     retrieved_count: int | None = None
     reranked: bool | None = None
     product_source: str | list[str] | None = None

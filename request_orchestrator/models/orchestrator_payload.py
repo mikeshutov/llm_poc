@@ -16,6 +16,23 @@ class EvidenceProducedByTool(RootModel[dict[str, list[UUID]]]):
 class OrchestratorPayloadToolSummary(BaseModel):
     evidence_produced: EvidenceProducedByTool = Field(default_factory=EvidenceProducedByTool.empty)
 
+    @classmethod
+    def build(
+        cls,
+        evidence_by_id: dict[str, EvidenceView],
+    ) -> "OrchestratorPayloadToolSummary":
+        evidence_ids_by_tool: dict[str, list[UUID]] = {}
+        seen_evidence_ids: set[UUID] = set()
+
+        for evidence in evidence_by_id.values():
+            tool_name = evidence.tool_name.strip()
+            if not tool_name or evidence.id in seen_evidence_ids:
+                continue
+            seen_evidence_ids.add(evidence.id)
+            evidence_ids_by_tool.setdefault(tool_name, []).append(evidence.id)
+
+        return cls(evidence_produced=EvidenceProducedByTool(evidence_ids_by_tool))
+
 
 class OrchestratorPayloadResultBlock(BaseModel):
     content: str = ""

@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, OPENAI_PROVIDER
 from llm.repository.conversation_model_config_repository import ConversationModelConfigRepository
+from conversation.constants import CONVERSATION_SOURCE_STREAMLIT
 from conversation.repository.conversation_repository import ConversationRepository
 from conversation.models.conversation_models import ConversationMetadata
 
@@ -157,7 +158,7 @@ def test_create_conversation_persists_default_model_config_rows() -> None:
         'user_id': 'anonymous',
         'title': 'anonymous',
         'created_at': '2026-08-09T00:00:00Z',
-            'metadata': {'sources': ['streamlit']},
+        'metadata': {'sources': [CONVERSATION_SOURCE_STREAMLIT]},
         'tone_state': {},
         'summary': '',
     }
@@ -180,7 +181,7 @@ def test_create_conversation_persists_default_model_config_rows() -> None:
 
     conversation = repo.create_conversation(
         user_id='anonymous',
-        metadata=ConversationMetadata(sources=['streamlit']),
+        metadata=ConversationMetadata(sources=[CONVERSATION_SOURCE_STREAMLIT]),
     )
 
     assert conversation.id == row['id']
