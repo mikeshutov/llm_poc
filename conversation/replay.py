@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from common.config import SUMMARY_BATCH_SIZE, SUMMARY_TRIGGER_SIZE
-from conversation.constants import CONVERSATION_SOURCE_REPLAY
+from conversation.constants import SOURCE_REPLAY
 from conversation.models.conversation_models import ConversationMetadata
 from conversation.models.replay_models import PopulatedReplayConversation, PreparedReplayConversation
 from conversation.repository.repo_factory import get_conversation_repo
@@ -38,7 +38,7 @@ def prepare_replay(roundtrip_id: str | UUID, user_id: str) -> PreparedReplayConv
     new_conversation = repo.create_conversation(
         user_id=user_id,
         metadata=ConversationMetadata(
-            sources=[CONVERSATION_SOURCE_REPLAY],
+            sources=[SOURCE_REPLAY],
             source_conversation_id=source_conversation.id,
             source_roundtrip_id=source_roundtrip.id,
             source_message_index=source_roundtrip.message_index,

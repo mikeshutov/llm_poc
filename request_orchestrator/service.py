@@ -48,7 +48,7 @@ def run_request_orchestrator_for_query(
         UUID(conversation_id),
         user_query,
         model=resolved_model_config.main_agent.planner.model,
-        resolved_model_config=resolved_model_config,
+        metadata={"resolved_model_config": resolved_model_config.model_dump(mode="json")},
     )
 
     conversation_context = build_roundtrip_context(

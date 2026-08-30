@@ -90,7 +90,7 @@ class ConversationRoundtrip:
     response_payload: OrchestratorPayload
     parsed_query: dict[str, Any]
     created_at: str
-    resolved_model_config: ConversationModelConfig | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     model: Optional[str] = None
     feedback_id: Optional[UUID] = None
     assistant_follow_up: str = ""
@@ -99,8 +99,7 @@ class ConversationRoundtrip:
     def __post_init__(self) -> None:
         self.response_payload = OrchestratorPayload.model_validate(self.response_payload)
         self.parsed_query = dict(self.parsed_query) if isinstance(self.parsed_query, dict) else {}
-        if self.resolved_model_config is not None:
-            self.resolved_model_config = ConversationModelConfig.model_validate(self.resolved_model_config)
+        self.metadata = dict(self.metadata) if isinstance(self.metadata, dict) else {}
         self.relevant_evidence = RelevantEvidenceByTool.model_validate(self.relevant_evidence)
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from langchain_core.tools import tool
@@ -32,7 +33,7 @@ class GetMemoryDetailResult(BaseModel):
     created_at: str = ""
     model: str = ""
     response_payload: OrchestratorPayload = Field(default_factory=OrchestratorPayload)
-    resolved_model_config: ConversationModelConfig | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class MemoryDetailEvidenceMetadata(BaseModel):
@@ -94,10 +95,10 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         created_at=str(roundtrip.created_at),
         model=roundtrip.model or "",
         response_payload=roundtrip.response_payload,
-        resolved_model_config=roundtrip.resolved_model_config,
+        metadata=roundtrip.metadata,
     )
     metadata = MemoryDetailEvidenceMetadata(
-        resolved_model_config=result.resolved_model_config,
+        resolved_model_config=_resolved_model_config(result.metadata),
         conversation_id=result.conversation_id,
         roundtrip_id=result.roundtrip_id,
         message_index=result.message_index,
@@ -119,3 +120,8 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         result=result,
         evidence=[evidence_view],
     )
+
+
+def _resolved_model_config(metadata: dict[str, Any]) -> ConversationModelConfig | None:
+    value = metadata.get("resolved_model_config")
+    return ConversationModelConfig.model_validate(value) if isinstance(value, dict) else None
