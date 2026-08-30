@@ -88,13 +88,13 @@ class FakeConversationRepository:
             summary_embedding=None,
         )
 
-    def create_pending_roundtrip(self, conversation_id, user_prompt, model=None, roundtrip_summary=None, roundtrip_summary_embedding=None, metadata=None):
+    def create_pending_roundtrip(self, conversation_id, user_prompt, model=None, roundtrip_summary=None, roundtrip_summary_embedding=None, resolved_model_config=None):
         self.pending_calls.append(
             {
                 'conversation_id': conversation_id,
                 'user_prompt': user_prompt,
                 'model': model,
-                'metadata': metadata,
+                'resolved_model_config': resolved_model_config,
             }
         )
         return ConversationRoundtrip(
@@ -108,7 +108,7 @@ class FakeConversationRepository:
             response_payload={},
             parsed_query={},
             created_at='2026-08-08T00:00:00Z',
-            metadata=metadata or {},
+            resolved_model_config=resolved_model_config,
             model=model,
         )
 
@@ -134,7 +134,7 @@ class FakeConversationRepository:
             response_payload=payload,
             parsed_query={},
             created_at='2026-08-08T00:00:00Z',
-            metadata={},
+            resolved_model_config=self.pending_calls[0]['resolved_model_config'],
             model=self.pending_calls[0]['model'],
             relevant_evidence=relevant_evidence or {},
         )
@@ -659,7 +659,7 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
         run_request_orchestrator_for_query(str(conversation_id), 'hello world', user_id='anonymous')
 
     assert fake_repo.pending_calls[0]['model'] == config.main_agent.planner.model
-    assert fake_repo.pending_calls[0]['metadata'].resolved_model_config == config
+    assert fake_repo.pending_calls[0]['resolved_model_config'] == config
     assert captured_context_kwargs == {
         'conversation_id': str(conversation_id),
         'limit': 5,

@@ -15,7 +15,7 @@ from request_orchestrator.orchestrator import run_agent
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from tool.summarize_tool_call import summarize_tool_calls
 from conversation.context_builder import build_roundtrip_context
-from conversation.models.conversation_models import ConversationRoundtrip, RoundtripMetadata
+from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo
 
 
@@ -48,7 +48,7 @@ def run_request_orchestrator_for_query(
         UUID(conversation_id),
         user_query,
         model=resolved_model_config.main_agent.planner.model,
-        metadata=RoundtripMetadata(resolved_model_config=resolved_model_config),
+        resolved_model_config=resolved_model_config,
     )
 
     conversation_context = build_roundtrip_context(

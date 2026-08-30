@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from pydantic import BaseModel, Field, RootModel
+from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 from request_orchestrator.models.evidence import EvidenceView
 
@@ -40,7 +40,8 @@ class OrchestratorPayloadResultBlock(BaseModel):
 
 
 class OrchestratorPayload(BaseModel):
-    tool_results: list[dict] = Field(default_factory=list)
+    model_config = ConfigDict(extra="forbid")
+
     result: list[OrchestratorPayloadResultBlock] = Field(default_factory=list)
     evidence_by_id: dict[str, EvidenceView] = Field(default_factory=dict)
     used_evidence_ids: list[str] = Field(default_factory=list)

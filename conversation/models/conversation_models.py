@@ -62,18 +62,6 @@ class ConversationMetadata(BaseModel):
     source_message_index: int | None = None
 
 
-class RoundtripMetadata(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    resolved_model_config: ConversationModelConfig | None = None
-
-
-class ParsedQuery(BaseModel):
-    """Retained only while the legacy JSONB column exists; no data is written to it."""
-
-    model_config = ConfigDict(extra="forbid")
-
-
 @dataclass(frozen=False)
 class Conversation:
     id: UUID
@@ -100,9 +88,9 @@ class ConversationRoundtrip:
     roundtrip_summary: Optional[str]
     roundtrip_summary_embedding: Optional[list[float]]
     response_payload: OrchestratorPayload
-    parsed_query: ParsedQuery
+    parsed_query: dict[str, Any]
     created_at: str
-    metadata: RoundtripMetadata
+    resolved_model_config: ConversationModelConfig | None = None
     model: Optional[str] = None
     feedback_id: Optional[UUID] = None
     assistant_follow_up: str = ""
@@ -110,8 +98,9 @@ class ConversationRoundtrip:
 
     def __post_init__(self) -> None:
         self.response_payload = OrchestratorPayload.model_validate(self.response_payload)
-        self.parsed_query = ParsedQuery.model_validate(self.parsed_query)
-        self.metadata = RoundtripMetadata.model_validate(self.metadata)
+        self.parsed_query = dict(self.parsed_query) if isinstance(self.parsed_query, dict) else {}
+        if self.resolved_model_config is not None:
+            self.resolved_model_config = ConversationModelConfig.model_validate(self.resolved_model_config)
         self.relevant_evidence = RelevantEvidenceByTool.model_validate(self.relevant_evidence)
 
 

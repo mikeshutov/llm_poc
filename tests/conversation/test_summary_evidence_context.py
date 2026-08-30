@@ -17,7 +17,6 @@ def test_summary_messages_include_relevant_evidence_by_tool() -> None:
         response_payload={},
         parsed_query={},
         created_at="2026-08-27T00:00:00Z",
-        metadata={},
         relevant_evidence={"search_products": [evidence_id]},
     )
 

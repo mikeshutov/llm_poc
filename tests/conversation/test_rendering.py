@@ -37,7 +37,6 @@ def test_serialize_roundtrip_payload_preserves_persisted_evidence() -> None:
         ),
         parsed_query={},
         created_at="2026-08-27T12:00:00+00:00",
-        metadata={},
     )
 
     payload = serialize_roundtrip_payload(roundtrip.response_payload)

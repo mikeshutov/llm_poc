@@ -19,7 +19,6 @@ from conversation.models.conversation_models import (
     ConversationSummary,
     RoundtripFeedback,
     RoundtripMemory,
-    RoundtripMetadata,
     RoundtripPrompt,
 )
 from db.connection import get_connection
@@ -27,6 +26,12 @@ from llm.repository.conversation_model_config_repository import ConversationMode
 from personalization.tone.models import TonePreferences
 from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
 from request_orchestrator.models.relevant_evidence import RelevantEvidenceByTool
+
+
+def _roundtrip_metadata(resolved_model_config: ConversationModelConfig | None) -> dict[str, Any]:
+    if resolved_model_config is None:
+        return {}
+    return {"resolved_model_config": resolved_model_config.model_dump(mode="json")}
 
 
 class ConversationRepository:
@@ -68,9 +73,8 @@ class ConversationRepository:
         model: Optional[str] = None,
         roundtrip_summary: Optional[str] = None,
         roundtrip_summary_embedding: Optional[list[float]] = None,
-        metadata: RoundtripMetadata | None = None,
+        resolved_model_config: ConversationModelConfig | None = None,
     ) -> ConversationRoundtrip:
-        metadata = metadata or RoundtripMetadata()
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -78,7 +82,7 @@ class ConversationRepository:
                 SELECT %s, COALESCE(MAX(message_index), -1) + 1, %s, '', %s, (%s)::vector, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, %s, %s
                 FROM conversation_roundtrip
                 WHERE conversation_id = %s
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata, model, assistant_follow_up
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata -> 'resolved_model_config' AS resolved_model_config, model, assistant_follow_up
                 """,
                 (
                     conversation_id,
@@ -86,7 +90,7 @@ class ConversationRepository:
                     roundtrip_summary,
                     roundtrip_summary_embedding,
                     model,
-                    Jsonb(metadata.model_dump(mode="json", exclude_none=True)),
+                    Jsonb(_roundtrip_metadata(resolved_model_config)),
                     conversation_id,
                 ),
             )
@@ -116,7 +120,7 @@ class ConversationRepository:
                     relevant_evidence = %s,
                     updated_at = now()
                 WHERE id = %s
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata, model, assistant_follow_up
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata -> 'resolved_model_config' AS resolved_model_config, model, assistant_follow_up
                 """,
                 (
                     response,
@@ -138,12 +142,11 @@ class ConversationRepository:
         user_prompt: str,
         generated_response: str,
         response_payload: OrchestratorPayload | None = None,
-        metadata: RoundtripMetadata | None = None,
+        resolved_model_config: ConversationModelConfig | None = None,
         model: Optional[str] = None,
         roundtrip_summary: Optional[str] = None,
         roundtrip_summary_embedding: Optional[list[float]] = None,
     ) -> ConversationRoundtrip:
-        metadata = metadata or RoundtripMetadata()
         response_payload = response_payload or OrchestratorPayload()
         assistant_follow_up = response_payload.next_question.strip()
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -164,7 +167,7 @@ class ConversationRepository:
                     %s
                 FROM conversation_roundtrip
                 WHERE conversation_id = %s
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata, model, assistant_follow_up
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata -> 'resolved_model_config' AS resolved_model_config, model, assistant_follow_up
                 """,
                 (
                     conversation_id,
@@ -177,7 +180,7 @@ class ConversationRepository:
                     Jsonb(RelevantEvidenceByTool.empty().model_dump(mode="json")),
                     Jsonb({}),
                     model,
-                    Jsonb(metadata.model_dump(mode="json", exclude_none=True)),
+                    Jsonb(_roundtrip_metadata(resolved_model_config)),
                     conversation_id,
                 ),
             )
@@ -573,7 +576,7 @@ class ConversationRepository:
                     rt.relevant_evidence,
                     rt.parsed_query,
                     rt.created_at,
-                    rt.metadata,
+                    rt.metadata -> 'resolved_model_config' AS resolved_model_config,
                     rt.model,
                     fb.id AS feedback_id
                 FROM conversation_roundtrip rt
@@ -602,7 +605,7 @@ class ConversationRepository:
                     rt.relevant_evidence,
                     rt.parsed_query,
                     rt.created_at,
-                    rt.metadata,
+                    rt.metadata -> 'resolved_model_config' AS resolved_model_config,
                     rt.model,
                     fb.id AS feedback_id
                 FROM conversation_roundtrip rt
@@ -633,7 +636,7 @@ class ConversationRepository:
                     relevant_evidence,
                     parsed_query,
                     created_at,
-                    metadata,
+                    metadata -> 'resolved_model_config' AS resolved_model_config,
                     model
                 FROM conversation_roundtrip
                 WHERE conversation_id = %s
@@ -684,7 +687,7 @@ class ConversationRepository:
                         rt.relevant_evidence,
                         rt.parsed_query,
                         rt.created_at,
-                        rt.metadata,
+                        rt.metadata -> 'resolved_model_config' AS resolved_model_config,
                         rt.model,
                         fb.id AS feedback_id
                     FROM conversation_roundtrip rt
@@ -712,7 +715,7 @@ class ConversationRepository:
                         rt.relevant_evidence,
                         rt.parsed_query,
                         rt.created_at,
-                        rt.metadata,
+                        rt.metadata -> 'resolved_model_config' AS resolved_model_config,
                         rt.model,
                         fb.id AS feedback_id
                     FROM conversation_roundtrip rt
@@ -752,7 +755,7 @@ class ConversationRepository:
                     rt.relevant_evidence,
                     rt.parsed_query,
                     rt.created_at,
-                    rt.metadata,
+                    rt.metadata -> 'resolved_model_config' AS resolved_model_config,
                     rt.model,
                     fb.id AS feedback_id
                 FROM conversation_roundtrip rt
@@ -834,7 +837,7 @@ class ConversationRepository:
                     metadata
                 )
                 VALUES (%s, %s, %s, %s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata, model, assistant_follow_up
+                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata -> 'resolved_model_config' AS resolved_model_config, model, assistant_follow_up
                 """,
                 (
                     conversation_id,
@@ -850,7 +853,7 @@ class ConversationRepository:
                     source_roundtrip.created_at,
                     source_roundtrip.created_at,
                     source_roundtrip.model,
-                    Jsonb(source_roundtrip.metadata.model_dump(mode="json", exclude_none=True)),
+                    Jsonb(_roundtrip_metadata(source_roundtrip.resolved_model_config)),
                 ),
             )
             row = cur.fetchone()

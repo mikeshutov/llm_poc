@@ -5,7 +5,7 @@ from uuid import UUID
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from conversation.models.conversation_models import RoundtripMetadata
+from llm.conversation_model_config import ConversationModelConfig
 from conversation.repository.repo_factory import get_conversation_repo
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
@@ -32,10 +32,11 @@ class GetMemoryDetailResult(BaseModel):
     created_at: str = ""
     model: str = ""
     response_payload: OrchestratorPayload = Field(default_factory=OrchestratorPayload)
-    metadata: RoundtripMetadata = Field(default_factory=RoundtripMetadata)
+    resolved_model_config: ConversationModelConfig | None = None
 
 
-class MemoryDetailEvidenceMetadata(RoundtripMetadata):
+class MemoryDetailEvidenceMetadata(BaseModel):
+    resolved_model_config: ConversationModelConfig | None = None
     conversation_id: str = ""
     roundtrip_id: str = ""
     message_index: int = 0
@@ -93,10 +94,10 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         created_at=str(roundtrip.created_at),
         model=roundtrip.model or "",
         response_payload=roundtrip.response_payload,
-        metadata=roundtrip.metadata,
+        resolved_model_config=roundtrip.resolved_model_config,
     )
     metadata = MemoryDetailEvidenceMetadata(
-        resolved_model_config=result.metadata.resolved_model_config,
+        resolved_model_config=result.resolved_model_config,
         conversation_id=result.conversation_id,
         roundtrip_id=result.roundtrip_id,
         message_index=result.message_index,

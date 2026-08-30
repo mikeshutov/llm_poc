@@ -38,16 +38,6 @@ def _is_evidence_excluded_from_persistence(evidence: EvidenceView) -> bool:
     return evidence.tool_name.strip() in EVIDENCE_PERSISTENCE_EXCLUDED_TOOL_NAMES
 
 
-def _is_tool_result_excluded_from_persistence(tool_result) -> bool:
-    tool_name = tool_result.tool_name.strip()
-    if tool_name in EVIDENCE_PERSISTENCE_EXCLUDED_TOOL_NAMES:
-        return True
-    return bool(tool_result.evidence) and all(
-        _is_evidence_excluded_from_persistence(evidence)
-        for evidence in tool_result.evidence
-    )
-
-
 @dataclass(frozen=True)
 class OrchestratorResult:
     agent_result: AgentResult = field(default_factory=AgentResult)
@@ -119,11 +109,6 @@ class OrchestratorResult:
             for evidence_id, evidence in evidence_bundle.evidence_by_id.items()
             if not _is_evidence_excluded_from_persistence(evidence)
         }
-        persisted_tool_results = [
-            tool_result
-            for tool_result in tool_results
-            if not _is_tool_result_excluded_from_persistence(tool_result)
-        ]
         result_blocks = self.result_blocks
         if not result_blocks:
             result_blocks = [
@@ -142,7 +127,6 @@ class OrchestratorResult:
             for block in result_blocks
         ]
         payload = OrchestratorPayload(
-            tool_results=[tool_result.model_dump(mode="json", exclude_none=True) for tool_result in persisted_tool_results],
             result=[
                 OrchestratorPayloadResultBlock(
                     content=block.content,

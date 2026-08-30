@@ -170,7 +170,6 @@ def test_excluded_tool_evidence_is_not_persisted() -> None:
             ],
         ).to_persistence_models()
 
-    assert [tool_result["tool_name"] for tool_result in payload.tool_results] == ["find_products"]
     assert list(payload.evidence_by_id) == [str(product_evidence.id)]
     assert payload.result[0].evidence_ids == [str(product_evidence.id)]
     assert payload.used_evidence_ids == [str(product_evidence.id)]

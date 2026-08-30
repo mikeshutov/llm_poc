@@ -32,9 +32,11 @@ def test_evidence_view_normalizes_llm_facing_text() -> None:
         llm_metadata={"seller": "<em>Amazon</em>&#x20;Store"},
     )
 
-    assert evidence.for_llm()["title"] == "DEWALT 20V"
-    assert evidence.for_llm()["summary"] == "Brushless drill."
-    assert evidence.for_llm()["metadata"] == {"seller": "Amazon Store"}
+    compact_view = evidence.compact_view()
+
+    assert compact_view["title"] == "DEWALT 20V"
+    assert compact_view["summary"] == "Brushless drill."
+    assert compact_view["metadata"] == {"seller": "Amazon Store"}
 
 
 def test_reranker_candidate_normalizes_prompt_text() -> None:
