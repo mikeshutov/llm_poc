@@ -4,7 +4,9 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
+
+from common.html_text import html_to_plain_text, normalize_html_values
 
 
 class EvidenceUrlType(StrEnum):
@@ -15,6 +17,30 @@ class EvidenceUrlType(StrEnum):
 class EvidenceUrl(BaseModel):
     url: str = ""
     url_type: EvidenceUrlType = EvidenceUrlType.WEBSITE
+
+
+class CompactEvidenceView(BaseModel):
+    evidence_id: UUID
+    title: str = ""
+    summary: str = ""
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class HydratedEvidenceView(CompactEvidenceView):
+    item_id: str = ""
+    tool_name: str = ""
+    urls: list[EvidenceUrl] = Field(default_factory=list)
+    image_url: str = ""
+    published_at: str = ""
+    source: str = ""
+    entity_type: str = ""
+    location_name: str = ""
+
+
+class EvaluatorEvidenceView(BaseModel):
+    evidence_id: UUID
+    summary: str = ""
+    present_data: list[str] = Field(default_factory=list)
 
 
 class EvidenceView(BaseModel):
@@ -31,8 +57,18 @@ class EvidenceView(BaseModel):
     source: str = ""
     entity_type: str = ""
     location_name: str = ""
-    llm_metadata: dict[str, Any] = Field(default_factory=dict)
+    llm_metadata: dict[str, JsonValue] = Field(default_factory=dict)
     raw_payload: Any = None
+
+    @field_validator("title", "summary", mode="before")
+    @classmethod
+    def normalize_llm_text(cls, value: object) -> object:
+        return html_to_plain_text(value) if isinstance(value, str) else value
+
+    @field_validator("llm_metadata", mode="before")
+    @classmethod
+    def normalize_llm_metadata(cls, value: object) -> object:
+        return normalize_html_values(value)
 
     @property
     def url(self) -> str:
@@ -47,47 +83,70 @@ class EvidenceView(BaseModel):
                 return cleaned_url
         return ""
 
-    def for_llm(self) -> dict[str, Any]:
-        return {
-            "evidence_id": str(self.id),
-            "item_id": self.item_id,
+    def compact_view(self) -> dict[str, Any]:
+        return CompactEvidenceView(
+            evidence_id=self.id,
+            title=self.title,
+            summary=self.summary,
+            metadata=self.llm_metadata,
+        ).model_dump(mode="json")
+
+    def hydrated_view(self) -> dict[str, Any]:
+        return HydratedEvidenceView(
+            evidence_id=self.id,
+            item_id=self.item_id,
+            tool_name=self.tool_name,
+            title=self.title,
+            summary=self.summary,
+            urls=self.urls,
+            image_url=self.image_url,
+            published_at=self.published_at,
+            source=self.source,
+            entity_type=self.entity_type,
+            location_name=self.location_name,
+            metadata=self.llm_metadata,
+        ).model_dump(mode="json")
+
+    def to_evaluator_view(self) -> dict[str, Any]:
+        hydrated_data = {
             "title": self.title,
             "summary": self.summary,
-            "metadata": dict(self.llm_metadata),
+            "urls": self.urls,
+            "image_url": self.image_url,
+            "published_at": self.published_at,
+            "source": self.source,
+            "entity_type": self.entity_type,
+            "location_name": self.location_name,
         }
+        return EvaluatorEvidenceView(
+            evidence_id=self.id,
+            summary=self.summary,
+            present_data=[
+                *[field_name for field_name, value in hydrated_data.items() if value],
+                *sorted(self.llm_metadata),
+            ],
+        ).model_dump(mode="json")
 
 
 class EvidenceBundle(BaseModel):
     evidence_by_id: dict[str, EvidenceView] = Field(default_factory=dict)
     evidence_views_by_tool_call_id: dict[UUID, list[EvidenceView]] = Field(default_factory=dict)
 
-    @model_validator(mode="before")
-    @classmethod
-    def coerce_reloaded_evidence_views(cls, value: Any) -> Any:
-        if not isinstance(value, dict):
-            return value
 
-        def coerce_evidence(evidence: Any) -> Any:
-            # Streamlit can retain tool modules across a source reload, leaving
-            # them with an older EvidenceView class identity.
-            return evidence.model_dump() if isinstance(evidence, BaseModel) else evidence
+class ToolMetadata(BaseModel):
+    """Shared, result-level metadata emitted by tool adapters."""
 
-        normalized = dict(value)
-        evidence_by_id = normalized.get("evidence_by_id")
-        if isinstance(evidence_by_id, dict):
-            normalized["evidence_by_id"] = {
-                evidence_id: coerce_evidence(evidence)
-                for evidence_id, evidence in evidence_by_id.items()
-            }
-        evidence_by_tool_call_id = normalized.get("evidence_views_by_tool_call_id")
-        if isinstance(evidence_by_tool_call_id, dict):
-            normalized["evidence_views_by_tool_call_id"] = {
-                tool_call_id: [coerce_evidence(evidence) for evidence in evidence_views]
-                if isinstance(evidence_views, list)
-                else evidence_views
-                for tool_call_id, evidence_views in evidence_by_tool_call_id.items()
-            }
-        return normalized
+    model_config = ConfigDict(extra="forbid")
+    retrieved_count: int | None = None
+    reranked: bool | None = None
+    product_source: str | list[str] | None = None
+    search_type: str | None = None
+    current_page: int | None = None
+    page_size: int | None = None
+    has_more: bool | None = None
+    returned_count: int | None = None
+    warnings: list[str] | None = None
+    ruling_source: str | None = None
 
 
 class ToolResult(BaseModel):
@@ -96,7 +155,7 @@ class ToolResult(BaseModel):
     tool_name: str = ""
     iteration: int | None = None
     result: Any = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    tool_metadata: ToolMetadata = Field(default_factory=ToolMetadata)
     evidence: list[EvidenceView] = Field(default_factory=list)
 
     @classmethod
@@ -104,4 +163,4 @@ class ToolResult(BaseModel):
         payload: dict[str, Any] = {"error": error}
         if extra_result:
             payload.update(extra_result)
-        return cls(result=payload, metadata={}, evidence=[])
+        return cls(result=payload, tool_metadata=ToolMetadata(), evidence=[])

@@ -6,8 +6,10 @@ from uuid import UUID
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
+from llm.conversation_model_config import ConversationModelConfig
 from conversation.repository.repo_factory import get_conversation_repo
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
+from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from tool.constants import TOOL_NAME_GET_MEMORY_DETAIL
 from tool.constants import TOOL_RESULT_TYPE_MEMORY_DETAIL
@@ -30,9 +32,17 @@ class GetMemoryDetailResult(BaseModel):
     roundtrip_summary: str = ""
     created_at: str = ""
     model: str = ""
-    response_payload: dict[str, Any] = Field(default_factory=dict)
-    parsed_query: dict[str, Any] = Field(default_factory=dict)
+    response_payload: OrchestratorPayload = Field(default_factory=OrchestratorPayload)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MemoryDetailEvidenceMetadata(BaseModel):
+    resolved_model_config: ConversationModelConfig | None = None
+    conversation_id: str = ""
+    roundtrip_id: str = ""
+    message_index: int = 0
+    created_at: str = ""
+    model: str = ""
 
 
 @tool(
@@ -84,19 +94,16 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         roundtrip_summary=roundtrip.roundtrip_summary or "",
         created_at=str(roundtrip.created_at),
         model=roundtrip.model or "",
-        response_payload=roundtrip.response_payload or {},
-        parsed_query=roundtrip.parsed_query or {},
-        metadata=roundtrip.metadata or {},
+        response_payload=roundtrip.response_payload,
+        metadata=roundtrip.metadata,
     )
-    metadata = dict(result.metadata)
-    metadata.update(
-        {
-            "conversation_id": result.conversation_id,
-            "roundtrip_id": result.roundtrip_id,
-            "message_index": result.message_index,
-            "created_at": result.created_at,
-            "model": result.model,
-        }
+    metadata = MemoryDetailEvidenceMetadata(
+        resolved_model_config=_resolved_model_config(result.metadata),
+        conversation_id=result.conversation_id,
+        roundtrip_id=result.roundtrip_id,
+        message_index=result.message_index,
+        created_at=result.created_at,
+        model=result.model,
     )
     evidence_view = EvidenceView(
         item_id=result.roundtrip_id,
@@ -106,10 +113,15 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         published_at=result.created_at.strip(),
         source=TOOL_NAME_GET_MEMORY_DETAIL,
         entity_type=TOOL_RESULT_TYPE_MEMORY_DETAIL,
-        llm_metadata=metadata,
+        llm_metadata=metadata.model_dump(mode="json", exclude_none=True),
         raw_payload=result,
     )
     return ToolResult(
         result=result,
         evidence=[evidence_view],
     )
+
+
+def _resolved_model_config(metadata: dict[str, Any]) -> ConversationModelConfig | None:
+    value = metadata.get("resolved_model_config")
+    return ConversationModelConfig.model_validate(value) if isinstance(value, dict) else None

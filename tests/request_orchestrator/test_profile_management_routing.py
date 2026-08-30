@@ -20,7 +20,6 @@ from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_SATISFIED
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
-from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
 from request_orchestrator.shared.evaluator import evaluator_router
 
 
@@ -28,37 +27,28 @@ def _hydrate_plan_state(state: AgentState, *, plan: Plan, results: dict[str, obj
     state.node_states.planner.plan = plan.model_copy(deep=True)
     state.node_states.planner.plan_count = 1
     state.node_states.planner.needs_replan = False
-    agent_name = state.agent_profile.name
-    tool_name_by_step_id = {
-        namespace_step_id(agent_name, format_plan_step_id(1, step.id)): step.tool
-        for step in plan.steps
-    }
-    step_id_by_local_step_id = {
-        format_plan_step_id(1, step.id): namespace_step_id(agent_name, format_plan_step_id(1, step.id))
-        for step in plan.steps
-    }
+    step_by_local_id = {step.id: step for step in plan.steps}
     normalized_results: list[ToolResult] = []
-    for step_id, value in (results or {}).items():
+    for local_step_id, value in (results or {}).items():
+        step = step_by_local_id[local_step_id]
         if isinstance(value, ToolResult):
             normalized_results.append(
                 value.model_copy(
                     update={
-                        "step_id": value.step_id or step_id_by_local_step_id.get(step_id, step_id),
-                        "tool_name": value.tool_name or tool_name_by_step_id.get(step_id_by_local_step_id.get(step_id, step_id), ""),
-                        "iteration": 1 if value.iteration is None else value.iteration,
+                        "plan_step_id": value.plan_step_id or step.db_id,
+                        "tool_name": value.tool_name or step.tool,
                     }
                 )
             )
             continue
         normalized_results.append(
             ToolResult(
-                step_id=step_id_by_local_step_id.get(step_id, step_id),
-                tool_name=tool_name_by_step_id.get(step_id_by_local_step_id.get(step_id, step_id), ""),
-                iteration=1,
+                plan_step_id=step.db_id,
+                tool_name=step.tool,
                 result=value,
             )
         )
-    state.result = state.result.copy(tool_results=normalized_results)
+    state.gather_tool_results = lambda: normalized_results
 
 
 def test_profile_router_routes_first_pass_to_plan() -> None:
@@ -97,7 +87,7 @@ def test_profile_router_routes_completed_results_to_evaluator() -> None:
                     "plan": "Load current profile state.",
                     "tool": "get_user_attributes",
                     "args": {"limit": 10, "is_active": True}}
-            ]}), results={"P1E1": {"items": []}})
+            ]}), results={"E1": {"items": []}})
 
     assert router(state) == EVALUATE_EDGE
 

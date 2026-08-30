@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from langchain_core.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from llm.clients.embeddings import embed_text
 from personalization.user_attributes.models.user_attribute_models import UserAttributeSearchResult
@@ -23,6 +23,17 @@ class SearchUserAttributesArgs(BaseModel):
     attribute_type: UserAttributeType | None = Field(default=None, description=f"Optional attribute-type filter. {ATTRIBUTE_TYPE_COMPACT_DESCRIPTION}")
     group_key: str | None = Field(default=None, description="Optional grouping-key filter.")
     source: str | None = Field(default=None, description="Optional source filter.")
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def default_invalid_limit(cls, value: object) -> int | object:
+        if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+            return 5
+        try:
+            normalized_limit = int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 5
+        return normalized_limit if 1 <= normalized_limit <= 10 else 5
 
 
 SEARCH_USER_ATTRIBUTES_DESCRIPTION = "Search persistent user attributes by semantic similarity."

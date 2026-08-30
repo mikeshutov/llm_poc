@@ -19,7 +19,6 @@ from request_orchestrator.constants import EVALUATE_EDGE
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
-from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
 
 
 def _state_with_completed_plan(*, needs_replan: bool, profile=MAIN_AGENT_PROFILE) -> AgentState:
@@ -38,14 +37,13 @@ def _state_with_completed_plan(*, needs_replan: bool, profile=MAIN_AGENT_PROFILE
     state.node_states.planner.plan = plan
     state.node_states.planner.plan_count = 1
     state.node_states.planner.needs_replan = needs_replan
-    state.result = state.result.copy(tool_results=[
+    state.gather_tool_results = lambda: [
         ToolResult(
-            step_id=namespace_step_id(profile.name, format_plan_step_id(1, "E1")),
+            plan_step_id=plan.steps[0].db_id,
             tool_name="tool_a",
-            iteration=1,
             result={"ok": True},
         )
-    ])
+    ]
     return state
 
 

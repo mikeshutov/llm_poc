@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal, TypeAlias
 
 from pydantic import BaseModel, Field
 import tiktoken
@@ -13,6 +13,10 @@ from common.data import is_meaningful_prompt_value, prune_empty_prompt_values
 from personalization.profile.models import UserProfile
 from conversation.models.conversation_models import ConversationContext
 from request_orchestrator.models.evidence import EvidenceView
+
+EVIDENCE_VIEW_COMPACT = "compact"
+EVIDENCE_VIEW_EVALUATOR = "evaluator"
+EvidenceViewMode: TypeAlias = Literal["compact", "evaluator"]
 
 
 class EvidenceStep(BaseModel):
@@ -29,7 +33,6 @@ class PromptSectionKeys:
     AVAILABLE_TOOLS = "available_tools"
     RULES = "rules"
     EVIDENCE = "evidence"
-    LATEST_USER_PROMPT = "latest_user_prompt"
     TASK = "task"
     SCHEMA = "schema"
 
@@ -42,7 +45,6 @@ BUILTIN_SECTION_KEYS = (
     PromptSectionKeys.AVAILABLE_TOOLS,
     PromptSectionKeys.RULES,
     PromptSectionKeys.EVIDENCE,
-    PromptSectionKeys.LATEST_USER_PROMPT,
     PromptSectionKeys.TASK,
     PromptSectionKeys.SCHEMA,
 )
@@ -55,7 +57,6 @@ INPUT_SECTION_KEYS = (
     PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES,
     PromptSectionKeys.AVAILABLE_TOOLS,
     PromptSectionKeys.EVIDENCE,
-    PromptSectionKeys.LATEST_USER_PROMPT,
     PromptSectionKeys.TASK,
 )
 OUTPUT_CONTRACT_SECTION_KEYS = (PromptSectionKeys.SCHEMA,)
@@ -86,13 +87,13 @@ class AgentPrompt:
     conversation_context: ConversationContext | None = None
     user_profile: UserProfile | None = None
     task: str = ""
-    latest_user_prompt: str = ""
     rules: str = ""
     schema: str = ""
     available_agents: Any = ""
     available_tool_categories: Any = ""
     available_tools: Any = ""
     evidence: list[EvidenceStep] | None = None
+    evidence_view: EvidenceViewMode = EVIDENCE_VIEW_COMPACT
     _enabled_sections: dict[str, dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
 
     def include_section(
@@ -130,8 +131,6 @@ class AgentPrompt:
                 value = self.rules
             elif key == PromptSectionKeys.EVIDENCE:
                 value = self._serialize_evidence_steps()
-            elif key == PromptSectionKeys.LATEST_USER_PROMPT:
-                value = self.latest_user_prompt or self.task
             elif key == PromptSectionKeys.TASK:
                 value = self.task
             elif key == PromptSectionKeys.SCHEMA:
@@ -219,7 +218,14 @@ class AgentPrompt:
                     {
                         "type": step.type,
                         "metadata": dict(step.metadata),
-                        "evidence": [evidence.for_llm() for evidence in step.evidence],
+                        "evidence": [
+                            (
+                                evidence.to_evaluator_view()
+                                if self.evidence_view == EVIDENCE_VIEW_EVALUATOR
+                                else evidence.compact_view()
+                            )
+                            for evidence in step.evidence
+                        ],
                     }
                 )
             )

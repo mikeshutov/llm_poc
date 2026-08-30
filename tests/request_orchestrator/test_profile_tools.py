@@ -21,6 +21,15 @@ from request_orchestrator.shared.tool_adapter.profile.set_user_display_name impo
 from request_orchestrator.shared.tool_adapter.profile.set_user_first_name import set_user_first_name
 from request_orchestrator.shared.tool_adapter.profile.set_user_last_name import set_user_last_name
 from request_orchestrator.shared.tool_adapter.profile.update_user_tone import update_user_tone
+from request_orchestrator.shared.tool_adapter.user_attributes.search_user_attributes import SearchUserAttributesArgs
+
+
+def test_search_user_attributes_defaults_invalid_limit() -> None:
+    assert SearchUserAttributesArgs(query="hobbies", limit=20).limit == 5
+    assert SearchUserAttributesArgs(query="hobbies", limit=0).limit == 5
+    assert SearchUserAttributesArgs(query="hobbies", limit=2.5).limit == 5
+    assert SearchUserAttributesArgs(query="hobbies", limit="invalid").limit == 5
+    assert SearchUserAttributesArgs(query="hobbies", limit=10).limit == 10
 
 
 def test_set_user_display_name_returns_typed_result() -> None:

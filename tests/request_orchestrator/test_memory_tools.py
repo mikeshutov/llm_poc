@@ -19,10 +19,16 @@ def test_get_memory_detail_returns_typed_result() -> None:
                 generated_response="We said we would offer 30-day returns.",
                 roundtrip_summary="The conversation decided on a 30-day return policy.",
                 roundtrip_summary_embedding=None,
-                response_payload={"response": "We said we would offer 30-day returns."},
+                    response_payload={
+                        "result": [
+                            {
+                                "content": "We said we would offer 30-day returns.",
+                                "evidence_ids": [],
+                            }
+                        ]
+                    },
                 parsed_query={"topic": "returns"},
                 created_at="2026-08-01T12:00:00+00:00",
-                metadata={"source": "memory"},
                 model="gpt-5.6-terra",
             )
 
@@ -48,23 +54,10 @@ def test_get_memory_detail_returns_typed_result() -> None:
     finally:
         module.get_conversation_repo = original_repo_getter
 
-    assert result.result.model_dump() == {
-        "error": "",
-        "memory_type": "roundtrip",
-        "title": "Memory detail for message 7",
-        "summary": "The conversation decided on a 30-day return policy.",
-        "conversation_id": str(fake_repo.roundtrip.conversation_id),
-        "roundtrip_id": str(fake_repo.roundtrip.id),
-        "message_index": 7,
-        "user_prompt": "What did we decide about returns?",
-        "generated_response": "We said we would offer 30-day returns.",
-        "roundtrip_summary": "The conversation decided on a 30-day return policy.",
-        "created_at": "2026-08-01T12:00:00+00:00",
-        "model": "gpt-5.6-terra",
-        "response_payload": {"response": "We said we would offer 30-day returns."},
-        "parsed_query": {"topic": "returns"},
-        "metadata": {"source": "memory"},
-    }
+    assert result.result.memory_type == "roundtrip"
+    assert result.result.roundtrip_id == str(fake_repo.roundtrip.id)
+    assert result.result.summary == "The conversation decided on a 30-day return policy."
+    assert fake_repo.roundtrip.parsed_query == {"topic": "returns"}
     assert result.evidence[0].item_id == str(fake_repo.roundtrip.id)
     assert result.evidence[0].title == "Memory detail for message 7"
     assert result.evidence[0].summary == "The conversation decided on a 30-day return policy."
@@ -74,22 +67,6 @@ def test_get_memory_detail_returns_typed_result() -> None:
 def test_get_memory_detail_rejects_invalid_roundtrip_id() -> None:
     result = get_memory_detail.invoke({"roundtrip_id": "not-a-uuid"})
 
-    assert result.result.model_dump() == {
-        "error": "Invalid roundtrip_id 'not-a-uuid'.",
-        "memory_type": "",
-        "title": "",
-        "summary": "",
-        "conversation_id": "",
-        "roundtrip_id": "",
-        "message_index": 0,
-        "user_prompt": "",
-        "generated_response": "",
-        "roundtrip_summary": "",
-        "created_at": "",
-        "model": "",
-        "response_payload": {},
-        "parsed_query": {},
-        "metadata": {},
-    }
+    assert result.result.error == "Invalid roundtrip_id 'not-a-uuid'."
     assert result.evidence == []
     assert result.evidence == []

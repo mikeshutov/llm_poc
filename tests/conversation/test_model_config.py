@@ -112,13 +112,14 @@ class FakeConversationRepository:
             model=model,
         )
 
-    def update_roundtrip(self, roundtrip_id, response, payload, roundtrip_summary=None, roundtrip_summary_embedding=None, assistant_follow_up=None):
+    def update_roundtrip(self, roundtrip_id, response, payload, roundtrip_summary=None, roundtrip_summary_embedding=None, assistant_follow_up=None, relevant_evidence=None):
         self.update_calls.append(
             {
                 'roundtrip_id': roundtrip_id,
                 'response': response,
                 'payload': payload,
                 'roundtrip_summary': roundtrip_summary,
+                'relevant_evidence': relevant_evidence,
             }
         )
         return ConversationRoundtrip(
@@ -133,8 +134,9 @@ class FakeConversationRepository:
             response_payload=payload,
             parsed_query={},
             created_at='2026-08-08T00:00:00Z',
-            metadata={},
+            metadata=self.pending_calls[0]['metadata'],
             model=self.pending_calls[0]['model'],
+            relevant_evidence=relevant_evidence or {},
         )
 
 
@@ -657,17 +659,15 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
         run_request_orchestrator_for_query(str(conversation_id), 'hello world', user_id='anonymous')
 
     assert fake_repo.pending_calls[0]['model'] == config.main_agent.planner.model
-    assert fake_repo.pending_calls[0]['metadata'] == {
-        'resolved_model_config': config.to_metadata_payload(),
-    }
+    assert fake_repo.pending_calls[0]['metadata']['resolved_model_config'] == config.model_dump(mode='json')
     assert captured_context_kwargs == {
         'conversation_id': str(conversation_id),
         'limit': 5,
     }
     assert 'llm_usage' not in fake_repo.update_calls[0]['payload']
     assert 'agent_logs' not in fake_repo.update_calls[0]['payload']
-    assert isinstance(fake_repo.update_calls[0]['payload']['roundtrip_latency_ms'], int)
-    assert fake_repo.update_calls[0]['payload']['roundtrip_latency_ms'] >= 0
+    assert isinstance(fake_repo.update_calls[0]['payload'].roundtrip_latency_ms, int)
+    assert fake_repo.update_calls[0]['payload'].roundtrip_latency_ms >= 0
 
 
 def test_run_request_orchestrator_passes_geometadata_to_user_profile_builder() -> None:

@@ -6,7 +6,9 @@ from uuid import uuid4
 
 from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, OPENAI_PROVIDER
 from llm.repository.conversation_model_config_repository import ConversationModelConfigRepository
+from conversation.constants import SOURCE_STREAMLIT
 from conversation.repository.conversation_repository import ConversationRepository
+from conversation.models.conversation_models import ConversationMetadata
 
 
 class FakeCursor:
@@ -156,7 +158,7 @@ def test_create_conversation_persists_default_model_config_rows() -> None:
         'user_id': 'anonymous',
         'title': 'anonymous',
         'created_at': '2026-08-09T00:00:00Z',
-        'metadata': {'source': 'streamlit'},
+        'metadata': {'sources': [SOURCE_STREAMLIT]},
         'tone_state': {},
         'summary': '',
     }
@@ -177,12 +179,16 @@ def test_create_conversation_persists_default_model_config_rows() -> None:
     with patch('conversation.repository.conversation_repository.register_vector', lambda conn: None):
         repo = ConversationRepository(conn=FakeConnection([create_cursor, FakeCursor(fetchall_rows=[]), *config_cursors]))
 
-    conversation = repo.create_conversation(user_id='anonymous', metadata={'source': 'streamlit'})
+    conversation = repo.create_conversation(
+        user_id='anonymous',
+        metadata=ConversationMetadata(sources=[SOURCE_STREAMLIT]),
+    )
 
     assert conversation.id == row['id']
     assert 'INSERT INTO conversation' in create_cursor.executed[0][0]
     assert len(config_cursors) == len(CONVERSATION_MODEL_CONFIG_SPECS)
     assert all('INSERT INTO conversation_model_config' in cursor.executed[0][0] for cursor in config_cursors)
+
 
 
 def test_resolve_conversation_model_config_backfills_missing_default_rows() -> None:

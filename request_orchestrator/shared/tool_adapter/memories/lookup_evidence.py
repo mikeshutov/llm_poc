@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+from langchain_core.tools import tool
+from pydantic import BaseModel, Field
+
+from request_orchestrator.models.evidence import HydratedEvidenceView, ToolResult
+from request_orchestrator.shared.runtime_context import get_current_user_id
+from tool.constants import TOOL_NAME_LOOKUP_EVIDENCE
+from tool.repository.evidence_repository import EvidenceRepository
+
+
+class LookupEvidenceArgs(BaseModel):
+    evidence_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        description="Evidence IDs from prior roundtrip context to retrieve. Provide all needed IDs in one array.",
+    )
+
+
+class EvidenceLookupResult(BaseModel):
+    evidence: list[HydratedEvidenceView] = Field(default_factory=list)
+
+
+@tool(
+    TOOL_NAME_LOOKUP_EVIDENCE,
+    args_schema=LookupEvidenceArgs,
+    description="""
+Retrieve full evidence records for provided evidence_ids.
+
+Required fields:
+- evidence_ids (array of strings): One or more evidence IDs for which full context is needed.
+
+""",
+)
+def lookup_evidence(evidence_ids: list[str]) -> ToolResult:
+    normalized_ids = list(
+        dict.fromkeys(
+            evidence_id.strip()
+            for evidence_id in evidence_ids
+            if isinstance(evidence_id, str) and evidence_id.strip()
+        )
+    )
+    evidence_by_id = EvidenceRepository().get_by_ids(
+        normalized_ids,
+        user_id=get_current_user_id(),
+    )
+    evidence = [evidence_by_id[evidence_id] for evidence_id in normalized_ids if evidence_id in evidence_by_id]
+    return ToolResult(
+        result=EvidenceLookupResult(
+            evidence=[evidence_view.hydrated_view() for evidence_view in evidence],
+        ),
+        evidence=evidence,
+    )

@@ -75,6 +75,14 @@ def render_magic_card_evidence_cards(items: Iterable[EvidenceView]) -> None:
                 _render_magic_card_evidence_card(item)
 
 
+def render_meal_evidence_cards(items: Iterable[EvidenceView]) -> None:
+    items_list = list(items)
+    for start in range(0, len(items_list), 2):
+        for column, item in zip(st.columns(2), items_list[start : start + 2]):
+            with column:
+                _render_meal_evidence_card(item)
+
+
 def render_magic_card_rulings(items: Iterable[EvidenceView]) -> None:
     rows = [
         {
@@ -145,6 +153,41 @@ def _render_magic_card_evidence_card(item: EvidenceView) -> None:
                 )
 
 
+def _render_meal_evidence_card(item: EvidenceView) -> None:
+    with st.container(border=True):
+        content_col, image_col = st.columns([2, 1])
+
+        with content_col:
+            title = item.title.strip() or "Meal"
+            st.markdown(f"### Recipe: {title}")
+
+            category = str(_metadata_value(item.llm_metadata, "category") or "").strip()
+            area = str(_metadata_value(item.llm_metadata, "area") or "").strip()
+            if category or area:
+                st.caption(" | ".join(part for part in (category, area) if part))
+
+            ingredients = _ingredient_lines(_metadata_value(item.llm_metadata, "ingredients"))
+            if ingredients:
+                st.markdown("**Ingredients**")
+                st.markdown("\n".join(f"- {ingredient}" for ingredient in ingredients))
+
+            instructions = str(_raw_value(item.raw_payload, "instructions") or "").strip()
+            if instructions:
+                st.markdown("**Recipe**")
+                st.write(instructions)
+            elif item.summary.strip():
+                st.write(item.summary.strip())
+
+            recipe_url = item.url.strip()
+            if recipe_url:
+                st.link_button("Open recipe", recipe_url)
+
+        with image_col:
+            image_url = item.image_url.strip()
+            if image_url:
+                st.image(image_url, width="stretch")
+
+
 def _raw_value(raw_payload: Any, key: str) -> Any:
     if isinstance(raw_payload, dict):
         return raw_payload.get(key)
@@ -159,6 +202,19 @@ def _string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _ingredient_lines(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    ingredients: list[str] = []
+    for ingredient in value:
+        name = str(_raw_value(ingredient, "name") or "").strip()
+        measure = str(_raw_value(ingredient, "measure") or "").strip()
+        if name:
+            ingredients.append(" ".join(part for part in (measure, name) if part))
+    return ingredients
 
 
 def _pricing_rows(source: Any) -> list[dict[str, str]]:

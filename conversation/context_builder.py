@@ -31,6 +31,12 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
             user_prompt=rt.user_prompt or "",
             roundtrip_summary=rt.roundtrip_summary or "",
             assistant_follow_up=rt.assistant_follow_up or "",
+            used_evidence_ids=[
+                evidence_id.strip()
+                for evidence_id in rt.response_payload.used_evidence_ids
+                if isinstance(evidence_id, str) and evidence_id.strip()
+            ],
+            relevant_evidence=rt.relevant_evidence.model_dump(mode="json"),
         )
         for rt in conversation_roundtrips
         if rt.user_prompt or rt.roundtrip_summary
@@ -38,14 +44,13 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
 
     recent_roundtrip_tool_summaries = []
     for rt in conversation_roundtrips:
-        payload = rt.response_payload if isinstance(rt.response_payload, dict) else {}
-        tool_summary = payload.get("tool_summary")
-        if not tool_summary:
+        tool_summary = rt.response_payload.tool_summary
+        if not tool_summary.evidence_produced.root:
             continue
         recent_roundtrip_tool_summaries.append(
             RecentRoundtripToolSummary(
                 message_index=rt.message_index,
-                tool_summary=ToolSummaryContext.model_validate(tool_summary),
+                tool_summary=ToolSummaryContext.model_validate(tool_summary.model_dump()),
             )
         )
 

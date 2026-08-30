@@ -1,9 +1,14 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from llm.conversation_model_config import ConversationModelConfig
+from personalization.tone.models import TonePreferences
+from request_orchestrator.models.orchestrator_payload import EvidenceProducedByTool, OrchestratorPayload
+from request_orchestrator.models.relevant_evidence import RelevantEvidenceByTool
 
 
 class ConversationSummaryResponse(BaseModel):
@@ -20,8 +25,7 @@ class ConversationSummaryResponse(BaseModel):
 
 class ToolSummaryContext(BaseModel):
     used_tools: list[str] = Field(default_factory=list)
-    produced: list[str] = Field(default_factory=list)
-    entities: list[str] = Field(default_factory=list)
+    evidence_produced: EvidenceProducedByTool = Field(default_factory=EvidenceProducedByTool.empty)
     freshness: str = ""
 
 
@@ -30,6 +34,8 @@ class RecentRoundtrip(BaseModel):
     user_prompt: str = ""
     roundtrip_summary: str = ""
     assistant_follow_up: str = ""
+    used_evidence_ids: list[str] = Field(default_factory=list)
+    relevant_evidence: RelevantEvidenceByTool = Field(default_factory=RelevantEvidenceByTool.empty)
 
 
 class RecentRoundtripToolSummary(BaseModel):
@@ -47,16 +53,29 @@ class ConversationContext(BaseModel):
     latest_assistant_follow_up: str = ""
 
 
+class ConversationMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sources: list[str] = Field(default_factory=list)
+    source_conversation_id: UUID | None = None
+    source_roundtrip_id: UUID | None = None
+    source_message_index: int | None = None
+
+
 @dataclass(frozen=False)
 class Conversation:
     id: UUID
     user_id: str
     title: Optional[str]
     created_at: str
-    metadata: dict[str, Any]
-    tone_state: dict[str, Any]
+    metadata: ConversationMetadata
+    tone_state: TonePreferences
     summary: str = ""
     summary_embedding: Optional[list[float]] = None
+
+    def __post_init__(self) -> None:
+        self.metadata = ConversationMetadata.model_validate(self.metadata)
+        self.tone_state = TonePreferences.model_validate(self.tone_state)
 
 
 @dataclass(frozen=False)
@@ -68,13 +87,20 @@ class ConversationRoundtrip:
     generated_response: str
     roundtrip_summary: Optional[str]
     roundtrip_summary_embedding: Optional[list[float]]
-    response_payload: dict[str, Any]
+    response_payload: OrchestratorPayload
     parsed_query: dict[str, Any]
     created_at: str
-    metadata: dict[str, Any]
+    metadata: dict[str, Any] = field(default_factory=dict)
     model: Optional[str] = None
     feedback_id: Optional[UUID] = None
     assistant_follow_up: str = ""
+    relevant_evidence: RelevantEvidenceByTool = field(default_factory=RelevantEvidenceByTool.empty)
+
+    def __post_init__(self) -> None:
+        self.response_payload = OrchestratorPayload.model_validate(self.response_payload)
+        self.parsed_query = dict(self.parsed_query) if isinstance(self.parsed_query, dict) else {}
+        self.metadata = dict(self.metadata) if isinstance(self.metadata, dict) else {}
+        self.relevant_evidence = RelevantEvidenceByTool.model_validate(self.relevant_evidence)
 
 
 @dataclass(frozen=False)

@@ -122,18 +122,8 @@ def emit_debug_message(content, content_title: str) -> None:
 
 def _build_request_analysis_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
-    goals = data.get("goals")
-    if not isinstance(goals, list):
-        # Preserve visibility for events written before request analysis supported
-        # one goal per agent.
-        legacy_goal = data.get("goal") or ""
-        legacy_categories = data.get("applicable_tool_categories") or []
-        goals = [] if not legacy_goal and not legacy_categories else [{
-            "goal": legacy_goal,
-            "tool_categories": legacy_categories,
-        }]
     return RequestAnalysisLogPayload(
-        goals=goals,
+        goals=data.get("goals") or [],
         requested_user_attribute_types=data.get("requested_user_attribute_types") or [],
     ).model_dump()
 

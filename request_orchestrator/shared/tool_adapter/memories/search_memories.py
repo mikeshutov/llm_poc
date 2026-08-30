@@ -19,7 +19,6 @@ class SearchMemoriesArgs(BaseModel):
 
 class MemorySearchMetadata(BaseModel):
     conversation_id: str
-    last_used_date: str | None = None
     relevance_score: float | None = None
 
 
@@ -33,7 +32,6 @@ Required fields:
 - query (string): Natural language description of the memory or prior conversation you want to find.
 
 Returns up to {DEFAULT_MEMORY_RESULT_LIMIT} relevant conversation memories for the current user.
-Each result includes conversation_id, summary, last_used_date, and relevance_score.
 """,
 )
 def search_memories(query: str) -> ToolResult:
@@ -47,7 +45,6 @@ def search_memories(query: str) -> ToolResult:
     for memory in memories:
         metadata = MemorySearchMetadata(
             conversation_id=str(memory.conversation_id),
-            last_used_date=memory.last_used_date,
             relevance_score=memory.relevance_score,
         )
         evidence_view = EvidenceView(

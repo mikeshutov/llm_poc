@@ -23,32 +23,43 @@ At a high level this repo explores:
 Rough breakdown of the current agent loop flow.
 1. Prompt comes in and we assemble conversation context.
 2. We pass that context plus the latest user prompt into agent state.
-3. We prepare a small `User Profile` section that starts with geo/location-aware metadata plus an initially empty user-attributes section.
-4. `request_analysis` infers the user's goal, selects relevant tool categories, and requests any specific user attribute types that would be helpful for the request.
-5. We load only the requested user attribute types into the profile and condense overlapping records for prompt efficiency.
-6. After profile loading, the main flow fans out into separate agent paths.
-7. The main agent path handles planning, execution, replanning, and synthesis, while the profile-management agent path can work on durable attribute maintenance separately.
-8. The executor executes the tool calls in the plan in parallel and stores the results in state.
-9. After execution, the loop can either replan immediately when the planner marked `needs_replan`, run the evaluator to decide whether another useful step remains, or synthesize if the goal is reached or limits are hit.
-10. Synthesis generates the final response, roundtrip summary, and tool summary. It works from explicit evidence plus narrowed conversation context rather than planner history payloads.
+3. We load likely useful user-created agents so request analysis can select them.
+4. We prepare a small `User Profile` section that starts with geo/location-aware metadata plus an initially empty user-attributes section.
+5. `request_analysis` infers the user's goal, selects relevant tool categories, and requests any specific user attribute types that would be helpful for the request.
+6. We load only the requested user attribute types into the profile and condense overlapping records for prompt efficiency.
+7. After profile loading, the main flow fans out into separate agent paths.
+8. Each dispatched agent runs in its own agent runner invocation: the built-in main and profile-management agents, plus zero or more selected user-created agents. The main agent handles planning, execution, and replanning, while the profile-management agent can work on durable attribute maintenance separately.
+9. The executor executes the tool calls in the plan in parallel and stores the results in state.
+10. After execution, the loop can either replan immediately when the planner marked `needs_replan`, run the evaluator to decide whether another useful step remains, or synthesize if the goal is reached or limits are hit.
+11. Synthesis generates the final response, roundtrip summary, and tool summary. It works from explicit evidence plus narrowed conversation context rather than planner history payloads.
 
 We also store conversations, roundtrips, prompt rows, summaries, and tool calls for future prompts.
 
 ```mermaid
 flowchart TD
     A[User Prompt] --> B[Build Context And Agent State]
-    B --> C[Request Analysis]
-    C --> D[Hydrate Profile Based On Request Analysis]
-    D --> P1[Main Planner]
-    D --> PMP[Profile Management Planner]
-    PMP --> PMX[Profile Management Executor]
-    PMX --> PMV{Profile Management Evaluator}
-    PMV -->|Needs another pass| PMP
-    PMV -->|satisfied or terminal| S[Synthesis]
-    P1 --> X[Main Agent Executor]
-    X --> EV[Main Agent Evaluator]
-    EV -->|satisfied or terminal| S
-    EV -->|retryable| P1
+    B --> LUA[Load Likely Useful User Agents]
+    LUA --> C[Request Analysis]
+    C --> D[Hydrate Profile And Distribute Goals Based On Request Analysis]
+    subgraph MAR[Agent Runner: Main Agent]
+        P1[Main Planner] --> X[Main Agent Executor]
+        X --> EV[Main Agent Evaluator]
+        EV -->|retryable| P1
+    end
+    subgraph PMAR[Agent Runner: Profile Management Agent]
+        PMP[Profile Management Planner] --> PMX[Profile Management Executor]
+        PMX --> PMV{Profile Management Evaluator}
+        PMV -->|Needs another pass| PMP
+    end
+    subgraph UCAR[Agent Runner: User-Created Agent]
+        UCA[User-Created Agent]
+    end
+    D -.->|Selected Agent: Main Agent| P1
+    D -.->|Selected Agent: Profile Management Agent| PMP
+    D -.->|Selected Agent: User-Created Agent| UCA
+    EV -.->|satisfied or terminal| S[Synthesis]
+    PMV -.->|satisfied or terminal| S
+    UCA -.->|Agent Result| S
     S --> L[Response]
 ```
 

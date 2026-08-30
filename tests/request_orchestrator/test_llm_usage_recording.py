@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from types import ModuleType, SimpleNamespace
 from unittest.mock import mock_open, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 if 'yfinance' not in sys.modules:
     sys.modules['yfinance'] = ModuleType('yfinance')
@@ -32,7 +32,6 @@ from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 from request_orchestrator.models.plan import Plan
-from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
 from request_orchestrator.shared.evaluator.evaluator import run_evaluator
 from request_orchestrator.shared.planner.planner import REQUIRED_CAPABILITY_UNAVAILABLE_REASON, run_planner
 from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context
@@ -138,40 +137,30 @@ def _set_agent_tool_results(
     if plan is not None:
         state.node_states.planner.plan = plan.model_copy(deep=True)
         state.node_states.planner.plan_count = plan_count
-    tool_name_by_namespaced_step_id = {
-        namespace_step_id(
-            state.agent_profile.name,
-            format_plan_step_id(plan_count, step.id),
-        ): step.tool
-        for step in (plan.steps if plan is not None else [])
-    }
+    step_by_local_id = {step.id: step for step in (plan.steps if plan is not None else [])}
     normalized_tool_results: list[ToolResult] = []
-    for step_id, value in (results or {}).items():
-        namespaced_step_id = (
-            step_id
-            if ":" in step_id
-            else namespace_step_id(state.agent_profile.name, step_id)
-        )
+    for local_step_id, value in (results or {}).items():
+        step = step_by_local_id[local_step_id]
         if isinstance(value, ToolResult):
             normalized_tool_results.append(
                 value.model_copy(
                     update={
-                        "step_id": value.step_id or namespaced_step_id,
-                        "tool_name": value.tool_name or tool_name_by_namespaced_step_id.get(namespaced_step_id, ""),
-                        "iteration": plan_count if value.iteration is None else value.iteration,
+                        "tool_call_id": value.tool_call_id or uuid4(),
+                        "plan_step_id": value.plan_step_id or step.db_id,
+                        "tool_name": value.tool_name or step.tool,
                     }
                 )
             )
             continue
         normalized_tool_results.append(
             ToolResult(
-                step_id=namespaced_step_id,
-                tool_name=tool_name_by_namespaced_step_id.get(namespaced_step_id, ""),
-                iteration=plan_count,
+                tool_call_id=uuid4(),
+                plan_step_id=step.db_id,
+                tool_name=step.tool,
                 result=value,
             )
         )
-    state.result = state.result.copy(tool_results=normalized_tool_results)
+    state.gather_tool_results = lambda: normalized_tool_results
 
 
 def test_request_analysis_records_llm_usage() -> None:
@@ -280,13 +269,11 @@ def test_agent_log_persists_conversation_event_immediately() -> None:
                 source='main_agent',
                 agent_name='main_agent',
                 node_name='plan',
-                step_id='P1E1',
                 iteration=1,
                 payload={
                     'agent_name': 'main_agent',
                     'kind': 'planner',
                     'node_name': 'plan',
-                    'step_id': 'P1E1',
                     'iteration': 1,
                     'data': {'step_plans': ['Find boots']},
                 },
@@ -300,11 +287,9 @@ def test_agent_log_persists_conversation_event_immediately() -> None:
     assert event['source'] == 'main_agent'
     assert event['agent_name'] == 'main_agent'
     assert event['node_name'] == 'plan'
-    assert event['step_id'] == 'P1E1'
     assert event['iteration'] == 1
     assert event['payload']['kind'] == 'planner'
     assert event['payload']['node_name'] == 'plan'
-    assert event['payload']['step_id'] == 'P1E1'
 
 
 def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_returned() -> None:
@@ -349,7 +334,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM('{"result": [{"content": "done", "evidence_ids": []}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.6-terra'),
+        llm=FakeInvokeLLM('{"result": [{"content": "done", "evidence_ids": []}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary"}', 'gpt-5.6-terra'),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
 
@@ -367,7 +352,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
     assert repo.llm_calls[0]['stage'] == 'synthesis'
     assert repo.llm_calls[0]['model'] == 'gpt-5.6-terra'
     assert repo.llm_calls[0]['metadata']['input_object']['prompt_token_count'] > 0
-    assert PromptSectionKeys.LATEST_USER_PROMPT in repo.llm_calls[0]['metadata']['input_object']['sections_raw']
+    assert PromptSectionKeys.TASK in repo.llm_calls[0]['metadata']['input_object']['sections_raw']
     payload = _latest_event_payload(repo, event_type='synthesis', agent_name='request_orchestrator')
     assert payload['data']['llm_usage']['model'] == 'gpt-5.6-terra'
     assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
@@ -451,7 +436,18 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
                     'args': {'query_text': 'shortlisted products'}}
             ]
         }),
-        results={'P1E1': {'items': ['result']}},
+        results={
+            'E1': ToolResult(
+                result={'items': ['result']},
+                evidence=[
+                    EvidenceView(
+                        id=UUID('25a4bcc1-2b18-5a36-940c-29c535bae654'),
+                        title='Shortlisted product',
+                        summary='Current product search result.',
+                    )
+                ],
+            )
+        },
     )
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
@@ -513,7 +509,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["e5cf297f-8f55-55a7-b1b2-7fb389482919"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary", "tool_summary": {"produced": [], "entities": []}}', 'gpt-5.6-terra'),
+        llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["e5cf297f-8f55-55a7-b1b2-7fb389482919"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary"}', 'gpt-5.6-terra'),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
     main_agent_state = state.agent_states['main_agent']
@@ -525,20 +521,22 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
                 {'id': 'E2', 'plan': 'Second step', 'tool': 'generic_web_search', 'args': {}}]
         }),
         results={
-            'P1E1': ToolResult(
+            'E1': ToolResult(
                 result={'value': 'a'},
                 evidence=[
                     EvidenceView(
+                        id=UUID('e5cf297f-8f55-55a7-b1b2-7fb389482919'),
                         item_id='item-a',
                         title='Item A',
                         summary='First item',
                     )
                 ],
             ),
-            'P1E2': ToolResult(
+            'E2': ToolResult(
                 result={'value': 'b'},
                 evidence=[
                     EvidenceView(
+                        id=UUID('c8271821-2b18-5a36-940c-29c535bae654'),
                         item_id='item-b',
                         title='Item B',
                         summary='Second item',
@@ -547,7 +545,9 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
             ),
         },
     )
-    main_agent_state.result = main_agent_state.result.copy(relevant_evidence_ids=['e5cf297f-8f55-55a7-b1b2-7fb389482919'])
+    main_agent_state.result = main_agent_state.result.copy(
+        relevant_evidence_ids=[UUID('e5cf297f-8f55-55a7-b1b2-7fb389482919')]
+    )
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',

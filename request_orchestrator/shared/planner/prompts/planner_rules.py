@@ -9,6 +9,7 @@ BASE_PLANNER_RULES = [
     "Do not make one planned tool step depend on another step's output. For now, every step must be runnable from its own arguments alone.",
     "You may use already-available tool results from previous work when deciding what to do next.",
     "Prefer the smallest useful set of tool calls.",
+    "If there are are no tools to use to fullfil request return no tool calls."
 ]
 
 

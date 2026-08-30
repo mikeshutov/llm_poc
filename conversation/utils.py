@@ -14,7 +14,7 @@ def flatten_conversation_entries(entries: list[dict]) -> str:
 
 def build_conversation_context_json(context: ConversationContext) -> str:
     return json.dumps(
-        prune_empty_prompt_values(context.model_dump()),
+        prune_empty_prompt_values(context.model_dump(mode="json")),
         indent=2,
         ensure_ascii=True,
     )

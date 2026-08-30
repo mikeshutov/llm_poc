@@ -52,7 +52,7 @@ def test_search_magic_cards_returns_typed_result() -> None:
         module._scryfall_client = original_client
 
     assert isinstance(result, ToolResult)
-    assert result.metadata == {
+    assert result.tool_metadata.model_dump(exclude_none=True) == {
         "current_page": 1,
         "page_size": 15,
         "has_more": False,
@@ -123,7 +123,7 @@ def test_search_magic_cards_applies_commander_color_identity_filter() -> None:
         module._scryfall_client = original_client
 
     assert isinstance(result, ToolResult)
-    assert result.metadata == {
+    assert result.tool_metadata.model_dump(exclude_none=True) == {
         "current_page": 1,
         "page_size": 15,
         "has_more": False,
@@ -297,7 +297,7 @@ def test_search_magic_cards_supports_internal_pagination() -> None:
     finally:
         module._scryfall_client = original_client
 
-    assert result.metadata == {
+    assert result.tool_metadata.model_dump(exclude_none=True) == {
         "current_page": 2,
         "page_size": 15,
         "has_more": False,

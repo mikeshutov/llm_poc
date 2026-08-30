@@ -1,27 +1,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from uuid import UUID
 
 from request_orchestrator.models.agent_result import AgentResult
+from request_orchestrator.models.evidence import EvidenceView
 from request_orchestrator.models.orchestrator_payload import (
     OrchestratorPayload,
     OrchestratorPayloadResultBlock,
+    OrchestratorPayloadToolSummary,
 )
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
+from request_orchestrator.models.relevant_evidence import RelevantEvidenceByTool
 from request_orchestrator.shared.evidence import build_evidence_bundle_from_tool_results
+from tool.constants import EVIDENCE_PERSISTENCE_EXCLUDED_TOOL_NAMES
 
 
 def _normalize_evidence_ids(
     evidence_ids: list[str],
-    evidence_by_id: dict[str, dict[str, object]],
+    evidence_by_id: dict[str, EvidenceView],
 ) -> list[str]:
     if not evidence_ids or not evidence_by_id:
-        return [
-            evidence_id.strip()
-            for evidence_id in evidence_ids
-            if isinstance(evidence_id, str) and evidence_id.strip()
-        ]
+        return []
 
     normalized_ids: list[str] = []
     for evidence_id in evidence_ids:
@@ -32,9 +31,11 @@ def _normalize_evidence_ids(
             continue
         if normalized in evidence_by_id:
             normalized_ids.append(normalized)
-            continue
-        normalized_ids.append(normalized)
     return normalized_ids
+
+
+def _is_evidence_excluded_from_persistence(evidence: EvidenceView) -> bool:
+    return evidence.tool_name.strip() in EVIDENCE_PERSISTENCE_EXCLUDED_TOOL_NAMES
 
 
 @dataclass(frozen=True)
@@ -98,14 +99,15 @@ class OrchestratorResult:
             roundtrip_latency_ms=self.roundtrip_latency_ms,
         )
 
-    def to_payload_model(self) -> OrchestratorPayload:
+    def to_persistence_models(self) -> tuple[OrchestratorPayload, RelevantEvidenceByTool]:
         from tool.repository.tool_call_repository import ToolCallRepository
 
         tool_results = ToolCallRepository().get_tool_results(self.agent_result.tool_call_ids)
         evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
         evidence_by_id = {
-            evidence_id: evidence.model_dump()
+            evidence_id: evidence
             for evidence_id, evidence in evidence_bundle.evidence_by_id.items()
+            if not _is_evidence_excluded_from_persistence(evidence)
         }
         result_blocks = self.result_blocks
         if not result_blocks:
@@ -124,9 +126,7 @@ class OrchestratorResult:
             )
             for block in result_blocks
         ]
-        return OrchestratorPayload(
-            tool_results=[tool_result.model_dump() for tool_result in tool_results],
-            relevant_evidence_ids=[str(evidence_id) for evidence_id in self.agent_result.relevant_evidence_ids],
+        payload = OrchestratorPayload(
             result=[
                 OrchestratorPayloadResultBlock(
                     content=block.content,
@@ -141,5 +141,13 @@ class OrchestratorResult:
             ),
             next_question=self.next_question,
             roundtrip_summary=self.roundtrip_summary,
+            tool_summary=OrchestratorPayloadToolSummary.build(evidence_by_id),
             roundtrip_latency_ms=self.roundtrip_latency_ms,
+        )
+        return (
+            payload,
+            RelevantEvidenceByTool.build(
+                self.agent_result.relevant_evidence_ids,
+                evidence_by_id,
+            ),
         )

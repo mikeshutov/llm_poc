@@ -2,7 +2,6 @@ import threading
 from time import perf_counter
 from uuid import UUID
 
-from common.data import sanitize_for_json_storage
 from llm.clients.embeddings import embed_text
 from llm.repository.repo_factory import get_conversation_model_config_repo
 from personalization.profile.models import GeoMetadata
@@ -49,7 +48,7 @@ def run_request_orchestrator_for_query(
         UUID(conversation_id),
         user_query,
         model=resolved_model_config.main_agent.planner.model,
-        metadata={"resolved_model_config": resolved_model_config.to_metadata_payload()},
+        metadata={"resolved_model_config": resolved_model_config.model_dump(mode="json")},
     )
 
     conversation_context = build_roundtrip_context(
@@ -86,7 +85,7 @@ def run_request_orchestrator_for_query(
 
     roundtrip_latency_ms = int((perf_counter() - started_at) * 1000)
     orchestrator_result = orchestrator_result.with_roundtrip_latency(roundtrip_latency_ms)
-    payload = sanitize_for_json_storage(orchestrator_result.to_payload_model().model_dump(exclude_none=True))
+    payload, relevant_evidence = orchestrator_result.to_persistence_models()
     roundtrip_summary = orchestrator_result.roundtrip_summary
 
     roundtrip_summary_embedding = embed_text(roundtrip_summary) if roundtrip_summary else None
@@ -97,6 +96,7 @@ def run_request_orchestrator_for_query(
         roundtrip_summary=roundtrip_summary,
         roundtrip_summary_embedding=roundtrip_summary_embedding,
         assistant_follow_up=orchestrator_result.next_question,
+        relevant_evidence=relevant_evidence,
     )
     #TODO: enable this once we improve summarization.
     #threading.Thread(target=summarize_tool_calls, args=(roundtrip.id,), daemon=True).start()

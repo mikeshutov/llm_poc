@@ -102,7 +102,6 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         user_profile=state.execution_context.user_profile,
         conversation_context=state.execution_context.conversation_context,
         task=state.inputs.task,
-        latest_user_prompt=state.inputs.task if _is_profile_management_agent(state) else None,
         available_tools=context.compiled_tools,
         rules=compiled_rules,
         evidence=evidence_steps,
@@ -119,8 +118,6 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
     prompt.include_section(PromptSectionKeys.AVAILABLE_TOOLS)
     prompt.include_section(PromptSectionKeys.RULES)
     prompt.include_section(PromptSectionKeys.EVIDENCE)
-    if _is_profile_management_agent(state):
-        prompt.include_section(PromptSectionKeys.LATEST_USER_PROMPT)
     prompt.include_section(PromptSectionKeys.SCHEMA)
     prompt.include_section(PromptSectionKeys.TASK)
     return prompt

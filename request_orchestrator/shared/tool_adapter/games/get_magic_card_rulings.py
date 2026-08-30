@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from integrations.scryfall import ScryfallCard, ScryfallClient, ScryfallRuling
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolMetadata, ToolResult
 from tool.constants import TOOL_NAME_GET_MAGIC_CARD_RULINGS
 from tool.constants import TOOL_RESULT_TYPE_RULES
 
@@ -44,10 +44,6 @@ class MagicCardRulingMetadata(BaseModel):
     ruling_count: int
 
 
-class MagicCardRulingsMetadata(BaseModel):
-    ruling_source: str | None = None
-
-
 def _card_url(card: ScryfallCard) -> str:
     return (card.scryfall_uri or "").strip()
 
@@ -62,10 +58,10 @@ def _build_metadata(
     )
 
 
-def _tool_metadata(result: MagicCardRulingsResult) -> dict[str, object]:
+def _tool_metadata(result: MagicCardRulingsResult) -> ToolMetadata:
     sources = {ruling.source.strip() for ruling in result.rulings if ruling.source.strip()}
     source = next(iter(sources)) if len(sources) == 1 else None
-    return MagicCardRulingsMetadata(ruling_source=source).model_dump(exclude_none=True)
+    return ToolMetadata(ruling_source=source)
 
 
 def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
@@ -86,7 +82,7 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
         )
         return ToolResult(
             result=result,
-            metadata=_tool_metadata(result),
+            tool_metadata=_tool_metadata(result),
             evidence=[evidence_view],
         )
 
@@ -107,7 +103,7 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
 
     return ToolResult(
         result=result,
-        metadata=_tool_metadata(result),
+        tool_metadata=_tool_metadata(result),
 
         evidence=evidence,
     )

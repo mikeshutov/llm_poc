@@ -9,11 +9,17 @@ import streamlit as st
 from common.config import CONTENT_KEY, FILES_DIR, IMAGE_MIME_PREFIX, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
 from common.logging import fetch_agent_logs_for_roundtrip, fetch_llm_call_payloads_for_roundtrip
 from llm.usage import build_llm_usage_payload
-from rendering.cards import render_cards, render_magic_card_evidence_cards, render_magic_card_rulings
+from rendering.cards import (
+    render_cards,
+    render_magic_card_evidence_cards,
+    render_magic_card_rulings,
+    render_meal_evidence_cards,
+)
 from rendering.debug import debug_render_message, render_agent_logs
 from rendering.feedback import render_feedback_controls
 from rendering.replay import render_replay_control
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView
+from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
 from tool.constants import TOOL_NAME_GET_COMMANDER_CARDS
@@ -21,6 +27,7 @@ from tool.constants import TOOL_NAME_SEARCH_MAGIC_CARDS
 from tool.constants import TOOL_NAME_STRUCTURED_FACTS_LOOKUP
 from tool.constants import TOOL_NAME_WIKIPEDIA_SEARCH
 from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
+from tool.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_RULES
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
 
@@ -40,6 +47,12 @@ class EvidenceCard:
     url: str
     image_url: str
     source: str
+    entity_type: str
+
+
+CARD_LAYOUTS_BY_EVIDENCE_TYPE: dict[str, dict[str, int]] = {
+    TOOL_RESULT_TYPE_MEAL_RESULTS: {"per_row": 2},
+}
 
 
 INLINE_EVIDENCE_TYPES: set[str] = {
@@ -77,6 +90,10 @@ def _is_magic_card_evidence(evidence: EvidenceView) -> bool:
 
 def _is_magic_card_ruling_evidence(evidence: EvidenceView) -> bool:
     return evidence.entity_type.strip() == TOOL_RESULT_TYPE_RULES
+
+
+def _is_meal_evidence(evidence: EvidenceView) -> bool:
+    return evidence.entity_type.strip() == TOOL_RESULT_TYPE_MEAL_RESULTS
 
 
 def format_timestamp(ts) -> str | None:
@@ -164,6 +181,10 @@ def _get_evidence_by_id(payload: dict | None) -> dict[str, EvidenceView]:
         except Exception:
             continue
     return evidence_by_id
+
+
+def serialize_roundtrip_payload(payload: OrchestratorPayload) -> dict:
+    return payload.model_dump(mode="json", exclude_none=True)
 
 
 def _normalize_block_evidence_ids(
@@ -256,7 +277,12 @@ def _build_block_cards(
         evidence = evidence_by_id.get(evidence_id)
         if evidence is None:
             continue
-        if _is_inline_evidence(evidence) or _is_magic_card_evidence(evidence) or _is_magic_card_ruling_evidence(evidence):
+        if (
+            _is_inline_evidence(evidence)
+            or _is_magic_card_evidence(evidence)
+            or _is_magic_card_ruling_evidence(evidence)
+            or _is_meal_evidence(evidence)
+        ):
             continue
         url = _primary_card_url(evidence.urls)
         image_url = evidence.image_url.strip()
@@ -272,6 +298,7 @@ def _build_block_cards(
                 url=url,
                 image_url=image_url,
                 source=evidence.source.strip(),
+                entity_type=evidence.entity_type.strip(),
             )
         )
     return cards
@@ -284,6 +311,23 @@ def _primary_card_url(urls: list[EvidenceUrl]) -> str:
             if entry.url_type == preferred_type and cleaned_url:
                 return cleaned_url
     return ""
+
+
+def _render_result_content(content: str, links: list[tuple[str, str]]) -> None:
+    chips = "".join(
+        (
+            "<a "
+            f'href="{html.escape(url, quote=True)}" '
+            'target="_blank" rel="noopener noreferrer" '
+            "style=\"display:inline-flex;align-items:center;gap:0.2rem;margin:0 0.25rem 0 0.35rem;"
+            "padding:0.08rem 0.4rem;border:1px solid rgba(49,51,63,0.22);border-radius:999px;"
+            "font-size:0.72rem;line-height:1.25;text-decoration:none;color:inherit;\">"
+            f"<span aria-hidden=\"true\">&#8599;</span> {html.escape(label)}</a>"
+        )
+        for label, url in links
+    )
+    escaped_content = html.escape(content).replace("\n", "<br>")
+    st.html(f'<span style="white-space:pre-wrap">{escaped_content}</span>{chips}')
 
 
 def _render_result_block(
@@ -306,26 +350,7 @@ def _render_result_block(
         source = evidence.source.strip()
         inline_labels.append(f"{label} ({source})" if source else label)
 
-    if inline_links:
-        inline_buttons = " ".join(
-            (
-                "<a "
-                f'href="{html.escape(url, quote=True)}" '
-                'target="_blank" rel="noopener noreferrer" '
-                "style=\"display:inline-block;vertical-align:middle;margin-left:0.35rem;"
-                "padding:0.14rem 0.5rem;border:1px solid rgba(49,51,63,0.2);"
-                "border-radius:999px;text-decoration:none;font-size:0.82rem;"
-                "line-height:1.4;color:inherit;background:rgba(255,255,255,0.65);\">"
-                f"â†— {html.escape(url)}</a>"
-            )
-            for _, url in inline_links
-        )
-        st.markdown(
-            f"<p>{html.escape(block.content)} {inline_buttons}</p>",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.write(block.content)
+    _render_result_content(block.content, inline_links)
 
     magic_card_evidence = [
         evidence
@@ -342,6 +367,14 @@ def _render_result_block(
     ]
     if magic_card_rulings:
         render_magic_card_rulings(magic_card_rulings)
+
+    meal_evidence = [
+        evidence
+        for evidence_id in block.evidence_ids
+        if (evidence := evidence_by_id.get(evidence_id)) is not None and _is_meal_evidence(evidence)
+    ]
+    if meal_evidence:
+        render_meal_evidence_cards(meal_evidence)
 
     block_cards = _build_block_cards(block, evidence_by_id)
     for label in inline_labels:
@@ -376,13 +409,21 @@ def render_assistant_content(
                 continue
             seen_card_ids.add(card.id)
             deduped_cards.append(card)
-        render_cards(
-            [card.__dict__ for card in deduped_cards],
-            heading_key="name",
-            description_key="description",
-            image_key="image_url",
-            link_key="url",
-        )
+        cards_by_layout: dict[int, list[EvidenceCard]] = {}
+        for card in deduped_cards:
+            layout = CARD_LAYOUTS_BY_EVIDENCE_TYPE.get(card.entity_type, {})
+            per_row = layout.get("per_row", 3)
+            cards_by_layout.setdefault(per_row, []).append(card)
+
+        for per_row, cards in cards_by_layout.items():
+            render_cards(
+                [card.__dict__ for card in cards],
+                per_row=per_row,
+                heading_key="name",
+                description_key="description",
+                image_key="image_url",
+                link_key="url",
+            )
 
     if has_next_question:
         st.markdown(next_question)

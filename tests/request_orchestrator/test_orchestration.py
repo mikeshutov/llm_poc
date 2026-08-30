@@ -37,7 +37,6 @@ from request_orchestrator.models.request_analysis import RequestAnalysis, Reques
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.plan import Plan
-from request_orchestrator.models.plan_step_ids import namespace_step_id
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from request_orchestrator.shared.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
@@ -48,6 +47,10 @@ from request_orchestrator.shared.evidence import (
 from request_orchestrator.shared.evaluator.prompts.evaluator_prompt import build_evaluator_prompt
 from llm.chat_models import build_llm_for_stage
 from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
+from request_orchestrator.shared.synthesis.prompts.synthesis_rules import (
+    PROFILE_PERSONALIZATION_RULE,
+    TONE_ADAPTATION_RULE,
+)
 from test_utilities import FakeUserAttributeRepository, MockLLM, MockLLMScenario
 
 
@@ -153,7 +156,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
         return result, llm, repo, roundtrip_id
 
-    def test_profile_management_subagent_uses_profile_goal_and_raw_user_prompt(self) -> None:
+    def test_profile_management_subagent_uses_profile_goal(self) -> None:
         parent_state = AgentState.new(
             task='Please remember that I like pizza and eggs.',
             execution_context=AgentExecutionContext.new(
@@ -177,7 +180,6 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertEqual(profile_state.agent_profile.max_turns, 5)
         self.assertIn('ROLE / RULES', prompt_text)
         self.assertIn('INPUT', prompt_text)
-        self.assertIn('"latest_user_prompt": "Please remember that I like pizza and eggs."', prompt_text)
         self.assertIn('Please remember that I like pizza and eggs.', prompt_text)
         self.assertNotIn('Use recent_roundtrip_tool_summaries', prompt_text)
         self.assertNotIn('Use recent_roundtrips when the user refers', prompt_text)
@@ -186,7 +188,6 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertNotIn('Evidence references must be defined before use.', prompt_text)
         self.assertIn("Do not make one planned tool step depend on another step's output.", prompt_text)
         self.assertIn('You may use already-available tool results from previous work', prompt_text)
-        self.assertEqual(prompt.latest_user_prompt, 'Please remember that I like pizza and eggs.')
         self.assertEqual(prompt.task, 'Please remember that I like pizza and eggs.')
         self.assertIn('attribute_type (required): Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.', prompt_text)
         self.assertIn('Available attribute prefixes:', prompt_text)
@@ -239,7 +240,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     type='web_search_results',
                     evidence=[
                         EvidenceView(
-                            evidence_id="25a4bcc1-2b18-5a36-940c-29c535bae654",
+                            id=uuid4(),
                             item_id="known-result",
                             title='Known Result',
                             summary='Known evidence result.',
@@ -264,7 +265,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     type='web_search_results',
                     evidence=[
                         EvidenceView(
-                            evidence_id="25a4bcc1-2b18-5a36-940c-29c535bae654",
+                            id=uuid4(),
                             item_id="known-result",
                             title='Known Result',
                             summary='Known evidence result.',
@@ -281,6 +282,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertIn('"tone"', synthesis_prompt)
         self.assertIn('"verbosity": "concise"', synthesis_prompt)
         self.assertIn('"directness": "high"', synthesis_prompt)
+        self.assertIn(TONE_ADAPTATION_RULE, synthesis_prompt)
+        self.assertNotIn(PROFILE_PERSONALIZATION_RULE, synthesis_prompt)
 
         self.assertNotIn('"tone"', request_analysis_prompt)
         self.assertNotIn('"verbosity": "concise"', request_analysis_prompt)
@@ -366,55 +369,51 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         )
 
         profile_state = main_state.agent_states['profile_management']
-        profile_state.result = AgentResult(
-            tool_results=[
-                ToolResult(
-                    step_id=namespace_step_id('profile_management', 'P1E1'),
-                    tool_name='get_current_weather',
-                    iteration=1,
-                    result={'temperature': 21.2},
-                    evidence=[
-                        EvidenceView(
-                            evidence_id='f822ca3a-bd48-50c5-9293-a4b7d512ecc8',
-                            item_id='Toronto',
-                            title='Weather Result',
-                            summary='21.2 C in Toronto.',
-                            source='get_current_weather',
-                            entity_type='weather',
-                        )
-                    ],
-                )
-            ]
-        )
-
-        main_agent_state = main_state.agent_states['main_agent']
-        main_agent_state.result = AgentResult(
-            tool_results=[
-                ToolResult(
-                    step_id=namespace_step_id('main_agent', 'P1E1'),
-                    tool_name='generic_web_search',
-                    iteration=1,
-                    result={'items': ['ramen']},
-                    evidence=[
-                        EvidenceView(
-                            evidence_id='c8271821-2d4c-51a1-bc00-1f4932d052d7',
-                            item_id='ramen-1',
-                            title='Ramen Result',
-                            summary='Popular ramen shop.',
-                            source='generic_web_search',
-                            entity_type='web_search_results',
-                        )
-                    ],
+        profile_result = ToolResult(
+            tool_call_id=uuid4(),
+            plan_step_id=uuid4(),
+            tool_name='get_current_weather',
+            result={'temperature': 21.2},
+            evidence=[
+                EvidenceView(
+                    id=uuid4(),
+                    item_id='Toronto',
+                    title='Weather Result',
+                    summary='21.2 C in Toronto.',
+                    source='get_current_weather',
+                    entity_type='weather',
                 )
             ],
-            relevant_evidence_ids=['c8271821-2d4c-51a1-bc00-1f4932d052d7'],
+        )
+        profile_state.gather_tool_results = lambda: [profile_result]
+
+        main_agent_state = main_state.agent_states['main_agent']
+        main_result = ToolResult(
+            tool_call_id=uuid4(),
+            plan_step_id=uuid4(),
+            tool_name='generic_web_search',
+            result={'items': ['ramen']},
+            evidence=[
+                EvidenceView(
+                    id=uuid4(),
+                    item_id='ramen-1',
+                    title='Ramen Result',
+                    summary='Popular ramen shop.',
+                    source='generic_web_search',
+                    entity_type='web_search_results',
+                )
+            ],
+        )
+        main_agent_state.gather_tool_results = lambda: [main_result]
+        main_agent_state.result = main_agent_state.result.copy(
+            relevant_evidence_ids=[main_result.evidence[0].id]
         )
 
         tool_results = main_state.gather_tool_results()
         evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
         evidence_steps = build_evidence_steps_from_tool_results(
             tool_results,
-            evidence_bundle.evidence_views_by_step_id,
+            evidence_bundle.evidence_views_by_tool_call_id,
         )
 
         self.assertEqual(len(tool_results), 2)
@@ -423,10 +422,10 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             ['Weather Result', 'Ramen Result'],
         )
         self.assertEqual(
-            sorted(evidence_bundle.hydrated_evidence_by_id.keys()),
-            ['c8271821-2d4c-51a1-bc00-1f4932d052d7', 'f822ca3a-bd48-50c5-9293-a4b7d512ecc8'],
+            sorted(evidence_bundle.evidence_by_id),
+            sorted([str(profile_result.evidence[0].id), str(main_result.evidence[0].id)]),
         )
-        self.assertEqual(main_state.gather_relevant_evidence_ids(), ['c8271821-2d4c-51a1-bc00-1f4932d052d7'])
+        self.assertEqual(main_state.gather_relevant_evidence_ids(), [main_result.evidence[0].id])
         self.assertEqual(len(evidence_steps), 2)
         self.assertEqual(
             [step.evidence[0].title for step in evidence_steps],
@@ -501,7 +500,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     type='generic',
                     evidence=[
                         EvidenceView(
-                            evidence_id="25a4bcc1-2b18-5a36-940c-29c535bae654",
+                            id=uuid4(),
                             item_id='https://example.com/soba',
                             title='Soba Noodles',
                             summary='Authentic soba noodles',
@@ -518,8 +517,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         prompt_text = prompt.build()
 
         self.assertIn('"title": "Soba Noodles"', prompt_text)
-        self.assertIn('"evidence_id": "25a4bcc1-2b18-5a36-940c-29c535bae654"', prompt_text)
-        self.assertIn('"item_id": "https://example.com/soba"', prompt_text)
+        self.assertIn('"evidence_id":', prompt_text)
+        self.assertNotIn('"item_id": "https://example.com/soba"', prompt_text)
         self.assertIn('"summary": "Authentic soba noodles"', prompt_text)
         self.assertNotIn('image_url', prompt_text)
         self.assertNotIn('category', prompt_text)
@@ -532,6 +531,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     conversation_summary='User has been comparing pantry noodle options and cares about quick preparation.',
                     latest_conversation_summary='User was comparing noodle options.',
                     tool_summary='Earlier tools found soba, udon, and ramen options.',
+                    latest_assistant_follow_up='Would you like a gluten-free option as well?',
                     recent_roundtrips=[
                         RecentRoundtrip(
                             message_index=4,
@@ -570,6 +570,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertIn('latest_conversation_summary', prompt_text)
         self.assertIn('tool_summary', prompt_text)
         self.assertIn('Earlier tools found soba, udon, and ramen options.', prompt_text)
+        self.assertIn('latest_assistant_follow_up', prompt_text)
+        self.assertIn('Would you like a gluten-free option as well?', prompt_text)
         self.assertNotIn('recent_roundtrips', prompt_text)
         self.assertNotIn('Earlier user prompt', prompt_text)
         self.assertNotIn('Earlier roundtrip summary', prompt_text)
@@ -669,11 +671,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "result": [{"content": "Stored your food likes as a user attribute.", "evidence_ids": []}],
           "next_question": "Do you want me to remember any other food preferences?",
-          "roundtrip_summary": "Stored the user's stated food likes as a persistent user attribute and confirmed the profile state.",
-          "tool_summary": {
-            "produced": ["current user attribute list"],
-            "entities": ["pizza", "eggs"]
-          }
+          "roundtrip_summary": "Stored the user's stated food likes as a persistent user attribute and confirmed the profile state."
         }
         """
 
@@ -786,11 +784,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "result": [{"content": "I used your stored food preferences while looking up a meal idea.", "evidence_ids": []}],
           "next_question": "Do you want a few more options based on those preferences?",
-          "roundtrip_summary": "Loaded the user's stored food likes and used them while planning a meal-related response.",
-          "tool_summary": {
-            "produced": ["meal ideas"],
-            "entities": ["pizza"]
-          }
+          "roundtrip_summary": "Loaded the user's stored food likes and used them while planning a meal-related response."
         }
         """
 
@@ -820,11 +814,10 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         with patch('common.logging.conversation_event_view.get_conversation_repo', return_value=repo):
             fetched_logs = fetch_agent_logs_for_roundtrip(roundtrip_id)
 
-        main_agent_logs = fetched_logs.get('main_agent', [])
-        orchestrator_logs = fetched_logs.get('request_orchestrator', [])
-        request_analysis_log = next(log for log in orchestrator_logs if log.get('kind') == 'request_analysis')
-        profile_load_log = next(log for log in orchestrator_logs if log.get('kind') == 'profile_load')
-        synthesis_log = next(log for log in orchestrator_logs if log.get('kind') == 'synthesis')
+        all_logs = [log for logs in fetched_logs.values() for log in logs]
+        request_analysis_log = next(log for log in all_logs if log.get('kind') == 'request_analysis')
+        profile_load_log = next(log for log in all_logs if log.get('kind') == 'profile_load')
+        synthesis_log = next(log for log in all_logs if log.get('kind') == 'synthesis')
 
         self.assertIsInstance(request_analysis_log.get('data', {}).get('requested_user_attribute_types'), list)
         self.assertIsInstance(profile_load_log.get('data', {}).get('loaded_attribute_count'), int)
@@ -889,11 +882,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "result": [{"content": "The result is 47.0.", "evidence_ids": []}],
           "next_question": "Do you want me to show the calculation steps too?",
-          "roundtrip_summary": "Calculated the requested expression using the math tool and returned the numeric result.",
-          "tool_summary": {
-            "produced": ["numeric result"],
-            "entities": ["(15 * 8) / 3 + 7"]
-          }
+          "roundtrip_summary": "Calculated the requested expression using the math tool and returned the numeric result."
         }
         """
 
@@ -974,11 +963,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "result": [{"content": "The current time in Tokyo is 2026-08-04T21:30:00+09:00.", "evidence_ids": []}],
           "next_question": "Do you want the current date there as well?",
-          "roundtrip_summary": "Looked up the current time in Tokyo using the world time tool and returned the reported local datetime.",
-          "tool_summary": {
-            "produced": ["local datetime", "UTC offset"],
-            "entities": ["Asia/Tokyo"]
-          }
+          "roundtrip_summary": "Looked up the current time in Tokyo using the world time tool and returned the reported local datetime."
         }
         """
 
@@ -1045,11 +1030,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         {
           "result": [{"content": "I can help with that.", "evidence_ids": []}],
           "next_question": "Which product category do you want to focus on?",
-          "roundtrip_summary": "The request was underspecified, so the response preserved the clarifying question and dropped the follow-up variant.",
-          "tool_summary": {
-            "produced": [],
-            "entities": []
-          }
+          "roundtrip_summary": "The request was underspecified, so the response preserved the clarifying question and dropped the follow-up variant."
         }
         """
 

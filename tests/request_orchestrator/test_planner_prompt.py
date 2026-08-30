@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from types import ModuleType, SimpleNamespace
+from uuid import uuid4
 
 if "yfinance" not in sys.modules:
     sys.modules["yfinance"] = ModuleType("yfinance")
@@ -16,7 +17,6 @@ from request_orchestrator.models.agent_prompt import PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.plan import Plan
-from request_orchestrator.models.plan_step_ids import format_plan_step_id
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 
 
@@ -36,11 +36,11 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
     )
     state.node_states.planner.plan = plan
     state.node_states.planner.plan_count = 1
-    state.result = state.result.copy(tool_results=[
+    state.gather_tool_results = lambda: [
         ToolResult(
-            step_id=format_plan_step_id(1, "E1"),
+            tool_call_id=uuid4(),
+            plan_step_id=plan.steps[0].db_id,
             tool_name="generic_web_search",
-            iteration=1,
             result={"secret": "raw payload should not be in planner prompt"},
             evidence=[
                 EvidenceView(
@@ -54,7 +54,7 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
                 )
             ],
         )
-    ])
+    ]
 
     prompt = build_planner_prompt(state)
     evidence_section = prompt.to_log_input_object()["sections_raw"][PromptSectionKeys.EVIDENCE]

@@ -8,6 +8,8 @@ import streamlit as st
 
 from request_orchestrator.service import run_request_orchestrator_for_query
 from common.config import CONTENT_KEY, ROLE_KEY, ROLE_USER
+from conversation.constants import SOURCE_STREAMLIT
+from conversation.models.conversation_models import ConversationMetadata
 from conversation.models.replay_models import PreparedReplayConversation
 from conversation.repository.repo_factory import get_conversation_repo
 from conversation.replay import execute_replay, prepare_replay
@@ -96,7 +98,7 @@ def setup_conversation(cid_value, user_id: str):
         st.session_state.conversation_id = str(
             conversation_repository.create_conversation(
                 user_id=user_id,
-                metadata={"source": "streamlit"},
+                metadata=ConversationMetadata(sources=[SOURCE_STREAMLIT]),
             ).id
         )
     st.query_params["uid"] = user_id

@@ -65,7 +65,7 @@ def build_evidence_steps_from_tool_results(
             continue
         resolved_tool_name = _resolve_tool_name(tool_result, fallback_tool_name="")
         step_type = get_tool_result_type(resolved_tool_name)
-        step_metadata = dict(tool_result.metadata)
+        step_metadata = tool_result.tool_metadata.model_dump(exclude_none=True)
         step_evidence = list(evidence_views_by_tool_call_id.get(tool_call_id, []))
         existing_step = evidence_step_by_type.get(step_type)
         if existing_step is None:
