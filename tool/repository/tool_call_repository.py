@@ -12,6 +12,7 @@ from db.connection import get_connection
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan import PlanStep
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, ToolResult
+from request_orchestrator.shared.runtime_context import get_current_user_id
 from common.signatures import build_signature
 from tool.repository.models import ToolCall
 
@@ -98,17 +99,7 @@ class ToolCallRepository:
     ) -> None:
         if not evidence_views:
             return
-        cur.execute(
-            """
-            SELECT c.user_id
-            FROM conversation_roundtrip rt
-            JOIN conversation c ON c.id = rt.conversation_id
-            WHERE rt.id = %s
-            """,
-            (roundtrip_id,),
-        )
-        roundtrip_row = cur.fetchone()
-        user_id = roundtrip_row["user_id"] if roundtrip_row else None
+        user_id = get_current_user_id()
         for evidence_view in evidence_views:
             evidence_view.hash = build_signature(
                 {

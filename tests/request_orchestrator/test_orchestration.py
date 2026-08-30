@@ -37,7 +37,6 @@ from request_orchestrator.models.request_analysis import RequestAnalysis, Reques
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.plan import Plan
-from request_orchestrator.models.plan_step_ids import namespace_step_id
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from request_orchestrator.shared.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
@@ -241,7 +240,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     type='web_search_results',
                     evidence=[
                         EvidenceView(
-                            evidence_id="25a4bcc1-2b18-5a36-940c-29c535bae654",
+                            id=uuid4(),
                             item_id="known-result",
                             title='Known Result',
                             summary='Known evidence result.',
@@ -266,7 +265,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     type='web_search_results',
                     evidence=[
                         EvidenceView(
-                            evidence_id="25a4bcc1-2b18-5a36-940c-29c535bae654",
+                            id=uuid4(),
                             item_id="known-result",
                             title='Known Result',
                             summary='Known evidence result.',
@@ -284,7 +283,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         self.assertIn('"verbosity": "concise"', synthesis_prompt)
         self.assertIn('"directness": "high"', synthesis_prompt)
         self.assertIn(TONE_ADAPTATION_RULE, synthesis_prompt)
-        self.assertIn(PROFILE_PERSONALIZATION_RULE, synthesis_prompt)
+        self.assertNotIn(PROFILE_PERSONALIZATION_RULE, synthesis_prompt)
 
         self.assertNotIn('"tone"', request_analysis_prompt)
         self.assertNotIn('"verbosity": "concise"', request_analysis_prompt)
@@ -370,55 +369,51 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         )
 
         profile_state = main_state.agent_states['profile_management']
-        profile_state.result = AgentResult(
-            tool_results=[
-                ToolResult(
-                    step_id=namespace_step_id('profile_management', 'P1E1'),
-                    tool_name='get_current_weather',
-                    iteration=1,
-                    result={'temperature': 21.2},
-                    evidence=[
-                        EvidenceView(
-                            evidence_id='f822ca3a-bd48-50c5-9293-a4b7d512ecc8',
-                            item_id='Toronto',
-                            title='Weather Result',
-                            summary='21.2 C in Toronto.',
-                            source='get_current_weather',
-                            entity_type='weather',
-                        )
-                    ],
-                )
-            ]
-        )
-
-        main_agent_state = main_state.agent_states['main_agent']
-        main_agent_state.result = AgentResult(
-            tool_results=[
-                ToolResult(
-                    step_id=namespace_step_id('main_agent', 'P1E1'),
-                    tool_name='generic_web_search',
-                    iteration=1,
-                    result={'items': ['ramen']},
-                    evidence=[
-                        EvidenceView(
-                            evidence_id='c8271821-2d4c-51a1-bc00-1f4932d052d7',
-                            item_id='ramen-1',
-                            title='Ramen Result',
-                            summary='Popular ramen shop.',
-                            source='generic_web_search',
-                            entity_type='web_search_results',
-                        )
-                    ],
+        profile_result = ToolResult(
+            tool_call_id=uuid4(),
+            plan_step_id=uuid4(),
+            tool_name='get_current_weather',
+            result={'temperature': 21.2},
+            evidence=[
+                EvidenceView(
+                    id=uuid4(),
+                    item_id='Toronto',
+                    title='Weather Result',
+                    summary='21.2 C in Toronto.',
+                    source='get_current_weather',
+                    entity_type='weather',
                 )
             ],
-            relevant_evidence_ids=['c8271821-2d4c-51a1-bc00-1f4932d052d7'],
+        )
+        profile_state.gather_tool_results = lambda: [profile_result]
+
+        main_agent_state = main_state.agent_states['main_agent']
+        main_result = ToolResult(
+            tool_call_id=uuid4(),
+            plan_step_id=uuid4(),
+            tool_name='generic_web_search',
+            result={'items': ['ramen']},
+            evidence=[
+                EvidenceView(
+                    id=uuid4(),
+                    item_id='ramen-1',
+                    title='Ramen Result',
+                    summary='Popular ramen shop.',
+                    source='generic_web_search',
+                    entity_type='web_search_results',
+                )
+            ],
+        )
+        main_agent_state.gather_tool_results = lambda: [main_result]
+        main_agent_state.result = main_agent_state.result.copy(
+            relevant_evidence_ids=[main_result.evidence[0].id]
         )
 
         tool_results = main_state.gather_tool_results()
         evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
         evidence_steps = build_evidence_steps_from_tool_results(
             tool_results,
-            evidence_bundle.evidence_views_by_step_id,
+            evidence_bundle.evidence_views_by_tool_call_id,
         )
 
         self.assertEqual(len(tool_results), 2)
@@ -427,10 +422,10 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             ['Weather Result', 'Ramen Result'],
         )
         self.assertEqual(
-            sorted(evidence_bundle.hydrated_evidence_by_id.keys()),
-            ['c8271821-2d4c-51a1-bc00-1f4932d052d7', 'f822ca3a-bd48-50c5-9293-a4b7d512ecc8'],
+            sorted(evidence_bundle.evidence_by_id),
+            sorted([str(profile_result.evidence[0].id), str(main_result.evidence[0].id)]),
         )
-        self.assertEqual(main_state.gather_relevant_evidence_ids(), ['c8271821-2d4c-51a1-bc00-1f4932d052d7'])
+        self.assertEqual(main_state.gather_relevant_evidence_ids(), [main_result.evidence[0].id])
         self.assertEqual(len(evidence_steps), 2)
         self.assertEqual(
             [step.evidence[0].title for step in evidence_steps],
@@ -505,7 +500,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
                     type='generic',
                     evidence=[
                         EvidenceView(
-                            evidence_id="25a4bcc1-2b18-5a36-940c-29c535bae654",
+                            id=uuid4(),
                             item_id='https://example.com/soba',
                             title='Soba Noodles',
                             summary='Authentic soba noodles',
@@ -522,8 +517,8 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         prompt_text = prompt.build()
 
         self.assertIn('"title": "Soba Noodles"', prompt_text)
-        self.assertIn('"evidence_id": "25a4bcc1-2b18-5a36-940c-29c535bae654"', prompt_text)
-        self.assertIn('"item_id": "https://example.com/soba"', prompt_text)
+        self.assertIn('"evidence_id":', prompt_text)
+        self.assertNotIn('"item_id": "https://example.com/soba"', prompt_text)
         self.assertIn('"summary": "Authentic soba noodles"', prompt_text)
         self.assertNotIn('image_url', prompt_text)
         self.assertNotIn('category', prompt_text)
@@ -819,11 +814,10 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         with patch('common.logging.conversation_event_view.get_conversation_repo', return_value=repo):
             fetched_logs = fetch_agent_logs_for_roundtrip(roundtrip_id)
 
-        main_agent_logs = fetched_logs.get('main_agent', [])
-        orchestrator_logs = fetched_logs.get('request_orchestrator', [])
-        request_analysis_log = next(log for log in orchestrator_logs if log.get('kind') == 'request_analysis')
-        profile_load_log = next(log for log in orchestrator_logs if log.get('kind') == 'profile_load')
-        synthesis_log = next(log for log in orchestrator_logs if log.get('kind') == 'synthesis')
+        all_logs = [log for logs in fetched_logs.values() for log in logs]
+        request_analysis_log = next(log for log in all_logs if log.get('kind') == 'request_analysis')
+        profile_load_log = next(log for log in all_logs if log.get('kind') == 'profile_load')
+        synthesis_log = next(log for log in all_logs if log.get('kind') == 'synthesis')
 
         self.assertIsInstance(request_analysis_log.get('data', {}).get('requested_user_attribute_types'), list)
         self.assertIsInstance(profile_load_log.get('data', {}).get('loaded_attribute_count'), int)

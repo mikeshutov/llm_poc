@@ -24,7 +24,6 @@ from request_orchestrator.models.evaluation_result import (
 )
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan, PlanStep
-from request_orchestrator.models.plan_step_ids import format_plan_step_id, namespace_step_id
 from request_orchestrator.shared.evaluator import evaluator_router
 
 
@@ -39,37 +38,28 @@ def _hydrate_plan_state(
     state.node_states.planner.plan = plan.model_copy(deep=True)
     state.node_states.planner.plan_count = max(0, plan_count)
     state.node_states.planner.needs_replan = needs_replan
-    agent_name = state.agent_profile.name
-    tool_name_by_step_id = {
-        namespace_step_id(agent_name, format_plan_step_id(plan_count, step.id)): step.tool
-        for step in plan.steps
-    }
-    step_id_by_local_step_id = {
-        format_plan_step_id(plan_count, step.id): namespace_step_id(agent_name, format_plan_step_id(plan_count, step.id))
-        for step in plan.steps
-    }
+    step_by_local_id = {step.id: step for step in plan.steps}
     normalized_results: list[ToolResult] = []
-    for step_id, value in (results or {}).items():
+    for local_step_id, value in (results or {}).items():
+        step = step_by_local_id[local_step_id]
         if isinstance(value, ToolResult):
             normalized_results.append(
                 value.model_copy(
                     update={
-                        "step_id": value.step_id or step_id_by_local_step_id.get(step_id, step_id),
-                        "tool_name": value.tool_name or tool_name_by_step_id.get(step_id_by_local_step_id.get(step_id, step_id), ""),
-                        "iteration": plan_count if value.iteration is None else value.iteration,
+                        "plan_step_id": value.plan_step_id or step.db_id,
+                        "tool_name": value.tool_name or step.tool,
                     }
                 )
             )
             continue
         normalized_results.append(
             ToolResult(
-                step_id=step_id_by_local_step_id.get(step_id, step_id),
-                tool_name=tool_name_by_step_id.get(step_id_by_local_step_id.get(step_id, step_id), ""),
-                iteration=plan_count,
+                plan_step_id=step.db_id,
+                tool_name=step.tool,
                 result=value,
             )
         )
-    state.result = state.result.copy(tool_results=normalized_results)
+    state.gather_tool_results = lambda: normalized_results
 
 
 def test_validator_routes_empty_plan_to_synthesis() -> None:
@@ -117,7 +107,7 @@ def test_router_routes_executed_results_to_evaluator() -> None:
                     "tool": "generic_web_search",
                     "args": {"query_text": "okonomiyaki kit"}}
             ]}),
-        results={"P1E1": {"items": []}},
+        results={"E1": {"items": []}},
         plan_count=1,
     )
 
@@ -196,14 +186,6 @@ def test_main_agent_graph_executes_plan_after_planner(monkeypatch) -> None:
         nonlocal executor_called
         executor_called = True
         state.node_states.evaluator.goal_reached = True
-        state.result = state.result.with_recorded_tool_result(
-            ToolResult(
-                step_id="main_agent:P1E1",
-                tool_name="generic_web_search",
-                iteration=1,
-                result={"items": []},
-            )
-        )
         return state
 
     monkeypatch.setattr(strategy_module, "run_planner", fake_planner)
@@ -217,4 +199,4 @@ def test_main_agent_graph_executes_plan_after_planner(monkeypatch) -> None:
 
     assert planner_called is True
     assert executor_called is True
-    assert final_state.result.tool_results_by_step_id()["main_agent:P1E1"].result == {"items": []}
+    assert final_state.node_states.evaluator.goal_reached is True

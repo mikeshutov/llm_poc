@@ -25,12 +25,11 @@ class EvidenceLookupResult(BaseModel):
     TOOL_NAME_LOOKUP_EVIDENCE,
     args_schema=LookupEvidenceArgs,
     description="""
-Retrieve full evidence records from the current user's prior conversation history.
+Retrieve full evidence records for provided evidence_ids.
 
 Required fields:
-- evidence_ids (array of strings): One or more evidence IDs from recent_roundtrips context.
+- evidence_ids (array of strings): One or more evidence IDs for which full context is needed.
 
-Returns matching evidence in the same order as requested.
 """,
 )
 def lookup_evidence(evidence_ids: list[str]) -> ToolResult:
