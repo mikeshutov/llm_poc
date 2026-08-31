@@ -11,3 +11,4 @@ class PlannerNodeState:
     plan: Plan | None = None
     needs_replan: bool = False
     plan_count: int = 0
+    no_result_attempts: int = 0

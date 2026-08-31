@@ -10,6 +10,8 @@ from pydantic import BaseModel
 def is_meaningful_prompt_value(value: Any) -> bool:
     if value is None:
         return False
+    if isinstance(value, bool):
+        return value
     if isinstance(value, str):
         normalized = value.strip()
         return normalized not in {"", "{}", "[]", '""'}

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from langgraph.graph import END
+
 from request_orchestrator.constants import EVALUATE_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
 from request_orchestrator.models.agent_result import ResultStatus
 from request_orchestrator.models.agent_state import AgentState
@@ -15,14 +17,23 @@ def run_execution_result_validator(state: AgentState) -> AgentState:
 
     step_ids = {step.db_id for step in plan.steps}
     calls = [call for call in state.gather_tool_calls() if call.plan_step_id in step_ids]
+    tool_results = [
+        tool_result
+        for tool_result in state.gather_tool_results()
+        if tool_result.plan_step_id in step_ids
+    ]
     statuses = [call.status for call in calls]
     if statuses and all(status == "rejected" for status in statuses):
         status = ResultStatus.NO_NEW_WORK
-    elif any(status == "completed" for status in statuses):
+    elif any(tool_result.evidence for tool_result in tool_results):
         status = ResultStatus.PARTIAL_SUCCESS
     else:
         status = ResultStatus.FAILED
     state.result = state.result.copy(result_status=status)
+    if status is ResultStatus.FAILED:
+        state.node_states.planner.no_result_attempts += 1
+    else:
+        state.node_states.planner.no_result_attempts = 0
     return state
 
 
@@ -51,4 +62,6 @@ def execution_result_router(state: AgentState) -> str:
         return SYNTHESIZE_EDGE
     if state.result.result_status is ResultStatus.PARTIAL_SUCCESS:
         return EVALUATE_EDGE
-    return PLAN_EDGE
+    if state.node_states.planner.no_result_attempts == 1:
+        return PLAN_EDGE
+    return END

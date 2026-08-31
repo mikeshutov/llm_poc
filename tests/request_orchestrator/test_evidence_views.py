@@ -1,4 +1,16 @@
 from uuid import uuid4
+import sys
+from types import ModuleType, SimpleNamespace
+
+if "yfinance" not in sys.modules:
+    sys.modules["yfinance"] = ModuleType("yfinance")
+
+if "pycountry" not in sys.modules:
+    pycountry_module = ModuleType("pycountry")
+    pycountry_module.countries = SimpleNamespace(
+        lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper())
+    )
+    sys.modules["pycountry"] = pycountry_module
 
 from request_orchestrator.models.agent_prompt import (
     EVIDENCE_VIEW_EVALUATOR,
@@ -6,7 +18,8 @@ from request_orchestrator.models.agent_prompt import (
     EvidenceStep,
     PromptSectionKeys,
 )
-from request_orchestrator.models.evidence import EvidenceView
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
+from request_orchestrator.shared.evidence import build_evidence_steps_from_tool_results
 
 
 def test_evidence_views_exclude_internal_and_raw_fields() -> None:
@@ -98,4 +111,40 @@ def test_agent_prompt_serializes_evaluator_evidence_view() -> None:
                 "price",
             ],
         }
+    ]
+
+
+def test_evidence_steps_present_empty_search_results_by_type() -> None:
+    tool_result = ToolResult(
+        tool_call_id=uuid4(),
+        tool_name="generic_web_search",
+        result={"results": []},
+    )
+    evidence_steps = build_evidence_steps_from_tool_results(
+        [tool_result],
+        evidence_views_by_tool_call_id={},
+    )
+    prompt = AgentPrompt(instruction="Use the evidence.", evidence=evidence_steps)
+    prompt.include_section(PromptSectionKeys.EVIDENCE)
+
+    assert prompt.sections_raw[PromptSectionKeys.EVIDENCE] == [
+        {"type": "web_search_results", "no_results": True}
+    ]
+
+
+def test_evidence_steps_do_not_label_tool_errors_as_no_results() -> None:
+    tool_result = ToolResult(
+        tool_call_id=uuid4(),
+        tool_name="generic_web_search",
+        result={"error": "Search provider unavailable."},
+    )
+    evidence_steps = build_evidence_steps_from_tool_results(
+        [tool_result],
+        evidence_views_by_tool_call_id={},
+    )
+    prompt = AgentPrompt(instruction="Use the evidence.", evidence=evidence_steps)
+    prompt.include_section(PromptSectionKeys.EVIDENCE)
+
+    assert prompt.sections_raw[PromptSectionKeys.EVIDENCE] == [
+        {"type": "web_search_results"}
     ]

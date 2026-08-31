@@ -6,7 +6,8 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from files.repository.file_repository import FileRepository
-from request_orchestrator.models.evidence import EvidenceView, ToolResult
+from files.urls import static_file_url
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from request_orchestrator.shared.tool_adapter.files.result_models import GetFileByIdResult
 from tool.constants import TOOL_NAME_GET_FILE_BY_ID
@@ -32,6 +33,9 @@ def _tool_result(result: GetFileByIdResult) -> ToolResult:
         tool_name=TOOL_NAME_GET_FILE_BY_ID,
         title=(result.file_name or "").strip() or "File",
         summary=(result.first_chunk or "").strip() or "Retrieved file metadata and preview.",
+        urls=[EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)]
+        if (file_url := static_file_url(result.file_path or ""))
+        else [],
         source=TOOL_NAME_GET_FILE_BY_ID,
         entity_type=TOOL_RESULT_TYPE_FILE,
         llm_metadata=metadata.model_dump(exclude_none=True),
@@ -71,6 +75,7 @@ def get_file_by_id(file_id: str) -> ToolResult:
         GetFileByIdResult(
             file_id=str(row["id"]),
             file_name=row["file_name"],
+            file_path=row["file_path"],
             file_type=row["file_type"],
             uploaded_at=str(row["uploaded_at"]),
             first_chunk=row.get("first_chunk"),

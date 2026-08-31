@@ -259,7 +259,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "When a file_id is known, prefer conclusions grounded in get_file_by_id or search_file_for_details results over vague file-name inference.",
             "Summarize or extract relevant pieces unless a quote is more appropriate.",
             "When referencing file content, cite the file name.",
-            "When rendering a list of files put them in a markdown list with links to the files.",
+            "Cite the relevant file evidence IDs. The renderer displays cited file names inline; do not invent URLs, Markdown links, or file paths.",
         ],
     ),
 }

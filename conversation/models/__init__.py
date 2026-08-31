@@ -1,16 +1,3 @@
-from __future__ import annotations
+from conversation.models.replay_models import PopulatedReplayConversation, PreparedReplayConversation
 
-from pydantic import BaseModel
-
-
-class PreparedReplayConversation(BaseModel):
-    conversation_id: str
-    source_roundtrip_id: str
-    source_conversation_id: str
-    source_message_index: int
-    user_prompt: str
-
-
-class PopulatedReplayConversation(BaseModel):
-    conversation_id: str
-    user_prompt: str
+__all__ = ["PopulatedReplayConversation", "PreparedReplayConversation"]

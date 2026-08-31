@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from types import ModuleType, SimpleNamespace
 
+from langgraph.graph import END
+
 if 'yfinance' not in sys.modules:
     sys.modules['yfinance'] = ModuleType('yfinance')
 
@@ -13,9 +15,14 @@ if 'pycountry' not in sys.modules:
 
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.main_agent.router.router import router
+from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.result_validator import (
+    execution_result_router,
+    run_execution_result_validator,
+)
 from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.validator import validator
 from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
+from request_orchestrator.models.agent_result import ResultStatus
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evaluation_result import (
     EVALUATION_STATUS_RETRYABLE,
@@ -131,6 +138,77 @@ def test_router_routes_missing_results_back_to_plan() -> None:
     )
 
     assert router(state) == PLAN_EDGE
+
+
+def test_execution_result_router_replans_once_after_an_empty_execution() -> None:
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    _hydrate_plan_state(
+        state,
+        plan=Plan.model_validate({
+            "steps": [
+                {
+                    "id": "E1",
+                    "plan": "Look it up",
+                    "tool": "generic_web_search",
+                    "args": {"query_text": "okonomiyaki kit"},
+                }
+            ]
+        }),
+        results={},
+        plan_count=1,
+    )
+    state.gather_tool_calls = lambda: [
+        SimpleNamespace(plan_step_id=state.node_states.planner.plan.steps[0].db_id, status="completed")
+    ]
+    state.gather_tool_results = lambda: [
+        ToolResult(
+            plan_step_id=state.node_states.planner.plan.steps[0].db_id,
+            tool_name="generic_web_search",
+            result={"results": []},
+        )
+    ]
+
+    run_execution_result_validator(state)
+
+    assert state.result.result_status is ResultStatus.FAILED
+    assert state.node_states.planner.no_result_attempts == 1
+    assert execution_result_router(state) == PLAN_EDGE
+
+
+def test_execution_result_router_skips_evaluator_after_second_empty_execution() -> None:
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    _hydrate_plan_state(
+        state,
+        plan=Plan.model_validate({
+            "steps": [
+                {
+                    "id": "E1",
+                    "plan": "Look it up again",
+                    "tool": "generic_web_search",
+                    "args": {"query_text": "okonomiyaki kit"},
+                }
+            ]
+        }),
+        results={},
+        plan_count=2,
+    )
+    state.node_states.planner.no_result_attempts = 1
+    state.gather_tool_calls = lambda: [
+        SimpleNamespace(plan_step_id=state.node_states.planner.plan.steps[0].db_id, status="completed")
+    ]
+    state.gather_tool_results = lambda: [
+        ToolResult(
+            plan_step_id=state.node_states.planner.plan.steps[0].db_id,
+            tool_name="generic_web_search",
+            result={"results": []},
+        )
+    ]
+
+    run_execution_result_validator(state)
+
+    assert state.result.result_status is ResultStatus.FAILED
+    assert state.node_states.planner.no_result_attempts == 2
+    assert execution_result_router(state) == END
 
 
 def test_evaluator_router_returns_synthesis_when_status_is_satisfied() -> None:
