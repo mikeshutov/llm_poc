@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from langsmith import traceable
-from request_orchestrator.agent_runner import AgentRunner
+from request_orchestrator.agent_runner.runner import AgentRunner
 from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.graph import PlannerExecutorEvaluatorStratagy
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.main_agent.router.router import router

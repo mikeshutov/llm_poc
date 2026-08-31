@@ -1,11 +1,3 @@
-from dataclasses import dataclass, field
+from request_orchestrator.shared.planner.models.compiled_planner_context import CompiledPlannerContext
 
-from langchain_core.tools import BaseTool
-
-
-#context of specifically the planner anything we should worry about
-@dataclass
-class CompiledPlannerContext:
-    tools: list[BaseTool]
-    compiled_tools: str
-    rules: dict[str, list[str]] = field(default_factory=dict)
+__all__ = ["CompiledPlannerContext"]

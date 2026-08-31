@@ -79,12 +79,13 @@ def build_evidence_steps_from_tool_results(
         step_metadata = tool_result.tool_metadata.model_dump(exclude_none=True)
         step_evidence = list(evidence_views_by_tool_call_id.get(tool_call_id, []))
         existing_step = evidence_step_by_type.get(step_type)
+        no_results = _tool_result_has_no_results(tool_result)
         if existing_step is None:
             evidence_step = EvidenceStep(
                 type=step_type,
                 metadata=step_metadata,
                 evidence=step_evidence,
-                no_results=_tool_result_has_no_results(tool_result),
+                no_results=no_results,
             )
             evidence_step_by_type[step_type] = evidence_step
             evidence_steps.append(evidence_step)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from importlib import import_module
 
-from request_orchestrator.agent_runner import AgentRunner
+from request_orchestrator.agent_runner.runner import AgentRunner
 from request_orchestrator.agent_runner.models.agent_profile import (
     AgentExecutionStrategy,
     AgentKind,
