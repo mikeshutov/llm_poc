@@ -5,9 +5,10 @@ from uuid import UUID
 from langchain_core.tools import tool
 from pydantic import BaseModel
 
+from files.urls import static_file_url
 from files.repository.file_chunk_repository import FileChunkRepository
 from llm.clients.embeddings import embed_text
-from request_orchestrator.models.evidence import EvidenceView, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from tool.constants import TOOL_NAME_SEARCH_FILE_FOR_DETAILS
 from tool.constants import TOOL_RESULT_TYPE_FILE_DETAILS
@@ -18,26 +19,19 @@ class SearchFileForDetailsArgs(BaseModel):
     query: str
 
 
-class SearchFileForDetailsMetadata(BaseModel):
-    file_name: str | None = None
-    file_path: str | None = None
-
-
 def _tool_result(result: list[dict]) -> ToolResult:
     evidence: list[EvidenceView] = []
     for file_result in result:
-        metadata = SearchFileForDetailsMetadata(
-            file_name=str(file_result.get("file_name", "")).strip() or None,
-            file_path=str(file_result.get("file_path", "")).strip() or None,
-        )
         evidence_view = EvidenceView(
             item_id=str(file_result.get("file_id", "")),
             tool_name=TOOL_NAME_SEARCH_FILE_FOR_DETAILS,
             title=str(file_result.get("file_name", "")).strip() or "File Detail",
             summary=str(file_result.get("content", "")).strip() or "Matched file content.",
+            urls=[EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)]
+            if (file_url := static_file_url(str(file_result.get("file_path", ""))))
+            else [],
             source=TOOL_NAME_SEARCH_FILE_FOR_DETAILS,
             entity_type=TOOL_RESULT_TYPE_FILE_DETAILS,
-            llm_metadata=metadata.model_dump(exclude_none=True),
             raw_payload=file_result,
         )
         evidence.append(evidence_view)

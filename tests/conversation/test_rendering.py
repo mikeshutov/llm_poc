@@ -16,6 +16,7 @@ from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from tool.constants import TOOL_NAME_GET_CURRENT_WEATHER
 from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
+from tool.constants import TOOL_RESULT_TYPE_FILE_DETAILS
 from tool.constants import TOOL_RESULT_TYPE_RULES
 from tool.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
@@ -235,6 +236,36 @@ def test_build_inline_evidence_includes_generic_web_search_results_from_source_o
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
         ),
     ]
+
+
+def test_render_result_block_renders_file_citations_as_inline_file_names(monkeypatch) -> None:
+    calls: dict[str, list[object]] = {"html": [], "caption": []}
+
+    monkeypatch.setattr(
+        "rendering.rendering.st.html",
+        lambda value, **kwargs: calls["html"].append((value, kwargs)),
+    )
+    monkeypatch.setattr("rendering.rendering.st.caption", lambda value: calls["caption"].append(value))
+
+    cards = _render_result_block(
+        SynthesisResultBlock(content="Your resume lists three years of experience.", evidence_ids=["file-evidence"]),
+        {
+            "file-evidence": EvidenceView(
+                evidence_id="file-evidence",
+                title="resume.pdf",
+                summary="Experience at Acme Corp.",
+                urls=[EvidenceUrl(url="app/static/files/resume.pdf", url_type=EvidenceUrlType.WEBSITE)],
+                source="search_file_for_details",
+                entity_type=TOOL_RESULT_TYPE_FILE_DETAILS,
+            )
+        },
+    )
+
+    assert cards == []
+    assert len(calls["html"]) == 1
+    rendered_value, _ = calls["html"][0]
+    assert "app/static/files/resume.pdf" in rendered_value
+    assert calls["caption"] == []
 
 
 def test_render_result_block_renders_weather_as_inline_html_link(monkeypatch) -> None:

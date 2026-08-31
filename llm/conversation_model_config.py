@@ -158,10 +158,10 @@ class ConversationModelConfig(BaseModel):
     }
     MODEL_PRICING_REGISTRY: ClassVar[dict[str, dict[str, ModelPricing]]] = {
         OPENAI_PROVIDER: {
-            "gpt-5.6": ModelPricing(input_price_per_million_tokens=Decimal("5.00"), cached_input_price_per_million_tokens=Decimal("0.50"), output_price_per_million_tokens=Decimal("30.00")),
-            "gpt-5.6-sol": ModelPricing(input_price_per_million_tokens=Decimal("5.00"), cached_input_price_per_million_tokens=Decimal("0.50"), output_price_per_million_tokens=Decimal("30.00")),
-            "gpt-5.6-terra": ModelPricing(input_price_per_million_tokens=Decimal("2.50"), cached_input_price_per_million_tokens=Decimal("0.25"), output_price_per_million_tokens=Decimal("15.00")),
-            "gpt-5.6-luna": ModelPricing(input_price_per_million_tokens=Decimal("1.00"), cached_input_price_per_million_tokens=Decimal("0.10"), output_price_per_million_tokens=Decimal("6.00")),
+            "gpt-5.6": ModelPricing(input_price_per_million_tokens=Decimal("4.00"), cached_input_price_per_million_tokens=Decimal("0.40"), output_price_per_million_tokens=Decimal("20.00")),
+            "gpt-5.6-sol": ModelPricing(input_price_per_million_tokens=Decimal("4.00"), cached_input_price_per_million_tokens=Decimal("0.40"), output_price_per_million_tokens=Decimal("20.00")),
+            "gpt-5.6-terra": ModelPricing(input_price_per_million_tokens=Decimal("2.00"), cached_input_price_per_million_tokens=Decimal("0.20"), output_price_per_million_tokens=Decimal("12.00")),
+            "gpt-5.6-luna": ModelPricing(input_price_per_million_tokens=Decimal("0.20"), cached_input_price_per_million_tokens=Decimal("0.02"), output_price_per_million_tokens=Decimal("1.20")),
             "o3": ModelPricing(input_price_per_million_tokens=Decimal("2.00"), output_price_per_million_tokens=Decimal("8.00")),
             "o3-pro": ModelPricing(input_price_per_million_tokens=Decimal("20.00"), output_price_per_million_tokens=Decimal("80.00")),
             "o3-mini": ModelPricing(input_price_per_million_tokens=Decimal("1.10"), output_price_per_million_tokens=Decimal("4.40")),

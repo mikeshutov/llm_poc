@@ -5,9 +5,10 @@ from typing import Optional
 from langchain_core.tools import tool
 from pydantic import BaseModel
 
+from files.urls import static_file_url
 from files.repository.file_chunk_repository import FileChunkRepository, FileTypeFilter
 from llm.clients.embeddings import embed_text
-from request_orchestrator.models.evidence import EvidenceView, ToolResult
+from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from tool.constants import TOOL_NAME_SEARCH_FILES
 from tool.constants import TOOL_RESULT_TYPE_FILE_RESULTS
@@ -34,6 +35,9 @@ def _tool_result(result: list[dict]) -> ToolResult:
             tool_name=TOOL_NAME_SEARCH_FILES,
             title=str(file_result.get("file_name", "")).strip() or "File Search Result",
             summary=str(file_result.get("top_chunk", "")).strip() or "Matched uploaded file.",
+            urls=[EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)]
+            if (file_url := static_file_url(str(file_result.get("file_path", ""))))
+            else [],
             source=TOOL_NAME_SEARCH_FILES,
             entity_type=TOOL_RESULT_TYPE_FILE_RESULTS,
             llm_metadata=metadata.model_dump(exclude_none=True),

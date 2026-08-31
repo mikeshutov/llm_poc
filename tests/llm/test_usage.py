@@ -69,8 +69,8 @@ def test_record_llm_call_uses_base_pricing_for_snapshot_model_name() -> None:
         )
 
     assert len(fake_repo.calls) == 1
-    assert fake_repo.calls[0]['input_price_per_million_tokens'] == Decimal('1.00')
-    assert fake_repo.calls[0]['output_price_per_million_tokens'] == Decimal('6.00')
+    assert fake_repo.calls[0]['input_price_per_million_tokens'] == Decimal('0.20')
+    assert fake_repo.calls[0]['output_price_per_million_tokens'] == Decimal('1.20')
 
 
 def test_record_llm_call_computes_costs_and_persists() -> None:
@@ -99,11 +99,11 @@ def test_record_llm_call_computes_costs_and_persists() -> None:
     assert stored['input_tokens'] == 120
     assert stored['output_tokens'] == 30
     assert stored['total_tokens'] == 150
-    assert stored['input_price_per_million_tokens'] == Decimal('1.00')
-    assert stored['output_price_per_million_tokens'] == Decimal('6.00')
-    assert stored['computed_input_cost'] == Decimal('0.00012')
-    assert stored['computed_output_cost'] == Decimal('0.00018')
-    assert stored['computed_total_cost'] == Decimal('0.00030')
+    assert stored['input_price_per_million_tokens'] == Decimal('0.20')
+    assert stored['output_price_per_million_tokens'] == Decimal('1.20')
+    assert stored['computed_input_cost'] == Decimal('0.000024')
+    assert stored['computed_output_cost'] == Decimal('0.000036')
+    assert stored['computed_total_cost'] == Decimal('0.000060')
     assert stored['metadata'] == {'kind': 'test'}
 
 
@@ -129,9 +129,9 @@ def test_record_llm_call_charges_cached_luna_tokens_at_the_cached_rate() -> None
 
     stored = fake_repo.calls[0]
     assert stored['cached_input_tokens'] == 400
-    assert stored['computed_input_cost'] == Decimal('0.00064')
-    assert stored['computed_output_cost'] == Decimal('0.0006')
-    assert stored['computed_total_cost'] == Decimal('0.00124')
+    assert stored['computed_input_cost'] == Decimal('0.000128')
+    assert stored['computed_output_cost'] == Decimal('0.00012')
+    assert stored['computed_total_cost'] == Decimal('0.000248')
 
 
 def test_record_llm_call_raises_when_model_has_no_pricing() -> None:

@@ -27,6 +27,9 @@ from tool.constants import TOOL_NAME_SEARCH_MAGIC_CARDS
 from tool.constants import TOOL_NAME_STRUCTURED_FACTS_LOOKUP
 from tool.constants import TOOL_NAME_WIKIPEDIA_SEARCH
 from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
+from tool.constants import TOOL_RESULT_TYPE_FILE
+from tool.constants import TOOL_RESULT_TYPE_FILE_DETAILS
+from tool.constants import TOOL_RESULT_TYPE_FILE_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_RULES
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
@@ -56,7 +59,16 @@ CARD_LAYOUTS_BY_EVIDENCE_TYPE: dict[str, dict[str, int]] = {
 
 
 INLINE_EVIDENCE_TYPES: set[str] = {
+    TOOL_RESULT_TYPE_FILE,
+    TOOL_RESULT_TYPE_FILE_DETAILS,
+    TOOL_RESULT_TYPE_FILE_RESULTS,
     TOOL_RESULT_TYPE_WEATHER,
+}
+
+FILE_EVIDENCE_TYPES: set[str] = {
+    TOOL_RESULT_TYPE_FILE,
+    TOOL_RESULT_TYPE_FILE_DETAILS,
+    TOOL_RESULT_TYPE_FILE_RESULTS,
 }
 
 INLINE_EVIDENCE_TOOL_NAMES: set[str] = {
@@ -79,6 +91,12 @@ def _is_inline_label_evidence(evidence: EvidenceView) -> bool:
 
 def _is_inline_evidence(evidence: EvidenceView) -> bool:
     return _is_inline_link_evidence(evidence) or _is_inline_label_evidence(evidence)
+
+
+def _inline_evidence_label(evidence: EvidenceView) -> str:
+    if evidence.entity_type.strip() in FILE_EVIDENCE_TYPES:
+        return evidence.title.strip() or str(evidence.id)
+    return evidence.summary.strip() or evidence.title.strip() or str(evidence.id)
 
 
 def _is_magic_card_evidence(evidence: EvidenceView) -> bool:
@@ -313,7 +331,11 @@ def _primary_card_url(urls: list[EvidenceUrl]) -> str:
     return ""
 
 
-def _render_result_content(content: str, links: list[tuple[str, str]]) -> None:
+def _render_result_content(
+    content: str,
+    links: list[tuple[str, str]],
+    labels: list[str] | None = None,
+) -> None:
     chips = "".join(
         (
             "<a "
@@ -326,8 +348,17 @@ def _render_result_content(content: str, links: list[tuple[str, str]]) -> None:
         )
         for label, url in links
     )
+    label_chips = "".join(
+        (
+            '<span style="display:inline-flex;align-items:center;gap:0.2rem;margin:0 0.25rem 0 0.35rem;'
+            "padding:0.08rem 0.4rem;border:1px solid rgba(49,51,63,0.22);border-radius:999px;"
+            'font-size:0.72rem;line-height:1.25;">'
+            f"{html.escape(label)}</span>"
+        )
+        for label in (labels or [])
+    )
     escaped_content = html.escape(content).replace("\n", "<br>")
-    st.html(f'<span style="white-space:pre-wrap">{escaped_content}</span>{chips}')
+    st.html(f'<span style="white-space:pre-wrap">{escaped_content}</span>{chips}{label_chips}')
 
 
 def _render_result_block(
@@ -337,20 +368,25 @@ def _render_result_block(
     inline_evidence = _build_inline_evidence(block, evidence_by_id)
     inline_links: list[tuple[str, str]] = []
     inline_labels: list[str] = []
+    inline_file_labels: list[str] = []
     for evidence in inline_evidence:
         evidence = evidence_by_id.get(evidence.evidence_id)
         if evidence is None:
             continue
         evidence_url = _primary_card_url(evidence.urls)
         if evidence_url:
-            label = evidence.title.strip() or evidence.source.strip() or evidence.evidence_id
+            label = evidence.title.strip() or evidence.source.strip() or str(evidence.id)
             inline_links.append((label, evidence_url))
             continue
-        label = evidence.summary.strip() or evidence.title.strip() or evidence.evidence_id
+        label = _inline_evidence_label(evidence)
         source = evidence.source.strip()
-        inline_labels.append(f"{label} ({source})" if source else label)
+        rendered_label = f"{label} ({source})" if source else label
+        if evidence.entity_type.strip() in FILE_EVIDENCE_TYPES:
+            inline_file_labels.append(rendered_label)
+        else:
+            inline_labels.append(rendered_label)
 
-    _render_result_content(block.content, inline_links)
+    _render_result_content(block.content, inline_links, inline_file_labels)
 
     magic_card_evidence = [
         evidence

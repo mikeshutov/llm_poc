@@ -204,29 +204,29 @@ def test_conversation_model_config_build_default_resolves_pricing_for_every_stag
     config = ConversationModelConfig.build_default()
 
     assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, REQUEST_ANALYSIS_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('1.00'),
-        cached_input_price_per_million_tokens=Decimal('0.10'),
-        output_price_per_million_tokens=Decimal('6.00'),
+        input_price_per_million_tokens=Decimal('0.20'),
+        cached_input_price_per_million_tokens=Decimal('0.02'),
+        output_price_per_million_tokens=Decimal('1.20'),
     )
     assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('1.00'),
-        cached_input_price_per_million_tokens=Decimal('0.10'),
-        output_price_per_million_tokens=Decimal('6.00'),
+        input_price_per_million_tokens=Decimal('0.20'),
+        cached_input_price_per_million_tokens=Decimal('0.02'),
+        output_price_per_million_tokens=Decimal('1.20'),
     )
     assert config.resolve_pricing(PROFILE_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('1.00'),
-        cached_input_price_per_million_tokens=Decimal('0.10'),
-        output_price_per_million_tokens=Decimal('6.00'),
+        input_price_per_million_tokens=Decimal('0.20'),
+        cached_input_price_per_million_tokens=Decimal('0.02'),
+        output_price_per_million_tokens=Decimal('1.20'),
     )
     assert config.resolve_pricing(SHARED_MODEL_SCOPE, EVALUATOR_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('1.00'),
-        cached_input_price_per_million_tokens=Decimal('0.10'),
-        output_price_per_million_tokens=Decimal('6.00'),
+        input_price_per_million_tokens=Decimal('0.20'),
+        cached_input_price_per_million_tokens=Decimal('0.02'),
+        output_price_per_million_tokens=Decimal('1.20'),
     )
     assert config.resolve_pricing(SHARED_MODEL_SCOPE, RERANKER_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('1.00'),
-        cached_input_price_per_million_tokens=Decimal('0.10'),
-        output_price_per_million_tokens=Decimal('6.00'),
+        input_price_per_million_tokens=Decimal('0.20'),
+        cached_input_price_per_million_tokens=Decimal('0.02'),
+        output_price_per_million_tokens=Decimal('1.20'),
     )
 
 
@@ -245,14 +245,14 @@ def test_conversation_model_config_override_changes_resolved_pricing_for_stage()
     )
 
     assert config.resolve_pricing(PROFILE_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('1.00'),
-        cached_input_price_per_million_tokens=Decimal('0.10'),
-        output_price_per_million_tokens=Decimal('6.00'),
+        input_price_per_million_tokens=Decimal('0.20'),
+        cached_input_price_per_million_tokens=Decimal('0.02'),
+        output_price_per_million_tokens=Decimal('1.20'),
     )
     assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('1.00'),
-        cached_input_price_per_million_tokens=Decimal('0.10'),
-        output_price_per_million_tokens=Decimal('6.00'),
+        input_price_per_million_tokens=Decimal('0.20'),
+        cached_input_price_per_million_tokens=Decimal('0.02'),
+        output_price_per_million_tokens=Decimal('1.20'),
     )
 
 
@@ -734,14 +734,14 @@ def test_build_model_config_rows_exposes_effective_models_overrides_and_pricing(
     assert evaluator_row['effective_model'] == 'gpt-5.6-luna'
     assert evaluator_row['override_model'] == 'gpt-5.6-luna'
     assert evaluator_row['override_provider'] == OPENAI_PROVIDER
-    assert evaluator_row['input_price'] == '$1 per 1M'
-    assert evaluator_row['output_price'] == '$6 per 1M'
+    assert evaluator_row['input_price'] == '$0.2 per 1M'
+    assert evaluator_row['output_price'] == '$1.2 per 1M'
     assert evaluator_row['effective_provider'] == 'OpenAI'
     assert OPENAI_PROVIDER in evaluator_row['provider_options']
     assert reranker_row['effective_model'] == 'gpt-5.6-terra'
     assert reranker_row['override_model'] == 'gpt-5.6-terra'
-    assert reranker_row['input_price'] == '$2.5 per 1M'
-    assert reranker_row['output_price'] == '$15 per 1M'
+    assert reranker_row['input_price'] == '$2 per 1M'
+    assert reranker_row['output_price'] == '$12 per 1M'
 
 
 def test_build_model_config_rows_reset_to_default_restores_model_and_pricing() -> None:
@@ -752,8 +752,8 @@ def test_build_model_config_rows_reset_to_default_restores_model_and_pricing() -
 
     assert request_analysis_row['effective_model'] == 'gpt-5.6-luna'
     assert request_analysis_row['override_model'] is None
-    assert request_analysis_row['input_price'] == '$1 per 1M'
-    assert request_analysis_row['output_price'] == '$6 per 1M'
+    assert request_analysis_row['input_price'] == '$0.2 per 1M'
+    assert request_analysis_row['output_price'] == '$1.2 per 1M'
 
 
 def test_build_model_config_rows_exposes_provider_filtered_options() -> None:
