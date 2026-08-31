@@ -28,6 +28,17 @@ def _resolve_tool_name(
     return fallback_tool_name
 
 
+def _tool_result_has_error(tool_result: ToolResult) -> bool:
+    result = tool_result.result
+    if isinstance(result, dict):
+        return bool(str(result.get("error", "")).strip())
+    return bool(str(getattr(result, "error", "")).strip())
+
+
+def _tool_result_has_no_results(tool_result: ToolResult) -> bool:
+    return not tool_result.evidence and not _tool_result_has_error(tool_result)
+
+
 def build_evidence_bundle_from_tool_results(tool_results: list[ToolResult]) -> EvidenceBundle:
     evidence_by_id: dict[str, EvidenceView] = {}
     evidence_views_by_tool_call_id: dict[UUID, list[EvidenceView]] = {}
@@ -73,12 +84,16 @@ def build_evidence_steps_from_tool_results(
                 type=step_type,
                 metadata=step_metadata,
                 evidence=step_evidence,
+                no_results=_tool_result_has_no_results(tool_result),
             )
             evidence_step_by_type[step_type] = evidence_step
             evidence_steps.append(evidence_step)
             continue
         existing_step.metadata = _merge_step_metadata(existing_step.metadata, step_metadata)
         existing_step.evidence.extend(step_evidence)
+        existing_step.no_results = not existing_step.evidence and (
+            existing_step.no_results or no_results
+        )
     return evidence_steps
 
 

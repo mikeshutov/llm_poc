@@ -13,6 +13,10 @@ from request_orchestrator.shared.planner.prompts.planner_schema_prompt import PL
 
 
 ATTRIBUTE_TYPE_MINIMAL_DESCRIPTION = 'Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.'
+EMPTY_EXECUTION_REPLAN_RULE = (
+    "The previous plan execution produced no results. Retry with materially different "
+    "tool calls or arguments; do not repeat the same request."
+)
 
 
 def _is_profile_management_agent(state: AgentState) -> bool:
@@ -96,6 +100,8 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
     compiled_rules = build_planner_rules(context.rules)
     if state.agent_profile.planner_rules:
         compiled_rules = f"{compiled_rules}\n\nAgent Rules:\n{state.agent_profile.planner_rules}"
+    if state.node_states.planner.no_result_attempts:
+        compiled_rules = f"{compiled_rules}\n\nExecution Feedback:\n- {EMPTY_EXECUTION_REPLAN_RULE}"
 
     prompt = AgentPrompt(
         instruction=state.agent_profile.planner_instruction,

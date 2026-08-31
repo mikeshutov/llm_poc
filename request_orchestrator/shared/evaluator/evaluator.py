@@ -23,7 +23,7 @@ from request_orchestrator.shared.evidence import (
     build_evidence_bundle_from_tool_results,
     build_evidence_steps_from_tool_results,
 )
-from request_orchestrator.shared.evaluator.prompts import build_evaluator_prompt
+from request_orchestrator.shared.evaluator.prompts.evaluator_prompt import build_evaluator_prompt
 from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
 
 EVALUATOR_KIND = "evaluator"

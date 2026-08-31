@@ -64,3 +64,12 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
     assert evidence_section[0]["evidence"][0]["summary"] == "Short evidence summary."
     assert evidence_section[0]["evidence"][0]["metadata"] == {"kind": "web"}
     assert "secret" not in str(evidence_section)
+
+
+def test_planner_prompt_explains_an_empty_execution_retry() -> None:
+    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state.node_states.planner.no_result_attempts = 1
+
+    prompt = build_planner_prompt(state)
+
+    assert "The previous plan execution produced no results." in prompt.build()

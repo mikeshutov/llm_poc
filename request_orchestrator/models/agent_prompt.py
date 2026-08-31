@@ -23,6 +23,7 @@ class EvidenceStep(BaseModel):
     type: str
     metadata: dict[str, Any] = Field(default_factory=dict)
     evidence: list[EvidenceView] = Field(default_factory=list)
+    no_results: bool = False
 
 
 class PromptSectionKeys:
@@ -218,6 +219,7 @@ class AgentPrompt:
                     {
                         "type": step.type,
                         "metadata": dict(step.metadata),
+                        "no_results": step.no_results,
                         "evidence": [
                             (
                                 evidence.to_evaluator_view()
