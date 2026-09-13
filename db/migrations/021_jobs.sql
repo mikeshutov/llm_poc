@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     days_of_week SMALLINT[] NOT NULL,
     run_time TIME NOT NULL,
     timezone TEXT NOT NULL,
+    next_execution_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT jobs_user_name_key UNIQUE (user_id, name),

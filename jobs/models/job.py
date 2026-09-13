@@ -30,6 +30,7 @@ class Job(BaseModel):
     plan_prompt_hash: str
     enabled: bool = False
     schedule: JobSchedule
+    next_execution_at: datetime
     created_at: datetime
     updated_at: datetime
 
