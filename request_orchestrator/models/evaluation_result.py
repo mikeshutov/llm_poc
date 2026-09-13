@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Final, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 EVALUATION_STATUS_SATISFIED: Final[Literal["SATISFIED"]] = "SATISFIED"
 EVALUATION_STATUS_RETRYABLE: Final[Literal["RETRYABLE"]] = "RETRYABLE"
@@ -20,7 +20,7 @@ EvaluationStatus = Literal[
 
 
 class EvaluationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     status: EvaluationStatus = EVALUATION_STATUS_RETRYABLE
     relevant_evidence: list[str] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
-    refined_goal: str = ""

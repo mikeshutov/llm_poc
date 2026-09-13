@@ -101,7 +101,6 @@ def run_evaluator(state: AgentState) -> AgentState:
     except Exception as exc:
         state.result = state.result.copy(relevant_evidence_ids=[], result_status=ResultStatus.FAILED)
         state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
-        state.node_states.evaluator.goal_reached = True
         create_conversation_event(
             conversation_id=execution_context.conversation_id,
             roundtrip_id=execution_context.roundtrip_id,
@@ -123,7 +122,6 @@ def run_evaluator(state: AgentState) -> AgentState:
     state.node_states.evaluator.evaluation_status = evaluation.status
 
     if evaluation.status in TERMINAL_EVALUATION_STATUSES:
-        state.node_states.evaluator.goal_reached = True
         state.result = state.result.copy(
             result_status=(
                 ResultStatus.SUCCESS
@@ -132,10 +130,7 @@ def run_evaluator(state: AgentState) -> AgentState:
             )
         )
     else:
-        refined_goal = evaluation.refined_goal.strip()
-        if refined_goal:
-            state.inputs.task = refined_goal
-        state.node_states.evaluator.goal_reached = False
+        state.node_states.evaluator.missing_information = evaluation.missing_information
 
     create_conversation_event(
         conversation_id=execution_context.conversation_id,
@@ -149,7 +144,6 @@ def run_evaluator(state: AgentState) -> AgentState:
             status=evaluation.status,
             relevant_evidence=[str(evidence_id) for evidence_id in deduped_relevant_evidence],
             missing_information=evaluation.missing_information,
-            refined_goal=evaluation.refined_goal,
             llm_call=llm_call,
         ).model_dump(),
     )

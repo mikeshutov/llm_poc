@@ -17,6 +17,11 @@ EMPTY_EXECUTION_REPLAN_RULE = (
     "The previous plan execution produced no results. Retry with materially different "
     "tool calls or arguments; do not repeat the same request."
 )
+MISSING_INFORMATION_REPLAN_RULE = (
+    "The evaluator identified unresolved missing_information below. Keep the original task "
+    "as the goal, use existing evidence as context, and plan only tool calls that directly "
+    "resolve those gaps."
+)
 
 
 def _is_profile_management_agent(state: AgentState) -> bool:
@@ -102,6 +107,8 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         compiled_rules = f"{compiled_rules}\n\nAgent Rules:\n{state.agent_profile.planner_rules}"
     if state.node_states.planner.no_result_attempts:
         compiled_rules = f"{compiled_rules}\n\nExecution Feedback:\n- {EMPTY_EXECUTION_REPLAN_RULE}"
+    if state.node_states.evaluator.missing_information:
+        compiled_rules = f"{compiled_rules}\n\nReplanning Guidance:\n- {MISSING_INFORMATION_REPLAN_RULE}"
 
     prompt = AgentPrompt(
         instruction=state.agent_profile.planner_instruction,
@@ -111,6 +118,7 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         available_tools=context.compiled_tools,
         rules=compiled_rules,
         evidence=evidence_steps,
+        missing_information=state.node_states.evaluator.missing_information,
         schema=PLANNER_SCHEMA,
     )
     prompt.include_section(
@@ -124,6 +132,7 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
     prompt.include_section(PromptSectionKeys.AVAILABLE_TOOLS)
     prompt.include_section(PromptSectionKeys.RULES)
     prompt.include_section(PromptSectionKeys.EVIDENCE)
+    prompt.include_section(PromptSectionKeys.MISSING_INFORMATION)
     prompt.include_section(PromptSectionKeys.SCHEMA)
     prompt.include_section(PromptSectionKeys.TASK)
     return prompt

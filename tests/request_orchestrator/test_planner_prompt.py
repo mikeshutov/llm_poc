@@ -73,3 +73,24 @@ def test_planner_prompt_explains_an_empty_execution_retry() -> None:
     prompt = build_planner_prompt(state)
 
     assert "The previous plan execution produced no results." in prompt.build()
+
+
+def test_planner_prompt_includes_evaluator_missing_information() -> None:
+    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state.node_states.evaluator.missing_information = ["Current Canadian pricing", "Shipping availability"]
+
+    prompt = build_planner_prompt(state)
+
+    assert prompt.sections_raw[PromptSectionKeys.MISSING_INFORMATION] == [
+        "Current Canadian pricing",
+        "Shipping availability",
+    ]
+    assert "The evaluator identified unresolved missing_information below." in prompt.build()
+
+
+def test_planner_prompt_omits_missing_information_guidance_without_evaluator_feedback() -> None:
+    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+
+    prompt = build_planner_prompt(state)
+
+    assert "The evaluator identified unresolved missing_information below." not in prompt.build()

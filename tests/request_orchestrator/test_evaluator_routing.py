@@ -228,7 +228,6 @@ def test_evaluator_router_returns_synthesis_when_status_is_terminal() -> None:
 def test_evaluator_router_returns_plan_when_status_is_retryable() -> None:
     state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
     state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_RETRYABLE
-    state.node_states.evaluator.goal_reached = False
 
     assert evaluator_router(state) == PLAN_EDGE
 
@@ -263,7 +262,7 @@ def test_main_agent_graph_executes_plan_after_planner(monkeypatch) -> None:
     def fake_executor(state: AgentState) -> AgentState:
         nonlocal executor_called
         executor_called = True
-        state.node_states.evaluator.goal_reached = True
+        state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
         return state
 
     monkeypatch.setattr(strategy_module, "run_planner", fake_planner)
@@ -277,4 +276,4 @@ def test_main_agent_graph_executes_plan_after_planner(monkeypatch) -> None:
 
     assert planner_called is True
     assert executor_called is True
-    assert final_state.node_states.evaluator.goal_reached is True
+    assert final_state.node_states.evaluator.evaluation_status == EVALUATION_STATUS_TERMINAL

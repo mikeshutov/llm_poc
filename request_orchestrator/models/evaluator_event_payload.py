@@ -11,7 +11,6 @@ class EvaluatorEventData(BaseModel):
     status: str
     relevant_evidence: list[str] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
-    refined_goal: str = ""
     parse_error: str | None = None
     llm_usage: dict[str, Any] | None = None
 
@@ -31,7 +30,6 @@ class EvaluatorEventPayload(BaseModel):
         status: str,
         relevant_evidence: list[str],
         missing_information: list[str],
-        refined_goal: str,
         llm_call: LlmCallRecord | None,
     ) -> "EvaluatorEventPayload":
         return cls(
@@ -42,7 +40,6 @@ class EvaluatorEventPayload(BaseModel):
                 status=status,
                 relevant_evidence=list(relevant_evidence),
                 missing_information=list(missing_information),
-                refined_goal=refined_goal,
                 llm_usage=None if llm_call is None else serialize_llm_call_record(llm_call),
             ),
         )
@@ -65,7 +62,6 @@ class EvaluatorEventPayload(BaseModel):
                 status=status,
                 relevant_evidence=[],
                 missing_information=[],
-                refined_goal="",
                 parse_error=parse_error,
                 llm_usage=None if llm_call is None else serialize_llm_call_record(llm_call),
             ),
