@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.constants import EVALUATE_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
+from request_orchestrator.models.evaluation_result import TERMINAL_EVALUATION_STATUSES
 
 
 def router(state: AgentState) -> str:
     planner_state = state.node_states.planner
     evaluator_state = state.node_states.evaluator
-    if evaluator_state.goal_reached:
+    if evaluator_state.evaluation_status in TERMINAL_EVALUATION_STATUSES:
         return SYNTHESIZE_EDGE
 
     if planner_state.plan_count >= state.max_turns:

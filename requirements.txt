@@ -4,6 +4,7 @@ openai
 langchain-openai
 langchain-anthropic
 langchain-core
+langchain-text-splitters
 langgraph
 langsmith
 psycopg[binary]

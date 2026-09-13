@@ -34,6 +34,7 @@ class PromptSectionKeys:
     AVAILABLE_TOOLS = "available_tools"
     RULES = "rules"
     EVIDENCE = "evidence"
+    MISSING_INFORMATION = "missing_information"
     TASK = "task"
     SCHEMA = "schema"
 
@@ -46,6 +47,7 @@ BUILTIN_SECTION_KEYS = (
     PromptSectionKeys.AVAILABLE_TOOLS,
     PromptSectionKeys.RULES,
     PromptSectionKeys.EVIDENCE,
+    PromptSectionKeys.MISSING_INFORMATION,
     PromptSectionKeys.TASK,
     PromptSectionKeys.SCHEMA,
 )
@@ -58,6 +60,7 @@ INPUT_SECTION_KEYS = (
     PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES,
     PromptSectionKeys.AVAILABLE_TOOLS,
     PromptSectionKeys.EVIDENCE,
+    PromptSectionKeys.MISSING_INFORMATION,
     PromptSectionKeys.TASK,
 )
 OUTPUT_CONTRACT_SECTION_KEYS = (PromptSectionKeys.SCHEMA,)
@@ -94,6 +97,7 @@ class AgentPrompt:
     available_tool_categories: Any = ""
     available_tools: Any = ""
     evidence: list[EvidenceStep] | None = None
+    missing_information: list[str] = field(default_factory=list)
     evidence_view: EvidenceViewMode = EVIDENCE_VIEW_COMPACT
     _enabled_sections: dict[str, dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
 
@@ -132,6 +136,8 @@ class AgentPrompt:
                 value = self.rules
             elif key == PromptSectionKeys.EVIDENCE:
                 value = self._serialize_evidence_steps()
+            elif key == PromptSectionKeys.MISSING_INFORMATION:
+                value = self.missing_information
             elif key == PromptSectionKeys.TASK:
                 value = self.task
             elif key == PromptSectionKeys.SCHEMA:

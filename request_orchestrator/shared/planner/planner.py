@@ -8,6 +8,7 @@ from common.data import sanitize_for_json_storage
 from common.logging import create_conversation_event, log_roundtrip_prompt
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.agent_result import AgentResult
+from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_TERMINAL
 from request_orchestrator.models.plan import Plan, PlanningResult
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
@@ -95,7 +96,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         if serialized is not None:
             llm_calls.append(serialized)
     except Exception as e:
-        agent_state.node_states.evaluator.goal_reached = True
+        agent_state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
         return agent_state
 
     if len(planning_result.steps) == 0 and planning_result.status == "blocked" and not planning_result.reason:
@@ -117,7 +118,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
     )
 
     if len(plan.steps) == 0:
-        agent_state.node_states.evaluator.goal_reached = True
+        agent_state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
 
     payload = {
         "agent_name": agent_state.agent_profile.name,

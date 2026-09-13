@@ -30,7 +30,7 @@ from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.models.request_analysis import RequestAnalysis, RequestAnalysisGoal
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
-from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
+from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE, EVALUATION_STATUS_TERMINAL
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.evaluator.evaluator import run_evaluator
 from request_orchestrator.shared.planner.planner import REQUIRED_CAPABILITY_UNAVAILABLE_REASON, run_planner
@@ -315,7 +315,7 @@ def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_retu
             run_planner(state)
 
     assert len(repo.llm_calls) == 1
-    assert state.node_states.evaluator.goal_reached is True
+    assert state.node_states.evaluator.evaluation_status == EVALUATION_STATUS_TERMINAL
     assert state.node_states.planner.plan is not None
     assert state.node_states.planner.plan.steps == []
     payload = _latest_event_payload(repo, event_type='plan', agent_name='main_agent')
@@ -413,7 +413,7 @@ def test_llm_client_records_tool_calling_and_image_caption_usage() -> None:
     assert all(isinstance(call['metadata']['latency_ms'], int) for call in repo.llm_calls)
 
 
-def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
+def test_run_evaluator_records_llm_usage_and_preserves_missing_information_for_replanning() -> None:
     repo = RecordingRepo()
     state = AgentState.new(
         task='Find current pricing for shortlisted products.',
@@ -422,7 +422,7 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["25a4bcc1-2b18-5a36-940c-29c535bae654"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"], "refined_goal": "Find current Canadian pricing and availability for the two shortlisted products."}', 'gpt-5.6-terra'),
+        llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["25a4bcc1-2b18-5a36-940c-29c535bae654"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"]}', 'gpt-5.6-terra'),
         agent_profile=MAIN_AGENT_PROFILE,
     )
     _set_agent_tool_results(
@@ -466,7 +466,11 @@ def test_run_evaluator_records_llm_usage_and_refines_goal() -> None:
     assert repo.llm_calls[0]['model'] == 'gpt-5.6-terra'
     assert PromptSectionKeys.EVIDENCE in repo.llm_calls[0]['metadata']['input_object']['sections_raw']
     assert state.node_states.evaluator.evaluation_status == EVALUATION_STATUS_RETRYABLE
-    assert state.inputs.task == 'Find current Canadian pricing and availability for the two shortlisted products.'
+    assert state.inputs.task == 'Find current pricing for shortlisted products.'
+    assert state.node_states.evaluator.missing_information == [
+        'Need current pricing for the top two products',
+        'Need shipping availability in Canada',
+    ]
     payload = _latest_event_payload(repo, event_type='evaluator', agent_name='main_agent')
     assert payload['data']['llm_usage']['model'] == 'gpt-5.6-terra'
     assert isinstance(payload['data']['llm_usage']['latency_ms'], int)

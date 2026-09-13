@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from request_orchestrator.models.evaluation_result import (
     EvaluationStatus,
@@ -12,4 +12,4 @@ from request_orchestrator.models.evaluation_result import (
 class EvaluatorNodeState:
     node_name: str = "evaluator"
     evaluation_status: EvaluationStatus = EVALUATION_STATUS_RETRYABLE
-    goal_reached: bool = False
+    missing_information: list[str] = field(default_factory=list)

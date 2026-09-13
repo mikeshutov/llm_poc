@@ -10,7 +10,6 @@ def evaluator_router(state: AgentState) -> str:
     evaluator_state = state.node_states.evaluator
     if (
         evaluator_state.evaluation_status in TERMINAL_EVALUATION_STATUSES
-        or evaluator_state.goal_reached
         or planner_state.plan_count >= state.max_turns
     ):
         return SYNTHESIZE_EDGE
