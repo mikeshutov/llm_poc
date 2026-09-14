@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 from common.html_text import html_to_plain_text, normalize_html_values
+from common.data import prune_empty_prompt_values
 
 
 class EvidenceUrlType(StrEnum):
@@ -40,7 +41,7 @@ class HydratedEvidenceView(CompactEvidenceView):
 class EvaluatorEvidenceView(BaseModel):
     evidence_id: UUID
     summary: str = ""
-    present_data: list[str] = Field(default_factory=list)
+    present_data: dict[str, Any] = Field(default_factory=dict)
 
 
 class EvidenceView(BaseModel):
@@ -118,13 +119,14 @@ class EvidenceView(BaseModel):
             "entity_type": self.entity_type,
             "location_name": self.location_name,
         }
+        present_data = prune_empty_prompt_values({
+            **hydrated_data,
+            "metadata": self.llm_metadata,
+        })
         return EvaluatorEvidenceView(
             evidence_id=self.id,
             summary=self.summary,
-            present_data=[
-                *[field_name for field_name, value in hydrated_data.items() if value],
-                *sorted(self.llm_metadata),
-            ],
+            present_data=present_data,
         ).model_dump(mode="json")
 
 
