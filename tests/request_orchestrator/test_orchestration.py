@@ -27,7 +27,7 @@ if 'pycountry' not in sys.modules:
 from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
-from request_orchestrator.agents.models.user_agent import UserAgent
+from request_orchestrator.agents.models.agent import Agent
 from request_orchestrator.orchestrator import run_agent
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_prompt import AgentPrompt, EvidenceStep, PromptSectionKeys
@@ -89,15 +89,15 @@ class InMemoryConversationEventRepo:
 
 
 class FakeUserAgentRepository:
-    def __init__(self, agents: list[UserAgent] | None = None) -> None:
+    def __init__(self, agents: list[Agent] | None = None) -> None:
         self.agents = list(agents or [])
 
-    def list_for_user(self, user_id: str, *, is_active: bool | None = True) -> list[UserAgent]:
+    def list_for_user(self, user_id: str, *, is_active: bool | None = True) -> list[Agent]:
         if is_active is None:
             return list(self.agents)
         return [agent for agent in self.agents if agent.is_active == is_active]
 
-    def list_relevant_for_user(self, user_id: str, *, query_embedding: list[float]) -> list[UserAgent]:
+    def list_relevant_for_user(self, user_id: str, *, query_embedding: list[float]) -> list[Agent]:
         return self.list_for_user(user_id)
 
 
@@ -130,7 +130,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
             stack.enter_context(patch('common.logging.conversation_event_view.get_conversation_repo', return_value=repo))
             stack.enter_context(
                 patch(
-                    'request_orchestrator.shared.agents.load_user_agents.get_user_agent_repo',
+                    'request_orchestrator.shared.agents.load_agents.get_agent_repo',
                     return_value=FakeUserAgentRepository(),
                 )
             )
@@ -317,7 +317,7 @@ class MainAgentOrchestrationTest(unittest.TestCase):
 
     def test_loaded_user_agent_is_exposed_to_request_analysis(self) -> None:
         user_profile = UserProfile(user_id="test-user")
-        custom_agent = UserAgent.model_validate(
+        custom_agent = Agent.model_validate(
             {
                 "id": str(uuid4()),
                 "user_id": "test-user",
@@ -342,15 +342,15 @@ class MainAgentOrchestrationTest(unittest.TestCase):
         )
 
         with patch(
-            "request_orchestrator.shared.agents.load_user_agents.get_user_agent_repo",
+            "request_orchestrator.shared.agents.load_agents.get_agent_repo",
             return_value=FakeUserAgentRepository([custom_agent]),
         ), patch(
-            "request_orchestrator.shared.agents.load_user_agents.embed_text",
+            "request_orchestrator.shared.agents.load_agents.embed_text",
             return_value=[0.1] * 1536,
         ):
-            from request_orchestrator.shared.agents import load_user_agents
+            from request_orchestrator.shared.agents import load_agents
 
-            load_user_agents(state)
+            load_agents(state)
 
         prompt_text = build_request_analysis_prompt(state).build()
 

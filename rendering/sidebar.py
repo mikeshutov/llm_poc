@@ -19,8 +19,8 @@ from jobs.service import generate_job_plan
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 from request_orchestrator.agent_runner.models.agent_profile import AgentExecutionStrategy
-from request_orchestrator.agents.models.user_agent import UserAgentModelConfig
-from request_orchestrator.agents.repository.repo_factory import get_user_agent_repo
+from request_orchestrator.agents.models.agent import AgentModelConfig
+from request_orchestrator.agents.repository.repo_factory import get_agent_repo
 from rendering.feedback import clear_feedback_state
 from rendering.replay import clear_replay_state
 from rendering.sources import clear_sources_panel
@@ -217,9 +217,9 @@ def _build_user_agent_model_config_inputs(
     *,
     widget_key_prefix: str,
     execution_strategy: AgentExecutionStrategy,
-) -> list[UserAgentModelConfig]:
+) -> list[AgentModelConfig]:
     provider_options = ConversationModelConfig.model_names_by_provider()
-    model_configs: list[UserAgentModelConfig] = []
+    model_configs: list[AgentModelConfig] = []
     for stage in execution_strategy.required_model_stages():
         provider_key = f"{widget_key_prefix}::{stage}::provider"
         model_key = f"{widget_key_prefix}::{stage}::model"
@@ -253,7 +253,7 @@ def _build_user_agent_model_config_inputs(
                 key=model_key,
             )
         model_configs.append(
-            UserAgentModelConfig(
+            AgentModelConfig(
                 stage=stage,
                 provider=selected_provider,
                 model=selected_model,
@@ -620,7 +620,7 @@ def render_profile_details_dialog(conversation_repository, user_id: str) -> None
 
 @st.dialog("User Agents", width="large")
 def render_user_agents_dialog(user_id: str) -> None:
-    user_agent_repository = get_user_agent_repo()
+    user_agent_repository = get_agent_repo()
     user_agents = user_agent_repository.list_for_user(user_id, is_active=None)
     create_mode = bool(st.session_state.get(USER_AGENTS_CREATE_MODE_KEY, False))
     edit_agent_id = str(st.session_state.get(USER_AGENTS_EDIT_AGENT_ID_KEY, "")).strip()
