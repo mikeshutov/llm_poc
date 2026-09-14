@@ -23,7 +23,8 @@ class Job(BaseModel):
     user_id: str
     name: str
     prompt: str
-    plan: Plan
+    current_plan_id: UUID | None = None
+    plan: Plan | None = None
     plan_version: int = Field(ge=1)
     plan_generated_at: datetime
     plan_status: JobPlanStatus = JobPlanStatus.READY

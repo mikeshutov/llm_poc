@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
+from hashlib import sha256
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
@@ -10,6 +13,9 @@ from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, Conve
 from conversation.constants import SOURCE_STREAMLIT
 from conversation.models.conversation_models import ConversationMetadata
 from conversation.models.replay_models import PreparedReplayConversation
+from jobs.models import JobSchedule
+from jobs.repository.repo_factory import get_job_repo
+from jobs.service import generate_job_plan
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 from request_orchestrator.agent_runner.models.agent_profile import AgentExecutionStrategy
@@ -33,6 +39,9 @@ PROFILE_EDIT_MODE_KEY = "profile_details_edit_mode"
 USER_AGENTS_DIALOG_KEY = "user_agents_dialog"
 USER_AGENTS_CREATE_MODE_KEY = "user_agents_create_mode"
 USER_AGENTS_EDIT_AGENT_ID_KEY = "user_agents_edit_agent_id"
+JOBS_DIALOG_KEY = "jobs_dialog"
+JOBS_CREATE_MODE_KEY = "jobs_create_mode"
+JOBS_EDIT_JOB_ID_KEY = "jobs_edit_job_id"
 USER_AGENT_STAGE_TITLES = {
     PLANNER_STAGE: "Planner",
     EVALUATOR_STAGE: "Evaluator",
@@ -88,6 +97,21 @@ def request_user_agents_dialog(user_id: str) -> None:
 
 def get_user_agents_dialog_request() -> dict[str, str] | None:
     payload = st.session_state.get(USER_AGENTS_DIALOG_KEY)
+    return payload if isinstance(payload, dict) else None
+
+
+def clear_jobs_dialog() -> None:
+    st.session_state.pop(JOBS_DIALOG_KEY, None)
+    st.session_state.pop(JOBS_CREATE_MODE_KEY, None)
+    st.session_state.pop(JOBS_EDIT_JOB_ID_KEY, None)
+
+
+def request_jobs_dialog(user_id: str) -> None:
+    st.session_state[JOBS_DIALOG_KEY] = {"user_id": user_id}
+
+
+def get_jobs_dialog_request() -> dict[str, str] | None:
+    payload = st.session_state.get(JOBS_DIALOG_KEY)
     return payload if isinstance(payload, dict) else None
 
 
@@ -781,6 +805,199 @@ def render_user_agents_dialog(user_id: str) -> None:
         st.rerun()
 
 
+def _next_execution_at(schedule: JobSchedule, now: datetime) -> datetime:
+    local_now = now.astimezone(ZoneInfo(schedule.timezone))
+    for day_offset in range(8):
+        candidate_date = local_now.date() + timedelta(days=day_offset)
+        if candidate_date.isoweekday() not in schedule.days_of_week:
+            continue
+        candidate = datetime.combine(
+            candidate_date,
+            schedule.run_time,
+            tzinfo=ZoneInfo(schedule.timezone),
+        )
+        if candidate > local_now:
+            return candidate.astimezone(timezone.utc)
+    raise ValueError("unable to calculate the next job execution")
+
+
+@st.dialog("Jobs", width="large")
+def render_jobs_dialog(user_id: str) -> None:
+    job_repository = get_job_repo()
+    jobs = job_repository.list_jobs(user_id, enabled=None)
+    create_mode = bool(st.session_state.get(JOBS_CREATE_MODE_KEY, False))
+    edit_job_id = str(st.session_state.get(JOBS_EDIT_JOB_ID_KEY, "")).strip()
+    edited_job = next((job for job in jobs if str(job.id) == edit_job_id), None)
+    if edit_job_id and edited_job is None:
+        st.session_state.pop(JOBS_EDIT_JOB_ID_KEY, None)
+    form_job = edited_job
+    form_visible = create_mode or form_job is not None
+
+    header_col, action_col = st.columns([4.5, 1.5], vertical_alignment="center")
+    with header_col:
+        st.caption(f"Manage scheduled jobs for `{user_id}`.")
+    with action_col:
+        if st.button(
+            "Create job" if not form_visible else "Hide form",
+            key=f"jobs_toggle_create::{user_id}",
+            use_container_width=True,
+            type="primary" if not form_visible else "secondary",
+        ):
+            st.session_state[JOBS_CREATE_MODE_KEY] = not form_visible
+            st.session_state.pop(JOBS_EDIT_JOB_ID_KEY, None)
+            st.rerun(scope="fragment")
+
+    if form_visible:
+        is_editing = form_job is not None
+        prefix = f"job_edit::{user_id}::{form_job.id}" if is_editing else f"job_create::{user_id}"
+        if not is_editing:
+            st.session_state.setdefault(f"{prefix}::days", [1])
+            st.session_state.setdefault(f"{prefix}::time", time(9, 0))
+            st.session_state.setdefault(f"{prefix}::timezone", "America/Toronto")
+            st.session_state.setdefault(f"{prefix}::enabled", False)
+        st.text_input(
+            "Job name",
+            value=form_job.name if is_editing else "",
+            key=f"{prefix}::name",
+        )
+        st.text_area(
+            "Prompt",
+            value=form_job.prompt if is_editing else "",
+            key=f"{prefix}::prompt",
+            height=140,
+        )
+        day_labels = {
+            1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday",
+            5: "Friday", 6: "Saturday", 7: "Sunday",
+        }
+        selected_days = st.multiselect(
+            "Run on",
+            options=list(day_labels),
+            default=form_job.schedule.days_of_week if is_editing else None,
+            format_func=lambda day: day_labels[day],
+            key=f"{prefix}::days",
+        )
+        selected_time = st.time_input(
+            "Run time",
+            value=form_job.schedule.run_time if is_editing else time(9, 0),
+            key=f"{prefix}::time",
+        )
+        timezone_name = st.text_input(
+            "Timezone",
+            value=form_job.schedule.timezone if is_editing else "America/Toronto",
+            key=f"{prefix}::timezone",
+            help="Use an IANA timezone such as America/Toronto.",
+        )
+        enabled = st.checkbox(
+            "Enabled",
+            value=form_job.enabled if is_editing else False,
+            key=f"{prefix}::enabled",
+        )
+        if not is_editing:
+            st.caption("New jobs are created as drafts until a plan is generated.")
+
+        save_col, cancel_col = st.columns(2)
+        with save_col:
+            save_job = st.button("Save job", type="primary", use_container_width=True)
+        with cancel_col:
+            cancel_job = st.button("Cancel", use_container_width=True)
+
+        if save_job:
+            try:
+                schedule = JobSchedule(
+                    days_of_week=selected_days,
+                    run_time=selected_time,
+                    timezone=timezone_name,
+                )
+                next_execution_at = _next_execution_at(schedule, datetime.now(timezone.utc))
+                if is_editing:
+                    requested_prompt = st.session_state[f"{prefix}::prompt"].strip()
+                    prompt_changed = sha256(requested_prompt.encode("utf-8")).hexdigest() != form_job.plan_prompt_hash
+                    needs_generation = prompt_changed or form_job.plan_status.value != "ready" or form_job.current_plan_id is None
+                    updated_job = job_repository.update_job(
+                        form_job.id,
+                        user_id=user_id,
+                        name=st.session_state[f"{prefix}::name"],
+                        prompt=requested_prompt,
+                        schedule=schedule,
+                        next_execution_at=next_execution_at,
+                        enabled=False if needs_generation else enabled,
+                    )
+                    if updated_job is None:
+                        raise ValueError("job not found")
+                    if needs_generation:
+                        generated_plan, generation_error = generate_job_plan(job_id=form_job.id, user_id=user_id)
+                        if generated_plan is None:
+                            st.error(f"Plan generation failed: {generation_error}")
+                            return
+                        if enabled:
+                            job_repository.toggle_enabled(form_job.id, user_id=user_id)
+                else:
+                    created_job = job_repository.create_job(
+                        user_id=user_id,
+                        name=st.session_state[f"{prefix}::name"],
+                        prompt=st.session_state[f"{prefix}::prompt"],
+                        schedule=schedule,
+                        next_execution_at=next_execution_at,
+                        enabled=False,
+                    )
+                    generated_plan, generation_error = generate_job_plan(job_id=created_job.id, user_id=user_id)
+                    if generated_plan is None:
+                        st.error(f"Plan generation failed: {generation_error}")
+                        return
+                    if enabled:
+                        job_repository.toggle_enabled(created_job.id, user_id=user_id)
+                st.session_state[JOBS_CREATE_MODE_KEY] = False
+                st.session_state.pop(JOBS_EDIT_JOB_ID_KEY, None)
+                st.rerun(scope="fragment")
+            except (ValueError, TypeError) as exc:
+                st.error(str(exc))
+        if cancel_job:
+            st.session_state[JOBS_CREATE_MODE_KEY] = False
+            st.session_state.pop(JOBS_EDIT_JOB_ID_KEY, None)
+            st.rerun(scope="fragment")
+
+    if not jobs:
+        st.info("No jobs yet.")
+    else:
+        for job in jobs:
+            with st.container(border=True):
+                title_col, status_col, edit_col, regenerate_col, action_col = st.columns(
+                    [3.0, 1.5, 1.0, 1.5, 1.5], vertical_alignment="center"
+                )
+                with title_col:
+                    st.markdown(f"**{job.name}**")
+                    st.caption(f"Next: {job.next_execution_at.astimezone().strftime('%Y-%m-%d %H:%M %Z')}")
+                with status_col:
+                    st.caption(f"{'Enabled' if job.enabled else 'Disabled'} · Plan {job.plan_status.value}")
+                with edit_col:
+                    if st.button("Edit", key=f"edit_job::{user_id}::{job.id}", use_container_width=True):
+                        st.session_state[JOBS_CREATE_MODE_KEY] = False
+                        st.session_state[JOBS_EDIT_JOB_ID_KEY] = str(job.id)
+                        st.rerun(scope="fragment")
+                with regenerate_col:
+                    if st.button("Regenerate", key=f"regenerate_job::{user_id}::{job.id}", use_container_width=True):
+                        with st.spinner("Generating plan..."):
+                            generated_plan, generation_error = generate_job_plan(job_id=job.id, user_id=user_id)
+                        if generated_plan is not None:
+                            st.success("Plan regenerated.")
+                            st.rerun(scope="fragment")
+                        else:
+                            st.error(f"Plan generation failed: {generation_error}")
+                with action_col:
+                    action = "Disable" if job.enabled else "Enable"
+                    if st.button(action, key=f"toggle_job::{user_id}::{job.id}", use_container_width=True):
+                        try:
+                            job_repository.toggle_enabled(job.id, user_id=user_id)
+                            st.rerun(scope="fragment")
+                        except ValueError as exc:
+                            st.error(str(exc))
+
+    if st.button("Close", key=f"close_jobs_dialog::{user_id}", use_container_width=True):
+        clear_jobs_dialog()
+        st.rerun(scope="fragment")
+
+
 def render_sidebar(conversation_repository) -> None:
     st.title("LLM Agentic Chat")
 
@@ -819,6 +1036,10 @@ def render_sidebar(conversation_repository) -> None:
 
     if st.button("View User Agents", use_container_width=True):
         request_user_agents_dialog(user_id=selected_user_id)
+        st.rerun()
+
+    if st.button("View Jobs", use_container_width=True):
+        request_jobs_dialog(user_id=selected_user_id)
         st.rerun()
 
     if st.session_state.get(USER_CREATE_FORM_KEY, False):
@@ -945,3 +1166,7 @@ def render_sidebar(conversation_repository) -> None:
     user_agents_dialog_request = get_user_agents_dialog_request()
     if user_agents_dialog_request:
         render_user_agents_dialog(user_agents_dialog_request["user_id"])
+
+    jobs_dialog_request = get_jobs_dialog_request()
+    if jobs_dialog_request:
+        render_jobs_dialog(jobs_dialog_request["user_id"])

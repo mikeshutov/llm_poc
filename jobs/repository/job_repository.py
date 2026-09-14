@@ -7,11 +7,11 @@ from uuid import UUID
 
 import psycopg
 from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
 
 from db.connection import get_connection
 from jobs.models import Job, JobPlanStatus, JobRun, JobRunStatus, JobSchedule
 from request_orchestrator.models.plan import Plan
+from tool.repository.plan_repository import PlanRepository
 
 
 class JobRepository:
@@ -26,8 +26,29 @@ class JobRepository:
             run_time=payload.pop("run_time"),
             timezone=payload.pop("timezone"),
         )
-        payload["plan"] = Plan.model_validate(payload["plan"])
+        if payload.get("plan") is not None:
+            payload["plan"] = Plan.model_validate(payload["plan"])
         return Job.model_validate(payload)
+
+    @staticmethod
+    def _job_columns() -> str:
+        return """jobs.id, jobs.user_id, jobs.name, jobs.prompt, jobs.current_plan_id,
+                       COALESCE(plans.version, 1) AS plan_version,
+                       COALESCE(plans.created_at, jobs.created_at) AS plan_generated_at,
+                       jobs.plan_status, jobs.plan_prompt_hash,
+                       jobs.enabled, jobs.days_of_week, jobs.run_time,
+                       jobs.timezone, jobs.next_execution_at,
+                       jobs.created_at, jobs.updated_at"""
+
+    def _get_job_row(self, cur, job_id: UUID, user_id: str) -> dict[str, Any] | None:
+        cur.execute(
+            f"""SELECT {self._job_columns()}
+                FROM jobs
+                LEFT JOIN plans ON plans.id = jobs.current_plan_id
+                WHERE jobs.id = %s AND jobs.user_id = %s""",
+            (job_id, user_id),
+        )
+        return cur.fetchone()
 
     @staticmethod
     def _run_from_row(row: dict[str, Any]) -> JobRun:
@@ -50,45 +71,36 @@ class JobRepository:
         user_id: str,
         name: str,
         prompt: str,
-        plan: Plan,
         schedule: JobSchedule,
         next_execution_at: datetime,
         enabled: bool = False,
-        plan_version: int = 1,
     ) -> Job:
         resolved_user_id = self._require_user_id(user_id)
         if not name.strip():
             raise ValueError("name is required")
         if not prompt.strip():
             raise ValueError("prompt is required")
-        if plan_version < 1:
-            raise ValueError("plan_version must be positive")
-        if enabled and not plan.steps:
+        if enabled:
             raise ValueError("cannot enable a job without a valid plan")
 
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 INSERT INTO jobs (
-                    user_id, name, prompt, plan, plan_version, plan_generated_at,
+                    user_id, name, prompt,
                     plan_status, plan_prompt_hash, enabled, days_of_week, run_time, timezone,
                     next_execution_at
                 )
-                VALUES (%s, %s, %s, %s, %s, now(), %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, user_id, name, prompt, plan, plan_version,
-                          plan_generated_at, plan_status, plan_prompt_hash,
-                          enabled, days_of_week, run_time,
-                          timezone, next_execution_at, created_at, updated_at
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
                 """,
                 (
                     resolved_user_id,
                     name.strip(),
                     prompt.strip(),
-                    Jsonb(plan.model_dump(mode="json")),
-                    plan_version,
-                    JobPlanStatus.READY.value if plan.steps else JobPlanStatus.FAILED.value,
+                    JobPlanStatus.FAILED.value,
                     self._prompt_hash(prompt.strip()),
-                    enabled,
+                    False,
                     schedule.days_of_week,
                     schedule.run_time,
                     schedule.timezone,
@@ -97,34 +109,20 @@ class JobRepository:
             )
             row = cur.fetchone()
             assert row is not None
-            return self._job_from_row(row)
+            job_id = row["id"]
+            job_row = self._get_job_row(cur, job_id, resolved_user_id)
+            assert job_row is not None
+            return self._job_from_row(job_row)
 
     def get_job(self, job_id: UUID, *, user_id: str) -> Job | None:
         resolved_user_id = self._require_user_id(user_id)
         with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT id, user_id, name, prompt, plan, plan_version,
-                       plan_generated_at, plan_status, plan_prompt_hash,
-                       enabled, days_of_week, run_time,
-                       timezone, next_execution_at, created_at, updated_at
-                FROM jobs
-                WHERE id = %s AND user_id = %s
-                """,
-                (job_id, resolved_user_id),
-            )
-            row = cur.fetchone()
+            row = self._get_job_row(cur, job_id, resolved_user_id)
             return self._job_from_row(row) if row else None
 
     def list_jobs(self, user_id: str, *, enabled: bool | None = None) -> list[Job]:
         resolved_user_id = self._require_user_id(user_id)
-        sql = """
-            SELECT id, user_id, name, prompt, plan, plan_version,
-                   plan_generated_at, plan_status, plan_prompt_hash,
-                   enabled, days_of_week, run_time,
-                   timezone, next_execution_at, created_at, updated_at
-            FROM jobs WHERE user_id = %s
-        """
+        sql = f"SELECT {self._job_columns()} FROM jobs LEFT JOIN plans ON plans.id = jobs.current_plan_id WHERE jobs.user_id = %s"
         params: list[Any] = [resolved_user_id]
         if enabled is not None:
             sql += " AND enabled = %s"
@@ -139,16 +137,15 @@ class JobRepository:
         if now.tzinfo is None:
             raise ValueError("now must be timezone-aware")
         with self._conn.cursor(row_factory=dict_row) as cur:
+            columns = self._job_columns()
             cur.execute(
-                """
-                SELECT id, user_id, name, prompt, plan, plan_version,
-                       plan_generated_at, plan_status, plan_prompt_hash,
-                       enabled, days_of_week, run_time, timezone,
-                       next_execution_at, created_at, updated_at
+                f"""
+                SELECT {columns}
                 FROM jobs
-                WHERE enabled = TRUE
-                  AND plan_status = 'ready'
-                  AND next_execution_at <= %s
+                LEFT JOIN plans ON plans.id = jobs.current_plan_id
+                WHERE jobs.enabled = TRUE
+                  AND jobs.plan_status = 'ready'
+                  AND jobs.next_execution_at <= %s
                 ORDER BY next_execution_at ASC, id ASC
                 """,
                 (now,),
@@ -177,7 +174,7 @@ class JobRepository:
         if enabled and (
             prompt_changed
             or current_job.plan_status != JobPlanStatus.READY
-            or not current_job.plan.steps
+            or current_job.current_plan_id is None
         ):
             raise ValueError("cannot enable a job until its plan is regenerated")
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -190,16 +187,13 @@ class JobRepository:
                     next_execution_at = %s,
                     updated_at = now()
                 WHERE id = %s AND user_id = %s
-                RETURNING id, user_id, name, prompt, plan, plan_version,
-                          plan_generated_at, plan_status, plan_prompt_hash,
-                          enabled, days_of_week, run_time,
-                          timezone, next_execution_at, created_at, updated_at
+                RETURNING id
                 """,
                 (name.strip(), resolved_prompt, enabled, prompt_changed, schedule.days_of_week,
                  schedule.run_time, schedule.timezone, next_execution_at, job_id, resolved_user_id),
             )
             row = cur.fetchone()
-            return self._job_from_row(row) if row else None
+            return self.get_job(job_id, user_id=resolved_user_id) if row else None
 
     def replace_plan(self, job_id: UUID, *, user_id: str, plan: Plan) -> Job | None:
         resolved_user_id = self._require_user_id(user_id)
@@ -208,41 +202,61 @@ class JobRepository:
         current_job = self.get_job(job_id, user_id=resolved_user_id)
         if current_job is None:
             return None
+        next_version = current_job.plan_version if current_job.current_plan_id is None else current_job.plan_version + 1
+        prompt_hash = self._prompt_hash(current_job.prompt)
+        plan_id = PlanRepository(self._conn).save_job_plan(
+            job_id=job_id,
+            user_id=resolved_user_id,
+            plan=plan,
+            version=next_version,
+            prompt_hash=prompt_hash,
+        )
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE jobs
+                SET current_plan_id = %s, plan_status = 'ready',
+                    plan_prompt_hash = %s, updated_at = now()
+                WHERE id = %s AND user_id = %s
+                """,
+                (plan_id, prompt_hash, job_id, resolved_user_id),
+            )
+        return self.get_job(job_id, user_id=resolved_user_id)
+
+    def toggle_enabled(self, job_id: UUID, *, user_id: str) -> bool:
+        """Toggle an owned job, rejecting the transition when its plan is invalid."""
+        resolved_user_id = self._require_user_id(user_id)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 UPDATE jobs
-                SET plan = %s, plan_version = plan_version + 1,
-                    plan_status = 'ready', plan_prompt_hash = %s,
-                    plan_generated_at = now(), updated_at = now()
-                WHERE id = %s AND user_id = %s
-                RETURNING id, user_id, name, prompt, plan, plan_version,
-                          plan_generated_at, plan_status, plan_prompt_hash,
-                          enabled, days_of_week, run_time,
-                          timezone, next_execution_at, created_at, updated_at
+                SET enabled = NOT enabled, updated_at = now()
+                WHERE id = %s
+                  AND user_id = %s
+                  AND (
+                      enabled = TRUE
+                      OR (
+                          plan_status = 'ready'
+                          AND current_plan_id IS NOT NULL
+                          AND EXISTS (
+                              SELECT 1 FROM plans
+                              WHERE plans.id = jobs.current_plan_id
+                                AND jsonb_typeof(plans.steps) = 'array'
+                                AND jsonb_array_length(plans.steps) > 0
+                          )
+                      )
+                  )
+                RETURNING enabled
                 """,
-                (Jsonb(plan.model_dump(mode="json")), self._prompt_hash(current_job.prompt), job_id, resolved_user_id),
+                (job_id, resolved_user_id),
             )
             row = cur.fetchone()
-            return self._job_from_row(row) if row else None
-
-    def set_enabled(self, job_id: UUID, *, user_id: str, enabled: bool) -> bool:
-        resolved_user_id = self._require_user_id(user_id)
-        current_job = self.get_job(job_id, user_id=resolved_user_id)
-        if current_job is None:
-            return False
-        if enabled and (
-            current_job.plan_status != JobPlanStatus.READY
-            or not current_job.plan.steps
-            or current_job.plan_prompt_hash != self._prompt_hash(current_job.prompt)
-        ):
+            if row is not None:
+                return row["enabled"]
+            cur.execute("SELECT 1 FROM jobs WHERE id = %s AND user_id = %s", (job_id, resolved_user_id))
+            if cur.fetchone() is None:
+                return False
             raise ValueError("cannot enable a job until its plan is regenerated")
-        with self._conn.cursor() as cur:
-            cur.execute(
-                "UPDATE jobs SET enabled = %s, updated_at = now() WHERE id = %s AND user_id = %s",
-                (enabled, job_id, resolved_user_id),
-            )
-            return cur.rowcount > 0
 
     def _create_job_run(
         self,
