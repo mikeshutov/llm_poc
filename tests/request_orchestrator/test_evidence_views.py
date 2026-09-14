@@ -100,16 +100,15 @@ def test_agent_prompt_serializes_evaluator_evidence_view() -> None:
         {
             "evidence_id": str(evidence.id),
             "summary": "A product with current pricing.",
-            "present_data": [
-                "title",
-                "summary",
-                "urls",
-                "image_url",
-                "source",
-                "entity_type",
-                "currency",
-                "price",
-            ],
+            "present_data": {
+                "title": "Product",
+                "summary": "A product with current pricing.",
+                "urls": [{"url": "https://example.com", "url_type": "website"}],
+                "image_url": "https://example.com/image.jpg",
+                "source": "catalog",
+                "entity_type": "product_results",
+                "metadata": {"price": 25.0, "currency": "CAD"},
+            },
         }
     ]
 
