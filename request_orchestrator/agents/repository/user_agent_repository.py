@@ -10,12 +10,12 @@ from psycopg.types.json import Jsonb
 from db.connection import get_connection
 from llm.clients.embeddings import embed_text
 from request_orchestrator.agent_runner.models.agent_profile import AgentExecutionStrategy
-from request_orchestrator.agents.models.user_agent import UserAgent, UserAgentModelConfig
+from request_orchestrator.agents.models.agent import Agent, AgentModelConfig, AgentType
 
 MIN_AGENT_SIMILARITY = 0.35
 
 
-class UserAgentRepository:
+class AgentRepository:
     def __init__(self, conn: psycopg.Connection | None = None):
         self._conn = conn or get_connection()
         register_vector(self._conn)
@@ -28,7 +28,7 @@ class UserAgentRepository:
                 normalized[field_name] = field_value.isoformat()
         return normalized
 
-    def _list_model_configs_by_agent_id(self, agent_ids: list[Any]) -> dict[Any, list[UserAgentModelConfig]]:
+    def _list_model_configs_by_agent_id(self, agent_ids: list[Any]) -> dict[Any, list[AgentModelConfig]]:
         if not agent_ids:
             return {}
 
@@ -36,22 +36,22 @@ class UserAgentRepository:
             cur.execute(
                 """
                 SELECT
-                    user_agent_id,
+                    agent_id,
                     stage,
                     provider,
                     model
-                FROM user_agent_model_config
-                WHERE user_agent_id = ANY(%s)
+                FROM agent_model_config
+                WHERE agent_id = ANY(%s)
                 ORDER BY stage ASC
                 """,
                 (agent_ids,),
             )
             rows = cur.fetchall()
 
-        grouped: dict[Any, list[UserAgentModelConfig]] = {}
+        grouped: dict[Any, list[AgentModelConfig]] = {}
         for row in rows:
-            grouped.setdefault(row["user_agent_id"], []).append(
-                UserAgentModelConfig(
+            grouped.setdefault(row["agent_id"], []).append(
+                AgentModelConfig(
                     stage=row["stage"],
                     provider=row["provider"],
                     model=row["model"],
@@ -59,7 +59,8 @@ class UserAgentRepository:
             )
         return grouped
 
-    def list_for_user(self, user_id: str, *, is_active: bool | None = True) -> list[UserAgent]:
+    def list_for_user(self, user_id: str, *, is_active: bool | None = True) -> list[Agent]:
+        # for now the list call only cares about the users agents post refactor we will load all via this
         resolved_user_id = user_id.strip()
         if not resolved_user_id:
             return []
@@ -67,6 +68,7 @@ class UserAgentRepository:
         sql = """
             SELECT
                 id,
+                agent_type,
                 user_id,
                 name,
                 description,
@@ -79,8 +81,8 @@ class UserAgentRepository:
                 metadata,
                 created_at,
                 updated_at
-            FROM user_agent
-            WHERE user_id = %s
+            FROM agents
+            WHERE agent_type = 'user' AND user_id = %s
         """
         params: list[Any] = [resolved_user_id]
         if is_active is not None:
@@ -93,7 +95,7 @@ class UserAgentRepository:
             rows = cur.fetchall()
         model_configs_by_agent_id = self._list_model_configs_by_agent_id([row["id"] for row in rows])
         return [
-            UserAgent(
+            Agent(
                 **self._normalize_row(row),
                 model_configs=model_configs_by_agent_id.get(row["id"], []),
             )
@@ -105,7 +107,7 @@ class UserAgentRepository:
         user_id: str,
         *,
         query_embedding: list[float],
-    ) -> list[UserAgent]:
+    ) -> list[Agent]:
         resolved_user_id = user_id.strip()
         if not resolved_user_id:
             return []
@@ -113,6 +115,7 @@ class UserAgentRepository:
         sql = """
             SELECT
                 id,
+                agent_type,
                 user_id,
                 name,
                 description,
@@ -125,8 +128,8 @@ class UserAgentRepository:
                 metadata,
                 created_at,
                 updated_at
-            FROM user_agent
-            WHERE user_id = %s
+            FROM agents
+            WHERE agent_type = 'user' AND user_id = %s
               AND is_active = TRUE
               AND description_embedding IS NOT NULL
               AND description_embedding <=> (%s)::vector <= 1 - %s
@@ -145,7 +148,7 @@ class UserAgentRepository:
             rows = cur.fetchall()
         model_configs_by_agent_id = self._list_model_configs_by_agent_id([row["id"] for row in rows])
         return [
-            UserAgent(
+            Agent(
                 **self._normalize_row(row),
                 model_configs=model_configs_by_agent_id.get(row["id"], []),
             )
@@ -164,9 +167,9 @@ class UserAgentRepository:
         planner_rules: str = "",
         max_turns: int = 10,
         is_active: bool = True,
-        model_configs: list[UserAgentModelConfig] | None = None,
+        model_configs: list[AgentModelConfig] | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> UserAgent:
+    ) -> Agent:
         resolved_user_id = user_id.strip()
         resolved_name = name.strip()
         if not resolved_user_id:
@@ -180,7 +183,7 @@ class UserAgentRepository:
         resolved_description = description.strip()
         description_embedding = embed_text(resolved_description) if resolved_description else None
         resolved_model_configs = [] if model_configs is None else [
-            UserAgentModelConfig(
+            AgentModelConfig(
                 stage=config.stage.strip(),
                 provider=config.provider.strip(),
                 model=config.model.strip(),
@@ -198,7 +201,8 @@ class UserAgentRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO user_agent (
+                INSERT INTO agents (
+                    agent_type,
                     user_id,
                     name,
                     description,
@@ -211,8 +215,8 @@ class UserAgentRepository:
                     is_active,
                     metadata
                 )
-                VALUES (%s, %s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (user_id, name)
+                VALUES (%s, %s, %s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, name) WHERE agent_type = 'user'
                 DO UPDATE SET
                     description = EXCLUDED.description,
                     description_embedding = EXCLUDED.description_embedding,
@@ -226,6 +230,7 @@ class UserAgentRepository:
                     updated_at = now()
                 RETURNING
                     id,
+                    agent_type,
                     user_id,
                     name,
                     description,
@@ -241,6 +246,7 @@ class UserAgentRepository:
                     updated_at
                 """,
                 (
+                    AgentType.USER.value,
                     resolved_user_id,
                     resolved_name,
                     resolved_description,
@@ -258,16 +264,16 @@ class UserAgentRepository:
             assert row is not None
             cur.execute(
                 """
-                DELETE FROM user_agent_model_config
-                WHERE user_agent_id = %s
+                DELETE FROM agent_model_config
+                WHERE agent_id = %s
                 """,
                 (row["id"],),
             )
             if resolved_model_configs:
                 cur.executemany(
                     """
-                    INSERT INTO user_agent_model_config (
-                        user_agent_id,
+                    INSERT INTO agent_model_config (
+                        agent_id,
                         stage,
                         provider,
                         model
@@ -284,7 +290,7 @@ class UserAgentRepository:
                         for config in resolved_model_configs
                     ],
                 )
-            return UserAgent(
+            return Agent(
                 **self._normalize_row(row),
                 model_configs=resolved_model_configs,
             )
@@ -300,10 +306,10 @@ class UserAgentRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                UPDATE user_agent
+                UPDATE agents
                 SET is_active = %s,
                     updated_at = now()
-                WHERE user_id = %s
+                WHERE agent_type = 'user' AND user_id = %s
                   AND name = %s
                 """,
                 (is_active, resolved_user_id, resolved_name),
