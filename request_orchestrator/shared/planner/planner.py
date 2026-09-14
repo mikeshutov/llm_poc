@@ -28,7 +28,7 @@ def _serialize_llm_call_for_log(llm_call) -> dict | None:
     return serialize_llm_call_record(llm_call)
 
 
-def _invoke_planner(
+def invoke_planner(
     agent_state: AgentState,
     prompt_text: str,
     *,
@@ -87,7 +87,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
     planning_result: PlanningResult
 
     try:
-        planning_result, llm_call = _invoke_planner(
+        planning_result, llm_call = invoke_planner(
             agent_state,
             prompt_text,
             prompt_input_object=prompt_input_object,
@@ -110,7 +110,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
     plan = Plan(steps=planning_result.steps)
 
     if agent_state.execution_context.roundtrip_id:
-        plan.db_id = PlanRepository().save_plan(agent_state.execution_context.roundtrip_id, plan)
+        plan.db_id = PlanRepository().save_interactive_plan(agent_state.execution_context.roundtrip_id, plan)
 
     agent_state.begin_plan(
         plan,
