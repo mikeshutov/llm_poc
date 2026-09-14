@@ -14,6 +14,11 @@ class PlanStatus(str, Enum):
     FAILED = "failed"
 
 
+class PlanKind(str, Enum):
+    INTERACTIVE = "interactive"
+    JOB = "job"
+
+
 class PlanningResultStatus(str, Enum):
     READY = "ready"
     BLOCKED = "blocked"

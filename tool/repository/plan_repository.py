@@ -7,7 +7,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from db.connection import get_connection
-from request_orchestrator.models.plan import Plan, PlanStatus
+from request_orchestrator.models.plan import Plan, PlanKind, PlanStatus
 
 
 class PlanRepository:
@@ -23,12 +23,12 @@ class PlanRepository:
         job_id: UUID | None = None,
         version: int = 1,
         prompt_hash: str | None = None,
-        plan_kind: str = "interactive",
+        plan_kind: PlanKind = PlanKind.INTERACTIVE,
     ) -> UUID:
         """Store one plan snapshot for either an interactive roundtrip or a job."""
         if (roundtrip_id is None) == (job_id is None):
             raise ValueError("exactly one of roundtrip_id or job_id is required")
-        if plan_kind not in {"interactive", "job"}:
+        if not isinstance(plan_kind, PlanKind):
             raise ValueError("unsupported plan kind")
         if version < 1:
             raise ValueError("version must be positive")
@@ -55,13 +55,17 @@ class PlanRepository:
                     plan.status.value,
                     version,
                     prompt_hash,
-                    plan_kind,
+                    plan_kind.value,
                 ),
             )
             return cur.fetchone()["id"]
 
     def save_interactive_plan(self, roundtrip_id: UUID, plan: Plan) -> UUID:
-        return self.save_plan(plan=plan, roundtrip_id=roundtrip_id)
+        return self.save_plan(
+            plan=plan,
+            roundtrip_id=roundtrip_id,
+            plan_kind=PlanKind.INTERACTIVE,
+        )
 
     def get_current_job_plan(self, *, job_id: UUID, user_id: str) -> Plan | None:
         """Load the current plan after verifying job ownership."""
@@ -103,7 +107,7 @@ class PlanRepository:
             job_id=job_id,
             version=version,
             prompt_hash=prompt_hash,
-            plan_kind="job",
+            plan_kind=PlanKind.JOB,
         )
 
     def update_status(self, plan_id: UUID, status: PlanStatus, current_step_index: int | None = None) -> None:
