@@ -17,6 +17,7 @@ def create_conversation_event(
     conversation_id: str | None = None,
     roundtrip_id: UUID | str | None = None,
     agent_name: str = "",
+    agent_version: int | None = None,
     node_name: str = "",
     iteration: int | None = None,
     payload: dict[str, Any] | None = None,
@@ -30,6 +31,9 @@ def create_conversation_event(
         resolved_roundtrip_id = get_current_roundtrip_id()
 
     try:
+        resolved_payload = {} if payload is None else dict(payload)
+        if agent_version is not None:
+            resolved_payload["agent_version"] = agent_version
         get_conversation_repo().create_conversation_event(
             conversation_id=UUID(resolved_conversation_id),
             roundtrip_id=(
@@ -42,7 +46,7 @@ def create_conversation_event(
             agent_name=agent_name,
             node_name=node_name,
             iteration=iteration,
-            payload={} if payload is None else dict(payload),
+            payload=resolved_payload,
         )
     except Exception:
         return
@@ -52,6 +56,7 @@ def log_roundtrip_prompt(
     *,
     roundtrip_id: UUID | None,
     agent: str,
+    agent_version: int | None = None,
     prompt_step: str,
     prompt: str,
 ) -> None:
@@ -75,4 +80,5 @@ def log_roundtrip_prompt(
             "prompt_step": prompt_step,
             "prompt": prompt,
         },
+        agent_version=agent_version,
     )

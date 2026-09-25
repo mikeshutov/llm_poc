@@ -26,6 +26,7 @@ class Agent(BaseModel):
     agent_type: AgentType = AgentType.USER
     user_id: str | None = None
     name: str
+    version: int = 1
     description: str = ""
     execution_strategy: AgentExecutionStrategy = AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR
     allowed_categories: list[str] = Field(default_factory=list)
@@ -55,8 +56,9 @@ class Agent(BaseModel):
         return AgentProfile(
             name=self.name,
             scope=MAIN_AGENT_MODEL_SCOPE,
+            version=self.version,
             description=self.description,
-            kind=AgentKind.USER_AGENT,
+            kind=AgentKind.BUILTIN if self.agent_type == AgentType.SYSTEM else AgentKind.USER_AGENT,
             execution_strategy=self.execution_strategy,
             allowed_categories=set(self.allowed_categories),
             stage_model_selections={
