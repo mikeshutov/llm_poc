@@ -1,5 +1,6 @@
 from personalization.profile.models import UserAttributesSection, UserProfile
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
+import pytest
 from reranker import Candidate, DEFAULT_TOP_K, RerankerPrompt, rerank_candidates
 from test_utilities.mock_llm import MockLLM
 from uuid import uuid4
@@ -25,7 +26,7 @@ def test_rerank_candidates_supports_limit_override() -> None:
     llm = MockLLM([
         '{"ranked_ids": ["candidate-8", "candidate-7", "candidate-6", "candidate-5", "candidate-4", "candidate-3", "candidate-2", "candidate-1"]}'
     ])
-    candidates = [Candidate(id=f"candidate-{index}", title=f"Candidate {index}") for index in range(1, 9)]
+    candidates = [Candidate(id=f"candidate-{index}", title=f"Candidate {index}") for index in range(1, 13)]
 
     ranked = rerank_candidates(candidates, goal="find the best option", llm=llm, limit=3)
 
@@ -162,12 +163,12 @@ def test_rerank_candidates_includes_user_profile_when_provided() -> None:
             ]
         )
     )
-    candidates = [Candidate(id=f"candidate-{index}", title=f"Candidate {index}") for index in range(1, 9)]
+    candidates = [Candidate(id=f"candidate-{index}", title=f"Candidate {index}") for index in range(1, 13)]
 
     rerank_candidates(candidates, goal="find the best option", user_profile=profile, llm=llm)
 
     assert llm.last_prompt is not None
-    assert 'user_profile:' in llm.last_prompt
+    assert 'preferences:' in llm.last_prompt
     assert 'style.preferences' in llm.last_prompt
     assert 'blue' in llm.last_prompt
 
@@ -176,7 +177,7 @@ def test_rerank_candidates_appends_candidates_missing_from_llm_output() -> None:
     llm = MockLLM([
         '{"ranked_ids": ["candidate-8"]}'
     ])
-    candidates = [Candidate(id=f"candidate-{index}", title=f"Candidate {index}") for index in range(1, 9)]
+    candidates = [Candidate(id=f"candidate-{index}", title=f"Candidate {index}") for index in range(1, 13)]
 
     ranked = rerank_candidates(candidates, llm=llm)
 
@@ -187,29 +188,25 @@ def test_rerank_candidates_appends_candidates_missing_from_llm_output() -> None:
         "candidate-3",
         "candidate-4",
         "candidate-5",
-    ]
-
-
-def test_rerank_candidates_falls_back_to_original_order_on_invalid_json() -> None:
-    llm = MockLLM(["not valid json"])
-    candidates = [Candidate(id=f"candidate-{index}", title=f"Candidate {index}") for index in range(1, 9)]
-
-    ranked = rerank_candidates(candidates, llm=llm)
-
-    assert [candidate.id for candidate in ranked] == [
-        "candidate-1",
-        "candidate-2",
-        "candidate-3",
-        "candidate-4",
-        "candidate-5",
         "candidate-6",
+        "candidate-7",
+        "candidate-9",
+        "candidate-10",
     ]
+
+
+def test_rerank_candidates_raises_on_invalid_backend_response() -> None:
+    llm = MockLLM(["not valid json"])
+    candidates = [Candidate(id=f"candidate-{index}", title=f"Candidate {index}") for index in range(1, 13)]
+
+    with pytest.raises(Exception):
+        rerank_candidates(candidates, llm=llm)
 
 
 def test_rerank_candidates_returns_only_default_top_k_results() -> None:
-    candidate_ids = [f"candidate-{index}" for index in range(1, 9)]
+    candidate_ids = [f"candidate-{index}" for index in range(1, 14)]
     llm = MockLLM([
-        '{"ranked_ids": ["candidate-8", "candidate-7", "candidate-6", "candidate-5", "candidate-4", "candidate-3", "candidate-2", "candidate-1"]}'
+        '{"ranked_ids": ["candidate-13", "candidate-12", "candidate-11", "candidate-10", "candidate-9", "candidate-8", "candidate-7", "candidate-6", "candidate-5", "candidate-4", "candidate-3", "candidate-2", "candidate-1"]}'
     ])
     candidates = [Candidate(id=candidate_id, title=candidate_id) for candidate_id in candidate_ids]
 
@@ -217,10 +214,14 @@ def test_rerank_candidates_returns_only_default_top_k_results() -> None:
 
     assert len(ranked) == DEFAULT_TOP_K
     assert [candidate.id for candidate in ranked] == [
+        "candidate-13",
+        "candidate-12",
+        "candidate-11",
+        "candidate-10",
+        "candidate-9",
         "candidate-8",
         "candidate-7",
         "candidate-6",
         "candidate-5",
         "candidate-4",
-        "candidate-3",
     ]

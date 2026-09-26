@@ -4,12 +4,30 @@ from datetime import timedelta
 from typing import Any
 
 from common.http import HttpClient, HttpClientError, DEFAULT_TTL
+from integrations.open_library.constants import DEFAULT_BOOK_SEARCH_LIMIT
 from integrations.open_library.models import BookSearchResult
-from request_orchestrator.shared.tool_adapter.books.constants import DEFAULT_BOOK_SEARCH_LIMIT
 
 OPEN_LIBRARY_BASE_URL = "https://openlibrary.org"
 OPEN_LIBRARY_WORK_URL_TEMPLATE = "https://openlibrary.org{work_key}"
 OPEN_LIBRARY_COVER_IMAGE_URL_TEMPLATE = "https://covers.openlibrary.org/b/id/{cover_id}-L.jpg"
+OPEN_LIBRARY_BOOK_FIELDS = ",".join(
+    (
+        "key",
+        "title",
+        "subtitle",
+        "description",
+        "first_sentence",
+        "author_name",
+        "first_publish_year",
+        "edition_count",
+        "number_of_pages_median",
+        "publish_date",
+        "subject",
+        "publisher",
+        "language",
+        "cover_i",
+    )
+)
 
 
 class OpenLibraryClientError(RuntimeError):
@@ -40,7 +58,12 @@ class OpenLibraryClient:
             raise ValueError("Search query must not be empty.")
 
         url = f"{self.base_url}/search.json"
-        params: dict[str, Any] = {"q": q, "limit": limit, "page": page}
+        params: dict[str, Any] = {
+            "q": q,
+            "limit": limit,
+            "page": page,
+            "fields": OPEN_LIBRARY_BOOK_FIELDS,
+        }
         try:
             payload = self._http.get(url, params)
         except HttpClientError as e:

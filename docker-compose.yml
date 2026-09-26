@@ -10,5 +10,19 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
+  reranker:
+    build:
+      context: .
+      dockerfile: services/reranker/Dockerfile
+    ports:
+      - "5433:8080"
+    environment:
+      RERANKER_MODEL: BAAI/bge-reranker-v2-m3
+      RERANKER_BATCH_SIZE: 8
+      RERANKER_MAX_LENGTH: 512
+    volumes:
+      - reranker-model-cache:/root/.cache/huggingface
+
 volumes:
   pgdata:
+  reranker-model-cache:
