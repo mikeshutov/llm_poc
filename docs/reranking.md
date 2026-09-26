@@ -1,24 +1,18 @@
 # Reranking
-The repo uses a dedicated local `BAAI/bge-reranker-v2-m3` service to improve ordering after retrieval without forcing every retrieval source to own its own ranking logic.
+The repo has a lightweight reranker layer for candidate results. It is used to improve ordering after retrieval without forcing every retrieval source to own its own ranking logic.
 
 ## Current Shape
 1. Retrieval produces `Candidate` objects plus the original domain models such as `ProductResult`.
-2. Each source maps its entity into a `Candidate` with semantic content and attributes.
-3. The application sends a query and richer, token-budgeted candidate evidence to the local `/rerank` endpoint.
-4. The reranker returns numeric scores in the form `{ "results": [{"id": "...", "score": 0.8}] }`.
-5. The reranker service rebuilds the ranked output from those returned ids.
-6. If the number of candidates is already at or below the configured top-k limit, the reranker call is skipped entirely.
+2. We send only a reduced candidate payload to the reranker prompt rather than the full object.
+3. The reranker returns structured JSON in the form `{ "ranked_ids": ["...", "..."] }`.
+4. The reranker service rebuilds the ranked output from those returned ids.
+5. If the number of candidates is already at or below the configured top-k limit, the reranker call is skipped entirely.
 
 ## Important Details
-1. The top-k limit is standardized in `reranker/constants.py` and is currently `10`.
-2. Candidate evidence construction is handled through the generic evidence builder, while each mapper supplies its domain fields.
-3. URLs, images, retrieval metadata, and embeddings are excluded from semantic reranker input.
-4. Candidate evidence is deterministically constrained by `RERANKER_CANDIDATE_TOKEN_BUDGET`.
-5. Product web results currently use their URL as the id when no better external identifier is available yet.
-
-The Docker service is exposed on `localhost:5433` for the local application. Set `RERANKER_SERVICE_URL=http://reranker:8080` when the application itself runs inside the Compose network.
-
-TODO: replace the approximate application-side character budget with tokenizer-aware budgeting that reserves space for the query, reports truncation, and aligns exactly with `RERANKER_MAX_LENGTH`.
+1. The top-k limit is standardized in `reranker/constants.py` and is currently `6`.
+2. Prompt construction is handled through a dedicated `RerankerPrompt` model rather than being assembled ad hoc in the service.
+3. Candidate text is intentionally condensed before it is sent to the model.
+4. Product web results currently use their URL as the id when no better external identifier is available yet.
 
 ## Separation Of Concerns
 The design keeps three concerns separate:

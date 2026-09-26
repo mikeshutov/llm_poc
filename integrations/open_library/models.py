@@ -10,14 +10,9 @@ class BookDoc(BaseModel):
 
     key: str
     title: str
-    subtitle: Optional[str] = None
-    description: Optional[str | dict[str, object]] = None
-    first_sentence: Optional[list[str] | str] = None
     author_name: Optional[list[str]] = None
     first_publish_year: Optional[int] = None
     edition_count: Optional[int] = None
-    number_of_pages_median: Optional[int] = None
-    publish_date: Optional[list[str] | str] = None
     isbn: Optional[list[str]] = None
     subject: Optional[list[str]] = None
     publisher: Optional[list[str]] = None

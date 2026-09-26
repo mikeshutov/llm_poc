@@ -164,9 +164,9 @@ def test_rerank_product_results_skips_llm_when_result_count_is_at_or_below_top_k
 
 
 def test_rerank_product_results_returns_only_default_top_k_products() -> None:
-    product_ids = [f"sku-{index}" for index in range(1, 14)]
+    product_ids = [f"sku-{index}" for index in range(1, 9)]
     llm = MockLLM([
-        '{"ranked_ids": ["sku-13", "sku-12", "sku-11", "sku-10", "sku-9", "sku-8", "sku-7", "sku-6", "sku-5", "sku-4", "sku-3", "sku-2", "sku-1"]}'
+        '{"ranked_ids": ["sku-8", "sku-7", "sku-6", "sku-5", "sku-4", "sku-3", "sku-2", "sku-1"]}'
     ])
     products = [
         ProductResult(
@@ -189,14 +189,10 @@ def test_rerank_product_results_returns_only_default_top_k_products() -> None:
 
     assert len(ranked_products) == DEFAULT_TOP_K
     assert [product.id for product in ranked_products] == [
-        "sku-13",
-        "sku-12",
-        "sku-11",
-        "sku-10",
-        "sku-9",
         "sku-8",
         "sku-7",
         "sku-6",
         "sku-5",
         "sku-4",
+        "sku-3",
     ]
