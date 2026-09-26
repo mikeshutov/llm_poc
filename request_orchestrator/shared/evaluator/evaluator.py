@@ -107,6 +107,7 @@ def run_evaluator(state: AgentState) -> AgentState:
             event_type=EVALUATOR_KIND,
             source=state.agent_profile.name,
             agent_name=state.agent_profile.name,
+            agent_version=state.agent_profile.version,
             payload=EvaluatorEventPayload.from_parse_error(
                 agent_name=state.agent_profile.name,
                 kind=EVALUATOR_KIND,
@@ -138,6 +139,7 @@ def run_evaluator(state: AgentState) -> AgentState:
         event_type=EVALUATOR_KIND,
         source=state.agent_profile.name,
         agent_name=state.agent_profile.name,
+        agent_version=state.agent_profile.version,
         payload=EvaluatorEventPayload.from_evaluation(
             agent_name=state.agent_profile.name,
             kind=EVALUATOR_KIND,
@@ -152,6 +154,7 @@ def run_evaluator(state: AgentState) -> AgentState:
         log_roundtrip_prompt(
             roundtrip_id=execution_context.roundtrip_id,
             agent=state.agent_profile.name,
+            agent_version=state.agent_profile.version,
             prompt_step=EVALUATOR_PROMPT_KIND,
             prompt=prompt_text,
         )

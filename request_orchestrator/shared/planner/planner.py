@@ -138,6 +138,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         event_type=PLAN_KIND,
         source=agent_state.agent_profile.name,
         agent_name=agent_state.agent_profile.name,
+        agent_version=agent_state.agent_profile.version,
         payload=payload,
     )
 
@@ -145,6 +146,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         log_roundtrip_prompt(
             roundtrip_id=agent_state.execution_context.roundtrip_id,
             agent=agent_state.agent_profile.name,
+            agent_version=agent_state.agent_profile.version,
             prompt_step=PLANNER_PROMPT_KIND,
             prompt=prompt_text,
         )

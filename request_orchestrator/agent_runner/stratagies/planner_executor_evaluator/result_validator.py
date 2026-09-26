@@ -47,6 +47,7 @@ def execution_result_router(state: AgentState) -> str:
             event_type=EXECUTION_RESULT_KIND,
             source=state.agent_profile.name,
             agent_name=state.agent_profile.name,
+            agent_version=state.agent_profile.version,
             node_name="execution_result_validator",
             payload={
                 "agent_name": state.agent_profile.name,

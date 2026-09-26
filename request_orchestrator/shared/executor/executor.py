@@ -149,6 +149,7 @@ def _record_step_result(
         event_type=TOOL_CALL_KIND,
         source=agent_state.agent_profile.name,
         agent_name=agent_state.agent_profile.name,
+        agent_version=agent_state.agent_profile.version,
         node_name="tool_call",
         iteration=iteration_number,
         payload=payload,

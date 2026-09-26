@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import streamlit as st
 
 from request_orchestrator.service import run_request_orchestrator_for_query
+from request_orchestrator.agents.seeder import seed_system_agents
 from common.config import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from conversation.constants import SOURCE_STREAMLIT
 from conversation.models.conversation_models import ConversationMetadata
@@ -29,6 +30,14 @@ st.set_page_config(
     page_icon=":robot_face:",
     layout="wide",
 )
+
+
+@st.cache_resource(show_spinner=False)
+def seed_agents_on_startup() -> tuple[str, ...]:
+    return tuple(agent.name for agent in seed_system_agents())
+
+
+seed_agents_on_startup()
 
 st.markdown(
     """<style>

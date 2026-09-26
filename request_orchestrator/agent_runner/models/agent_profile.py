@@ -36,6 +36,7 @@ class AgentExecutionStrategy(StrEnum):
 class AgentProfile:
     name: str
     scope: str
+    version: int = 1
     description: str = ""
     kind: AgentKind = AgentKind.BUILTIN
     execution_strategy: AgentExecutionStrategy = AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR
