@@ -9,7 +9,7 @@ from conversation.repository.repo_factory import get_conversation_repo
 DISPLAY_EXCLUDED_EVENT_TYPES = {"prompt", "llm_call"}
 
 
-def _move_reranker_events_after_tool_calls(events: list[ConversationEvent]) -> list[ConversationEvent]:
+def _order_reranker_events_after_tool_calls(events: list[ConversationEvent]) -> list[ConversationEvent]:
     """Keep reranker diagnostics after the tool event that triggered them."""
     ordered = list(events)
     index = 0
@@ -69,7 +69,7 @@ def fetch_agent_logs_for_roundtrip(roundtrip_id: str | None) -> dict[str, list[d
         return {}
 
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for event in _move_reranker_events_after_tool_calls(events):
+    for event in _order_reranker_events_after_tool_calls(events):
         if event.event_type in DISPLAY_EXCLUDED_EVENT_TYPES:
             continue
         agent_name, payload = normalize_conversation_event(event)

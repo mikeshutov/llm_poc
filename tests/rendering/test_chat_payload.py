@@ -19,7 +19,7 @@ from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from conversation.models.conversation_models import ConversationEvent
 from common.logging import fetch_agent_logs_for_roundtrip
-from common.logging.conversation_event_view import _move_reranker_events_after_tool_calls
+from common.logging.conversation_event_view import _order_reranker_events_after_tool_calls
 from rendering.debug import _build_log_payload, _build_llm_call_payload, _build_reranker_call_payload, _ordered_agent_log_sections, _split_orchestrator_entries_for_agents
 from rendering.messages.chat import _build_answer_payload
 from rendering.rendering import fetch_llm_usage_for_roundtrip
@@ -319,7 +319,7 @@ def test_reranker_events_are_rendered_after_tool_call_events() -> None:
             created_at='2026-09-26T00:00:00Z',
         )
 
-    ordered = _move_reranker_events_after_tool_calls([
+    ordered = _order_reranker_events_after_tool_calls([
         event('reranker_call', 1),
         event('tool_call', 2),
     ])
