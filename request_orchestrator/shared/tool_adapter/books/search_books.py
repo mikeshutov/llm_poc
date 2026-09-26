@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
-from integrations.open_library import (
+from integrations.open_library.client import (
     OPEN_LIBRARY_COVER_IMAGE_URL_TEMPLATE,
     OPEN_LIBRARY_WORK_URL_TEMPLATE,
     OpenLibraryClient,

@@ -55,7 +55,7 @@ def test_rerank_cocktail_search_result_reorders_and_limits_to_three() -> None:
         }
     )
 
-    reranked = rerank_cocktail_search_result(response, goal="good tequila cocktails", llm=llm, limit=DEFAULT_MEAL_RERANK_LIMIT)
+    reranked = rerank_cocktail_search_result(response, goal="good tequila cocktails", llm=llm, limit=3)
 
     assert [cocktail.id for cocktail in reranked.drinks] == ["drink-5", "drink-4", "drink-3"]
     assert reranked.retrieved_count == 5
@@ -75,7 +75,7 @@ def test_rerank_cocktail_search_result_skips_llm_when_result_count_is_at_or_belo
         }
     )
 
-    reranked = rerank_cocktail_search_result(response, goal="good tequila cocktails", llm=llm, limit=DEFAULT_MEAL_RERANK_LIMIT)
+    reranked = rerank_cocktail_search_result(response, goal="good tequila cocktails", llm=llm, limit=3)
 
     assert [cocktail.id for cocktail in reranked.drinks] == ["drink-1", "drink-2"]
     assert reranked.retrieved_count == 2

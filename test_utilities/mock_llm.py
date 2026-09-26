@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 from threading import Lock
 from typing import Any, Sequence
 
@@ -109,6 +110,19 @@ class MockLLM:
                 raise AssertionError('MockLLM.invoke was called without a queued response.')
 
             return MockLLMResponse(content=self.responses.pop(0))
+
+    def rerank(self, query: str, candidates: list[dict[str, str]]) -> list[dict[str, Any]]:
+        """Compatibility scorer for legacy reranker tests."""
+        with self._lock:
+            self.prompts.append(json.dumps({'query': query, 'candidates': candidates}))
+            if not self.responses:
+                raise AssertionError('MockLLM.rerank was called without a queued response.')
+            payload = json.loads(self.responses.pop(0))
+        ranked_ids = payload.get('ranked_ids', [])
+        return [
+            {'id': candidate_id, 'score': float(len(ranked_ids) - index)}
+            for index, candidate_id in enumerate(ranked_ids)
+        ]
 
     @property
     def last_prompt(self) -> str | None:

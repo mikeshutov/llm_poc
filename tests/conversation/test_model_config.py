@@ -33,7 +33,6 @@ from llm.conversation_model_config import (
     PLANNER_STAGE,
     PROFILE_AGENT_MODEL_SCOPE,
     REQUEST_ANALYSIS_STAGE,
-    RERANKER_STAGE,
     SHARED_MODEL_SCOPE,
     SYNTHESIS_STAGE,
     XAI_PROVIDER,
@@ -168,13 +167,6 @@ def test_conversation_model_config_resolves_partial_overrides_with_defaults() ->
                 provider=OPENAI_PROVIDER,
                 model='gpt-5.6-luna',
             ),
-            ConversationModelConfigEntry(
-                conversation_id=conversation_id,
-                agent=SHARED_MODEL_SCOPE,
-                stage=RERANKER_STAGE,
-                provider=OPENAI_PROVIDER,
-                model='gpt-5.6-terra',
-            ),
         ]
     )
 
@@ -184,7 +176,6 @@ def test_conversation_model_config_resolves_partial_overrides_with_defaults() ->
     assert config.main_agent.synthesis.model == 'gpt-5.6-luna'
     assert config.profile_agent.planner.model == 'gpt-5.6-luna'
     assert config.shared.evaluator.model == 'gpt-5.6-luna'
-    assert config.shared.reranker.model == 'gpt-5.6-terra'
 
 
 def test_conversation_model_config_build_default_returns_defaults() -> None:
@@ -196,8 +187,6 @@ def test_conversation_model_config_build_default_returns_defaults() -> None:
     assert config.main_agent.synthesis.model == 'gpt-5.6-luna'
     assert config.profile_agent.planner.model == 'gpt-5.6-luna'
     assert config.shared.evaluator.model == 'gpt-5.6-luna'
-    assert config.shared.reranker.model == 'gpt-5.6-luna'
-    assert ConversationModelConfig.default_shared_reranker_model() == 'gpt-5.6-luna'
 
 
 def test_conversation_model_config_build_default_resolves_pricing_for_every_stage() -> None:
@@ -219,11 +208,6 @@ def test_conversation_model_config_build_default_resolves_pricing_for_every_stag
         output_price_per_million_tokens=Decimal('1.20'),
     )
     assert config.resolve_pricing(SHARED_MODEL_SCOPE, EVALUATOR_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('0.20'),
-        cached_input_price_per_million_tokens=Decimal('0.02'),
-        output_price_per_million_tokens=Decimal('1.20'),
-    )
-    assert config.resolve_pricing(SHARED_MODEL_SCOPE, RERANKER_STAGE) == ModelPricing(
         input_price_per_million_tokens=Decimal('0.20'),
         cached_input_price_per_million_tokens=Decimal('0.02'),
         output_price_per_million_tokens=Decimal('1.20'),
@@ -603,27 +587,6 @@ def test_llm_factory_build_llm_for_stage_uses_mistral_openai_compatible_endpoint
     assert request_analysis_llm.kwargs['base_url'] == 'https://api.mistral.ai/v1'
 
 
-def test_candidate_reranker_uses_shared_conversation_model_from_runtime_context() -> None:
-    conversation_id = uuid4()
-    config = resolve_conversation_model_config(
-        [
-            ConversationModelConfigEntry(
-                conversation_id=conversation_id,
-                agent=SHARED_MODEL_SCOPE,
-                stage=RERANKER_STAGE,
-                provider=OPENAI_PROVIDER,
-                model='gpt-5.6-terra',
-            )
-        ]
-    )
-
-    with patch('reranker.service.build_chat_model', side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name)):
-        with bind_runtime_context(conversation_id=str(conversation_id), conversation_model_config=config):
-            reranker = CandidateReranker()
-
-    assert reranker.llm.model == 'gpt-5.6-terra'
-
-
 def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> None:
     conversation_id = uuid4()
     config = ConversationModelConfig.build_default()
@@ -718,18 +681,10 @@ def test_build_model_config_rows_exposes_effective_models_overrides_and_pricing(
         provider=OPENAI_PROVIDER,
         model='gpt-5.6-luna',
     )
-    reranker_override = ConversationModelConfigEntry(
-        conversation_id=conversation_id,
-        agent=SHARED_MODEL_SCOPE,
-        stage=RERANKER_STAGE,
-        provider=OPENAI_PROVIDER,
-        model='gpt-5.6-terra',
-    )
-    resolved = resolve_conversation_model_config([evaluator_override, reranker_override])
+    resolved = resolve_conversation_model_config([evaluator_override])
 
-    rows = build_model_config_rows(resolved, [evaluator_override, reranker_override])
+    rows = build_model_config_rows(resolved, [evaluator_override])
     evaluator_row = next(row for row in rows if row['agent'] == SHARED_MODEL_SCOPE and row['stage'] == EVALUATOR_STAGE)
-    reranker_row = next(row for row in rows if row['agent'] == SHARED_MODEL_SCOPE and row['stage'] == RERANKER_STAGE)
 
     assert evaluator_row['effective_model'] == 'gpt-5.6-luna'
     assert evaluator_row['override_model'] == 'gpt-5.6-luna'
@@ -738,10 +693,6 @@ def test_build_model_config_rows_exposes_effective_models_overrides_and_pricing(
     assert evaluator_row['output_price'] == '$1.2 per 1M'
     assert evaluator_row['effective_provider'] == 'OpenAI'
     assert OPENAI_PROVIDER in evaluator_row['provider_options']
-    assert reranker_row['effective_model'] == 'gpt-5.6-terra'
-    assert reranker_row['override_model'] == 'gpt-5.6-terra'
-    assert reranker_row['input_price'] == '$2 per 1M'
-    assert reranker_row['output_price'] == '$12 per 1M'
 
 
 def test_build_model_config_rows_reset_to_default_restores_model_and_pricing() -> None:

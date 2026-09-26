@@ -17,7 +17,6 @@ REQUEST_ANALYSIS_STAGE = "request_analysis"
 PLANNER_STAGE = "planner"
 SYNTHESIS_STAGE = "synthesis"
 EVALUATOR_STAGE = "evaluator"
-RERANKER_STAGE = "reranker"
 
 OPENAI_PROVIDER = "openai"
 ANTHROPIC_PROVIDER = "anthropic"
@@ -39,7 +38,6 @@ DEFAULT_MAIN_AGENT_PLANNER_MODEL = _configured_model("MAIN_AGENT_PLANNER_MODEL",
 DEFAULT_MAIN_AGENT_SYNTHESIS_MODEL = _configured_model("MAIN_AGENT_SYNTHESIS_MODEL", DEFAULT_MAIN_AGENT_MODEL)
 DEFAULT_PROFILE_AGENT_PLANNER_MODEL = _configured_model("PROFILE_AGENT_PLANNER_MODEL", DEFAULT_MINI_MODEL)
 DEFAULT_SHARED_EVALUATOR_MODEL = DEFAULT_MINI_MODEL
-DEFAULT_SHARED_RERANKER_MODEL = DEFAULT_MINI_MODEL
 
 
 class ModelPricing(BaseModel):
@@ -102,13 +100,6 @@ CONVERSATION_MODEL_CONFIG_SPECS: tuple[ConversationModelConfigSpec, ...] = (
         default_provider=OPENAI_PROVIDER,
         default_model=DEFAULT_SHARED_EVALUATOR_MODEL,
     ),
-    ConversationModelConfigSpec(
-        agent=SHARED_MODEL_SCOPE,
-        stage=RERANKER_STAGE,
-        label="Shared / reranker",
-        default_provider=OPENAI_PROVIDER,
-        default_model=DEFAULT_SHARED_RERANKER_MODEL,
-    ),
 )
 
 
@@ -142,7 +133,6 @@ class ProfileAgentConversationModelConfig(BaseModel):
 
 class SharedConversationModelConfig(BaseModel):
     evaluator: ModelSelection
-    reranker: ModelSelection
 
 
 class ConversationModelConfig(BaseModel):
@@ -214,17 +204,12 @@ class ConversationModelConfig(BaseModel):
             ),
             shared=SharedConversationModelConfig(
                 evaluator=ModelSelection(provider=OPENAI_PROVIDER, model=DEFAULT_SHARED_EVALUATOR_MODEL),
-                reranker=ModelSelection(provider=OPENAI_PROVIDER, model=DEFAULT_SHARED_RERANKER_MODEL),
             ),
         )
 
     @classmethod
     def default_main_agent_planner_model(cls) -> str:
         return DEFAULT_MAIN_AGENT_PLANNER_MODEL
-
-    @classmethod
-    def default_shared_reranker_model(cls) -> str:
-        return DEFAULT_SHARED_RERANKER_MODEL
 
     @classmethod
     def provider_display_name(cls, provider: str) -> str:

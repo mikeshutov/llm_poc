@@ -6,8 +6,11 @@ At a high level, each turn can produce observable data in a few layers:
 1. Agent-stage logs such as request analysis, profile hydration, planning, evaluation, synthesis, and tool calls.
 2. Stored prompt rows for important LLM stages.
 3. Structured LLM call records with usage, cost, latency, and prompt metadata.
-4. Roundtrip-level payloads with summaries, tool summaries, evidence attribution, and total turn duration.
-5. Hydrated evidence attached to final results so source rendering can stay typed.
+4. Structured local reranker events with model, candidate, evidence, and latency metadata.
+5. Roundtrip-level payloads with summaries, tool summaries, evidence attribution, and total turn duration.
+6. Hydrated evidence attached to final results so source rendering can stay typed.
+
+Local BGE reranking is not recorded as an LLM call and therefore has no token usage or provider cost. Its `reranker_call` event records model name, candidate count, evidence lengths, latency, and failures.
 
 ## Agent Logs
 The Streamlit debug experience renders structured agent logs rather than raw text blobs.
