@@ -19,8 +19,7 @@ from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from conversation.models.conversation_models import ConversationEvent
 from common.logging import fetch_agent_logs_for_roundtrip
-from common.logging.conversation_event_view import _move_reranker_events_after_tool_calls
-from rendering.debug import _build_log_payload, _build_llm_call_payload, _build_reranker_call_payload, _ordered_agent_log_sections, _split_orchestrator_entries_for_agents
+from rendering.debug import _build_log_payload, _build_llm_call_payload, _ordered_agent_log_sections, _split_orchestrator_entries_for_agents
 from rendering.messages.chat import _build_answer_payload
 from rendering.rendering import fetch_llm_usage_for_roundtrip
 
@@ -280,51 +279,6 @@ def test_build_log_payload_labels_llm_call_entries() -> None:
     assert payload['model'] == 'gpt-5.6-terra'
     assert payload['total_tokens'] == 120
     assert payload['computed_total_cost'] == '0.000325'
-
-
-def test_build_log_payload_labels_reranker_call_entries() -> None:
-    title, payload = _build_log_payload(
-        {
-            'kind': 'reranker_call',
-            'model': 'BAAI/bge-reranker-v2-m3',
-            'query': 'query: hiking boots',
-            'candidates': [{'id': '1', 'text': 'title: Trail boots'}],
-            'results': [{'id': '1', 'score': 0.92}],
-            'candidate_count': 1,
-            'limit': 10,
-            'evidence_lengths': [18],
-            'batch_size': 8,
-            'latency_ms': 250,
-        }
-    )
-
-    assert title == 'Reranker'
-    assert payload['model'] == 'BAAI/bge-reranker-v2-m3'
-    assert payload['query'] == 'query: hiking boots'
-    assert payload['results'] == [{'id': '1', 'score': 0.92}]
-
-
-def test_reranker_events_are_rendered_after_tool_call_events() -> None:
-    def event(event_type: str, event_id: int) -> ConversationEvent:
-        return ConversationEvent(
-            id=event_id,
-            conversation_id=uuid4(),
-            roundtrip_id=uuid4(),
-            event_type=event_type,
-            source='main_agent',
-            agent_name='main_agent',
-            node_name=event_type,
-            iteration=1,
-            payload={},
-            created_at='2026-09-26T00:00:00Z',
-        )
-
-    ordered = _move_reranker_events_after_tool_calls([
-        event('reranker_call', 1),
-        event('tool_call', 2),
-    ])
-
-    assert [item.event_type for item in ordered] == ['tool_call', 'reranker_call']
 
 
 def test_build_request_analysis_log_payload_displays_all_agent_goals() -> None:

@@ -15,13 +15,9 @@ def test_book_to_candidate_maps_book_fields() -> None:
                 {
                     "key": "/works/OL1W",
                     "title": "  The Hobbit  ",
-                    "subtitle": "There and Back Again",
-                    "description": {"type": "/type/text", "value": "A hobbit leaves home for an unexpected adventure."},
                     "author_name": [" J.R.R. Tolkien "],
                     "first_publish_year": 1937,
                     "edition_count": 12,
-                    "number_of_pages_median": 310,
-                    "publish_date": ["1937", "1951"],
                     "subject": [" Fantasy ", " Adventure "],
                     "publisher": [" Allen & Unwin "],
                     "language": ["eng"],
@@ -36,12 +32,9 @@ def test_book_to_candidate_maps_book_fields() -> None:
     assert candidate.id == "/works/OL1W"
     assert candidate.title == "The Hobbit"
     assert candidate.content["name"] == "The Hobbit"
-    assert candidate.content["summary"] == "A hobbit leaves home for an unexpected adventure."
-    assert candidate.attributes["subjects"] == ["Fantasy", "Adventure"]
-    assert candidate.attributes["subtitle"] == "There and Back Again"
-    assert candidate.attributes["publishers"] == ["Allen & Unwin"]
-    assert candidate.attributes["publish_dates"] == ["1937", "1951"]
-    assert candidate.attributes["number_of_pages"] == 310
+    assert candidate.content["summary"] == "J.R.R. Tolkien. 1937. 12 editions"
+    assert candidate.content["description"] == "Fantasy, Adventure"
+    assert candidate.content["text"] == "Allen & Unwin"
     assert candidate.content["url"] == "https://openlibrary.org/works/OL1W"
     assert candidate.content["image_url"] == "https://covers.openlibrary.org/b/id/12345-L.jpg"
     assert candidate.metadata["source"] == "open_library"
@@ -103,4 +96,4 @@ def test_rerank_book_search_result_skips_llm_when_result_count_is_at_or_below_li
     assert reranked.retrieved_count == 2
     assert reranked.reranked is True
     assert llm.last_prompt is None
-    assert DEFAULT_BOOK_SEARCH_LIMIT == 30
+    assert DEFAULT_BOOK_SEARCH_LIMIT == 20

@@ -53,7 +53,7 @@ def test_rerank_meal_search_result_reorders_and_limits_to_three() -> None:
         }
     )
 
-    reranked = rerank_meal_search_result(response, goal="good pasta recipes", llm=llm, limit=3)
+    reranked = rerank_meal_search_result(response, goal="good pasta recipes", llm=llm, limit=DEFAULT_MEAL_RERANK_LIMIT)
 
     assert [meal.id for meal in reranked.meals] == ["meal-5", "meal-4", "meal-3"]
     assert reranked.retrieved_count == 5
@@ -73,7 +73,7 @@ def test_rerank_meal_search_result_skips_llm_when_result_count_is_at_or_below_li
         }
     )
 
-    reranked = rerank_meal_search_result(response, goal="good pasta recipes", llm=llm, limit=3)
+    reranked = rerank_meal_search_result(response, goal="good pasta recipes", llm=llm, limit=DEFAULT_MEAL_RERANK_LIMIT)
 
     assert [meal.id for meal in reranked.meals] == ["meal-1", "meal-2"]
     assert reranked.retrieved_count == 2

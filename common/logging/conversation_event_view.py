@@ -9,34 +9,6 @@ from conversation.repository.repo_factory import get_conversation_repo
 DISPLAY_EXCLUDED_EVENT_TYPES = {"prompt", "llm_call"}
 
 
-def _move_reranker_events_after_tool_calls(events: list[ConversationEvent]) -> list[ConversationEvent]:
-    """Keep reranker diagnostics after the tool event that triggered them."""
-    ordered = list(events)
-    index = 0
-    while index < len(ordered):
-        if ordered[index].event_type != "reranker_call":
-            index += 1
-            continue
-        if index > 0 and ordered[index - 1].event_type == "tool_call":
-            index += 1
-            continue
-        tool_index = next(
-            (
-                candidate_index
-                for candidate_index in range(index + 1, len(ordered))
-                if ordered[candidate_index].event_type == "tool_call"
-            ),
-            None,
-        )
-        if tool_index is None:
-            index += 1
-            continue
-        reranker_event = ordered.pop(index)
-        ordered.insert(tool_index, reranker_event)
-        index = tool_index + 1
-    return ordered
-
-
 def normalize_conversation_event(event: ConversationEvent) -> tuple[str, dict[str, Any]]:
     payload = dict(event.payload or {})
     if event.event_type == "llm_call":
@@ -69,7 +41,7 @@ def fetch_agent_logs_for_roundtrip(roundtrip_id: str | None) -> dict[str, list[d
         return {}
 
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for event in _move_reranker_events_after_tool_calls(events):
+    for event in events:
         if event.event_type in DISPLAY_EXCLUDED_EVENT_TYPES:
             continue
         agent_name, payload = normalize_conversation_event(event)

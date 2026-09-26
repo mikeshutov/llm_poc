@@ -3,10 +3,7 @@ from typing import Optional
 
 from llm.clients.embeddings import embed_text
 from products.candidate_mapper import rerank_product_results
-from products.constants import (
-    DEFAULT_PRODUCT_SEARCH_CANDIDATE_LIMIT,
-    DEFAULT_PRODUCT_WEB_SEARCH_CANDIDATE_LIMIT,
-)
+from products.constants import DEFAULT_PRODUCT_SEARCH_CANDIDATE_LIMIT
 from products.models.product_query import ProductQuery
 from products.models.product_result import ProductResult
 from products.models.product_search_results import ProductSearchResults
@@ -104,8 +101,8 @@ def find_products_web(
     external_results: list[ProductResult] = []
     try:
         brave_client = BraveSearchClient()
-        web_payload = brave_client.shopping_search(web_query, count=DEFAULT_PRODUCT_WEB_SEARCH_CANDIDATE_LIMIT)
-        external_results = _web_results_to_products(web_payload, DEFAULT_PRODUCT_WEB_SEARCH_CANDIDATE_LIMIT)
+        web_payload = brave_client.shopping_search(web_query, count=DEFAULT_PRODUCT_SEARCH_CANDIDATE_LIMIT)
+        external_results = _web_results_to_products(web_payload, DEFAULT_PRODUCT_SEARCH_CANDIDATE_LIMIT)
     except (ValueError, BraveSearchError):
         pass
     retrieved_count = len(external_results)

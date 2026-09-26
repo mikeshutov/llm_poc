@@ -45,7 +45,6 @@ class ConversationModelConfigRepository:
                 SELECT conversation_id, agent, stage, provider, model, created_at, updated_at
                 FROM conversation_model_config
                 WHERE conversation_id = %s
-                  AND stage <> 'reranker'
                 ORDER BY agent ASC, stage ASC
                 """,
                 (conversation_id,),

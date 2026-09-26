@@ -6,7 +6,7 @@ from openai import OpenAI
 
 from common.config import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
 from llm.clients.tool_response_parser import parse_tool_args
-from llm.conversation_model_config import DEFAULT_MINI_MODEL, OPENAI_PROVIDER
+from llm.conversation_model_config import ConversationModelConfig, OPENAI_PROVIDER
 from llm.models.tool_call import ToolCall, ToolCallResult
 from llm.usage import record_llm_call
 from request_orchestrator.shared.runtime_context import get_current_conversation_id, get_current_roundtrip_id, get_current_user_id
@@ -18,14 +18,14 @@ def get_openai_client() -> OpenAI:
     return OpenAI()
 
 # used for the rest of our requests
-def get_llm_client(default_model: str = DEFAULT_MINI_MODEL) -> "LlmClient":
+def get_llm_client(default_model: str = ConversationModelConfig.default_shared_reranker_model()) -> "LlmClient":
     return LlmClient(default_model=default_model)
 
 
 # This is mostly for when we want to utilize our own LLM client
 # We can probably expand on this client to be able to handle a bunch of different models not just openai models
 class LlmClient:
-    def __init__(self, client: Optional[OpenAI] = None, default_model: str = DEFAULT_MINI_MODEL):
+    def __init__(self, client: Optional[OpenAI] = None, default_model: str = ConversationModelConfig.default_shared_reranker_model()):
         self.client = client or get_openai_client()
         self.default_model = default_model
 
