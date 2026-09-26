@@ -157,6 +157,44 @@ class AgentRepository:
             for row in rows
         ]
 
+    def list_system_agents(self) -> list[Agent]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT id, agent_type, user_id, name, version, description,
+                       execution_strategy, allowed_categories, planner_instruction,
+                       planner_rules, max_turns, is_active, metadata,
+                       created_at, updated_at
+                FROM agents
+                WHERE agent_type = 'system'
+                ORDER BY name ASC, created_at ASC
+                """
+            )
+            rows = cur.fetchall()
+        model_configs_by_agent_id = self._list_model_configs_by_agent_id([row["id"] for row in rows])
+        return [
+            Agent(
+                **self._normalize_row(row),
+                model_configs=model_configs_by_agent_id.get(row["id"], []),
+            )
+            for row in rows
+        ]
+
+    def delete_system_agents(self, names: set[str]) -> int:
+        if not names:
+            return 0
+
+        with self._conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM agents
+                WHERE agent_type = 'system'
+                  AND name = ANY(%s)
+                """,
+                (list(names),),
+            )
+            return cur.rowcount
+
     def _get_agent_by_id(
         self,
         cur: Any,

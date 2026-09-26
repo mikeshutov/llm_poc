@@ -39,6 +39,9 @@ def test_system_agent_seeder_delegates_each_profile(monkeypatch) -> None:
     calls = []
 
     class FakeRepository:
+        def list_system_agents(self):
+            return []
+
         def upsert(self, **kwargs):
             calls.append(kwargs)
             return seeded[0]
@@ -57,3 +60,25 @@ def test_system_agent_seeder_delegates_each_profile(monkeypatch) -> None:
         "planner_rules": profiles[0].planner_rules,
         "max_turns": profiles[0].max_turns,
     }]
+
+
+def test_system_agent_seeder_deletes_profiles_removed_from_code(monkeypatch) -> None:
+    profiles = [seeder.MAIN_AGENT_PROFILE]
+    stale_agent = _agent(agent_type=AgentType.SYSTEM, name="removed-agent")
+    deleted = []
+
+    class FakeRepository:
+        def list_system_agents(self):
+            return [stale_agent]
+
+        def delete_system_agents(self, names):
+            deleted.append(names)
+
+        def upsert(self, **kwargs):
+            return kwargs
+
+    monkeypatch.setattr(seeder, "get_agent_repo", lambda: FakeRepository())
+
+    seeder.seed_system_agents(profiles)
+
+    assert deleted == [{"removed-agent"}]

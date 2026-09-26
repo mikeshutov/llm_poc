@@ -26,6 +26,7 @@ class Tool:
     rate_limit_key: str | None = None
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
     rate_limit_policy: RateLimitPolicy | None = None
+    version: int = 1
 
     @property
     def name(self) -> str:

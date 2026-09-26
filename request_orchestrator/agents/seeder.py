@@ -19,6 +19,13 @@ def seed_system_agents(
     profiles: Iterable[AgentProfile] = SYSTEM_AGENT_PROFILES,
 ) -> list[Agent]:
     repository = get_agent_repo()
+    profiles = tuple(profiles)
+    profile_names = {profile.name for profile in profiles}
+    existing_names = {agent.name for agent in repository.list_system_agents()}
+    stale_names = existing_names - profile_names
+    if stale_names:
+        repository.delete_system_agents(stale_names)
+
     return [
         repository.upsert(
             agent_type=AgentType.SYSTEM,
