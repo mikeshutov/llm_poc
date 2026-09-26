@@ -358,13 +358,19 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
     assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
 
 
-def test_reranker_records_llm_usage_when_it_runs() -> None:
+def test_reranker_records_non_llm_telemetry_when_it_runs() -> None:
     repo = RecordingRepo()
     candidates = [
         Candidate(id=f'c{i}', source='web', content=CandidateContent(text=f'Item {i}'))
         for i in range(7)
     ]
-    llm = FakeInvokeLLM('{"ranked_ids": ["c3", "c1", "c2"]}')
+    class FakeReranker:
+        def rerank(self, query, candidates):
+            return [
+                {'id': 'c3', 'score': 3.0},
+                {'id': 'c1', 'score': 2.0},
+                {'id': 'c2', 'score': 1.0},
+            ]
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',
@@ -376,17 +382,14 @@ def test_reranker_records_llm_usage_when_it_runs() -> None:
             roundtrip_id=str(uuid4()),
         ):
             with bind_agent_context(agent_name='main_agent'):
-                rerank_candidates(candidates, goal='Find the best one', llm=llm)
+                rerank_candidates(candidates, goal='Find the best one', backend=FakeReranker())
 
-    assert len(repo.llm_calls) == 1
-    assert repo.llm_calls[0]['stage'] == 'reranker'
-    assert repo.llm_calls[0]['metadata']['caller_agent_name'] == 'main_agent'
-    assert repo.llm_calls[0]['metadata']['candidate_count'] == 7
-    assert isinstance(repo.llm_calls[0]['metadata']['latency_ms'], int)
-    assert repo.llm_calls[0]['metadata']['input_object']['goal'] == 'Find the best one'
-    assert repo.llm_calls[0]['metadata']['input_object']['candidate_ids'] == [f'c{i}' for i in range(7)]
-    assert repo.llm_calls[0]['metadata']['output_object']['raw_content'] == '{"ranked_ids": ["c3", "c1", "c2"]}'
-    assert any(event['agent_name'] == 'main_agent' and event['event_type'] == 'llm_call' for event in repo.conversation_events)
+    assert repo.llm_calls == []
+    reranker_events = [event for event in repo.conversation_events if event['event_type'] == 'reranker_call']
+    assert len(reranker_events) == 1
+    assert reranker_events[0]['agent_name'] == 'main_agent'
+    assert reranker_events[0]['payload']['candidate_count'] == 7
+    assert isinstance(reranker_events[0]['payload']['latency_ms'], int)
 
 
 def test_llm_client_records_tool_calling_and_image_caption_usage() -> None:
@@ -568,3 +571,50 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
     assert '"evidence_id": "c8271821-2d4c-51a1-bc00-1f4932d052d7"' not in prompt_text
     payload = _latest_event_payload(repo, event_type='synthesis', agent_name='request_orchestrator')
     assert payload['data']['relevant_evidence_ids'] == ['e5cf297f-8f55-55a7-b1b2-7fb389482919']
+
+
+def test_run_synthesis_uses_all_fed_evidence_when_citations_are_missing() -> None:
+    repo = RecordingRepo()
+    first_id = UUID('e5cf297f-8f55-55a7-b1b2-7fb389482919')
+    second_id = UUID('c8271821-2d4c-51a1-bc00-1f4932d052d7')
+    state = MainState.new(
+        task='Summarize this.',
+        execution_context=AgentExecutionContext.new(
+            conversation_context=ConversationContext(),
+            user_profile=UserProfile(),
+            conversation_id=str(uuid4()),
+        ),
+        llm=FakeInvokeLLM(
+            '{"result": [{"content": "done", "evidence_ids": []}], '
+            '"next_question": "", "roundtrip_summary": "summary"}'
+        ),
+        agent_profiles=_agent_profiles_for(UserProfile()),
+    )
+    _set_agent_tool_results(
+        state.agent_states['main_agent'],
+        plan=Plan.model_validate({
+            'steps': [{'id': 'E1', 'plan': 'Search', 'tool': 'generic_web_search', 'args': {}}]
+        }),
+        results={
+            'E1': ToolResult(
+                result={'value': 'results'},
+                evidence=[
+                    EvidenceView(id=first_id, item_id='item-a', title='Item A', summary='First item'),
+                    EvidenceView(id=second_id, item_id='item-b', title='Item B', summary='Second item'),
+                ],
+            )
+        },
+    )
+
+    with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
+        'common.logging.conversation_event_logger.get_conversation_repo',
+        return_value=repo,
+    ), patch(
+        'llm.chat_models.build_chat_model',
+        return_value=state.llm,
+    ):
+        with bind_runtime_context(**_bind_args_for_main_state(state)):
+            run_synthesis(state)
+
+    assert state.result.result_blocks[0].evidence_ids == [str(first_id), str(second_id)]
+    assert state.result.used_evidence_ids == [str(first_id), str(second_id)]

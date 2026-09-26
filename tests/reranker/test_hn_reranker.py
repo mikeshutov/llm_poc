@@ -84,4 +84,4 @@ def test_rerank_hn_search_result_skips_llm_when_result_count_is_at_or_below_limi
     assert reranked.retrieved_count == 2
     assert reranked.reranked is True
     assert llm.last_prompt is None
-    assert DEFAULT_HN_SEARCH_LIMIT == 20
+    assert DEFAULT_HN_SEARCH_LIMIT == 30

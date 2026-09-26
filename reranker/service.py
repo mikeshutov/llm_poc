@@ -3,34 +3,27 @@ from __future__ import annotations
 from time import perf_counter
 from typing import Any
 
-from common.data import strip_code_fences
-from llm.conversation_model_config import ConversationModelConfig, RERANKER_STAGE, SHARED_MODEL_SCOPE
-from llm.usage import record_llm_call
+from common.logging import create_conversation_event
 from personalization.profile.models import UserProfile
-from llm.chat_models import build_chat_model
 from request_orchestrator.shared.runtime_context import (
     get_current_agent_name,
-    get_current_conversation_model_config,
-    get_current_conversation_id,
     get_current_roundtrip_id,
-    get_current_user_id,
 )
+from reranker.client import RerankerBackend, RerankerClient
 from reranker.constants import DEFAULT_TOP_K
-from reranker.models import Candidate, RerankerPrompt, RerankerResult
+from reranker.evidence import build_candidate_evidence, build_reranker_query
+from reranker.models import Candidate
 
 
 class CandidateReranker:
     def __init__(
         self,
         llm: Any | None = None,
-        conversation_model_config: ConversationModelConfig | None = None,
+        conversation_model_config: Any | None = None,
+        backend: RerankerBackend | None = None,
     ):
-        resolved_config = conversation_model_config or get_current_conversation_model_config() or ConversationModelConfig.build_default()
-        resolved_provider = resolved_config.resolve_provider(SHARED_MODEL_SCOPE, RERANKER_STAGE)
-        resolved_model = resolved_config.resolve(SHARED_MODEL_SCOPE, RERANKER_STAGE)
-        self.provider = resolved_provider
-        self.model_name = resolved_model
-        self.llm = build_chat_model(provider=resolved_provider, model_name=resolved_model) if llm is None else llm
+        self.backend = backend or (llm if hasattr(llm, "rerank") else RerankerClient())
+        self.model_name = "BAAI/bge-reranker-v2-m3"
 
     def rerank(
         self,
@@ -48,50 +41,57 @@ class CandidateReranker:
 
         resolved_goal = goal if goal is not None else query
 
-        prompt = RerankerPrompt(
-            goal=resolved_goal or "",
-            user_profile=user_profile,
-            candidates=candidates,
-        ).to_prompt_text()
+        query_text = build_reranker_query(resolved_goal, user_profile)
+        evidence = [
+            {"id": candidate.id, "text": build_candidate_evidence(candidate)}
+            for candidate in candidates
+        ]
         started_at = perf_counter()
-        response = self.llm.invoke(prompt)
+        try:
+            scored = self.backend.rerank(query_text, evidence)
+        except Exception as exc:
+            create_conversation_event(
+                event_type="reranker_call",
+                source="reranker.candidate_reranker",
+                agent_name=get_current_agent_name() or "",
+                node_name="reranker",
+                payload={
+                    "model": self.model_name,
+                    "candidate_count": len(candidates),
+                    "limit": resolved_limit,
+                    "query": query_text,
+                    "candidates": evidence,
+                    "results": [],
+                    "error": str(exc),
+                    "roundtrip_id": get_current_roundtrip_id(),
+                },
+            )
+            raise
         latency_ms = int((perf_counter() - started_at) * 1000)
-        record_llm_call(
-            raw_response=response,
-            model_name=self.model_name,
-            provider=self.provider,
-            conversation_id=get_current_conversation_id(),
-            roundtrip_id=get_current_roundtrip_id(),
-            user_id=get_current_user_id(),
-            agent=SHARED_MODEL_SCOPE,
-            stage=RERANKER_STAGE,
-            callsite="reranker.candidate_reranker",
-            metadata={
+        create_conversation_event(
+            event_type="reranker_call",
+            source="reranker.candidate_reranker",
+            agent_name=get_current_agent_name() or "",
+            node_name="reranker",
+            payload={
+                "model": self.model_name,
                 "candidate_count": len(candidates),
                 "limit": resolved_limit,
-                "caller_agent_name": get_current_agent_name(),
-            },
-            latency_ms=latency_ms,
-            owner_agent_name=get_current_agent_name(),
-            input_object={
-                "prompt": prompt,
-                "goal": resolved_goal,
-                "limit": resolved_limit,
-                "candidate_ids": [candidate.id for candidate in candidates],
-            },
-            output_object={
-                "raw_content": response.content,
+                "query": query_text,
+                "candidates": evidence,
+                "results": scored,
+                "evidence_lengths": [len(item["text"]) for item in evidence],
+                "batch_size": getattr(self.backend, "batch_size", None),
+                "latency_ms": latency_ms,
+                "roundtrip_id": get_current_roundtrip_id(),
             },
         )
-        raw = strip_code_fences(response.content)
-
-        try:
-            rerank_result = RerankerResult.model_validate_json(raw)
-        except Exception:
-            return list(candidates)[:resolved_limit]
-
         candidate_by_id = {candidate.id: candidate for candidate in candidates}
-        ranked_candidates = self._sort_candidates(candidate_by_id, candidates, rerank_result.ranked_ids)
+        ranked_candidates = self._sort_candidates(
+            candidate_by_id,
+            candidates,
+            [str(item["id"]) for item in scored],
+        )
         return ranked_candidates[:resolved_limit]
 
     def _sort_candidates(
@@ -128,9 +128,14 @@ def rerank_candidates(
     user_profile: UserProfile | None = None,
     llm: Any | None = None,
     limit: int | None = None,
-    conversation_model_config: ConversationModelConfig | None = None,
+    conversation_model_config: Any | None = None,
+    backend: RerankerBackend | None = None,
 ) -> list[Candidate]:
-    return CandidateReranker(llm=llm, conversation_model_config=conversation_model_config).rerank(
+    return CandidateReranker(
+        llm=llm,
+        conversation_model_config=conversation_model_config,
+        backend=backend,
+    ).rerank(
         candidates,
         goal=goal,
         query=query,

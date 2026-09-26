@@ -15,7 +15,7 @@ def _build_instruction(state: AgentState) -> str:
         "You are an evaluator between planning and synthesis. "
         "Decide whether the current evidence is sufficient to answer the user's stated question or goal,"
         "Do not expand the user's scope or require optional information that was not requested unless absolutely necessary. "
-        "Return exactly one JSON object matching the provided schema, with the `status` field set to SATISFIED, RETRYABLE, or TERMINAL."
+        "Return exactly one JSON object matching the provided schema, with the `status` field set to SATISFIED, PARTIAL_BUT_SUFFICIENT, RETRYABLE, or TERMINAL."
     )
 
 

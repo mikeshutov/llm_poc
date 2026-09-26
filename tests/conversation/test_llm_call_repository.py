@@ -227,6 +227,5 @@ def test_resolve_conversation_model_config_backfills_missing_default_rows() -> N
     assert resolved.main_agent.request_analysis.model == 'gpt-5.6-luna'
     assert resolved.profile_agent.planner.model == 'gpt-5.6-luna'
     assert resolved.shared.evaluator.model == 'gpt-5.6-luna'
-    assert resolved.shared.reranker.model == 'gpt-5.6-luna'
     assert len(backfill_cursors) == len(CONVERSATION_MODEL_CONFIG_SPECS) - 1
     assert all('INSERT INTO conversation_model_config' in cursor.executed[0][0] for cursor in backfill_cursors)

@@ -36,6 +36,19 @@ def _resolve_synthesis_model_name(state: MainState) -> str:
     )
 
 
+def _evidence_ids_from_steps(evidence_steps) -> list[str]:
+    """Return the unique evidence IDs that were included in the synthesis prompt."""
+    evidence_ids: list[str] = []
+    seen: set[str] = set()
+    for step in evidence_steps:
+        for evidence in step.evidence:
+            evidence_id = str(evidence.id)
+            if evidence_id not in seen:
+                seen.add(evidence_id)
+                evidence_ids.append(evidence_id)
+    return evidence_ids
+
+
 @traceable(name="Synthesis Node")
 def run_synthesis(state: MainState) -> MainState:
     execution_context = state.execution_context
@@ -100,15 +113,19 @@ def run_synthesis(state: MainState) -> MainState:
         for evidence_id in block.evidence_ids
         if evidence_id
     ]
+    result_blocks = [
+        block.model_copy(deep=True)
+        for block in synthesis_result.result
+    ]
     if not used_evidence_ids:
-        used_evidence_ids = [
-            str(evidence.id)
-            for step in evidence_steps
-            for evidence in step.evidence
+        used_evidence_ids = _evidence_ids_from_steps(evidence_steps)
+        result_blocks = [
+            block.model_copy(update={"evidence_ids": list(used_evidence_ids)})
+            for block in result_blocks
         ]
 
     log_data = {
-        "answer_preview": [block.content for block in synthesis_result.result[:3]],
+        "answer_preview": [block.content for block in result_blocks[:3]],
         "next_question": synthesis_result.next_question,
         "relevant_evidence_ids": used_evidence_ids,
         "llm_usage": None if llm_call is None else serialize_llm_call_record(llm_call),
@@ -131,13 +148,10 @@ def run_synthesis(state: MainState) -> MainState:
             tool_call_ids=state.gather_tool_call_ids(),
             relevant_evidence_ids=[UUID(evidence_id) for evidence_id in relevant_evidence_ids],
         ),
-        result_blocks=[
-            block.model_copy(deep=True)
-            for block in synthesis_result.result
-        ],
+        result_blocks=result_blocks,
         answer=[
             block.content.strip()
-            for block in synthesis_result.result
+            for block in result_blocks
             if isinstance(block.content, str) and block.content.strip()
         ],
         next_question=synthesis_result.next_question.strip(),
