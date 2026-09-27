@@ -3,13 +3,8 @@ from __future__ import annotations
 from time import perf_counter
 from typing import Any
 
-from common.logging import create_conversation_event
 from personalization.profile.models import UserProfile
-from request_orchestrator.shared.runtime_context import (
-    get_current_agent_name,
-    get_current_roundtrip_id,
-    set_current_tool_call_field,
-)
+from request_orchestrator.shared.runtime_context import get_current_roundtrip_id
 from reranker.client import RerankerBackend, RerankerClient
 from reranker.constants import DEFAULT_TOP_K, RERANKER_MODEL_NAME
 from reranker.models import RerankerCandidate, RerankerScore
@@ -32,6 +27,7 @@ class CandidateReranker:
         query: str | None = None,
         user_profile: UserProfile | None = None,
         limit: int | None = None,
+        telemetry: dict[str, Any] | None = None,
     ) -> list[RerankerCandidate]:
         resolved_limit = DEFAULT_TOP_K if limit is None else max(1, limit)
 
@@ -59,14 +55,8 @@ class CandidateReranker:
                 "error": str(exc),
                 "roundtrip_id": get_current_roundtrip_id(),
             }
-            if not set_current_tool_call_field("rerank", rerank_payload):
-                create_conversation_event(
-                    event_type="reranker_call",
-                    source="reranker.candidate_reranker",
-                    agent_name=get_current_agent_name() or "",
-                    node_name="reranker",
-                    payload=rerank_payload,
-                )
+            if telemetry is not None:
+                telemetry.update(rerank_payload)
             raise
         latency_ms = int((perf_counter() - started_at) * 1000)
         rerank_payload = {
@@ -81,14 +71,8 @@ class CandidateReranker:
             "latency_ms": latency_ms,
             "roundtrip_id": get_current_roundtrip_id(),
         }
-        if not set_current_tool_call_field("rerank", rerank_payload):
-            create_conversation_event(
-                event_type="reranker_call",
-                source="reranker.candidate_reranker",
-                agent_name=get_current_agent_name() or "",
-                node_name="reranker",
-                payload=rerank_payload,
-            )
+        if telemetry is not None:
+            telemetry.update(rerank_payload)
         candidate_by_id = {candidate.id: candidate for candidate in candidates}
         ranked_candidates = self._sort_candidates(
             candidate_by_id,
@@ -132,6 +116,7 @@ def rerank_candidates(
     llm: Any | None = None,
     limit: int | None = None,
     backend: RerankerBackend | None = None,
+    telemetry: dict[str, Any] | None = None,
 ) -> list[RerankerCandidate]:
     return CandidateReranker(
         llm=llm,
@@ -142,4 +127,5 @@ def rerank_candidates(
         query=query,
         user_profile=user_profile,
         limit=limit,
+        telemetry=telemetry,
     )

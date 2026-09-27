@@ -34,7 +34,7 @@ class MealIngredientMetadata(BaseModel):
     measure: str | None = None
 
 
-def _tool_result(result: MealSearchResult) -> ToolResult:
+def _tool_result(result: MealSearchResult, *, rerank: dict | None = None) -> ToolResult:
     evidence: list[EvidenceView] = []
     for meal in result.meals:
         url = (meal.source or meal.youtube or "").strip()
@@ -74,6 +74,7 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             reranked=result.reranked,
         ),
 
+        rerank=rerank,
         evidence=evidence,
     )
 
@@ -100,6 +101,7 @@ Example valid call:
 def search_meals(query: str) -> ToolResult:
     try:
         response = _meal_db_client.search(query)
-        return _tool_result(rerank_meal_search_result(response, goal=query, limit=DEFAULT_MEAL_RERANK_LIMIT))
+        rerank: dict = {}
+        return _tool_result(rerank_meal_search_result(response, goal=query, limit=DEFAULT_MEAL_RERANK_LIMIT, telemetry=rerank), rerank=rerank or None)
     except RequestException as e:
         return ToolResult.error(f"MealDB service unavailable: {e}")

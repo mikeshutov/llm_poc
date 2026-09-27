@@ -362,7 +362,7 @@ def test_reranker_records_non_llm_telemetry_when_it_runs() -> None:
     repo = RecordingRepo()
     candidates = [
             RerankerCandidate(id=f'c{i}', fields={'name': f'Item {i}'})
-        for i in range(7)
+        for i in range(12)
     ]
     class FakeReranker:
         def rerank(self, query, candidates):
@@ -372,24 +372,19 @@ def test_reranker_records_non_llm_telemetry_when_it_runs() -> None:
                 {'id': 'c2', 'score': 1.0},
             ]
 
-    with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
-        'common.logging.conversation_event_logger.get_conversation_repo',
-        return_value=repo,
-    ):
+    telemetry: dict = {}
+    with patch('llm.usage.get_conversation_repo', return_value=repo):
         with bind_runtime_context(
             conversation_id=str(uuid4()),
             conversation_model_config=None,
             roundtrip_id=str(uuid4()),
         ):
             with bind_agent_context(agent_name='main_agent'):
-                rerank_candidates(candidates, goal='Find the best one', backend=FakeReranker())
+                rerank_candidates(candidates, goal='Find the best one', backend=FakeReranker(), telemetry=telemetry)
 
     assert repo.llm_calls == []
-    reranker_events = [event for event in repo.conversation_events if event['event_type'] == 'reranker_call']
-    assert len(reranker_events) == 1
-    assert reranker_events[0]['agent_name'] == 'main_agent'
-    assert reranker_events[0]['payload']['candidate_count'] == 7
-    assert isinstance(reranker_events[0]['payload']['latency_ms'], int)
+    assert telemetry['candidate_count'] == 12
+    assert isinstance(telemetry['latency_ms'], int)
 
 
 def test_llm_client_records_tool_calling_and_image_caption_usage() -> None:

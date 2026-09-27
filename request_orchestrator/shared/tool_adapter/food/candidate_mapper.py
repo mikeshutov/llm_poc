@@ -61,13 +61,14 @@ def rerank_meal_search_result(
     goal: str | None = None,
     llm: Any | None = None,
     limit: int = 3,
+    telemetry: dict[str, Any] | None = None,
 ) -> MealSearchResult:
     retrieved_count = len(response.meals)
     if not response.meals:
         return MealSearchResult(meals=[], retrieved_count=0, reranked=True)
 
     candidates = [meal_to_candidate(meal) for meal in response.meals]
-    ranked_candidates = rerank_candidates(candidates, goal=goal, llm=llm, limit=limit)
+    ranked_candidates = rerank_candidates(candidates, goal=goal, llm=llm, limit=limit, telemetry=telemetry)
     meal_by_id = {meal.id: meal for meal in response.meals}
     ranked_meals: list[Meal] = []
     seen_ids: set[str] = set()
@@ -92,13 +93,14 @@ def rerank_cocktail_search_result(
     goal: str | None = None,
     llm: Any | None = None,
     limit: int = 3,
+    telemetry: dict[str, Any] | None = None,
 ) -> CocktailSearchResult:
     retrieved_count = len(response.drinks)
     if not response.drinks:
         return CocktailSearchResult(drinks=[], retrieved_count=0, reranked=True)
 
     candidates = [cocktail_to_candidate(cocktail) for cocktail in response.drinks]
-    ranked_candidates = rerank_candidates(candidates, goal=goal, llm=llm, limit=limit)
+    ranked_candidates = rerank_candidates(candidates, goal=goal, llm=llm, limit=limit, telemetry=telemetry)
     cocktail_by_id = {cocktail.id: cocktail for cocktail in response.drinks}
     ranked_cocktails: list[Cocktail] = []
     seen_ids: set[str] = set()

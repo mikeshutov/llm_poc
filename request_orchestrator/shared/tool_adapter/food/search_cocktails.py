@@ -32,7 +32,7 @@ class CocktailSearchMetadata(BaseModel):
     reranked: bool
 
 
-def _tool_result(result: CocktailSearchResult) -> ToolResult:
+def _tool_result(result: CocktailSearchResult, *, rerank: dict | None = None) -> ToolResult:
     evidence: list[EvidenceView] = []
     for cocktail in result.drinks:
         summary_parts = [
@@ -66,7 +66,7 @@ def _tool_result(result: CocktailSearchResult) -> ToolResult:
             raw_payload=cocktail,
         )
         evidence.append(evidence_view)
-    return ToolResult(result=result, evidence=evidence)
+    return ToolResult(result=result, rerank=rerank, evidence=evidence)
 
 
 
@@ -91,6 +91,7 @@ Example valid call:
 def search_cocktails(query: str) -> ToolResult:
     try:
         response = _cocktail_client.search(query)
-        return _tool_result(rerank_cocktail_search_result(response, goal=query, limit=DEFAULT_MEAL_RERANK_LIMIT))
+        rerank: dict = {}
+        return _tool_result(rerank_cocktail_search_result(response, goal=query, limit=DEFAULT_MEAL_RERANK_LIMIT, telemetry=rerank), rerank=rerank or None)
     except RequestException as e:
         return ToolResult.error(f"CocktailDB service unavailable: {e}")

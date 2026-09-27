@@ -58,7 +58,7 @@ def _coerce_search_type(search_type: str) -> SearchType:
         raise ValueError(f"Invalid search_type '{search_type}'. Allowed values: {allowed}.") from exc
 
 
-def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
+def _web_search_tool_result(result: WebSearchResponse, *, rerank: dict[str, Any] | None = None) -> ToolResult:
     evidence: list[EvidenceView] = []
     for item in result.results:
         url = (item.url or "").strip()
@@ -84,11 +84,12 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
             search_type=SearchType.WEB_SEARCH.value,
         ),
 
+        rerank=rerank,
         evidence=evidence,
     )
 
 
-def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
+def _news_search_tool_result(result: NewsSearchResponse, *, rerank: dict[str, Any] | None = None) -> ToolResult:
     evidence: list[EvidenceView] = []
     for item in result.results:
         url = (item.url or "").strip()
@@ -114,6 +115,7 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
             search_type=SearchType.NEWS_SEARCH.value,
         ),
 
+        rerank=rerank,
         evidence=evidence,
     )
 
@@ -153,7 +155,8 @@ def generic_web_search(
     match _coerce_search_type(search_type):
         case SearchType.NEWS_SEARCH:
             response = brave_client.news_search(normalized_query)
-            return _news_search_tool_result(rerank_news_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K))
+            rerank: dict[str, Any] = {}
+            return _news_search_tool_result(rerank_news_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K, telemetry=rerank), rerank=rerank or None)
         #case SearchType.SUGGESTION_SEARCH:
         #    return brave_client.suggest(query_text)
         case _:
@@ -165,4 +168,5 @@ def generic_web_search(
                     extra_params=params or {},
                 )
             )
-            return _web_search_tool_result(rerank_web_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K))
+            rerank: dict[str, Any] = {}
+            return _web_search_tool_result(rerank_web_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K, telemetry=rerank), rerank=rerank or None)

@@ -43,7 +43,7 @@ def _book_summary(book: BookDoc) -> str:
     return ". ".join(parts) if parts else f"Book result for {book.title}."
 
 
-def _tool_result(result: BookSearchResult) -> ToolResult:
+def _tool_result(result: BookSearchResult, *, rerank: dict | None = None) -> ToolResult:
     evidence: list[EvidenceView] = []
     for book in result.docs:
         url = OPEN_LIBRARY_WORK_URL_TEMPLATE.format(work_key=book.key).strip() if book.key else ""
@@ -66,7 +66,7 @@ def _tool_result(result: BookSearchResult) -> ToolResult:
             raw_payload=book,
         )
         evidence.append(evidence_view)
-    return ToolResult(result=result, evidence=evidence)
+    return ToolResult(result=result, rerank=rerank, evidence=evidence)
 
 
 
@@ -91,6 +91,7 @@ Example valid call:
 def search_books(query: str) -> ToolResult:
     try:
         response = _open_library_client.search(query, limit=DEFAULT_BOOK_SEARCH_LIMIT)
-        return _tool_result(rerank_book_search_result(response, goal=query))
+        rerank: dict = {}
+        return _tool_result(rerank_book_search_result(response, goal=query, telemetry=rerank), rerank=rerank or None)
     except RequestException as e:
         return ToolResult.error(f"Open Library service unavailable: {e}")

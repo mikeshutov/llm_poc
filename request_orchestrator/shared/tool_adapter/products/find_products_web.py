@@ -44,7 +44,7 @@ def _product_summary(product: ProductResult) -> str:
     return ". ".join(part for part in parts if part) or f"Product result for {product.name}."
 
 
-def _tool_result(result: ProductSearchResults) -> ToolResult:
+def _tool_result(result: ProductSearchResults, *, rerank: dict[str, Any] | None = None) -> ToolResult:
     evidence: list[EvidenceView] = []
     products = [*result.internal_results, *result.external_results]
     product_sources = sorted({product.source.value for product in products})
@@ -82,7 +82,7 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
             raw_payload=product,
         )
         evidence.append(evidence_view)
-    return ToolResult(result=result, tool_metadata=tool_metadata, evidence=evidence)
+    return ToolResult(result=result, tool_metadata=tool_metadata, rerank=rerank, evidence=evidence)
 
 
 @tool(
@@ -115,4 +115,5 @@ Example valid call:
 def find_products_web(
     query_text: str,
 ) -> ToolResult:
-    return _tool_result(web_find_products(query_text=query_text))
+    rerank: dict[str, Any] = {}
+    return _tool_result(web_find_products(query_text=query_text, telemetry=rerank), rerank=rerank or None)

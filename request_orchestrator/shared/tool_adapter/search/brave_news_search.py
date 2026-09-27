@@ -25,7 +25,7 @@ class BraveNewsSearchMetadata(BaseModel):
     age: str | None = None
 
 
-def _tool_result(result: NewsSearchResponse) -> ToolResult:
+def _tool_result(result: NewsSearchResponse, *, rerank: dict | None = None) -> ToolResult:
     evidence: list[EvidenceView] = []
 
     for news_item in result.results:
@@ -53,6 +53,7 @@ def _tool_result(result: NewsSearchResponse) -> ToolResult:
             search_type=SearchType.NEWS_SEARCH.value,
         ),
 
+        rerank=rerank,
         evidence=evidence,
     )
 
@@ -74,4 +75,5 @@ Example valid call:
 )
 def news_search(q: str) -> ToolResult:
     response = BraveSearchClient().news_search(q)
-    return _tool_result(rerank_news_search_response(response, goal=q, limit=DEFAULT_TOP_K))
+    rerank: dict = {}
+    return _tool_result(rerank_news_search_response(response, goal=q, limit=DEFAULT_TOP_K, telemetry=rerank), rerank=rerank or None)

@@ -37,7 +37,7 @@ def _hit_summary(hit: HnHit) -> str:
     return ". ".join(parts) if parts else "Hacker News result."
 
 
-def _tool_result(result: HnSearchResult) -> ToolResult:
+def _tool_result(result: HnSearchResult, *, rerank: dict | None = None) -> ToolResult:
     evidence: list[EvidenceView] = []
     for hit in result.hits:
         url = (hit.url or "").strip()
@@ -60,7 +60,7 @@ def _tool_result(result: HnSearchResult) -> ToolResult:
             raw_payload=hit,
         )
         evidence.append(evidence_view)
-    return ToolResult(result=result, evidence=evidence)
+    return ToolResult(result=result, rerank=rerank, evidence=evidence)
 
 
 
@@ -100,6 +100,7 @@ Example valid call:
 def hn_search(query: str, sort_by: str = "relevance") -> ToolResult:
     try:
         response = _hn_client.search(query, sort_by=sort_by, hits_per_page=DEFAULT_HN_SEARCH_LIMIT)
-        return _tool_result(rerank_hn_search_result(response, goal=query))
+        rerank: dict = {}
+        return _tool_result(rerank_hn_search_result(response, goal=query, telemetry=rerank), rerank=rerank or None)
     except RequestException as e:
         return ToolResult.error(f"Hacker News search unavailable: {e}")

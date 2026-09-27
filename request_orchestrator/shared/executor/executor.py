@@ -17,7 +17,7 @@ from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan import PlanStep
-from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context, bind_tool_call_fields
+from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context
 from tool.registry import call_tool
 from tool.repository.tool_call_repository import ToolCallRepository
 from rendering.debug import TOOL_CALL_KIND
@@ -31,7 +31,6 @@ class StepExecutionResult:
     error_text: str = ""
     rejection_reason: str = ""
     latency_ms: int = 0
-    tool_call_fields: dict[str, Any] | None = None
 
 
 def _substitute_refs(obj, results: dict):
@@ -78,27 +77,25 @@ def _execute_step(
 ) -> StepExecutionResult:
     args = resolved_args if resolved_args is not None else _substitute_refs(step.args, tool_results_by_step_id)
     started_at = perf_counter()
-    tool_call_fields: dict[str, Any] = {}
-    with bind_tool_call_fields(tool_call_fields):
-        if rejection_reason:
-            output = ToolResult.error(rejection_reason)
-            error_text = rejection_reason
-        else:
-            try:
-                output = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)
-                error_text = ""
-            except ValidationError as e:
-                error_text = f"Invalid arguments for tool '{step.tool}': {e.errors(include_url=False)}"
-                output = ToolResult(
-                    result={"error": error_text},
-                    evidence=[],
-                )
-            except Exception as e:
-                error_text = f"Tool '{step.tool}' failed: {e}"
-                output = ToolResult(
-                    result={"error": error_text, "tool": step.tool},
-                    evidence=[],
-                )
+    if rejection_reason:
+        output = ToolResult.error(rejection_reason)
+        error_text = rejection_reason
+    else:
+        try:
+            output = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)
+            error_text = ""
+        except ValidationError as e:
+            error_text = f"Invalid arguments for tool '{step.tool}': {e.errors(include_url=False)}"
+            output = ToolResult(
+                result={"error": error_text},
+                evidence=[],
+            )
+        except Exception as e:
+            error_text = f"Tool '{step.tool}' failed: {e}"
+            output = ToolResult(
+                result={"error": error_text, "tool": step.tool},
+                evidence=[],
+            )
     latency_ms = int((perf_counter() - started_at) * 1000)
 
     return StepExecutionResult(
@@ -107,7 +104,6 @@ def _execute_step(
         output=output,
         error_text=error_text,
         latency_ms=latency_ms,
-        tool_call_fields=tool_call_fields,
     )
 
 
@@ -143,8 +139,8 @@ def _record_step_result(
     }
     if execution_result.error_text:
         payload["error"] = execution_result.error_text
-    if execution_result.tool_call_fields:
-        payload.update(sanitize_for_json_storage(execution_result.tool_call_fields))
+    if isinstance(output, ToolResult) and output.rerank is not None:
+        payload["rerank"] = sanitize_for_json_storage(output.rerank)
     create_conversation_event(
         conversation_id=execution_context.conversation_id,
         roundtrip_id=execution_context.roundtrip_id,
