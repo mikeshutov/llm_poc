@@ -16,8 +16,6 @@ The repo uses a dedicated local `BAAI/bge-reranker-v2-m3` service to improve ord
 4. Candidate evidence is deterministically constrained by `RERANKER_CANDIDATE_TOKEN_BUDGET`.
 5. Product web results currently use their URL as the id when no better external identifier is available yet.
 
-The Docker service is exposed on `localhost:5433` for the local application. Set `RERANKER_SERVICE_URL=http://reranker:8080` when the application itself runs inside the Compose network.
-
 TODO: replace the approximate application-side character budget with tokenizer-aware budgeting that reserves space for the query, reports truncation, and aligns exactly with `RERANKER_MAX_LENGTH`.
 
 ## Separation Of Concerns

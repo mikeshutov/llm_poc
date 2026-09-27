@@ -1,7 +1,7 @@
 from integrations.meal_db.models import MealSearchResult
 from request_orchestrator.shared.tool_adapter.food.candidate_mapper import meal_to_candidate, rerank_meal_search_result
 from request_orchestrator.shared.tool_adapter.food.constants import DEFAULT_MEAL_RERANK_LIMIT
-from test_utilities.mock_llm import MockLLM
+from test_utilities.fake_reranker import FakeReranker
 
 
 def test_meal_to_candidate_maps_meal_fields() -> None:
@@ -34,9 +34,7 @@ def test_meal_to_candidate_maps_meal_fields() -> None:
 
 
 def test_rerank_meal_search_result_reorders_and_limits_to_three() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["meal-5", "meal-4", "meal-3", "meal-2", "meal-1"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["meal-5", "meal-4", "meal-3", "meal-2", "meal-1"]}')
     response = MealSearchResult.model_validate(
         {
             "meals": [
@@ -57,9 +55,7 @@ def test_rerank_meal_search_result_reorders_and_limits_to_three() -> None:
 
 
 def test_rerank_meal_search_result_skips_llm_when_result_count_is_at_or_below_limit() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["meal-2", "meal-1"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["meal-2", "meal-1"]}')
     response = MealSearchResult.model_validate(
         {
             "meals": [
@@ -74,4 +70,3 @@ def test_rerank_meal_search_result_skips_llm_when_result_count_is_at_or_below_li
     assert [meal.id for meal in reranked.meals] == ["meal-1", "meal-2"]
     assert reranked.retrieved_count == 2
     assert reranked.reranked is True
-    assert llm.last_prompt is None

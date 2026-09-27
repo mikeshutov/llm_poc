@@ -9,7 +9,7 @@ The system can use different models for different parts of the loop. Today the c
 4. `profile_agent.planner`
 5. `shared.evaluator`
 
-That means request analysis, planning, synthesis, and evaluation do not have to share the same model. Reranking is handled independently by the local BGE service.
+That means request analysis, planning, synthesis, and evaluation do not have to share the same model. 
 
 ## Defaults
 The defaults currently live in `llm/conversation_model_config.py`.
@@ -44,7 +44,6 @@ In practice:
 3. Synthesis asks for `main_agent.synthesis`.
 4. Profile management planning asks for `profile_agent.planner`.
 5. Evaluator asks for `shared.evaluator`.
-6. Reranking is handled by the dedicated local BGE reranker service and is not resolved through conversation model configuration.
 
 This keeps model choice close to the purpose of the stage rather than treating the whole request as one uniform LLM call.
 

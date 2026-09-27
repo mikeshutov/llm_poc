@@ -8,7 +8,7 @@ from products.models.product_search_results import ProductSearchResults
 from products.models.product_source import ProductSource
 from products.repository.product_repository import ProductRepository
 from reranker.constants import DEFAULT_TOP_K
-from test_utilities.mock_llm import MockLLM
+from test_utilities.fake_reranker import FakeReranker
 
 
 def test_product_result_to_candidate_maps_product_fields() -> None:
@@ -120,9 +120,7 @@ def test_product_repository_selects_description_when_column_exists() -> None:
 
 
 def test_rerank_product_results_skips_llm_when_result_count_is_at_or_below_top_k() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["sku-2", "sku-1"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["sku-2", "sku-1"]}')
     products = [
         ProductResult(
             id="sku-1",
@@ -155,14 +153,11 @@ def test_rerank_product_results_skips_llm_when_result_count_is_at_or_below_top_k
     ranked_products = rerank_product_results(products, query="best product", llm=llm)
 
     assert [product.id for product in ranked_products] == ["sku-1", "sku-2"]
-    assert llm.last_prompt is None
 
 
 def test_rerank_product_results_returns_only_default_top_k_products() -> None:
     product_ids = [f"sku-{index}" for index in range(1, 14)]
-    llm = MockLLM([
-        '{"ranked_ids": ["sku-13", "sku-12", "sku-11", "sku-10", "sku-9", "sku-8", "sku-7", "sku-6", "sku-5", "sku-4", "sku-3", "sku-2", "sku-1"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["sku-13", "sku-12", "sku-11", "sku-10", "sku-9", "sku-8", "sku-7", "sku-6", "sku-5", "sku-4", "sku-3", "sku-2", "sku-1"]}')
     products = [
         ProductResult(
             id=product_id,

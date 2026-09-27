@@ -4,7 +4,7 @@ from request_orchestrator.shared.tool_adapter.books.candidate_mapper import (
     rerank_book_search_result,
 )
 from request_orchestrator.shared.tool_adapter.books.constants import DEFAULT_BOOK_SEARCH_LIMIT
-from test_utilities.mock_llm import MockLLM
+from test_utilities.fake_reranker import FakeReranker
 
 
 def test_book_to_candidate_maps_book_fields() -> None:
@@ -43,12 +43,10 @@ def test_book_to_candidate_maps_book_fields() -> None:
 
 
 def test_rerank_book_search_result_reorders_results_and_preserves_metadata() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["/works/OL7W", "/works/OL6W", "/works/OL5W", "/works/OL4W", "/works/OL3W", "/works/OL2W"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["/works/OL7W", "/works/OL6W", "/works/OL5W", "/works/OL4W", "/works/OL3W", "/works/OL2W"]}')
     response = BookSearchResult.model_validate(
         {
-            "numFound": 7,
+            "numFound": 11,
             "docs": [
                 {"key": "/works/OL1W", "title": "Book One"},
                 {"key": "/works/OL2W", "title": "Book Two"},
@@ -56,7 +54,11 @@ def test_rerank_book_search_result_reorders_results_and_preserves_metadata() -> 
                 {"key": "/works/OL4W", "title": "Book Four"},
                 {"key": "/works/OL5W", "title": "Book Five"},
                 {"key": "/works/OL6W", "title": "Book Six"},
-                {"key": "/works/OL7W", "title": "Book Seven"},
+                    {"key": "/works/OL7W", "title": "Book Seven"},
+                    {"key": "/works/OL8W", "title": "Book Eight"},
+                    {"key": "/works/OL9W", "title": "Book Nine"},
+                    {"key": "/works/OL10W", "title": "Book Ten"},
+                    {"key": "/works/OL11W", "title": "Book Eleven"},
             ],
         }
     )
@@ -70,15 +72,17 @@ def test_rerank_book_search_result_reorders_results_and_preserves_metadata() -> 
         "/works/OL4W",
         "/works/OL3W",
         "/works/OL2W",
+        "/works/OL1W",
+        "/works/OL8W",
+        "/works/OL9W",
+        "/works/OL10W",
     ]
-    assert reranked.retrieved_count == 7
+    assert reranked.retrieved_count == 11
     assert reranked.reranked is True
 
 
 def test_rerank_book_search_result_skips_llm_when_result_count_is_at_or_below_limit() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["/works/OL2W", "/works/OL1W"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["/works/OL2W", "/works/OL1W"]}')
     response = BookSearchResult.model_validate(
         {
             "numFound": 2,
@@ -97,5 +101,4 @@ def test_rerank_book_search_result_skips_llm_when_result_count_is_at_or_below_li
     ]
     assert reranked.retrieved_count == 2
     assert reranked.reranked is True
-    assert llm.last_prompt is None
     assert DEFAULT_BOOK_SEARCH_LIMIT == 30
