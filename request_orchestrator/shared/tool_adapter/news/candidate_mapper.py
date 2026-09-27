@@ -10,9 +10,6 @@ from reranker import RerankerCandidate, rerank_candidates
 
 def hn_hit_to_candidate(hit: HnHit) -> RerankerCandidate:
     tag_text = ", ".join(tag for tag in (hit.tags or []) if tag)
-    fields = [f"title: {normalize_text(hit.title) or hit.title or hit.url or hit.object_id}"]
-    if hit.story_text:
-        fields.append(f"story: {normalize_text(hit.story_text)}")
     summary_parts = [
         cleaned
         for cleaned in (
@@ -24,12 +21,14 @@ def hn_hit_to_candidate(hit: HnHit) -> RerankerCandidate:
         if cleaned is not None
     ]
 
-    fields.extend(f"metadata: {part}" for part in summary_parts)
-    if hit.created_at:
-        fields.append(f"published: {normalize_text(hit.created_at)}")
     return RerankerCandidate(
         id=hit.object_id,
-        text="\n".join(fields),
+        fields={
+            "title": normalize_text(hit.title) or hit.title or hit.url or hit.object_id,
+            "story": normalize_text(hit.story_text),
+            "engagement": ". ".join(summary_parts) if summary_parts else None,
+            "published": normalize_text(hit.created_at),
+        },
     )
 
 

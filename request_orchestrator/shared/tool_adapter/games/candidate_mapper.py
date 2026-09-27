@@ -7,16 +7,16 @@ from reranker import RerankerCandidate, rerank_candidates
 
 
 def edhrec_card_to_candidate(card: EdhrecCardView, *, section: str) -> RerankerCandidate:
-    fields = [f"name: {card.name}", f"section: {section}"]
-    fields.extend(f"{field}: {value}" for field, value in (
-        ("synergy", card.synergy),
-        ("num_decks", card.num_decks),
-        ("potential_decks", card.potential_decks),
-        ("trend_zscore", card.trend_zscore),
-    ) if value is not None)
     return RerankerCandidate(
         id=card.id or card.slug or card.name,
-        text="\n".join(fields),
+        fields={
+            "name": card.name,
+            "section": section,
+            "synergy": card.synergy,
+            "num_decks": card.num_decks,
+            "potential_decks": card.potential_decks,
+            "trend_zscore": card.trend_zscore,
+        },
     )
 
 

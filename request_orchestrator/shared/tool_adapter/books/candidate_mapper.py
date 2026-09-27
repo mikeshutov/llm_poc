@@ -23,31 +23,21 @@ def book_to_candidate(book: BookDoc) -> RerankerCandidate:
     publish_dates = normalize_values(book.publish_date)
     subtitle = normalize_text(book.subtitle) if book.subtitle else None
 
-    fields = [f"title: {normalize_text(book.title) or book.title}"]
-    if subtitle:
-        fields.append(f"subtitle: {subtitle}")
-    description = _book_description(book)
-    if description:
-        fields.append(f"summary: {description}")
-    if author_names:
-        fields.append(f"authors: {author_names}")
-    if subjects:
-        fields.append(f"subjects: {subjects}")
-    if publishers:
-        fields.append(f"publishers: {publishers}")
-    if book.language:
-        fields.append(f"languages: {normalize_values(book.language)}")
-    if book.first_publish_year is not None:
-        fields.append(f"first_publish_year: {book.first_publish_year}")
-    if book.edition_count is not None:
-        fields.append(f"edition_count: {book.edition_count}")
-    if book.number_of_pages_median is not None:
-        fields.append(f"number_of_pages: {book.number_of_pages_median}")
-    if publish_dates:
-        fields.append(f"publish_dates: {publish_dates}")
     return RerankerCandidate(
         id=book.key,
-        text="\n".join(fields),
+        fields={
+            "title": normalize_text(book.title) or book.title,
+            "subtitle": subtitle,
+            "summary": _book_description(book),
+            "authors": author_names,
+            "subjects": subjects,
+            "publishers": publishers,
+            "languages": normalize_values(book.language),
+            "first_publish_year": book.first_publish_year,
+            "edition_count": book.edition_count,
+            "number_of_pages": book.number_of_pages_median,
+            "publish_dates": publish_dates,
+        },
     )
 
 

@@ -10,7 +10,7 @@ from request_orchestrator.shared.runtime_context import (
     get_current_roundtrip_id,
 )
 from reranker.client import RerankerBackend, RerankerClient
-from reranker.constants import DEFAULT_TOP_K
+from reranker.constants import DEFAULT_TOP_K, RERANKER_MODEL_NAME
 from reranker.models import RerankerCandidate, RerankerScore
 from reranker.query import build_reranker_query
 
@@ -19,11 +19,9 @@ class CandidateReranker:
     def __init__(
         self,
         llm: Any | None = None,
-        conversation_model_config: Any | None = None,
         backend: RerankerBackend | None = None,
     ):
         self.backend = backend or (llm if hasattr(llm, "rerank") else RerankerClient())
-        self.model_name = "BAAI/bge-reranker-v2-m3"
 
     def rerank(
         self,
@@ -42,7 +40,7 @@ class CandidateReranker:
         resolved_goal = goal if goal is not None else query
 
         query_text = build_reranker_query(resolved_goal, user_profile)
-        evidence = list(candidates)
+        evidence = candidates
         started_at = perf_counter()
         try:
             scored = [
@@ -56,7 +54,7 @@ class CandidateReranker:
                 agent_name=get_current_agent_name() or "",
                 node_name="reranker",
                 payload={
-                    "model": self.model_name,
+                    "model": RERANKER_MODEL_NAME,
                     "candidate_count": len(candidates),
                     "limit": resolved_limit,
                     "query": query_text,
@@ -74,13 +72,13 @@ class CandidateReranker:
             agent_name=get_current_agent_name() or "",
             node_name="reranker",
             payload={
-                "model": self.model_name,
+                "model": RERANKER_MODEL_NAME,
                 "candidate_count": len(candidates),
                 "limit": resolved_limit,
                 "query": query_text,
                 "candidates": [item.model_dump() for item in evidence],
                 "results": [item.model_dump() for item in scored],
-                "evidence_lengths": [len(item.text) for item in evidence],
+                "evidence_lengths": [len(str(item.fields)) for item in evidence],
                 "batch_size": getattr(self.backend, "batch_size", None),
                 "latency_ms": latency_ms,
                 "roundtrip_id": get_current_roundtrip_id(),
@@ -128,12 +126,10 @@ def rerank_candidates(
     user_profile: UserProfile | None = None,
     llm: Any | None = None,
     limit: int | None = None,
-    conversation_model_config: Any | None = None,
     backend: RerankerBackend | None = None,
 ) -> list[RerankerCandidate]:
     return CandidateReranker(
         llm=llm,
-        conversation_model_config=conversation_model_config,
         backend=backend,
     ).rerank(
         candidates,

@@ -3,6 +3,7 @@ from reranker.query import build_reranker_query
 from reranker.models import (
     RerankerCandidate,
     RerankerRequest,
+    RerankerRequestCandidate,
     RerankerResponse,
     RerankerScore,
 )
@@ -12,6 +13,7 @@ from reranker.constants import DEFAULT_TOP_K
 __all__ = [
     "RerankerCandidate",
     "RerankerRequest",
+    "RerankerRequestCandidate",
     "RerankerResponse",
     "RerankerScore",
     "RerankerClient",

@@ -34,12 +34,12 @@ def test_book_to_candidate_maps_book_fields() -> None:
     candidate = book_to_candidate(response.docs[0])
 
     assert candidate.id == "/works/OL1W"
-    assert candidate.text.startswith("title: The Hobbit\nsubtitle: There and Back Again")
-    assert "summary: A hobbit leaves home for an unexpected adventure." in candidate.text
-    assert "subjects: ['Fantasy', 'Adventure']" in candidate.text
-    assert "publishers: ['Allen & Unwin']" in candidate.text
-    assert "number_of_pages: 310" in candidate.text
-    assert "openlibrary.org" not in candidate.text
+    assert candidate.fields["title"] == "The Hobbit"
+    assert candidate.fields["summary"] == "A hobbit leaves home for an unexpected adventure."
+    assert candidate.fields["subjects"] == ["Fantasy", "Adventure"]
+    assert candidate.fields["publishers"] == ["Allen & Unwin"]
+    assert candidate.fields["number_of_pages"] == 310
+    assert "url" not in candidate.fields
 
 
 def test_rerank_book_search_result_reorders_results_and_preserves_metadata() -> None:

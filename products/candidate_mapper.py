@@ -8,52 +8,19 @@ from products.models.product_result import ProductResult
 
 
 def product_result_to_candidate(product: ProductResult) -> RerankerCandidate:
-    fields = [
-        f"title: {product.name}",
-        *(
-            [f"description: {product.description}"]
-            if product.description
-            else []
-        ),
-        *(
-            [f"category: {product.category}"]
-            if product.category
-            else []
-        ),
-        *(
-            [f"color: {product.color}"]
-            if product.color
-            else []
-        ),
-        *(
-            [f"style: {product.style}"]
-            if product.style
-            else []
-        ),
-        *(
-            [f"gender: {product.gender}"]
-            if product.gender
-            else []
-        ),
-        *(
-            [f"season: {product.season}"]
-            if product.season
-            else []
-        ),
-        *(
-            [f"year: {product.year}"]
-            if product.year is not None
-            else []
-        ),
-        *(
-            [f"price: {product.price}"]
-            if product.price is not None
-            else []
-        ),
-    ]
     return RerankerCandidate(
         id=product.id,
-        text="\n".join(fields),
+        fields={
+            "title": product.name,
+            "description": product.description,
+            "category": product.category,
+            "color": product.color,
+            "style": product.style,
+            "gender": product.gender,
+            "season": product.season,
+            "year": product.year,
+            "price": product.price,
+        },
     )
 
 

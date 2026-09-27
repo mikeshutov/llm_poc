@@ -8,24 +8,20 @@ from reranker import RerankerCandidate, rerank_candidates
 
 
 def web_search_result_to_candidate(result: WebSearchResult) -> RerankerCandidate:
-    fields = [f"title: {result.title or result.url}"]
-    if result.description:
-        fields.append(f"description: {result.description}")
     return RerankerCandidate(
         id=result.url or result.title or "unknown-web-result",
-        text="\n".join(fields),
+        fields={"title": result.title or result.url, "description": result.description},
     )
 
 
 def news_result_to_candidate(result: NewsResult) -> RerankerCandidate:
-    fields = [f"title: {result.title or result.url}"]
-    if result.description:
-        fields.append(f"description: {result.description}")
-    if result.age:
-        fields.append(f"published: {result.age}")
     return RerankerCandidate(
         id=result.url or result.title or "unknown-news-result",
-        text="\n".join(fields),
+        fields={
+            "title": result.title or result.url,
+            "description": result.description,
+            "published": result.age,
+        },
     )
 
 

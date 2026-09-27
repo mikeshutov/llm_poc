@@ -22,7 +22,7 @@ def test_reranker_sorts_by_backend_scores_and_appends_unscored_candidates() -> N
         {"id": "2", "score": 0.9},
         {"id": "unknown", "score": 1.0},
     ])
-    candidates = [RerankerCandidate(id=str(index), text=f"Candidate {index}") for index in range(1, 13)]
+    candidates = [RerankerCandidate(id=str(index), fields={"title": f"Candidate {index}"}) for index in range(1, 13)]
 
     ranked = rerank_candidates(candidates, goal="best", backend=backend)
 
@@ -54,7 +54,7 @@ def test_reranker_client_applies_candidate_budget_before_serialization() -> None
     with patch("reranker.client.requests.post", return_value=response) as post:
         RerankerClient(base_url="http://reranker").rerank(
             "query",
-            [RerankerCandidate(id="1", text="word " * 500)],
+            [RerankerCandidate(id="1", fields={"description": "word " * 500})],
         )
 
     submitted = post.call_args.kwargs["json"]["candidates"][0]["text"]
@@ -70,5 +70,5 @@ def test_reranker_client_rejects_invalid_response() -> None:
         with pytest.raises(RerankerUnavailableError):
             RerankerClient(base_url="http://reranker").rerank(
                 "query",
-                [RerankerCandidate(id="1", text="text")],
+            [RerankerCandidate(id="1", fields={"description": "text"})],
             )

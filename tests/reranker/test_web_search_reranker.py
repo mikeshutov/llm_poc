@@ -21,7 +21,10 @@ def test_web_search_result_to_candidate_maps_result_fields() -> None:
     candidate = web_search_result_to_candidate(response.results[0])
 
     assert candidate.id == "https://example.com/jacket"
-    assert candidate.text == "title: Lightweight Summer Jacket\ndescription: A breathable jacket for warm weather."
+    assert candidate.fields == {
+        "title": "Lightweight Summer Jacket",
+        "description": "A breathable jacket for warm weather.",
+    }
 
 
 def test_rerank_web_search_response_reorders_results_and_exposes_retrieval_metadata() -> None:

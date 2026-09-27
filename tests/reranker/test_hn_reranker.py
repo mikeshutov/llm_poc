@@ -30,11 +30,10 @@ def test_hn_hit_to_candidate_maps_hit_fields() -> None:
     candidate = hn_hit_to_candidate(response.hits[0])
 
     assert candidate.id == "1"
-    assert "title: AI Agents Are Getting Better" in candidate.text
-    assert "story: Discussion of agent progress." in candidate.text
-    assert "metadata: pg. 123 points. 45 comments. story, ai" in candidate.text
-    assert "published: 2026-08-13T10:00:00Z" in candidate.text
-    assert "example.com" not in candidate.text
+    assert candidate.fields["title"] == "AI Agents Are Getting Better"
+    assert candidate.fields["story"] == "Discussion of agent progress."
+    assert candidate.fields["engagement"] == "pg. 123 points. 45 comments. story, ai"
+    assert candidate.fields["published"] == "2026-08-13T10:00:00Z"
 
 
 def test_rerank_hn_search_result_reorders_hits_and_preserves_metadata() -> None:

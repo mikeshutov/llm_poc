@@ -18,7 +18,7 @@ from request_orchestrator.shared.tool_adapter.products.find_products_web import 
 from request_orchestrator.shared.tool_adapter.products.find_products_web import _tool_result as web_product_tool_result
 from request_orchestrator.shared.tool_adapter.search.brave_news_search import _tool_result as brave_news_tool_result
 from request_orchestrator.shared.tool_adapter.search.generic_web_search import _news_search_tool_result, _web_search_tool_result
-from reranker.models import Candidate
+from reranker.models import RerankerCandidate
 
 
 def test_html_to_plain_text_normalizes_entities_and_whitespace() -> None:
@@ -39,17 +39,14 @@ def test_evidence_view_normalizes_llm_facing_text() -> None:
     assert compact_view["metadata"] == {"seller": "Amazon Store"}
 
 
-def test_reranker_candidate_normalizes_prompt_text() -> None:
-    candidate = Candidate(
+def test_reranker_candidate_contains_only_standardized_text() -> None:
+    candidate = RerankerCandidate(
         id="drill-1",
-        title="<b>DEWALT</b>&#x20;20V",
-        content={"description": "<p>Brushless&nbsp;drill.</p>"},
-        attributes={"seller": "<em>Amazon</em>&#x20;Store"},
+        fields={"title": "DEWALT 20V", "description": "Brushless drill.", "seller": "Amazon Store"},
     )
 
-    assert candidate.title == "DEWALT 20V"
-    assert candidate.content.description == "Brushless drill."
-    assert candidate.attributes == {"seller": "Amazon Store"}
+    assert candidate.id == "drill-1"
+    assert candidate.fields == {"title": "DEWALT 20V", "description": "Brushless drill.", "seller": "Amazon Store"}
 
 
 def test_web_search_evidence_strips_html_from_brave_summary() -> None:

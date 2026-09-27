@@ -9,8 +9,9 @@ from typing import Any
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+from reranker.constants import RERANKER_MODEL_NAME
 
-MODEL_NAME = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+MODEL_NAME = os.getenv("RERANKER_MODEL", RERANKER_MODEL_NAME)
 HOST = os.getenv("RERANKER_HOST", "0.0.0.0")
 PORT = int(os.getenv("RERANKER_PORT", "8080"))
 BATCH_SIZE = max(1, int(os.getenv("RERANKER_BATCH_SIZE", "8")))

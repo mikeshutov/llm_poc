@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import os
+import json
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 import requests
 from pydantic import ValidationError
 
-from reranker.models import RerankerCandidate, RerankerRequest, RerankerResponse, RerankerScore
+from reranker.models import (
+    RerankerCandidate,
+    RerankerRequest,
+    RerankerRequestCandidate,
+    RerankerResponse,
+    RerankerScore,
+)
 
 RERANKER_CANDIDATE_TOKEN_BUDGET = max(64, int(os.getenv("RERANKER_CANDIDATE_TOKEN_BUDGET", "384")))
 
@@ -31,12 +38,26 @@ class RerankerClient:
         candidates: list[RerankerCandidate],
         *,
         token_budget: int | None = None,
-    ) -> list[RerankerCandidate]:
+    ) -> list[RerankerRequestCandidate]:
         max_chars = max(64, token_budget or RERANKER_CANDIDATE_TOKEN_BUDGET) * 4
         return [
-            candidate.model_copy(update={"text": candidate.text[:max_chars].rstrip()})
+            RerankerRequestCandidate(
+                id=candidate.id,
+                text=self._serialize_fields(candidate.fields, max_chars=max_chars),
+            )
             for candidate in candidates
         ]
+
+    @staticmethod
+    def _serialize_fields(fields: dict[str, Any], *, max_chars: int) -> str:
+        lines: list[str] = []
+        for name, value in fields.items():
+            if value is None or value == "" or value == [] or value == {}:
+                continue
+            if isinstance(value, (dict, list, tuple)):
+                value = json.dumps(value, ensure_ascii=True, default=str)
+            lines.append(f"{name}: {value}")
+        return "\n".join(lines)[:max_chars].rstrip()
 
     def rerank(self, query: str, candidates: list[RerankerCandidate]) -> list[RerankerScore]:
         candidates = self.prepare_candidates(candidates)

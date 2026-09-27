@@ -361,7 +361,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
 def test_reranker_records_non_llm_telemetry_when_it_runs() -> None:
     repo = RecordingRepo()
     candidates = [
-            RerankerCandidate(id=f'c{i}', text=f'Item {i}')
+            RerankerCandidate(id=f'c{i}', fields={'name': f'Item {i}'})
         for i in range(7)
     ]
     class FakeReranker:

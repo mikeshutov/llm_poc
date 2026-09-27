@@ -30,11 +30,10 @@ def test_cocktail_to_candidate_maps_cocktail_fields() -> None:
     candidate = cocktail_to_candidate(response.drinks[0])
 
     assert candidate.id == "drink-1"
-    assert "name: Margarita" in candidate.text
-    assert "attributes: Ordinary Drink. Alcoholic. Cocktail glass. Citrus,IBA" in candidate.text
-    assert "instructions: Shake with ice and strain." in candidate.text
-    assert "ingredients: Tequila, Lime Juice" in candidate.text
-    assert "example.com" not in candidate.text
+    assert candidate.fields["name"] == "Margarita"
+    assert candidate.fields["attributes"] == "Ordinary Drink. Alcoholic. Cocktail glass. Citrus,IBA"
+    assert candidate.fields["instructions"] == "Shake with ice and strain."
+    assert candidate.fields["ingredients"] == ["Tequila", "Lime Juice"]
 
 
 def test_rerank_cocktail_search_result_reorders_and_limits_to_three() -> None:

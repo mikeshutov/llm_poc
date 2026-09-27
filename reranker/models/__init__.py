@@ -1,6 +1,7 @@
-from reranker.models.reranker_api import (
+from reranker.models.reranker import (
     RerankerCandidate,
     RerankerRequest,
+    RerankerRequestCandidate,
     RerankerResponse,
     RerankerScore,
 )
@@ -8,6 +9,7 @@ from reranker.models.reranker_api import (
 __all__ = [
     "RerankerCandidate",
     "RerankerRequest",
+    "RerankerRequestCandidate",
     "RerankerResponse",
     "RerankerScore",
 ]

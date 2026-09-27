@@ -20,16 +20,14 @@ def meal_to_candidate(meal: Meal) -> RerankerCandidate:
         if cleaned is not None
     ]
 
-    fields = [f"name: {normalize_text(meal.name) or meal.name}"]
-    if summary_parts:
-        fields.append(f"attributes: {'. '.join(summary_parts)}")
-    if meal.instructions:
-        fields.append(f"instructions: {normalize_text(meal.instructions)}")
-    if ingredient_names:
-        fields.append(f"ingredients: {', '.join(ingredient_names)}")
     return RerankerCandidate(
         id=meal.id,
-        text="\n".join(fields),
+        fields={
+            "name": normalize_text(meal.name) or meal.name,
+            "attributes": ". ".join(summary_parts) if summary_parts else None,
+            "instructions": normalize_text(meal.instructions),
+            "ingredients": ingredient_names,
+        },
     )
 
 
@@ -46,16 +44,14 @@ def cocktail_to_candidate(cocktail: Cocktail) -> RerankerCandidate:
         if cleaned is not None
     ]
 
-    fields = [f"name: {normalize_text(cocktail.name) or cocktail.name}"]
-    if summary_parts:
-        fields.append(f"attributes: {'. '.join(summary_parts)}")
-    if cocktail.instructions:
-        fields.append(f"instructions: {normalize_text(cocktail.instructions)}")
-    if ingredient_names:
-        fields.append(f"ingredients: {', '.join(ingredient_names)}")
     return RerankerCandidate(
         id=cocktail.id,
-        text="\n".join(fields),
+        fields={
+            "name": normalize_text(cocktail.name) or cocktail.name,
+            "attributes": ". ".join(summary_parts) if summary_parts else None,
+            "instructions": normalize_text(cocktail.instructions),
+            "ingredients": ingredient_names,
+        },
     )
 
 

@@ -111,10 +111,14 @@ class MockLLM:
 
             return MockLLMResponse(content=self.responses.pop(0))
 
-    def rerank(self, query: str, candidates: list[dict[str, str]]) -> list[dict[str, Any]]:
-        """Compatibility scorer for legacy reranker tests."""
+    def rerank(self, query: str, candidates: list[Any]) -> list[dict[str, Any]]:
+        """Compatibility scorer for reranker tests."""
         with self._lock:
-            self.prompts.append(json.dumps({'query': query, 'candidates': candidates}))
+            serializable_candidates = [
+                candidate.model_dump() if hasattr(candidate, 'model_dump') else candidate
+                for candidate in candidates
+            ]
+            self.prompts.append(json.dumps({'query': query, 'candidates': serializable_candidates}))
             if not self.responses:
                 raise AssertionError('MockLLM.rerank was called without a queued response.')
             payload = json.loads(self.responses.pop(0))
