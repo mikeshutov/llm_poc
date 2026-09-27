@@ -3,12 +3,12 @@ from __future__ import annotations
 from typing import Any
 
 from personalization.profile.models import UserProfile
-from reranker import DEFAULT_TOP_K, RerankerCandidate, rerank_candidates
+from reranker import Candidate, DEFAULT_TOP_K, rerank_candidates
 from products.models.product_result import ProductResult
 
 
-def product_result_to_candidate(product: ProductResult) -> RerankerCandidate:
-    return RerankerCandidate(
+def product_result_to_candidate(product: ProductResult) -> Candidate:
+    return Candidate(
         id=product.id,
         fields={
             "title": product.name,
@@ -24,7 +24,7 @@ def product_result_to_candidate(product: ProductResult) -> RerankerCandidate:
     )
 
 
-def prepare_product_candidates(products: list[ProductResult]) -> list[RerankerCandidate]:
+def prepare_product_candidates(products: list[ProductResult]) -> list[Candidate]:
     return [product_result_to_candidate(product) for product in products]
 
 

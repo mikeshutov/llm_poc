@@ -12,8 +12,6 @@ class Candidate(BaseModel):
     fields: dict[str, Any] = Field(default_factory=dict)
 
 
-# Compatibility alias for callers that adopted the temporary explicit name.
-RerankerCandidate = Candidate
 
 
 class RerankerRequestCandidate(BaseModel):

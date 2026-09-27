@@ -36,7 +36,7 @@ from request_orchestrator.shared.evaluator.evaluator import run_evaluator
 from request_orchestrator.shared.planner.planner import REQUIRED_CAPABILITY_UNAVAILABLE_REASON, run_planner
 from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context
 from request_orchestrator.shared.synthesis.synthesis import run_synthesis
-from reranker.models import RerankerCandidate
+from reranker.models import Candidate
 from reranker.service import rerank_candidates
 
 
@@ -361,7 +361,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
 def test_reranker_does_not_record_llm_usage_when_it_runs() -> None:
     repo = RecordingRepo()
     candidates = [
-            RerankerCandidate(id=f'c{i}', fields={'name': f'Item {i}'})
+            Candidate(id=f'c{i}', fields={'name': f'Item {i}'})
         for i in range(12)
     ]
     class FakeReranker:

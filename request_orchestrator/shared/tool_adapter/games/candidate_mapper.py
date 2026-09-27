@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from integrations.edhrec.models import EdhrecCardView
-from reranker import RerankerCandidate, rerank_candidates
+from reranker import Candidate, rerank_candidates
 
 
-def edhrec_card_to_candidate(card: EdhrecCardView, *, section: str) -> RerankerCandidate:
-    return RerankerCandidate(
+def edhrec_card_to_candidate(card: EdhrecCardView, *, section: str) -> Candidate:
+    return Candidate(
         id=card.id or card.slug or card.name,
         fields={
             "name": card.name,

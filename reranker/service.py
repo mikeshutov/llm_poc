@@ -8,7 +8,7 @@ from request_orchestrator.shared.runtime_context import get_current_roundtrip_id
 from request_orchestrator.models.evidence import ToolResult
 from reranker.client import RerankerBackend, RerankerClient
 from reranker.constants import DEFAULT_TOP_K, RERANKER_MODEL_NAME
-from reranker.models import RerankerCandidate, RerankerScore
+from reranker.models import Candidate, RerankerScore
 from reranker.query import build_reranker_query
 
 
@@ -23,13 +23,13 @@ class CandidateReranker:
 
     def rerank(
         self,
-        candidates: list[RerankerCandidate],
+        candidates: list[Candidate],
         *,
         goal: str | None = None,
         query: str | None = None,
         user_profile: UserProfile | None = None,
         limit: int | None = None,
-    ) -> list[RerankerCandidate]:
+    ) -> list[Candidate]:
         resolved_limit = DEFAULT_TOP_K if limit is None else max(1, limit)
 
         if len(candidates) <= resolved_limit:
@@ -80,6 +80,31 @@ class CandidateReranker:
         )
         return ranked_candidates[:resolved_limit]
 
+    def _sort_candidates(
+        self,
+        candidate_by_id: dict[str, Candidate],
+        candidates: list[Candidate],
+        ranked_candidate_ids: list[str],
+    ) -> list[Candidate]:
+        seen_ids: set[str] = set()
+        ranked_candidates: list[Candidate] = []
+
+        for candidate_id in ranked_candidate_ids:
+            if candidate_id in seen_ids:
+                continue
+            candidate = candidate_by_id.get(candidate_id)
+            if candidate is None:
+                continue
+            ranked_candidates.append(candidate)
+            seen_ids.add(candidate_id)
+
+        for candidate in candidates:
+            if candidate.id in seen_ids:
+                continue
+            ranked_candidates.append(candidate)
+
+        return ranked_candidates
+
 
 def rerank_tool_result(
     tool_result: ToolResult,
@@ -109,34 +134,8 @@ def rerank_tool_result(
     tool_result.rerank_debug = reranker.last_debug_payload
     return tool_result
 
-    def _sort_candidates(
-        self,
-        candidate_by_id: dict[str, RerankerCandidate],
-        candidates: list[RerankerCandidate],
-        ranked_candidate_ids: list[str],
-    ) -> list[RerankerCandidate]:
-        seen_ids: set[str] = set()
-        ranked_candidates: list[RerankerCandidate] = []
-
-        for candidate_id in ranked_candidate_ids:
-            if candidate_id in seen_ids:
-                continue
-            candidate = candidate_by_id.get(candidate_id)
-            if candidate is None:
-                continue
-            ranked_candidates.append(candidate)
-            seen_ids.add(candidate_id)
-
-        for candidate in candidates:
-            if candidate.id in seen_ids:
-                continue
-            ranked_candidates.append(candidate)
-
-        return ranked_candidates
-
-
 def rerank_candidates(
-    candidates: list[RerankerCandidate],
+    candidates: list[Candidate],
     *,
     goal: str | None = None,
     query: str | None = None,
@@ -144,7 +143,7 @@ def rerank_candidates(
     llm: Any | None = None,
     limit: int | None = None,
     backend: RerankerBackend | None = None,
-) -> list[RerankerCandidate]:
+) -> list[Candidate]:
     return CandidateReranker(
         llm=llm,
         backend=backend,

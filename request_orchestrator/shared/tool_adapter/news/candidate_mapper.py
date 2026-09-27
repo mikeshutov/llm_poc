@@ -5,10 +5,10 @@ from typing import Any
 from common.utils import normalize_text
 from integrations.hn_algolia.models import HnHit, HnSearchResult
 from request_orchestrator.shared.tool_adapter.news.constants import DEFAULT_HN_SEARCH_LIMIT
-from reranker import RerankerCandidate, rerank_candidates
+from reranker import Candidate, rerank_candidates
 
 
-def hn_hit_to_candidate(hit: HnHit) -> RerankerCandidate:
+def hn_hit_to_candidate(hit: HnHit) -> Candidate:
     tag_text = ", ".join(tag for tag in (hit.tags or []) if tag)
     summary_parts = [
         cleaned
@@ -21,7 +21,7 @@ def hn_hit_to_candidate(hit: HnHit) -> RerankerCandidate:
         if cleaned is not None
     ]
 
-    return RerankerCandidate(
+    return Candidate(
         id=hit.object_id,
         fields={
             "title": normalize_text(hit.title) or hit.title or hit.url or hit.object_id,

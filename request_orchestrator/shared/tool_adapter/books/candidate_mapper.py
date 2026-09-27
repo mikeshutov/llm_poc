@@ -5,7 +5,7 @@ from typing import Any
 from common.utils import normalize_text, normalize_values, unique_normalized_values
 from integrations.open_library.models import BookDoc, BookSearchResult
 from request_orchestrator.shared.tool_adapter.books.constants import DEFAULT_BOOK_SEARCH_LIMIT
-from reranker import RerankerCandidate, rerank_candidates
+from reranker import Candidate, rerank_candidates
 
 
 def _book_description(book: BookDoc) -> str | None:
@@ -16,14 +16,14 @@ def _book_description(book: BookDoc) -> str | None:
     return " ".join(descriptions) if descriptions else None
 
 
-def book_to_candidate(book: BookDoc) -> RerankerCandidate:
+def book_to_candidate(book: BookDoc) -> Candidate:
     author_names = unique_normalized_values(book.author_name)
     subjects = unique_normalized_values(book.subject, exclude_prefixes=("nyt:",))
     publishers = unique_normalized_values(book.publisher)
     publish_dates = normalize_values(book.publish_date)
     subtitle = normalize_text(book.subtitle) if book.subtitle else None
 
-    return RerankerCandidate(
+    return Candidate(
         id=book.key,
         fields={
             "title": normalize_text(book.title) or book.title,

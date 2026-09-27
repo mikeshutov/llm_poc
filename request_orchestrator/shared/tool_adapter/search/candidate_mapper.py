@@ -4,18 +4,18 @@ from typing import Any
 
 from integrations.brave.models import NewsResult, NewsSearchResponse, WebSearchResponse, WebSearchResult
 from personalization.profile.models import UserProfile
-from reranker import RerankerCandidate, rerank_candidates
+from reranker import Candidate, rerank_candidates
 
 
-def web_search_result_to_candidate(result: WebSearchResult) -> RerankerCandidate:
-    return RerankerCandidate(
+def web_search_result_to_candidate(result: WebSearchResult) -> Candidate:
+    return Candidate(
         id=result.url or result.title or "unknown-web-result",
         fields={"title": result.title or result.url, "description": result.description},
     )
 
 
-def news_result_to_candidate(result: NewsResult) -> RerankerCandidate:
-    return RerankerCandidate(
+def news_result_to_candidate(result: NewsResult) -> Candidate:
+    return Candidate(
         id=result.url or result.title or "unknown-news-result",
         fields={
             "title": result.title or result.url,

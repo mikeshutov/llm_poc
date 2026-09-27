@@ -18,7 +18,7 @@ from request_orchestrator.shared.tool_adapter.products.find_products_web import 
 from request_orchestrator.shared.tool_adapter.products.find_products_web import _tool_result as web_product_tool_result
 from request_orchestrator.shared.tool_adapter.search.brave_news_search import _tool_result as brave_news_tool_result
 from request_orchestrator.shared.tool_adapter.search.generic_web_search import _news_search_tool_result, _web_search_tool_result
-from reranker.models import RerankerCandidate
+from reranker.models import Candidate
 
 
 def test_html_to_plain_text_normalizes_entities_and_whitespace() -> None:
@@ -62,7 +62,7 @@ def test_evidence_view_projects_semantic_fields_to_reranker_candidate() -> None:
 
 
 def test_reranker_candidate_contains_only_standardized_text() -> None:
-    candidate = RerankerCandidate(
+    candidate = Candidate(
         id="drill-1",
         fields={"title": "DEWALT 20V", "description": "Brushless drill.", "seller": "Amazon Store"},
     )

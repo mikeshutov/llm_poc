@@ -5,10 +5,10 @@ from typing import Any
 from common.utils import normalize_text
 from integrations.cocktail_db.models import Cocktail, CocktailSearchResult
 from integrations.meal_db.models import Meal, MealSearchResult
-from reranker import RerankerCandidate, rerank_candidates
+from reranker import Candidate, rerank_candidates
 
 
-def meal_to_candidate(meal: Meal) -> RerankerCandidate:
+def meal_to_candidate(meal: Meal) -> Candidate:
     ingredient_names = [cleaned for ingredient in meal.ingredients if (cleaned := normalize_text(ingredient.name))]
     summary_parts = [
         cleaned
@@ -20,7 +20,7 @@ def meal_to_candidate(meal: Meal) -> RerankerCandidate:
         if cleaned is not None
     ]
 
-    return RerankerCandidate(
+    return Candidate(
         id=meal.id,
         fields={
             "name": normalize_text(meal.name) or meal.name,
@@ -31,7 +31,7 @@ def meal_to_candidate(meal: Meal) -> RerankerCandidate:
     )
 
 
-def cocktail_to_candidate(cocktail: Cocktail) -> RerankerCandidate:
+def cocktail_to_candidate(cocktail: Cocktail) -> Candidate:
     ingredient_names = [cleaned for ingredient in cocktail.ingredients if (cleaned := normalize_text(ingredient.name))]
     summary_parts = [
         cleaned
@@ -44,7 +44,7 @@ def cocktail_to_candidate(cocktail: Cocktail) -> RerankerCandidate:
         if cleaned is not None
     ]
 
-    return RerankerCandidate(
+    return Candidate(
         id=cocktail.id,
         fields={
             "name": normalize_text(cocktail.name) or cocktail.name,

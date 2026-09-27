@@ -9,7 +9,7 @@ import requests
 from pydantic import ValidationError
 
 from reranker.models import (
-    RerankerCandidate,
+    Candidate,
     RerankerRequest,
     RerankerRequestCandidate,
     RerankerResponse,
@@ -24,7 +24,7 @@ class RerankerUnavailableError(RuntimeError):
 
 
 class RerankerBackend(Protocol):
-    def rerank(self, query: str, candidates: list[RerankerCandidate]) -> list[RerankerScore]: ...
+    def rerank(self, query: str, candidates: list[Candidate]) -> list[RerankerScore]: ...
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,7 @@ class RerankerClient:
 
     def prepare_candidates(
         self,
-        candidates: list[RerankerCandidate],
+        candidates: list[Candidate],
         *,
         token_budget: int | None = None,
     ) -> list[RerankerRequestCandidate]:
@@ -59,7 +59,7 @@ class RerankerClient:
             lines.append(f"{name}: {value}")
         return "\n".join(lines)[:max_chars].rstrip()
 
-    def rerank(self, query: str, candidates: list[RerankerCandidate]) -> list[RerankerScore]:
+    def rerank(self, query: str, candidates: list[Candidate]) -> list[RerankerScore]:
         candidates = self.prepare_candidates(candidates)
         try:
             response = requests.post(
