@@ -39,6 +39,28 @@ def test_evidence_view_normalizes_llm_facing_text() -> None:
     assert compact_view["metadata"] == {"seller": "Amazon Store"}
 
 
+def test_evidence_view_projects_semantic_fields_to_reranker_candidate() -> None:
+    evidence = EvidenceView(
+        item_id="drill-1",
+        title="DEWALT 20V",
+        summary="Brushless drill.",
+        urls=[{"url": "https://example.com/drill"}],
+        image_url="https://example.com/drill.jpg",
+        source="product-search",
+        llm_metadata={"category": "Tools", "color": "Yellow"},
+    )
+
+    candidate = evidence.to_candidate()
+
+    assert candidate.id == "drill-1"
+    assert candidate.fields == {
+        "title": "DEWALT 20V",
+        "summary": "Brushless drill.",
+        "category": "Tools",
+        "color": "Yellow",
+    }
+
+
 def test_reranker_candidate_contains_only_standardized_text() -> None:
     candidate = RerankerCandidate(
         id="drill-1",
