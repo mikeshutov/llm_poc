@@ -23,20 +23,11 @@ def hn_hit_to_candidate(hit: HnHit) -> Candidate:
 
     return Candidate(
         id=hit.object_id,
-        title=normalize_text(hit.title) or hit.title or hit.url or hit.object_id,
-        content={
-            "name": normalize_text(hit.title) or hit.title,
-            "summary": ". ".join(summary_parts) if summary_parts else None,
-            "description": normalize_text(hit.story_text),
-            "url": normalize_text(hit.url),
-        },
-        attributes={
-            "author": normalize_text(hit.author),
-            "tags": list(hit.tags or []),
-        },
-        metadata={
-            "source": "hn_search",
-            "created_at": hit.created_at,
+        fields={
+            "title": normalize_text(hit.title) or hit.title or hit.url or hit.object_id,
+            "story": normalize_text(hit.story_text),
+            "engagement": ". ".join(summary_parts) if summary_parts else None,
+            "published": normalize_text(hit.created_at),
         },
     )
 

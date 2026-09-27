@@ -8,23 +8,11 @@ from products.models.product_result import ProductResult
 
 
 def product_result_to_candidate(product: ProductResult) -> Candidate:
-    metadata = {
-        "source": product.source.value,
-    }
-    if product.score is not None:
-        metadata["retrieval_distance"] = product.score
-
     return Candidate(
         id=product.id,
-        candidate_type="product",
-        title=product.name,
-        content={
-            "name": product.name,
+        fields={
+            "title": product.name,
             "description": product.description,
-            "url": product.url,
-            "image_url": product.image_url,
-        },
-        attributes={
             "category": product.category,
             "color": product.color,
             "style": product.style,
@@ -33,7 +21,6 @@ def product_result_to_candidate(product: ProductResult) -> Candidate:
             "year": product.year,
             "price": product.price,
         },
-        metadata=metadata,
     )
 
 

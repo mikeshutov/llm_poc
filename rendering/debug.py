@@ -13,6 +13,7 @@ TOOL_CALL_KIND = "tool_call"
 SYNTHESIS_KIND = "synthesis"
 EXECUTION_RESULT_KIND = "execution_result"
 LLM_CALL_KIND = "llm_call"
+RERANKER_CALL_KIND = "reranker_call"
 ORCHESTRATOR_AGENT_NAME = "request_orchestrator"
 DEFAULT_AGENT_LOG_ORDER = [
     ORCHESTRATOR_AGENT_NAME,
@@ -94,6 +95,21 @@ class LlmCallLogPayload(BaseModel):
     input_object: object | None = None
     output_object: object | None = None
     metadata: dict = Field(default_factory=dict)
+
+
+class RerankerCallLogPayload(BaseModel):
+    title: str = "Reranker"
+    model: str = ""
+    query: str = ""
+    candidates: list[dict] = Field(default_factory=list)
+    results: list[dict] = Field(default_factory=list)
+    candidate_count: int = 0
+    limit: int | None = None
+    evidence_lengths: list[int] = Field(default_factory=list)
+    batch_size: int | None = None
+    latency_ms: int | None = None
+    error: str = ""
+
 
 
 def debug_render_message(content, content_title: str) -> None:
@@ -231,6 +247,8 @@ def _build_log_payload(entry: dict) -> tuple[str, dict]:
         payload = _build_tool_call_payload(entry)
     elif kind == LLM_CALL_KIND:
         payload = _build_llm_call_payload(entry)
+    elif kind == RERANKER_CALL_KIND:
+        payload = RerankerCallLogPayload.model_validate(entry).model_dump()
     else:
         payload = dict(entry)
         payload.setdefault("title", entry.get("title", "Log Entry"))

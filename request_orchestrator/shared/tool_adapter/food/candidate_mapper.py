@@ -22,22 +22,11 @@ def meal_to_candidate(meal: Meal) -> Candidate:
 
     return Candidate(
         id=meal.id,
-        title=normalize_text(meal.name) or meal.name,
-        content={
-            "name": normalize_text(meal.name),
-            "summary": ". ".join(summary_parts) if summary_parts else None,
-            "description": normalize_text(meal.instructions),
-            "text": ", ".join(ingredient_names) if ingredient_names else None,
-            "url": normalize_text(meal.source) or normalize_text(meal.youtube),
-            "image_url": normalize_text(meal.thumbnail),
-        },
-        attributes={
-            "category": normalize_text(meal.category),
-            "area": normalize_text(meal.area),
-            "tags": normalize_text(meal.tags),
-        },
-        metadata={
-            "source": "meal_db",
+        fields={
+            "name": normalize_text(meal.name) or meal.name,
+            "attributes": ". ".join(summary_parts) if summary_parts else None,
+            "instructions": normalize_text(meal.instructions),
+            "ingredients": ingredient_names,
         },
     )
 
@@ -57,22 +46,11 @@ def cocktail_to_candidate(cocktail: Cocktail) -> Candidate:
 
     return Candidate(
         id=cocktail.id,
-        title=normalize_text(cocktail.name) or cocktail.name,
-        content={
-            "name": normalize_text(cocktail.name),
-            "summary": ". ".join(summary_parts) if summary_parts else None,
-            "description": normalize_text(cocktail.instructions),
-            "text": ", ".join(ingredient_names) if ingredient_names else None,
-            "image_url": normalize_text(cocktail.thumbnail),
-        },
-        attributes={
-            "category": normalize_text(cocktail.category),
-            "alcoholic": normalize_text(cocktail.alcoholic),
-            "glass": normalize_text(cocktail.glass),
-            "tags": normalize_text(cocktail.tags),
-        },
-        metadata={
-            "source": "cocktail_db",
+        fields={
+            "name": normalize_text(cocktail.name) or cocktail.name,
+            "attributes": ". ".join(summary_parts) if summary_parts else None,
+            "instructions": normalize_text(cocktail.instructions),
+            "ingredients": ingredient_names,
         },
     )
 

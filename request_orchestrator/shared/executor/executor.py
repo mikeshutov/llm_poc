@@ -78,28 +78,24 @@ def _execute_step(
     args = resolved_args if resolved_args is not None else _substitute_refs(step.args, tool_results_by_step_id)
     started_at = perf_counter()
     if rejection_reason:
-        return StepExecutionResult(
-            step=step,
-            args=args,
-            output=ToolResult.error(rejection_reason),
-            error_text=rejection_reason,
-            rejection_reason=rejection_reason,
-        )
-    try:
-        output = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)
-        error_text = ""
-    except ValidationError as e:
-        error_text = f"Invalid arguments for tool '{step.tool}': {e.errors(include_url=False)}"
-        output = ToolResult(
-            result={"error": error_text},
-            evidence=[],
-        )
-    except Exception as e:
-        error_text = f"Tool '{step.tool}' failed: {e}"
-        output = ToolResult(
-            result={"error": error_text, "tool": step.tool},
-            evidence=[],
-        )
+        output = ToolResult.error(rejection_reason)
+        error_text = rejection_reason
+    else:
+        try:
+            output = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)
+            error_text = ""
+        except ValidationError as e:
+            error_text = f"Invalid arguments for tool '{step.tool}': {e.errors(include_url=False)}"
+            output = ToolResult(
+                result={"error": error_text},
+                evidence=[],
+            )
+        except Exception as e:
+            error_text = f"Tool '{step.tool}' failed: {e}"
+            output = ToolResult(
+                result={"error": error_text, "tool": step.tool},
+                evidence=[],
+            )
     latency_ms = int((perf_counter() - started_at) * 1000)
 
     return StepExecutionResult(
@@ -154,7 +150,6 @@ def _record_step_result(
         iteration=iteration_number,
         payload=payload,
     )
-
     if tool_repo and execution_context.roundtrip_id:
         tool_call_id = tool_repo.append_tool_call(
             execution_context.roundtrip_id,

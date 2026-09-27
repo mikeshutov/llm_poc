@@ -10,32 +10,17 @@ from reranker import Candidate, rerank_candidates
 def web_search_result_to_candidate(result: WebSearchResult) -> Candidate:
     return Candidate(
         id=result.url or result.title or "unknown-web-result",
-        title=result.title or result.url,
-        content={
-            "name": result.title,
-            "description": result.description,
-            "url": result.url,
-            "image_url": result.image_url,
-        },
-        metadata={
-            "source": "web_search",
-        },
+        fields={"title": result.title or result.url, "description": result.description},
     )
 
 
 def news_result_to_candidate(result: NewsResult) -> Candidate:
     return Candidate(
         id=result.url or result.title or "unknown-news-result",
-        title=result.title or result.url,
-        content={
-            "name": result.title,
+        fields={
+            "title": result.title or result.url,
             "description": result.description,
-            "summary": result.age,
-            "url": result.url,
-            "image_url": result.thumbnail_url,
-        },
-        metadata={
-            "source": "news_search",
+            "published": result.age,
         },
     )
 

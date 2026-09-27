@@ -1,2 +1,3 @@
-DEFAULT_TOP_K = 6
-RERANKER_RESPONSE_SCHEMA = '{"ranked_ids": ["candidate-id-1", "candidate-id-2"]}'
+RERANKER_MODEL_NAME = "BAAI/bge-reranker-v2-m3"
+RERANKER_EVENT_TYPE = "reranker_call"
+DEFAULT_TOP_K = 10

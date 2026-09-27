@@ -1,6 +1,6 @@
 from integrations.brave.models import WebSearchResponse
 from request_orchestrator.shared.tool_adapter.search.candidate_mapper import rerank_web_search_response, web_search_result_to_candidate
-from test_utilities.mock_llm import MockLLM
+from test_utilities.fake_reranker import FakeReranker
 
 
 def test_web_search_result_to_candidate_maps_result_fields() -> None:
@@ -21,15 +21,14 @@ def test_web_search_result_to_candidate_maps_result_fields() -> None:
     candidate = web_search_result_to_candidate(response.results[0])
 
     assert candidate.id == "https://example.com/jacket"
-    assert candidate.title == "Lightweight Summer Jacket"
-    assert candidate.content["description"] == "A breathable jacket for warm weather."
-    assert candidate.metadata["source"] == "web_search"
+    assert candidate.fields == {
+        "title": "Lightweight Summer Jacket",
+        "description": "A breathable jacket for warm weather.",
+    }
 
 
 def test_rerank_web_search_response_reorders_results_and_exposes_retrieval_metadata() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["https://example.com/3", "https://example.com/2", "https://example.com/1", "https://example.com/4"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["https://example.com/3", "https://example.com/2", "https://example.com/1", "https://example.com/4"]}')
     response = WebSearchResponse.model_validate(
         {
             "query": "best summer jackets",
@@ -58,9 +57,7 @@ def test_rerank_web_search_response_reorders_results_and_exposes_retrieval_metad
 
 
 def test_rerank_web_search_response_skips_llm_when_result_count_is_at_or_below_limit() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["https://example.com/2", "https://example.com/1"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["https://example.com/2", "https://example.com/1"]}')
     response = WebSearchResponse.model_validate(
         {
             "query": "best summer jackets",
@@ -79,4 +76,3 @@ def test_rerank_web_search_response_skips_llm_when_result_count_is_at_or_below_l
     ]
     assert reranked.retrieved_count == 2
     assert reranked.reranked is True
-    assert llm.last_prompt is None

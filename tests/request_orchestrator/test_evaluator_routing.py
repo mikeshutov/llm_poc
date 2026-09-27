@@ -25,6 +25,7 @@ from request_orchestrator.models.agent_execution_context import AgentExecutionCo
 from request_orchestrator.models.agent_result import ResultStatus
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evaluation_result import (
+    EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT,
     EVALUATION_STATUS_RETRYABLE,
     EVALUATION_STATUS_SATISFIED,
     EVALUATION_STATUS_TERMINAL,
@@ -214,6 +215,13 @@ def test_execution_result_router_skips_evaluator_after_second_empty_execution() 
 def test_evaluator_router_returns_synthesis_when_status_is_satisfied() -> None:
     state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
     state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
+
+    assert evaluator_router(state) == SYNTHESIZE_EDGE
+
+
+def test_evaluator_router_returns_synthesis_when_status_is_partial_but_sufficient() -> None:
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT
 
     assert evaluator_router(state) == SYNTHESIZE_EDGE
 

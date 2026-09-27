@@ -39,17 +39,36 @@ def test_evidence_view_normalizes_llm_facing_text() -> None:
     assert compact_view["metadata"] == {"seller": "Amazon Store"}
 
 
-def test_reranker_candidate_normalizes_prompt_text() -> None:
-    candidate = Candidate(
-        id="drill-1",
-        title="<b>DEWALT</b>&#x20;20V",
-        content={"description": "<p>Brushless&nbsp;drill.</p>"},
-        attributes={"seller": "<em>Amazon</em>&#x20;Store"},
+def test_evidence_view_projects_semantic_fields_to_reranker_candidate() -> None:
+    evidence = EvidenceView(
+        item_id="drill-1",
+        title="DEWALT 20V",
+        summary="Brushless drill.",
+        urls=[{"url": "https://example.com/drill"}],
+        image_url="https://example.com/drill.jpg",
+        source="product-search",
+        llm_metadata={"category": "Tools", "color": "Yellow"},
     )
 
-    assert candidate.title == "DEWALT 20V"
-    assert candidate.content.description == "Brushless drill."
-    assert candidate.attributes == {"seller": "Amazon Store"}
+    candidate = evidence.to_candidate()
+
+    assert candidate.id == "drill-1"
+    assert candidate.fields == {
+        "title": "DEWALT 20V",
+        "summary": "Brushless drill.",
+        "category": "Tools",
+        "color": "Yellow",
+    }
+
+
+def test_reranker_candidate_contains_only_standardized_text() -> None:
+    candidate = Candidate(
+        id="drill-1",
+        fields={"title": "DEWALT 20V", "description": "Brushless drill.", "seller": "Amazon Store"},
+    )
+
+    assert candidate.id == "drill-1"
+    assert candidate.fields == {"title": "DEWALT 20V", "description": "Brushless drill.", "seller": "Amazon Store"}
 
 
 def test_web_search_evidence_strips_html_from_brave_summary() -> None:

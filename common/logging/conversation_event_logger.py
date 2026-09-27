@@ -4,10 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from conversation.repository.repo_factory import get_conversation_repo
-from request_orchestrator.shared.runtime_context import (
-    get_current_conversation_id,
-    get_current_roundtrip_id,
-)
+from request_orchestrator.shared.runtime_context import get_current_conversation_id, get_current_roundtrip_id
 
 
 def create_conversation_event(

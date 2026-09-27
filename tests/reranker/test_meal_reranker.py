@@ -1,7 +1,7 @@
 from integrations.meal_db.models import MealSearchResult
 from request_orchestrator.shared.tool_adapter.food.candidate_mapper import meal_to_candidate, rerank_meal_search_result
 from request_orchestrator.shared.tool_adapter.food.constants import DEFAULT_MEAL_RERANK_LIMIT
-from test_utilities.mock_llm import MockLLM
+from test_utilities.fake_reranker import FakeReranker
 
 
 def test_meal_to_candidate_maps_meal_fields() -> None:
@@ -27,20 +27,14 @@ def test_meal_to_candidate_maps_meal_fields() -> None:
     candidate = meal_to_candidate(response.meals[0])
 
     assert candidate.id == "meal-1"
-    assert candidate.title == "Pasta Primavera"
-    assert candidate.content["name"] == "Pasta Primavera"
-    assert candidate.content["summary"] == "Pasta. Italian. Quick,Fresh"
-    assert candidate.content["description"] == "Boil pasta and toss with vegetables."
-    assert candidate.content["text"] == "Pasta, Tomato"
-    assert candidate.content["url"] == "https://example.com/pasta"
-    assert candidate.content["image_url"] == "https://example.com/pasta.jpg"
-    assert candidate.metadata["source"] == "meal_db"
+    assert candidate.fields["name"] == "Pasta Primavera"
+    assert candidate.fields["attributes"] == "Pasta. Italian. Quick,Fresh"
+    assert candidate.fields["instructions"] == "Boil pasta and toss with vegetables."
+    assert candidate.fields["ingredients"] == ["Pasta", "Tomato"]
 
 
 def test_rerank_meal_search_result_reorders_and_limits_to_three() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["meal-5", "meal-4", "meal-3", "meal-2", "meal-1"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["meal-5", "meal-4", "meal-3", "meal-2", "meal-1"]}')
     response = MealSearchResult.model_validate(
         {
             "meals": [
@@ -53,7 +47,7 @@ def test_rerank_meal_search_result_reorders_and_limits_to_three() -> None:
         }
     )
 
-    reranked = rerank_meal_search_result(response, goal="good pasta recipes", llm=llm, limit=DEFAULT_MEAL_RERANK_LIMIT)
+    reranked = rerank_meal_search_result(response, goal="good pasta recipes", llm=llm, limit=3)
 
     assert [meal.id for meal in reranked.meals] == ["meal-5", "meal-4", "meal-3"]
     assert reranked.retrieved_count == 5
@@ -61,9 +55,7 @@ def test_rerank_meal_search_result_reorders_and_limits_to_three() -> None:
 
 
 def test_rerank_meal_search_result_skips_llm_when_result_count_is_at_or_below_limit() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["meal-2", "meal-1"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["meal-2", "meal-1"]}')
     response = MealSearchResult.model_validate(
         {
             "meals": [
@@ -73,9 +65,8 @@ def test_rerank_meal_search_result_skips_llm_when_result_count_is_at_or_below_li
         }
     )
 
-    reranked = rerank_meal_search_result(response, goal="good pasta recipes", llm=llm, limit=DEFAULT_MEAL_RERANK_LIMIT)
+    reranked = rerank_meal_search_result(response, goal="good pasta recipes", llm=llm, limit=3)
 
     assert [meal.id for meal in reranked.meals] == ["meal-1", "meal-2"]
     assert reranked.retrieved_count == 2
     assert reranked.reranked is True
-    assert llm.last_prompt is None

@@ -13,6 +13,7 @@ from request_orchestrator.constants import EVALUATOR_PROMPT_KIND
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evaluator_event_payload import EvaluatorEventPayload
 from request_orchestrator.models.evaluation_result import (
+    EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT,
     EVALUATION_STATUS_TERMINAL,
     EVALUATION_STATUS_SATISFIED,
     EvaluationResult,
@@ -121,18 +122,16 @@ def run_evaluator(state: AgentState) -> AgentState:
     deduped_relevant_evidence = _dedupe_evidence_ids(evaluation.relevant_evidence)
     state.result = state.result.copy(relevant_evidence_ids=deduped_relevant_evidence)
     state.node_states.evaluator.evaluation_status = evaluation.status
+    state.node_states.evaluator.missing_information = evaluation.missing_information
 
     if evaluation.status in TERMINAL_EVALUATION_STATUSES:
         state.result = state.result.copy(
             result_status=(
                 ResultStatus.SUCCESS
-                if evaluation.status == EVALUATION_STATUS_SATISFIED
+                if evaluation.status in {EVALUATION_STATUS_SATISFIED, EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT}
                 else ResultStatus.FAILED
             )
         )
-    else:
-        state.node_states.evaluator.missing_information = evaluation.missing_information
-
     create_conversation_event(
         conversation_id=execution_context.conversation_id,
         roundtrip_id=execution_context.roundtrip_id,

@@ -281,6 +281,28 @@ def test_build_log_payload_labels_llm_call_entries() -> None:
     assert payload['computed_total_cost'] == '0.000325'
 
 
+def test_build_log_payload_labels_reranker_call_entries() -> None:
+    title, payload = _build_log_payload(
+        {
+            'kind': 'reranker_call',
+            'model': 'BAAI/bge-reranker-v2-m3',
+            'query': 'query: hiking boots',
+            'candidates': [{'id': '1', 'text': 'title: Trail boots'}],
+            'results': [{'id': '1', 'score': 0.92}],
+            'candidate_count': 1,
+            'limit': 10,
+            'evidence_lengths': [18],
+            'batch_size': 8,
+            'latency_ms': 250,
+        }
+    )
+
+    assert title == 'Reranker'
+    assert payload['model'] == 'BAAI/bge-reranker-v2-m3'
+    assert payload['query'] == 'query: hiking boots'
+    assert payload['results'] == [{'id': '1', 'score': 0.92}]
+
+
 def test_build_request_analysis_log_payload_displays_all_agent_goals() -> None:
     title, payload = _build_log_payload(
         {

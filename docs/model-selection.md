@@ -8,9 +8,8 @@ The system can use different models for different parts of the loop. Today the c
 3. `main_agent.synthesis`
 4. `profile_agent.planner`
 5. `shared.evaluator`
-6. `shared.reranker`
 
-That means request analysis, planning, synthesis, evaluation, and reranking do not have to share the same model.
+That means request analysis, planning, synthesis, and evaluation do not have to share the same model. 
 
 ## Defaults
 The defaults currently live in `llm/conversation_model_config.py`.
@@ -45,7 +44,6 @@ In practice:
 3. Synthesis asks for `main_agent.synthesis`.
 4. Profile management planning asks for `profile_agent.planner`.
 5. Evaluator asks for `shared.evaluator`.
-6. Reranker asks for `shared.reranker`.
 
 This keeps model choice close to the purpose of the stage rather than treating the whole request as one uniform LLM call.
 

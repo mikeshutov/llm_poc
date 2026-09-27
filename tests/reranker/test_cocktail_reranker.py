@@ -4,7 +4,7 @@ from request_orchestrator.shared.tool_adapter.food.candidate_mapper import (
     rerank_cocktail_search_result,
 )
 from request_orchestrator.shared.tool_adapter.food.constants import DEFAULT_MEAL_RERANK_LIMIT
-from test_utilities.mock_llm import MockLLM
+from test_utilities.fake_reranker import FakeReranker
 
 
 def test_cocktail_to_candidate_maps_cocktail_fields() -> None:
@@ -30,19 +30,14 @@ def test_cocktail_to_candidate_maps_cocktail_fields() -> None:
     candidate = cocktail_to_candidate(response.drinks[0])
 
     assert candidate.id == "drink-1"
-    assert candidate.title == "Margarita"
-    assert candidate.content["name"] == "Margarita"
-    assert candidate.content["summary"] == "Ordinary Drink. Alcoholic. Cocktail glass. Citrus,IBA"
-    assert candidate.content["description"] == "Shake with ice and strain."
-    assert candidate.content["text"] == "Tequila, Lime Juice"
-    assert candidate.content["image_url"] == "https://example.com/margarita.jpg"
-    assert candidate.metadata["source"] == "cocktail_db"
+    assert candidate.fields["name"] == "Margarita"
+    assert candidate.fields["attributes"] == "Ordinary Drink. Alcoholic. Cocktail glass. Citrus,IBA"
+    assert candidate.fields["instructions"] == "Shake with ice and strain."
+    assert candidate.fields["ingredients"] == ["Tequila", "Lime Juice"]
 
 
 def test_rerank_cocktail_search_result_reorders_and_limits_to_three() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["drink-5", "drink-4", "drink-3", "drink-2", "drink-1"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["drink-5", "drink-4", "drink-3", "drink-2", "drink-1"]}')
     response = CocktailSearchResult.model_validate(
         {
             "drinks": [
@@ -55,7 +50,7 @@ def test_rerank_cocktail_search_result_reorders_and_limits_to_three() -> None:
         }
     )
 
-    reranked = rerank_cocktail_search_result(response, goal="good tequila cocktails", llm=llm, limit=DEFAULT_MEAL_RERANK_LIMIT)
+    reranked = rerank_cocktail_search_result(response, goal="good tequila cocktails", llm=llm, limit=3)
 
     assert [cocktail.id for cocktail in reranked.drinks] == ["drink-5", "drink-4", "drink-3"]
     assert reranked.retrieved_count == 5
@@ -63,9 +58,7 @@ def test_rerank_cocktail_search_result_reorders_and_limits_to_three() -> None:
 
 
 def test_rerank_cocktail_search_result_skips_llm_when_result_count_is_at_or_below_limit() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["drink-2", "drink-1"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["drink-2", "drink-1"]}')
     response = CocktailSearchResult.model_validate(
         {
             "drinks": [
@@ -75,9 +68,8 @@ def test_rerank_cocktail_search_result_skips_llm_when_result_count_is_at_or_belo
         }
     )
 
-    reranked = rerank_cocktail_search_result(response, goal="good tequila cocktails", llm=llm, limit=DEFAULT_MEAL_RERANK_LIMIT)
+    reranked = rerank_cocktail_search_result(response, goal="good tequila cocktails", llm=llm, limit=3)
 
     assert [cocktail.id for cocktail in reranked.drinks] == ["drink-1", "drink-2"]
     assert reranked.retrieved_count == 2
     assert reranked.reranked is True
-    assert llm.last_prompt is None

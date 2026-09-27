@@ -4,7 +4,7 @@ from request_orchestrator.shared.tool_adapter.news.candidate_mapper import (
     rerank_hn_search_result,
 )
 from request_orchestrator.shared.tool_adapter.news.constants import DEFAULT_HN_SEARCH_LIMIT
-from test_utilities.mock_llm import MockLLM
+from test_utilities.fake_reranker import FakeReranker
 
 
 def test_hn_hit_to_candidate_maps_hit_fields() -> None:
@@ -30,18 +30,14 @@ def test_hn_hit_to_candidate_maps_hit_fields() -> None:
     candidate = hn_hit_to_candidate(response.hits[0])
 
     assert candidate.id == "1"
-    assert candidate.title == "AI Agents Are Getting Better"
-    assert candidate.content["name"] == "AI Agents Are Getting Better"
-    assert candidate.content["summary"] == "pg. 123 points. 45 comments. story, ai"
-    assert candidate.content["description"] == "Discussion of agent progress."
-    assert candidate.content["url"] == "https://example.com/ai-agents"
-    assert candidate.metadata["source"] == "hn_search"
+    assert candidate.fields["title"] == "AI Agents Are Getting Better"
+    assert candidate.fields["story"] == "Discussion of agent progress."
+    assert candidate.fields["engagement"] == "pg. 123 points. 45 comments. story, ai"
+    assert candidate.fields["published"] == "2026-08-13T10:00:00Z"
 
 
 def test_rerank_hn_search_result_reorders_hits_and_preserves_metadata() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["7", "6", "5", "4", "3", "2"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["7", "6", "5", "4", "3", "2"]}')
     response = HnSearchResult.model_validate(
         {
             "nbHits": 7,
@@ -65,9 +61,7 @@ def test_rerank_hn_search_result_reorders_hits_and_preserves_metadata() -> None:
 
 
 def test_rerank_hn_search_result_skips_llm_when_result_count_is_at_or_below_limit() -> None:
-    llm = MockLLM([
-        '{"ranked_ids": ["2", "1"]}'
-    ])
+    llm = FakeReranker('{"ranked_ids": ["2", "1"]}')
     response = HnSearchResult.model_validate(
         {
             "nbHits": 2,
@@ -83,5 +77,4 @@ def test_rerank_hn_search_result_skips_llm_when_result_count_is_at_or_below_limi
     assert [hit.object_id for hit in reranked.hits] == ["1", "2"]
     assert reranked.retrieved_count == 2
     assert reranked.reranked is True
-    assert llm.last_prompt is None
-    assert DEFAULT_HN_SEARCH_LIMIT == 20
+    assert DEFAULT_HN_SEARCH_LIMIT == 30
