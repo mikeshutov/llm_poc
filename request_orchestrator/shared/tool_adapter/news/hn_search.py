@@ -37,7 +37,7 @@ def _hit_summary(hit: HnHit) -> str:
     return ". ".join(parts) if parts else "Hacker News result."
 
 
-def _tool_result(result: HnSearchResult, *, rerank: dict | None = None) -> ToolResult:
+def _tool_result(result: HnSearchResult) -> ToolResult:
     evidence: list[EvidenceView] = []
     for hit in result.hits:
         url = (hit.url or "").strip()
@@ -60,7 +60,7 @@ def _tool_result(result: HnSearchResult, *, rerank: dict | None = None) -> ToolR
             raw_payload=hit,
         )
         evidence.append(evidence_view)
-    return ToolResult(result=result, rerank=rerank, evidence=evidence)
+    return ToolResult(result=result, evidence=evidence)
 
 
 

@@ -128,7 +128,7 @@ def _card_summary(card: CommanderCardResult, scryfall_card: ScryfallCard | None)
     return " | ".join(parts) if parts else f"Commander card recommendation for {card.name}."
 
 
-def _tool_result(result: CommanderCardsResult, *, rerank: dict | None = None) -> ToolResult:
+def _tool_result(result: CommanderCardsResult) -> ToolResult:
     evidence: list[EvidenceView] = []
     scryfall_cards_by_name = _scryfall_cards_by_name(result.cards)
     for card in result.cards:
@@ -161,7 +161,7 @@ def _tool_result(result: CommanderCardsResult, *, rerank: dict | None = None) ->
             ),
         )
         evidence.append(evidence_view)
-    return ToolResult(result=result, rerank=rerank, evidence=evidence)
+    return ToolResult(result=result, evidence=evidence)
 
 
 @tool(

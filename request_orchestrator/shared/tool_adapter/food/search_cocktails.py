@@ -32,7 +32,7 @@ class CocktailSearchMetadata(BaseModel):
     reranked: bool
 
 
-def _tool_result(result: CocktailSearchResult, *, rerank: dict | None = None) -> ToolResult:
+def _tool_result(result: CocktailSearchResult) -> ToolResult:
     evidence: list[EvidenceView] = []
     for cocktail in result.drinks:
         summary_parts = [
@@ -66,7 +66,7 @@ def _tool_result(result: CocktailSearchResult, *, rerank: dict | None = None) ->
             raw_payload=cocktail,
         )
         evidence.append(evidence_view)
-    return ToolResult(result=result, rerank=rerank, evidence=evidence)
+    return ToolResult(result=result, evidence=evidence)
 
 
 

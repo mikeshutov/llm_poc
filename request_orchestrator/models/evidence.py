@@ -176,7 +176,6 @@ class ToolResult(BaseModel):
     iteration: int | None = None
     result: Any = None
     tool_metadata: ToolMetadata = Field(default_factory=ToolMetadata)
-    rerank_debug: dict[str, Any] | None = None
     evidence: list[EvidenceView] = Field(default_factory=list)
 
     @classmethod

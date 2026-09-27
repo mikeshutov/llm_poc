@@ -34,7 +34,7 @@ class MealIngredientMetadata(BaseModel):
     measure: str | None = None
 
 
-def _tool_result(result: MealSearchResult, *, rerank: dict | None = None) -> ToolResult:
+def _tool_result(result: MealSearchResult) -> ToolResult:
     evidence: list[EvidenceView] = []
     for meal in result.meals:
         url = (meal.source or meal.youtube or "").strip()
@@ -74,7 +74,6 @@ def _tool_result(result: MealSearchResult, *, rerank: dict | None = None) -> Too
             reranked=result.reranked,
         ),
 
-        rerank=rerank,
         evidence=evidence,
     )
 

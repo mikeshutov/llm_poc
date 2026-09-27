@@ -43,7 +43,7 @@ def _book_summary(book: BookDoc) -> str:
     return ". ".join(parts) if parts else f"Book result for {book.title}."
 
 
-def _tool_result(result: BookSearchResult, *, rerank: dict | None = None) -> ToolResult:
+def _tool_result(result: BookSearchResult) -> ToolResult:
     evidence: list[EvidenceView] = []
     for book in result.docs:
         url = OPEN_LIBRARY_WORK_URL_TEMPLATE.format(work_key=book.key).strip() if book.key else ""
@@ -66,7 +66,7 @@ def _tool_result(result: BookSearchResult, *, rerank: dict | None = None) -> Too
             raw_payload=book,
         )
         evidence.append(evidence_view)
-    return ToolResult(result=result, rerank=rerank, evidence=evidence)
+    return ToolResult(result=result, evidence=evidence)
 
 
 

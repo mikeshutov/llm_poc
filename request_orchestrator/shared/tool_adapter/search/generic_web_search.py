@@ -58,7 +58,7 @@ def _coerce_search_type(search_type: str) -> SearchType:
         raise ValueError(f"Invalid search_type '{search_type}'. Allowed values: {allowed}.") from exc
 
 
-def _web_search_tool_result(result: WebSearchResponse, *, rerank: dict[str, Any] | None = None) -> ToolResult:
+def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
     evidence: list[EvidenceView] = []
     for item in result.results:
         url = (item.url or "").strip()
@@ -84,12 +84,11 @@ def _web_search_tool_result(result: WebSearchResponse, *, rerank: dict[str, Any]
             search_type=SearchType.WEB_SEARCH.value,
         ),
 
-        rerank=rerank,
         evidence=evidence,
     )
 
 
-def _news_search_tool_result(result: NewsSearchResponse, *, rerank: dict[str, Any] | None = None) -> ToolResult:
+def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
     evidence: list[EvidenceView] = []
     for item in result.results:
         url = (item.url or "").strip()
@@ -115,7 +114,6 @@ def _news_search_tool_result(result: NewsSearchResponse, *, rerank: dict[str, An
             search_type=SearchType.NEWS_SEARCH.value,
         ),
 
-        rerank=rerank,
         evidence=evidence,
     )
 
