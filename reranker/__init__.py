@@ -1,6 +1,7 @@
 from reranker.client import RerankerClient, RerankerUnavailableError
 from reranker.query import build_reranker_query
 from reranker.models import (
+    Candidate,
     RerankerCandidate,
     RerankerRequest,
     RerankerRequestCandidate,
@@ -11,6 +12,7 @@ from reranker.service import CandidateReranker, rerank_candidates
 from reranker.constants import DEFAULT_TOP_K
 
 __all__ = [
+    "Candidate",
     "RerankerCandidate",
     "RerankerRequest",
     "RerankerRequestCandidate",

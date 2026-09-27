@@ -17,7 +17,7 @@ from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan import PlanStep
-from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context, defer_conversation_events
+from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context, bind_tool_call_fields
 from tool.registry import call_tool
 from tool.repository.tool_call_repository import ToolCallRepository
 from rendering.debug import TOOL_CALL_KIND
@@ -31,7 +31,7 @@ class StepExecutionResult:
     error_text: str = ""
     rejection_reason: str = ""
     latency_ms: int = 0
-    deferred_events: list[dict[str, Any]] | None = None
+    tool_call_fields: dict[str, Any] | None = None
 
 
 def _substitute_refs(obj, results: dict):
@@ -78,8 +78,8 @@ def _execute_step(
 ) -> StepExecutionResult:
     args = resolved_args if resolved_args is not None else _substitute_refs(step.args, tool_results_by_step_id)
     started_at = perf_counter()
-    deferred_events: list[dict[str, Any]] = []
-    with defer_conversation_events(deferred_events):
+    tool_call_fields: dict[str, Any] = {}
+    with bind_tool_call_fields(tool_call_fields):
         if rejection_reason:
             output = ToolResult.error(rejection_reason)
             error_text = rejection_reason
@@ -107,7 +107,7 @@ def _execute_step(
         output=output,
         error_text=error_text,
         latency_ms=latency_ms,
-        deferred_events=deferred_events,
+        tool_call_fields=tool_call_fields,
     )
 
 
@@ -143,6 +143,8 @@ def _record_step_result(
     }
     if execution_result.error_text:
         payload["error"] = execution_result.error_text
+    if execution_result.tool_call_fields:
+        payload.update(sanitize_for_json_storage(execution_result.tool_call_fields))
     create_conversation_event(
         conversation_id=execution_context.conversation_id,
         roundtrip_id=execution_context.roundtrip_id,
@@ -154,9 +156,6 @@ def _record_step_result(
         iteration=iteration_number,
         payload=payload,
     )
-    for deferred_event in execution_result.deferred_events or []:
-        create_conversation_event(**deferred_event)
-
     if tool_repo and execution_context.roundtrip_id:
         tool_call_id = tool_repo.append_tool_call(
             execution_context.roundtrip_id,

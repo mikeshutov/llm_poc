@@ -1,4 +1,5 @@
 from reranker.models.reranker import (
+    Candidate,
     RerankerCandidate,
     RerankerRequest,
     RerankerRequestCandidate,
@@ -7,6 +8,7 @@ from reranker.models.reranker import (
 )
 
 __all__ = [
+    "Candidate",
     "RerankerCandidate",
     "RerankerRequest",
     "RerankerRequestCandidate",

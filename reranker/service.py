@@ -8,6 +8,7 @@ from personalization.profile.models import UserProfile
 from request_orchestrator.shared.runtime_context import (
     get_current_agent_name,
     get_current_roundtrip_id,
+    set_current_tool_call_field,
 )
 from reranker.client import RerankerBackend, RerankerClient
 from reranker.constants import DEFAULT_TOP_K, RERANKER_MODEL_NAME
@@ -48,42 +49,46 @@ class CandidateReranker:
                 for item in self.backend.rerank(query_text, evidence)
             ]
         except Exception as exc:
-            create_conversation_event(
-                event_type="reranker_call",
-                source="reranker.candidate_reranker",
-                agent_name=get_current_agent_name() or "",
-                node_name="reranker",
-                payload={
-                    "model": RERANKER_MODEL_NAME,
-                    "candidate_count": len(candidates),
-                    "limit": resolved_limit,
-                    "query": query_text,
-                    "candidates": [item.model_dump() for item in evidence],
-                    "results": [],
-                    "error": str(exc),
-                    "roundtrip_id": get_current_roundtrip_id(),
-                },
-            )
-            raise
-        latency_ms = int((perf_counter() - started_at) * 1000)
-        create_conversation_event(
-            event_type="reranker_call",
-            source="reranker.candidate_reranker",
-            agent_name=get_current_agent_name() or "",
-            node_name="reranker",
-            payload={
+            rerank_payload = {
                 "model": RERANKER_MODEL_NAME,
                 "candidate_count": len(candidates),
                 "limit": resolved_limit,
                 "query": query_text,
                 "candidates": [item.model_dump() for item in evidence],
-                "results": [item.model_dump() for item in scored],
-                "evidence_lengths": [len(str(item.fields)) for item in evidence],
-                "batch_size": getattr(self.backend, "batch_size", None),
-                "latency_ms": latency_ms,
+                "results": [],
+                "error": str(exc),
                 "roundtrip_id": get_current_roundtrip_id(),
-            },
-        )
+            }
+            if not set_current_tool_call_field("rerank", rerank_payload):
+                create_conversation_event(
+                    event_type="reranker_call",
+                    source="reranker.candidate_reranker",
+                    agent_name=get_current_agent_name() or "",
+                    node_name="reranker",
+                    payload=rerank_payload,
+                )
+            raise
+        latency_ms = int((perf_counter() - started_at) * 1000)
+        rerank_payload = {
+            "model": RERANKER_MODEL_NAME,
+            "candidate_count": len(candidates),
+            "limit": resolved_limit,
+            "query": query_text,
+            "candidates": [item.model_dump() for item in evidence],
+            "results": [item.model_dump() for item in scored],
+            "evidence_lengths": [len(str(item.fields)) for item in evidence],
+            "batch_size": getattr(self.backend, "batch_size", None),
+            "latency_ms": latency_ms,
+            "roundtrip_id": get_current_roundtrip_id(),
+        }
+        if not set_current_tool_call_field("rerank", rerank_payload):
+            create_conversation_event(
+                event_type="reranker_call",
+                source="reranker.candidate_reranker",
+                agent_name=get_current_agent_name() or "",
+                node_name="reranker",
+                payload=rerank_payload,
+            )
         candidate_by_id = {candidate.id: candidate for candidate in candidates}
         ranked_candidates = self._sort_candidates(
             candidate_by_id,

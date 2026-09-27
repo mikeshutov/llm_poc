@@ -5,11 +5,15 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class RerankerCandidate(BaseModel):
+class Candidate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
     fields: dict[str, Any] = Field(default_factory=dict)
+
+
+# Compatibility alias for callers that adopted the temporary explicit name.
+RerankerCandidate = Candidate
 
 
 class RerankerRequestCandidate(BaseModel):

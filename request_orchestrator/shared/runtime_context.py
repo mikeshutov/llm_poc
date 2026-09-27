@@ -11,8 +11,8 @@ _current_roundtrip_id: ContextVar[str | None] = ContextVar("current_roundtrip_id
 _current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
 _current_agent_name: ContextVar[str | None] = ContextVar("current_agent_name", default=None)
 _current_conversation_model_config: ContextVar[ConversationModelConfig | None] = ContextVar("current_conversation_model_config", default=None)
-_deferred_conversation_events: ContextVar[list[dict[str, Any]] | None] = ContextVar(
-    "deferred_conversation_events",
+_current_tool_call_fields: ContextVar[dict[str, Any] | None] = ContextVar(
+    "current_tool_call_fields",
     default=None,
 )
 
@@ -37,17 +37,21 @@ def get_current_conversation_model_config() -> ConversationModelConfig | None:
     return _current_conversation_model_config.get()
 
 
-def get_deferred_conversation_events() -> list[dict[str, Any]] | None:
-    return _deferred_conversation_events.get()
+def set_current_tool_call_field(name: str, value: Any) -> bool:
+    fields = _current_tool_call_fields.get()
+    if fields is None:
+        return False
+    fields[name] = value
+    return True
 
 
 @contextmanager
-def defer_conversation_events(events: list[dict[str, Any]]) -> Iterator[None]:
-    token = _deferred_conversation_events.set(events)
+def bind_tool_call_fields(fields: dict[str, Any]) -> Iterator[None]:
+    token = _current_tool_call_fields.set(fields)
     try:
         yield
     finally:
-        _deferred_conversation_events.reset(token)
+        _current_tool_call_fields.reset(token)
 
 
 @contextmanager
