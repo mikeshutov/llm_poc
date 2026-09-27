@@ -9,9 +9,8 @@ from typing import Any
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from reranker.constants import RERANKER_MODEL_NAME
-
-MODEL_NAME = os.getenv("RERANKER_MODEL", RERANKER_MODEL_NAME)
+DEFAULT_MODEL_NAME = "BAAI/bge-reranker-v2-m3"
+MODEL_NAME = os.getenv("RERANKER_MODEL", DEFAULT_MODEL_NAME)
 HOST = os.getenv("RERANKER_HOST", "0.0.0.0")
 PORT = int(os.getenv("RERANKER_PORT", "8080"))
 BATCH_SIZE = max(1, int(os.getenv("RERANKER_BATCH_SIZE", "8")))
@@ -57,18 +56,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def handle(self) -> None:
-        if self.command == "GET":
-            if self.path == "/health":
-                self._send_response(200, {"status": "ok", "model": MODEL_NAME})
-                return
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path == "/health":
+            self._send_response(200, {"status": "ok", "model": MODEL_NAME})
+            return
+        self._send_response(404, {"error": "not found"})
+
+    def do_POST(self) -> None:  # noqa: N802
+        if self.path != "/rerank":
             self._send_response(404, {"error": "not found"})
             return
-
-        if self.command != "POST" or self.path != "/rerank":
-            self._send_response(404, {"error": "not found"})
-            return
-
         try:
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length))
