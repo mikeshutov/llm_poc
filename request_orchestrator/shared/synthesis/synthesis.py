@@ -36,17 +36,34 @@ def _resolve_synthesis_model_name(state: MainState) -> str:
     )
 
 
-def _evidence_ids_from_steps(evidence_steps) -> list[str]:
-    """Return the unique evidence IDs that were included in the synthesis prompt."""
+def _build_result_blocks(synthesis_result: SynthesisResult, evidence_steps) -> tuple[list, list[str]]:
+    result_blocks = [block.model_copy(deep=True) for block in synthesis_result.result]
+    used_evidence_ids = [
+        evidence_id
+        for block in result_blocks
+        for evidence_id in block.evidence_ids
+        if evidence_id
+    ]
+    if used_evidence_ids:
+        return result_blocks, used_evidence_ids
+
     evidence_ids: list[str] = []
     seen: set[str] = set()
     for step in evidence_steps:
         for evidence in step.evidence:
             evidence_id = str(evidence.id)
-            if evidence_id not in seen:
-                seen.add(evidence_id)
-                evidence_ids.append(evidence_id)
-    return evidence_ids
+            if evidence_id in seen:
+                continue
+            seen.add(evidence_id)
+            evidence_ids.append(evidence_id)
+
+    return (
+        [
+            block.model_copy(update={"evidence_ids": list(evidence_ids)})
+            for block in result_blocks
+        ],
+        evidence_ids,
+    )
 
 
 @traceable(name="Synthesis Node")
@@ -107,22 +124,7 @@ def run_synthesis(state: MainState) -> MainState:
         )
         return state
 
-    used_evidence_ids = [
-        evidence_id
-        for block in synthesis_result.result
-        for evidence_id in block.evidence_ids
-        if evidence_id
-    ]
-    result_blocks = [
-        block.model_copy(deep=True)
-        for block in synthesis_result.result
-    ]
-    if not used_evidence_ids:
-        used_evidence_ids = _evidence_ids_from_steps(evidence_steps)
-        result_blocks = [
-            block.model_copy(update={"evidence_ids": list(used_evidence_ids)})
-            for block in result_blocks
-        ]
+    result_blocks, used_evidence_ids = _build_result_blocks(synthesis_result, evidence_steps)
 
     log_data = {
         "answer_preview": [block.content for block in result_blocks[:3]],

@@ -358,7 +358,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
     assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
 
 
-def test_reranker_records_non_llm_telemetry_when_it_runs() -> None:
+def test_reranker_does_not_record_llm_usage_when_it_runs() -> None:
     repo = RecordingRepo()
     candidates = [
             RerankerCandidate(id=f'c{i}', fields={'name': f'Item {i}'})
@@ -372,7 +372,6 @@ def test_reranker_records_non_llm_telemetry_when_it_runs() -> None:
                 {'id': 'c2', 'score': 1.0},
             ]
 
-    telemetry: dict = {}
     with patch('llm.usage.get_conversation_repo', return_value=repo):
         with bind_runtime_context(
             conversation_id=str(uuid4()),
@@ -380,11 +379,9 @@ def test_reranker_records_non_llm_telemetry_when_it_runs() -> None:
             roundtrip_id=str(uuid4()),
         ):
             with bind_agent_context(agent_name='main_agent'):
-                rerank_candidates(candidates, goal='Find the best one', backend=FakeReranker(), telemetry=telemetry)
+                rerank_candidates(candidates, goal='Find the best one', backend=FakeReranker())
 
     assert repo.llm_calls == []
-    assert telemetry['candidate_count'] == 12
-    assert isinstance(telemetry['latency_ms'], int)
 
 
 def test_llm_client_records_tool_calling_and_image_caption_usage() -> None:
