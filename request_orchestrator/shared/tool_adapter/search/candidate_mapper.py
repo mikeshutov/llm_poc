@@ -32,7 +32,6 @@ def rerank_web_search_response(
     user_profile: UserProfile | None = None,
     llm: Any | None = None,
     limit: int | None = None,
-    telemetry: dict[str, Any] | None = None,
 ) -> WebSearchResponse:
     retrieved_count = len(response.results)
     if not response.results:
@@ -50,7 +49,6 @@ def rerank_web_search_response(
         user_profile=user_profile,
         llm=llm,
         limit=limit,
-        telemetry=telemetry,
     )
     result_by_id = {
         (result.url or result.title or "unknown-web-result"): result
@@ -84,7 +82,6 @@ def rerank_news_search_response(
     user_profile: UserProfile | None = None,
     llm: Any | None = None,
     limit: int | None = None,
-    telemetry: dict[str, Any] | None = None,
 ) -> NewsSearchResponse:
     retrieved_count = len(response.results)
     if not response.results:
@@ -103,7 +100,6 @@ def rerank_news_search_response(
         user_profile=user_profile,
         llm=llm,
         limit=limit,
-        telemetry=telemetry,
     )
     result_by_id = {
         (result.url or result.title or "unknown-news-result"): result

@@ -1,5 +1,5 @@
 import re
-from typing import Any, Optional
+from typing import Optional
 
 from llm.clients.embeddings import embed_text
 from products.candidate_mapper import rerank_product_results
@@ -79,7 +79,6 @@ def _is_high_confidence_product_detail_url(url: Optional[str]) -> bool:
 def find_products(
     query_text: str,
     product_filters: Optional[ProductQuery] = None,
-    telemetry: dict[str, Any] | None = None,
 ) -> ProductSearchResults:
     repo = ProductRepository()
     query_embedding = embed_text(query_text or "")
@@ -89,7 +88,7 @@ def find_products(
         limit=DEFAULT_PRODUCT_SEARCH_CANDIDATE_LIMIT,
     )
     retrieved_count = len(internal_results)
-    internal_results = rerank_product_results(internal_results, goal=query_text, telemetry=telemetry)
+    internal_results = rerank_product_results(internal_results, goal=query_text)
     return ProductSearchResults(
         internal_results=internal_results,
         external_results=[],
@@ -100,7 +99,6 @@ def find_products(
 
 def find_products_web(
     query_text: str,
-    telemetry: dict[str, Any] | None = None,
 ) -> ProductSearchResults:
     web_query = (query_text or "").strip() or "products"
     external_results: list[ProductResult] = []
@@ -111,7 +109,7 @@ def find_products_web(
     except (ValueError, BraveSearchError):
         pass
     retrieved_count = len(external_results)
-    external_results = rerank_product_results(external_results, goal=query_text, telemetry=telemetry)
+    external_results = rerank_product_results(external_results, goal=query_text)
     return ProductSearchResults(
         internal_results=[],
         external_results=external_results,

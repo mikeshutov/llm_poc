@@ -139,8 +139,8 @@ def _record_step_result(
     }
     if execution_result.error_text:
         payload["error"] = execution_result.error_text
-    if isinstance(output, ToolResult) and output.rerank is not None:
-        payload["rerank"] = sanitize_for_json_storage(output.rerank)
+    if isinstance(output, ToolResult) and output.rerank_debug is not None:
+        payload["rerank"] = sanitize_for_json_storage(output.rerank_debug)
     create_conversation_event(
         conversation_id=execution_context.conversation_id,
         roundtrip_id=execution_context.roundtrip_id,

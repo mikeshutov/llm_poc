@@ -46,7 +46,6 @@ def rerank_book_search_result(
     *,
     goal: str | None = None,
     llm: Any | None = None,
-    telemetry: dict[str, Any] | None = None,
 ) -> BookSearchResult:
     retrieved_count = len(response.docs)
     if not response.docs:
@@ -63,7 +62,6 @@ def rerank_book_search_result(
         candidates,
         goal=goal,
         llm=llm,
-        telemetry=telemetry,
     )
     book_by_id = {book.key: book for book in response.docs}
     ranked_books: list[BookDoc] = []

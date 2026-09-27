@@ -133,9 +133,7 @@ def find_products(
     query_text: str,
     product_filters: ProductFiltersArgs | None = None,
 ) -> ToolResult:
-    rerank: dict[str, Any] = {}
     return _tool_result(catalog_find_products(
         query_text=query_text,
         product_filters=ProductQuery(**product_filters.model_dump()) if product_filters else None,
-        telemetry=rerank,
-    ), rerank=rerank or None)
+    ))

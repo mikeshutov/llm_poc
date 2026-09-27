@@ -26,7 +26,6 @@ def rerank_edhrec_cards(
     goal: str | None = None,
     llm: Any | None = None,
     limit: int | None = None,
-    telemetry: dict[str, Any] | None = None,
 ) -> list[tuple[str, EdhrecCardView]]:
     if not cards:
         return []
@@ -40,7 +39,6 @@ def rerank_edhrec_cards(
         goal=goal,
         llm=llm,
         limit=limit,
-        telemetry=telemetry,
     )
     card_by_id = {
         (card.id or card.slug or card.name): (section, card)

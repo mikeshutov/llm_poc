@@ -155,8 +155,7 @@ def generic_web_search(
     match _coerce_search_type(search_type):
         case SearchType.NEWS_SEARCH:
             response = brave_client.news_search(normalized_query)
-            rerank: dict[str, Any] = {}
-            return _news_search_tool_result(rerank_news_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K, telemetry=rerank), rerank=rerank or None)
+            return _news_search_tool_result(rerank_news_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K))
         #case SearchType.SUGGESTION_SEARCH:
         #    return brave_client.suggest(query_text)
         case _:
@@ -168,5 +167,4 @@ def generic_web_search(
                     extra_params=params or {},
                 )
             )
-            rerank: dict[str, Any] = {}
-            return _web_search_tool_result(rerank_web_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K, telemetry=rerank), rerank=rerank or None)
+            return _web_search_tool_result(rerank_web_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K))

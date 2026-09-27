@@ -35,14 +35,13 @@ def rerank_product_results(
     query: str | None = None,
     user_profile: UserProfile | None = None,
     llm: Any | None = None,
-    telemetry: dict[str, Any] | None = None,
 ) -> list[ProductResult]:
     if len(products) <= 1:
         return list(products)[:DEFAULT_TOP_K]
 
     resolved_goal = goal if goal is not None else query
     candidates = prepare_product_candidates(products)
-    ranked_candidates = rerank_candidates(candidates, goal=resolved_goal, user_profile=user_profile, llm=llm, telemetry=telemetry)
+    ranked_candidates = rerank_candidates(candidates, goal=resolved_goal, user_profile=user_profile, llm=llm)
     products_by_id = {product.id: product for product in products}
     ranked_products: list[ProductResult] = []
     seen_ids: set[str] = set()

@@ -179,12 +179,10 @@ Optional fields:
 )
 def get_commander_cards(commander_name: str, limit: int = 6) -> ToolResult:
     slug, page = _edhrec_client.get_commander_page(commander_name)
-    rerank: dict = {}
     ranked_cards = rerank_edhrec_cards(
         _flatten_candidate_cards(page),
         goal=f"Most relevant EDHREC card recommendations for a {commander_name.strip()} commander deck.",
         limit=limit,
-        telemetry=rerank,
     )
     return _tool_result(
         CommanderCardsResult(
@@ -193,6 +191,5 @@ def get_commander_cards(commander_name: str, limit: int = 6) -> ToolResult:
             commander_slug=slug,
             returned_count=len(ranked_cards),
             cards=[_card_result(section, card) for section, card in ranked_cards],
-        ),
-        rerank=rerank or None,
+        )
     )

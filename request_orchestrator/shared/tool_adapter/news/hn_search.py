@@ -100,7 +100,6 @@ Example valid call:
 def hn_search(query: str, sort_by: str = "relevance") -> ToolResult:
     try:
         response = _hn_client.search(query, sort_by=sort_by, hits_per_page=DEFAULT_HN_SEARCH_LIMIT)
-        rerank: dict = {}
-        return _tool_result(rerank_hn_search_result(response, goal=query, telemetry=rerank), rerank=rerank or None)
+        return _tool_result(rerank_hn_search_result(response, goal=query))
     except RequestException as e:
         return ToolResult.error(f"Hacker News search unavailable: {e}")

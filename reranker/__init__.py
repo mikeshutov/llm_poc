@@ -8,7 +8,7 @@ from reranker.models import (
     RerankerResponse,
     RerankerScore,
 )
-from reranker.service import CandidateReranker, rerank_candidates
+from reranker.service import CandidateReranker, rerank_candidates, rerank_tool_result
 from reranker.constants import DEFAULT_TOP_K
 
 __all__ = [
@@ -23,5 +23,6 @@ __all__ = [
     "build_reranker_query",
     "CandidateReranker",
     "rerank_candidates",
+    "rerank_tool_result",
     "DEFAULT_TOP_K",
 ]

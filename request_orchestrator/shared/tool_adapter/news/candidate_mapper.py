@@ -37,7 +37,6 @@ def rerank_hn_search_result(
     *,
     goal: str | None = None,
     llm: Any | None = None,
-    telemetry: dict[str, Any] | None = None,
 ) -> HnSearchResult:
     retrieved_count = len(response.hits)
     if not response.hits:
@@ -51,7 +50,7 @@ def rerank_hn_search_result(
         )
 
     candidates = [hn_hit_to_candidate(hit) for hit in response.hits]
-    ranked_candidates = rerank_candidates(candidates, goal=goal, llm=llm, telemetry=telemetry)
+    ranked_candidates = rerank_candidates(candidates, goal=goal, llm=llm)
     hit_by_id = {hit.object_id: hit for hit in response.hits}
     ranked_hits: list[HnHit] = []
     seen_ids: set[str] = set()

@@ -91,7 +91,6 @@ Example valid call:
 def search_books(query: str) -> ToolResult:
     try:
         response = _open_library_client.search(query, limit=DEFAULT_BOOK_SEARCH_LIMIT)
-        rerank: dict = {}
-        return _tool_result(rerank_book_search_result(response, goal=query, telemetry=rerank), rerank=rerank or None)
+        return _tool_result(rerank_book_search_result(response, goal=query))
     except RequestException as e:
         return ToolResult.error(f"Open Library service unavailable: {e}")

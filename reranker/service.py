@@ -5,6 +5,7 @@ from typing import Any
 
 from personalization.profile.models import UserProfile
 from request_orchestrator.shared.runtime_context import get_current_roundtrip_id
+from request_orchestrator.models.evidence import ToolResult
 from reranker.client import RerankerBackend, RerankerClient
 from reranker.constants import DEFAULT_TOP_K, RERANKER_MODEL_NAME
 from reranker.models import RerankerCandidate, RerankerScore
@@ -18,6 +19,7 @@ class CandidateReranker:
         backend: RerankerBackend | None = None,
     ):
         self.backend = backend or (llm if hasattr(llm, "rerank") else RerankerClient())
+        self.last_debug_payload: dict[str, Any] | None = None
 
     def rerank(
         self,
@@ -27,7 +29,6 @@ class CandidateReranker:
         query: str | None = None,
         user_profile: UserProfile | None = None,
         limit: int | None = None,
-        telemetry: dict[str, Any] | None = None,
     ) -> list[RerankerCandidate]:
         resolved_limit = DEFAULT_TOP_K if limit is None else max(1, limit)
 
@@ -55,8 +56,7 @@ class CandidateReranker:
                 "error": str(exc),
                 "roundtrip_id": get_current_roundtrip_id(),
             }
-            if telemetry is not None:
-                telemetry.update(rerank_payload)
+            self.last_debug_payload = rerank_payload
             raise
         latency_ms = int((perf_counter() - started_at) * 1000)
         rerank_payload = {
@@ -71,8 +71,7 @@ class CandidateReranker:
             "latency_ms": latency_ms,
             "roundtrip_id": get_current_roundtrip_id(),
         }
-        if telemetry is not None:
-            telemetry.update(rerank_payload)
+        self.last_debug_payload = rerank_payload
         candidate_by_id = {candidate.id: candidate for candidate in candidates}
         ranked_candidates = self._sort_candidates(
             candidate_by_id,
@@ -80,6 +79,35 @@ class CandidateReranker:
             [item.id for item in scored],
         )
         return ranked_candidates[:resolved_limit]
+
+
+def rerank_tool_result(
+    tool_result: ToolResult,
+    *,
+    goal: str | None = None,
+    user_profile: UserProfile | None = None,
+    limit: int | None = None,
+) -> ToolResult:
+    reranker = CandidateReranker()
+    candidates = [evidence.to_candidate() for evidence in tool_result.evidence]
+    ranked_candidates = reranker.rerank(
+        candidates,
+        goal=goal,
+        user_profile=user_profile,
+        limit=limit,
+    )
+    evidence_by_id = {
+        evidence.item_id or str(evidence.id): evidence
+        for evidence in tool_result.evidence
+    }
+    ordered_evidence = [
+        evidence_by_id[candidate.id]
+        for candidate in ranked_candidates
+        if candidate.id in evidence_by_id
+    ]
+    tool_result.evidence = ordered_evidence
+    tool_result.rerank_debug = reranker.last_debug_payload
+    return tool_result
 
     def _sort_candidates(
         self,
@@ -116,7 +144,6 @@ def rerank_candidates(
     llm: Any | None = None,
     limit: int | None = None,
     backend: RerankerBackend | None = None,
-    telemetry: dict[str, Any] | None = None,
 ) -> list[RerankerCandidate]:
     return CandidateReranker(
         llm=llm,
@@ -127,5 +154,4 @@ def rerank_candidates(
         query=query,
         user_profile=user_profile,
         limit=limit,
-        telemetry=telemetry,
     )

@@ -115,5 +115,4 @@ Example valid call:
 def find_products_web(
     query_text: str,
 ) -> ToolResult:
-    rerank: dict[str, Any] = {}
-    return _tool_result(web_find_products(query_text=query_text, telemetry=rerank), rerank=rerank or None)
+    return _tool_result(web_find_products(query_text=query_text))

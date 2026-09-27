@@ -75,5 +75,4 @@ Example valid call:
 )
 def news_search(q: str) -> ToolResult:
     response = BraveSearchClient().news_search(q)
-    rerank: dict = {}
-    return _tool_result(rerank_news_search_response(response, goal=q, limit=DEFAULT_TOP_K, telemetry=rerank), rerank=rerank or None)
+    return _tool_result(rerank_news_search_response(response, goal=q, limit=DEFAULT_TOP_K))

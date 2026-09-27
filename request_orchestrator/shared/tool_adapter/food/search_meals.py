@@ -101,7 +101,6 @@ Example valid call:
 def search_meals(query: str) -> ToolResult:
     try:
         response = _meal_db_client.search(query)
-        rerank: dict = {}
-        return _tool_result(rerank_meal_search_result(response, goal=query, limit=DEFAULT_MEAL_RERANK_LIMIT, telemetry=rerank), rerank=rerank or None)
+        return _tool_result(rerank_meal_search_result(response, goal=query, limit=DEFAULT_MEAL_RERANK_LIMIT))
     except RequestException as e:
         return ToolResult.error(f"MealDB service unavailable: {e}")
