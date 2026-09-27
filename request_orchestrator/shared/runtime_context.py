@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from typing import Any, Iterator
+from typing import Iterator
 
 from llm.conversation_model_config import ConversationModelConfig
 

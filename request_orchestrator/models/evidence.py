@@ -6,8 +6,9 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
-from common.html_text import html_to_plain_text, normalize_html_values
 from common.data import prune_empty_prompt_values
+from common.html_text import html_to_plain_text, normalize_html_values
+from reranker.models.reranker import Candidate
 
 
 class EvidenceUrlType(StrEnum):
@@ -94,8 +95,6 @@ class EvidenceView(BaseModel):
 
     def to_candidate(self):
         """Project this evidence into the semantic input used by the reranker."""
-        from reranker import Candidate
-
         fields: dict[str, Any] = {
             "title": self.title,
             "summary": self.summary,
