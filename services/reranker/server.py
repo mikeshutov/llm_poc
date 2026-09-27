@@ -49,7 +49,7 @@ def score_pairs(query: str, candidates: list[dict[str, Any]]) -> list[dict[str, 
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, status: int, payload: dict[str, Any]) -> None:
+    def _send_response(self, status: int, payload: dict[str, Any]) -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -57,16 +57,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/health":
-            self._send(200, {"status": "ok", "model": MODEL_NAME})
+    def handle(self) -> None:
+        if self.command == "GET":
+            if self.path == "/health":
+                self._send_response(200, {"status": "ok", "model": MODEL_NAME})
+                return
+            self._send_response(404, {"error": "not found"})
             return
-        self._send(404, {"error": "not found"})
 
-    def do_POST(self) -> None:  # noqa: N802
-        if self.path != "/rerank":
-            self._send(404, {"error": "not found"})
+        if self.command != "POST" or self.path != "/rerank":
+            self._send_response(404, {"error": "not found"})
             return
+
         try:
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length))
@@ -74,11 +76,11 @@ class Handler(BaseHTTPRequestHandler):
             candidates = payload["candidates"]
             if not isinstance(candidates, list) or any("id" not in item for item in candidates):
                 raise ValueError("candidates must be a list containing ids")
-            self._send(200, {"results": score_pairs(query, candidates)})
+            self._send_response(200, {"results": score_pairs(query, candidates)})
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            self._send(400, {"error": str(exc)})
+            self._send_response(400, {"error": str(exc)})
         except Exception as exc:  # pragma: no cover - protects the service boundary
-            self._send(500, {"error": str(exc)})
+            self._send_response(500, {"error": str(exc)})
 
     def log_message(self, format: str, *args: Any) -> None:
         return

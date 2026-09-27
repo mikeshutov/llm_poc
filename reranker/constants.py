@@ -1,2 +1,3 @@
 RERANKER_MODEL_NAME = "BAAI/bge-reranker-v2-m3"
+RERANKER_EVENT_TYPE = "reranker_call"
 DEFAULT_TOP_K = 10

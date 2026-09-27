@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from reranker import Candidate, RerankerClient, RerankerUnavailableError, build_reranker_query, rerank_candidates
+from reranker.service import CandidateReranker
 
 
 class StaticBackend:
@@ -15,6 +16,27 @@ class StaticBackend:
         self.query = query
         self.candidates = candidates
         return self.results
+
+
+@patch("reranker.service.create_conversation_event")
+def test_reranker_records_debug_event(
+    create_event: Mock,
+) -> None:
+    backend = StaticBackend([{"id": "1", "score": 0.9}])
+    candidates = [
+        Candidate(id="1", fields={"title": "Trail boots", "price": 80}),
+        Candidate(id="2", fields={"title": "Dress shoes"}),
+    ]
+
+    CandidateReranker(backend=backend).rerank(candidates, goal="hiking boots", limit=1)
+
+    payload = create_event.call_args.kwargs["payload"]
+    assert create_event.call_args.kwargs["event_type"] == "reranker_call"
+    assert payload["query"] == "query: hiking boots"
+    assert payload["candidate_count"] == 2
+    assert payload["candidates"][0]["fields"]["title"] == "Trail boots"
+    assert payload["results"] == [{"id": "1", "score": 0.9}]
+    assert payload["limit"] == 1
 
 
 def test_reranker_sorts_by_backend_scores_and_appends_unscored_candidates() -> None:
