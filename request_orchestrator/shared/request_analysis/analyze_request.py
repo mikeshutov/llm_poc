@@ -13,12 +13,14 @@ from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.request_analysis import RequestAnalysis
 from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
 from request_orchestrator.shared.request_analysis.prompts.request_analysis_prompt import build_request_analysis_prompt
+from request_orchestrator.shared.request_analysis.attribute_discovery import attribute_discovery
 
 ORCHESTRATOR_AGENT_NAME = "request_orchestrator"
 
 
 @traceable(name="Request Analysis Node")
 def analyze_request(main_state: MainState) -> MainState:
+    discovered_attribute_types = attribute_discovery(main_state)
     prompt = build_request_analysis_prompt(main_state)
     prompt_text = prompt.build()
     execution_context = main_state.execution_context
@@ -65,6 +67,7 @@ def analyze_request(main_state: MainState) -> MainState:
     except Exception:
         main_state.request_analysis = RequestAnalysis()
         parsed_successfully = False
+    main_state.request_analysis.requested_user_attribute_types = discovered_attribute_types
 
     create_conversation_event(
         conversation_id=execution_context.conversation_id,
