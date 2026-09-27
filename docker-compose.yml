@@ -23,6 +23,20 @@ services:
     volumes:
       - reranker-model-cache:/root/.cache/huggingface
 
+  attribute-classifier:
+    build:
+      context: .
+      dockerfile: services/attribute_classifier/Dockerfile
+    ports:
+      - "5434:8081"
+    environment:
+      ATTRIBUTE_CLASSIFIER_MODEL: ${ATTRIBUTE_CLASSIFIER_MODEL:-/app/services/attribute_classifier/training/trained_models/attribute-relevance-setfit}
+      ATTRIBUTE_CLASSIFIER_THRESHOLD: ${ATTRIBUTE_CLASSIFIER_THRESHOLD:-0.5}
+    volumes:
+      - ./services/attribute_classifier/training/trained_models:/app/services/attribute_classifier/training/trained_models:ro
+      - attribute-classifier-model-cache:/root/.cache/huggingface
+
 volumes:
   pgdata:
   reranker-model-cache:
+  attribute-classifier-model-cache:

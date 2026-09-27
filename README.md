@@ -73,6 +73,7 @@ The more detailed documentation now lives in the [`docs/`](docs/) folder.
 - [Observability](docs/observability.md)
 - [Request Analysis](docs/request-analysis.md)
 - [Reranking](docs/reranking.md)
+- [Attribute relevance classifier](docs/attribute-classifier.md)
 
 ## Setup
 ### Prereqs

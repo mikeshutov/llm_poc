@@ -1,0 +1,4 @@
+setfit
+torch
+torchvision
+pydantic
