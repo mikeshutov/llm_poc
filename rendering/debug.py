@@ -111,6 +111,7 @@ class RerankerCallLogPayload(BaseModel):
     error: str = ""
 
 
+
 def debug_render_message(content, content_title: str) -> None:
     with st.chat_message("assistant", avatar=":material/edit:"):
         with st.expander(content_title):
@@ -227,21 +228,6 @@ def _build_llm_call_payload(entry: dict) -> dict:
     ).model_dump()
 
 
-def _build_reranker_call_payload(entry: dict) -> dict:
-    return RerankerCallLogPayload(
-        model=entry.get("model") or "",
-        query=entry.get("query") or "",
-        candidates=entry.get("candidates") or [],
-        results=entry.get("results") or [],
-        candidate_count=entry.get("candidate_count") or 0,
-        limit=entry.get("limit"),
-        evidence_lengths=entry.get("evidence_lengths") or [],
-        batch_size=entry.get("batch_size"),
-        latency_ms=entry.get("latency_ms"),
-        error=entry.get("error") or "",
-    ).model_dump()
-
-
 def _build_log_payload(entry: dict) -> tuple[str, dict]:
     kind = entry.get("kind") or "event"
 
@@ -262,7 +248,7 @@ def _build_log_payload(entry: dict) -> tuple[str, dict]:
     elif kind == LLM_CALL_KIND:
         payload = _build_llm_call_payload(entry)
     elif kind == RERANKER_CALL_KIND:
-        payload = _build_reranker_call_payload(entry)
+        payload = RerankerCallLogPayload.model_validate(entry).model_dump()
     else:
         payload = dict(entry)
         payload.setdefault("title", entry.get("title", "Log Entry"))

@@ -19,7 +19,7 @@ from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from conversation.models.conversation_models import ConversationEvent
 from common.logging import fetch_agent_logs_for_roundtrip
-from rendering.debug import _build_log_payload, _build_llm_call_payload, _build_reranker_call_payload, _ordered_agent_log_sections, _split_orchestrator_entries_for_agents
+from rendering.debug import _build_log_payload, _build_llm_call_payload, _ordered_agent_log_sections, _split_orchestrator_entries_for_agents
 from rendering.messages.chat import _build_answer_payload
 from rendering.rendering import fetch_llm_usage_for_roundtrip
 
