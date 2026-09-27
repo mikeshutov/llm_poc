@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from typing import Iterator
+from typing import Any, Iterator
 
 from llm.conversation_model_config import ConversationModelConfig
 
@@ -11,6 +11,10 @@ _current_roundtrip_id: ContextVar[str | None] = ContextVar("current_roundtrip_id
 _current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
 _current_agent_name: ContextVar[str | None] = ContextVar("current_agent_name", default=None)
 _current_conversation_model_config: ContextVar[ConversationModelConfig | None] = ContextVar("current_conversation_model_config", default=None)
+_deferred_conversation_events: ContextVar[list[dict[str, Any]] | None] = ContextVar(
+    "deferred_conversation_events",
+    default=None,
+)
 
 
 def get_current_conversation_id() -> str | None:
@@ -31,6 +35,19 @@ def get_current_agent_name() -> str | None:
 
 def get_current_conversation_model_config() -> ConversationModelConfig | None:
     return _current_conversation_model_config.get()
+
+
+def get_deferred_conversation_events() -> list[dict[str, Any]] | None:
+    return _deferred_conversation_events.get()
+
+
+@contextmanager
+def defer_conversation_events(events: list[dict[str, Any]]) -> Iterator[None]:
+    token = _deferred_conversation_events.set(events)
+    try:
+        yield
+    finally:
+        _deferred_conversation_events.reset(token)
 
 
 @contextmanager

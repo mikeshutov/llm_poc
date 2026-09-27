@@ -34,17 +34,12 @@ def test_book_to_candidate_maps_book_fields() -> None:
     candidate = book_to_candidate(response.docs[0])
 
     assert candidate.id == "/works/OL1W"
-    assert candidate.title == "The Hobbit"
-    assert candidate.content["name"] == "The Hobbit"
-    assert candidate.content["summary"] == "A hobbit leaves home for an unexpected adventure."
-    assert candidate.attributes["subjects"] == ["Fantasy", "Adventure"]
-    assert candidate.attributes["subtitle"] == "There and Back Again"
-    assert candidate.attributes["publishers"] == ["Allen & Unwin"]
-    assert candidate.attributes["publish_dates"] == ["1937", "1951"]
-    assert candidate.attributes["number_of_pages"] == 310
-    assert candidate.content["url"] == "https://openlibrary.org/works/OL1W"
-    assert candidate.content["image_url"] == "https://covers.openlibrary.org/b/id/12345-L.jpg"
-    assert candidate.metadata["source"] == "open_library"
+    assert candidate.text.startswith("title: The Hobbit\nsubtitle: There and Back Again")
+    assert "summary: A hobbit leaves home for an unexpected adventure." in candidate.text
+    assert "subjects: ['Fantasy', 'Adventure']" in candidate.text
+    assert "publishers: ['Allen & Unwin']" in candidate.text
+    assert "number_of_pages: 310" in candidate.text
+    assert "openlibrary.org" not in candidate.text
 
 
 def test_rerank_book_search_result_reorders_results_and_preserves_metadata() -> None:

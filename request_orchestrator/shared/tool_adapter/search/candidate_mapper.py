@@ -4,39 +4,28 @@ from typing import Any
 
 from integrations.brave.models import NewsResult, NewsSearchResponse, WebSearchResponse, WebSearchResult
 from personalization.profile.models import UserProfile
-from reranker import Candidate, rerank_candidates
+from reranker import RerankerCandidate, rerank_candidates
 
 
-def web_search_result_to_candidate(result: WebSearchResult) -> Candidate:
-    return Candidate(
+def web_search_result_to_candidate(result: WebSearchResult) -> RerankerCandidate:
+    fields = [f"title: {result.title or result.url}"]
+    if result.description:
+        fields.append(f"description: {result.description}")
+    return RerankerCandidate(
         id=result.url or result.title or "unknown-web-result",
-        title=result.title or result.url,
-        content={
-            "name": result.title,
-            "description": result.description,
-            "url": result.url,
-            "image_url": result.image_url,
-        },
-        metadata={
-            "source": "web_search",
-        },
+        text="\n".join(fields),
     )
 
 
-def news_result_to_candidate(result: NewsResult) -> Candidate:
-    return Candidate(
+def news_result_to_candidate(result: NewsResult) -> RerankerCandidate:
+    fields = [f"title: {result.title or result.url}"]
+    if result.description:
+        fields.append(f"description: {result.description}")
+    if result.age:
+        fields.append(f"published: {result.age}")
+    return RerankerCandidate(
         id=result.url or result.title or "unknown-news-result",
-        title=result.title or result.url,
-        content={
-            "name": result.title,
-            "description": result.description,
-            "summary": result.age,
-            "url": result.url,
-            "image_url": result.thumbnail_url,
-        },
-        metadata={
-            "source": "news_search",
-        },
+        text="\n".join(fields),
     )
 
 

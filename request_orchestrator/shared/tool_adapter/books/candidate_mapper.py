@@ -2,75 +2,52 @@ from __future__ import annotations
 
 from typing import Any
 
-from common.utils import normalize_text
-from integrations.open_library import OPEN_LIBRARY_COVER_IMAGE_URL_TEMPLATE, OPEN_LIBRARY_WORK_URL_TEMPLATE
+from common.utils import normalize_text, normalize_values, unique_normalized_values
 from integrations.open_library.models import BookDoc, BookSearchResult
 from request_orchestrator.shared.tool_adapter.books.constants import DEFAULT_BOOK_SEARCH_LIMIT
-from reranker import Candidate, rerank_candidates
-
-
-def _normalized_values(values: object) -> list[str]:
-    if values is None:
-        return []
-    if isinstance(values, str):
-        values = [values]
-    if not isinstance(values, (list, tuple)):
-        values = [values]
-    return [cleaned for value in values if (cleaned := normalize_text(str(value)))]
-
-
-def _unique_values(values: object, *, exclude_prefixes: tuple[str, ...] = ()) -> list[str]:
-    unique: list[str] = []
-    seen: set[str] = set()
-    for value in _normalized_values(values):
-        if any(value.casefold().startswith(prefix.casefold()) for prefix in exclude_prefixes):
-            continue
-        normalized = value.casefold()
-        if normalized in seen:
-            continue
-        seen.add(normalized)
-        unique.append(value)
-    return unique
+from reranker import RerankerCandidate, rerank_candidates
 
 
 def _book_description(book: BookDoc) -> str | None:
     description = book.description
     if isinstance(description, dict):
         description = description.get("value")
-    descriptions = _normalized_values(description) or _normalized_values(book.first_sentence)
+    descriptions = normalize_values(description) or normalize_values(book.first_sentence)
     return " ".join(descriptions) if descriptions else None
 
 
-def book_to_candidate(book: BookDoc) -> Candidate:
-    author_names = _unique_values(book.author_name)
-    subjects = _unique_values(book.subject, exclude_prefixes=("nyt:",))
-    publishers = _unique_values(book.publisher)
-    publish_dates = _normalized_values(book.publish_date)
+def book_to_candidate(book: BookDoc) -> RerankerCandidate:
+    author_names = unique_normalized_values(book.author_name)
+    subjects = unique_normalized_values(book.subject, exclude_prefixes=("nyt:",))
+    publishers = unique_normalized_values(book.publisher)
+    publish_dates = normalize_values(book.publish_date)
     subtitle = normalize_text(book.subtitle) if book.subtitle else None
 
-    return Candidate(
+    fields = [f"title: {normalize_text(book.title) or book.title}"]
+    if subtitle:
+        fields.append(f"subtitle: {subtitle}")
+    description = _book_description(book)
+    if description:
+        fields.append(f"summary: {description}")
+    if author_names:
+        fields.append(f"authors: {author_names}")
+    if subjects:
+        fields.append(f"subjects: {subjects}")
+    if publishers:
+        fields.append(f"publishers: {publishers}")
+    if book.language:
+        fields.append(f"languages: {normalize_values(book.language)}")
+    if book.first_publish_year is not None:
+        fields.append(f"first_publish_year: {book.first_publish_year}")
+    if book.edition_count is not None:
+        fields.append(f"edition_count: {book.edition_count}")
+    if book.number_of_pages_median is not None:
+        fields.append(f"number_of_pages: {book.number_of_pages_median}")
+    if publish_dates:
+        fields.append(f"publish_dates: {publish_dates}")
+    return RerankerCandidate(
         id=book.key,
-        title=normalize_text(book.title) or book.title,
-        content={
-            "name": normalize_text(book.title),
-            "summary": _book_description(book),
-            "url": OPEN_LIBRARY_WORK_URL_TEMPLATE.format(work_key=book.key) if book.key else None,
-            "image_url": OPEN_LIBRARY_COVER_IMAGE_URL_TEMPLATE.format(cover_id=book.cover_i) if book.cover_i is not None else None,
-        },
-        attributes={
-            "authors": author_names,
-            "subjects": subjects,
-            "publishers": publishers,
-            "languages": _normalized_values(book.language),
-            "subtitle": subtitle,
-            "publish_dates": publish_dates,
-            "first_publish_year": book.first_publish_year,
-            "edition_count": book.edition_count,
-            "number_of_pages": book.number_of_pages_median,
-        },
-        metadata={
-            "source": "open_library",
-        },
+        text="\n".join(fields),
     )
 
 

@@ -5,11 +5,14 @@ from typing import Any
 from common.utils import normalize_text
 from integrations.hn_algolia.models import HnHit, HnSearchResult
 from request_orchestrator.shared.tool_adapter.news.constants import DEFAULT_HN_SEARCH_LIMIT
-from reranker import Candidate, rerank_candidates
+from reranker import RerankerCandidate, rerank_candidates
 
 
-def hn_hit_to_candidate(hit: HnHit) -> Candidate:
+def hn_hit_to_candidate(hit: HnHit) -> RerankerCandidate:
     tag_text = ", ".join(tag for tag in (hit.tags or []) if tag)
+    fields = [f"title: {normalize_text(hit.title) or hit.title or hit.url or hit.object_id}"]
+    if hit.story_text:
+        fields.append(f"story: {normalize_text(hit.story_text)}")
     summary_parts = [
         cleaned
         for cleaned in (
@@ -21,23 +24,12 @@ def hn_hit_to_candidate(hit: HnHit) -> Candidate:
         if cleaned is not None
     ]
 
-    return Candidate(
+    fields.extend(f"metadata: {part}" for part in summary_parts)
+    if hit.created_at:
+        fields.append(f"published: {normalize_text(hit.created_at)}")
+    return RerankerCandidate(
         id=hit.object_id,
-        title=normalize_text(hit.title) or hit.title or hit.url or hit.object_id,
-        content={
-            "name": normalize_text(hit.title) or hit.title,
-            "summary": ". ".join(summary_parts) if summary_parts else None,
-            "description": normalize_text(hit.story_text),
-            "url": normalize_text(hit.url),
-        },
-        attributes={
-            "author": normalize_text(hit.author),
-            "tags": list(hit.tags or []),
-        },
-        metadata={
-            "source": "hn_search",
-            "created_at": hit.created_at,
-        },
+        text="\n".join(fields),
     )
 
 

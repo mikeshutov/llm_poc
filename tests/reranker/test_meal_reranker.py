@@ -27,14 +27,11 @@ def test_meal_to_candidate_maps_meal_fields() -> None:
     candidate = meal_to_candidate(response.meals[0])
 
     assert candidate.id == "meal-1"
-    assert candidate.title == "Pasta Primavera"
-    assert candidate.content["name"] == "Pasta Primavera"
-    assert candidate.content["summary"] == "Pasta. Italian. Quick,Fresh"
-    assert candidate.content["description"] == "Boil pasta and toss with vegetables."
-    assert candidate.content["text"] == "Pasta, Tomato"
-    assert candidate.content["url"] == "https://example.com/pasta"
-    assert candidate.content["image_url"] == "https://example.com/pasta.jpg"
-    assert candidate.metadata["source"] == "meal_db"
+    assert "name: Pasta Primavera" in candidate.text
+    assert "attributes: Pasta. Italian. Quick,Fresh" in candidate.text
+    assert "instructions: Boil pasta and toss with vegetables." in candidate.text
+    assert "ingredients: Pasta, Tomato" in candidate.text
+    assert "example.com" not in candidate.text
 
 
 def test_rerank_meal_search_result_reorders_and_limits_to_three() -> None:

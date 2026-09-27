@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 import requests
+from pydantic import ValidationError
+
+from reranker.models import RerankerCandidate, RerankerRequest, RerankerResponse, RerankerScore
+
+RERANKER_CANDIDATE_TOKEN_BUDGET = max(64, int(os.getenv("RERANKER_CANDIDATE_TOKEN_BUDGET", "384")))
 
 
 class RerankerUnavailableError(RuntimeError):
@@ -12,7 +17,7 @@ class RerankerUnavailableError(RuntimeError):
 
 
 class RerankerBackend(Protocol):
-    def rerank(self, query: str, candidates: list[dict[str, str]]) -> list[dict[str, Any]]: ...
+    def rerank(self, query: str, candidates: list[RerankerCandidate]) -> list[RerankerScore]: ...
 
 
 @dataclass(frozen=True)
@@ -21,28 +26,28 @@ class RerankerClient:
     timeout_seconds: float = float(os.getenv("RERANKER_TIMEOUT_SECONDS", "15"))
     batch_size: int = max(1, int(os.getenv("RERANKER_BATCH_SIZE", "8")))
 
-    def rerank(self, query: str, candidates: list[dict[str, str]]) -> list[dict[str, Any]]:
+    def prepare_candidates(
+        self,
+        candidates: list[RerankerCandidate],
+        *,
+        token_budget: int | None = None,
+    ) -> list[RerankerCandidate]:
+        max_chars = max(64, token_budget or RERANKER_CANDIDATE_TOKEN_BUDGET) * 4
+        return [
+            candidate.model_copy(update={"text": candidate.text[:max_chars].rstrip()})
+            for candidate in candidates
+        ]
+
+    def rerank(self, query: str, candidates: list[RerankerCandidate]) -> list[RerankerScore]:
+        candidates = self.prepare_candidates(candidates)
         try:
             response = requests.post(
                 f"{self.base_url.rstrip('/')}/rerank",
-                json={"query": query, "candidates": candidates},
+                json=RerankerRequest(query=query, candidates=candidates).model_dump(mode="json"),
                 timeout=self.timeout_seconds,
             )
             response.raise_for_status()
-            payload = response.json()
-        except (requests.RequestException, ValueError) as exc:
+            payload = RerankerResponse.model_validate(response.json())
+        except (requests.RequestException, ValueError, ValidationError) as exc:
             raise RerankerUnavailableError("The local reranker service is unavailable") from exc
-
-        results = payload.get("results") if isinstance(payload, dict) else None
-        if not isinstance(results, list):
-            raise RerankerUnavailableError("The reranker service returned an invalid response")
-        normalized: list[dict[str, Any]] = []
-        for result in results:
-            if not isinstance(result, dict) or not isinstance(result.get("id"), str):
-                raise RerankerUnavailableError("The reranker service returned an invalid result")
-            try:
-                score = float(result["score"])
-            except (KeyError, TypeError, ValueError) as exc:
-                raise RerankerUnavailableError("The reranker service returned an invalid score") from exc
-            normalized.append({"id": result["id"], "score": score})
-        return normalized
+        return payload.results

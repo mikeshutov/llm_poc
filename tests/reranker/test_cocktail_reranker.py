@@ -30,13 +30,11 @@ def test_cocktail_to_candidate_maps_cocktail_fields() -> None:
     candidate = cocktail_to_candidate(response.drinks[0])
 
     assert candidate.id == "drink-1"
-    assert candidate.title == "Margarita"
-    assert candidate.content["name"] == "Margarita"
-    assert candidate.content["summary"] == "Ordinary Drink. Alcoholic. Cocktail glass. Citrus,IBA"
-    assert candidate.content["description"] == "Shake with ice and strain."
-    assert candidate.content["text"] == "Tequila, Lime Juice"
-    assert candidate.content["image_url"] == "https://example.com/margarita.jpg"
-    assert candidate.metadata["source"] == "cocktail_db"
+    assert "name: Margarita" in candidate.text
+    assert "attributes: Ordinary Drink. Alcoholic. Cocktail glass. Citrus,IBA" in candidate.text
+    assert "instructions: Shake with ice and strain." in candidate.text
+    assert "ingredients: Tequila, Lime Juice" in candidate.text
+    assert "example.com" not in candidate.text
 
 
 def test_rerank_cocktail_search_result_reorders_and_limits_to_three() -> None:

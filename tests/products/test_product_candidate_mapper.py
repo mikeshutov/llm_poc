@@ -32,14 +32,10 @@ def test_product_result_to_candidate_maps_product_fields() -> None:
     candidate = product_result_to_candidate(product)
 
     assert candidate.id == "sku-123"
-    assert candidate.candidate_type == "product"
-    assert candidate.title == "Trail Running Shoes"
-    assert candidate.content["description"] == "Men Blue Footwear Sport Spring. Year: 2026"
-    assert candidate.content["url"] == "https://example.com/products/sku-123"
-    assert candidate.attributes["price"] == 129.99
-    assert candidate.metadata["source"] == "db"
-    assert candidate.metadata["retrieval_distance"] == 0.87
-    assert candidate.score is None
+    assert "title: Trail Running Shoes" in candidate.text
+    assert "description: Men Blue Footwear Sport Spring. Year: 2026" in candidate.text
+    assert "price: 129.99" in candidate.text
+    assert "https://example.com" not in candidate.text
 
 
 def test_prepare_product_candidates_maps_multiple_products() -> None:
@@ -75,8 +71,7 @@ def test_prepare_product_candidates_maps_multiple_products() -> None:
     candidates = prepare_product_candidates(products)
 
     assert [candidate.id for candidate in candidates] == ["sku-1", "sku-2"]
-    assert candidates[0].content["description"] == "First product description"
-    assert all(candidate.candidate_type == "product" for candidate in candidates)
+    assert "description: First product description" in candidates[0].text
 
 
 def test_product_search_results_exposes_retrieval_metadata() -> None:

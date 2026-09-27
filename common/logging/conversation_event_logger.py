@@ -5,6 +5,7 @@ from uuid import UUID
 
 from conversation.repository.repo_factory import get_conversation_repo
 from request_orchestrator.shared.runtime_context import (
+    get_deferred_conversation_events,
     get_current_conversation_id,
     get_current_roundtrip_id,
 )
@@ -22,6 +23,21 @@ def create_conversation_event(
     iteration: int | None = None,
     payload: dict[str, Any] | None = None,
 ) -> None:
+    deferred_events = get_deferred_conversation_events()
+    if event_type == "reranker_call" and deferred_events is not None:
+        deferred_events.append({
+            "event_type": event_type,
+            "source": source,
+            "conversation_id": conversation_id,
+            "roundtrip_id": roundtrip_id,
+            "agent_name": agent_name,
+            "agent_version": agent_version,
+            "node_name": node_name,
+            "iteration": iteration,
+            "payload": payload,
+        })
+        return
+
     resolved_conversation_id = conversation_id or get_current_conversation_id()
     if not resolved_conversation_id:
         return

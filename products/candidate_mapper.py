@@ -3,41 +3,61 @@ from __future__ import annotations
 from typing import Any
 
 from personalization.profile.models import UserProfile
-from reranker import Candidate, DEFAULT_TOP_K, rerank_candidates
+from reranker import DEFAULT_TOP_K, RerankerCandidate, rerank_candidates
 from products.models.product_result import ProductResult
 
 
-def product_result_to_candidate(product: ProductResult) -> Candidate:
-    metadata = {
-        "source": product.source.value,
-    }
-    if product.score is not None:
-        metadata["retrieval_distance"] = product.score
-
-    return Candidate(
+def product_result_to_candidate(product: ProductResult) -> RerankerCandidate:
+    fields = [
+        f"title: {product.name}",
+        *(
+            [f"description: {product.description}"]
+            if product.description
+            else []
+        ),
+        *(
+            [f"category: {product.category}"]
+            if product.category
+            else []
+        ),
+        *(
+            [f"color: {product.color}"]
+            if product.color
+            else []
+        ),
+        *(
+            [f"style: {product.style}"]
+            if product.style
+            else []
+        ),
+        *(
+            [f"gender: {product.gender}"]
+            if product.gender
+            else []
+        ),
+        *(
+            [f"season: {product.season}"]
+            if product.season
+            else []
+        ),
+        *(
+            [f"year: {product.year}"]
+            if product.year is not None
+            else []
+        ),
+        *(
+            [f"price: {product.price}"]
+            if product.price is not None
+            else []
+        ),
+    ]
+    return RerankerCandidate(
         id=product.id,
-        candidate_type="product",
-        title=product.name,
-        content={
-            "name": product.name,
-            "description": product.description,
-            "url": product.url,
-            "image_url": product.image_url,
-        },
-        attributes={
-            "category": product.category,
-            "color": product.color,
-            "style": product.style,
-            "gender": product.gender,
-            "season": product.season,
-            "year": product.year,
-            "price": product.price,
-        },
-        metadata=metadata,
+        text="\n".join(fields),
     )
 
 
-def prepare_product_candidates(products: list[ProductResult]) -> list[Candidate]:
+def prepare_product_candidates(products: list[ProductResult]) -> list[RerankerCandidate]:
     return [product_result_to_candidate(product) for product in products]
 
 

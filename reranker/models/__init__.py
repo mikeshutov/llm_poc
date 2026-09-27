@@ -1,11 +1,13 @@
-from reranker.models.candidate import Candidate
-from reranker.models.candidate_content import CandidateContent
-from reranker.models.rerank_result import RerankerResult
-from reranker.models.reranker_prompt import RerankerPrompt
+from reranker.models.reranker_api import (
+    RerankerCandidate,
+    RerankerRequest,
+    RerankerResponse,
+    RerankerScore,
+)
 
 __all__ = [
-    "Candidate",
-    "CandidateContent",
-    "RerankerResult",
-    "RerankerPrompt",
+    "RerankerCandidate",
+    "RerankerRequest",
+    "RerankerResponse",
+    "RerankerScore",
 ]

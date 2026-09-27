@@ -5,10 +5,10 @@ from typing import Any
 from common.utils import normalize_text
 from integrations.cocktail_db.models import Cocktail, CocktailSearchResult
 from integrations.meal_db.models import Meal, MealSearchResult
-from reranker import Candidate, rerank_candidates
+from reranker import RerankerCandidate, rerank_candidates
 
 
-def meal_to_candidate(meal: Meal) -> Candidate:
+def meal_to_candidate(meal: Meal) -> RerankerCandidate:
     ingredient_names = [cleaned for ingredient in meal.ingredients if (cleaned := normalize_text(ingredient.name))]
     summary_parts = [
         cleaned
@@ -20,29 +20,20 @@ def meal_to_candidate(meal: Meal) -> Candidate:
         if cleaned is not None
     ]
 
-    return Candidate(
+    fields = [f"name: {normalize_text(meal.name) or meal.name}"]
+    if summary_parts:
+        fields.append(f"attributes: {'. '.join(summary_parts)}")
+    if meal.instructions:
+        fields.append(f"instructions: {normalize_text(meal.instructions)}")
+    if ingredient_names:
+        fields.append(f"ingredients: {', '.join(ingredient_names)}")
+    return RerankerCandidate(
         id=meal.id,
-        title=normalize_text(meal.name) or meal.name,
-        content={
-            "name": normalize_text(meal.name),
-            "summary": ". ".join(summary_parts) if summary_parts else None,
-            "description": normalize_text(meal.instructions),
-            "text": ", ".join(ingredient_names) if ingredient_names else None,
-            "url": normalize_text(meal.source) or normalize_text(meal.youtube),
-            "image_url": normalize_text(meal.thumbnail),
-        },
-        attributes={
-            "category": normalize_text(meal.category),
-            "area": normalize_text(meal.area),
-            "tags": normalize_text(meal.tags),
-        },
-        metadata={
-            "source": "meal_db",
-        },
+        text="\n".join(fields),
     )
 
 
-def cocktail_to_candidate(cocktail: Cocktail) -> Candidate:
+def cocktail_to_candidate(cocktail: Cocktail) -> RerankerCandidate:
     ingredient_names = [cleaned for ingredient in cocktail.ingredients if (cleaned := normalize_text(ingredient.name))]
     summary_parts = [
         cleaned
@@ -55,25 +46,16 @@ def cocktail_to_candidate(cocktail: Cocktail) -> Candidate:
         if cleaned is not None
     ]
 
-    return Candidate(
+    fields = [f"name: {normalize_text(cocktail.name) or cocktail.name}"]
+    if summary_parts:
+        fields.append(f"attributes: {'. '.join(summary_parts)}")
+    if cocktail.instructions:
+        fields.append(f"instructions: {normalize_text(cocktail.instructions)}")
+    if ingredient_names:
+        fields.append(f"ingredients: {', '.join(ingredient_names)}")
+    return RerankerCandidate(
         id=cocktail.id,
-        title=normalize_text(cocktail.name) or cocktail.name,
-        content={
-            "name": normalize_text(cocktail.name),
-            "summary": ". ".join(summary_parts) if summary_parts else None,
-            "description": normalize_text(cocktail.instructions),
-            "text": ", ".join(ingredient_names) if ingredient_names else None,
-            "image_url": normalize_text(cocktail.thumbnail),
-        },
-        attributes={
-            "category": normalize_text(cocktail.category),
-            "alcoholic": normalize_text(cocktail.alcoholic),
-            "glass": normalize_text(cocktail.glass),
-            "tags": normalize_text(cocktail.tags),
-        },
-        metadata={
-            "source": "cocktail_db",
-        },
+        text="\n".join(fields),
     )
 
 

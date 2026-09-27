@@ -11,8 +11,8 @@ from request_orchestrator.shared.runtime_context import (
 )
 from reranker.client import RerankerBackend, RerankerClient
 from reranker.constants import DEFAULT_TOP_K
-from reranker.evidence import build_candidate_evidence, build_reranker_query
-from reranker.models import Candidate
+from reranker.models import RerankerCandidate, RerankerScore
+from reranker.query import build_reranker_query
 
 
 class CandidateReranker:
@@ -27,13 +27,13 @@ class CandidateReranker:
 
     def rerank(
         self,
-        candidates: list[Candidate],
+        candidates: list[RerankerCandidate],
         *,
         goal: str | None = None,
         query: str | None = None,
         user_profile: UserProfile | None = None,
         limit: int | None = None,
-    ) -> list[Candidate]:
+    ) -> list[RerankerCandidate]:
         resolved_limit = DEFAULT_TOP_K if limit is None else max(1, limit)
 
         if len(candidates) <= resolved_limit:
@@ -42,13 +42,13 @@ class CandidateReranker:
         resolved_goal = goal if goal is not None else query
 
         query_text = build_reranker_query(resolved_goal, user_profile)
-        evidence = [
-            {"id": candidate.id, "text": build_candidate_evidence(candidate)}
-            for candidate in candidates
-        ]
+        evidence = list(candidates)
         started_at = perf_counter()
         try:
-            scored = self.backend.rerank(query_text, evidence)
+            scored = [
+                item if isinstance(item, RerankerScore) else RerankerScore.model_validate(item)
+                for item in self.backend.rerank(query_text, evidence)
+            ]
         except Exception as exc:
             create_conversation_event(
                 event_type="reranker_call",
@@ -60,7 +60,7 @@ class CandidateReranker:
                     "candidate_count": len(candidates),
                     "limit": resolved_limit,
                     "query": query_text,
-                    "candidates": evidence,
+                    "candidates": [item.model_dump() for item in evidence],
                     "results": [],
                     "error": str(exc),
                     "roundtrip_id": get_current_roundtrip_id(),
@@ -78,9 +78,9 @@ class CandidateReranker:
                 "candidate_count": len(candidates),
                 "limit": resolved_limit,
                 "query": query_text,
-                "candidates": evidence,
-                "results": scored,
-                "evidence_lengths": [len(item["text"]) for item in evidence],
+                "candidates": [item.model_dump() for item in evidence],
+                "results": [item.model_dump() for item in scored],
+                "evidence_lengths": [len(item.text) for item in evidence],
                 "batch_size": getattr(self.backend, "batch_size", None),
                 "latency_ms": latency_ms,
                 "roundtrip_id": get_current_roundtrip_id(),
@@ -90,18 +90,18 @@ class CandidateReranker:
         ranked_candidates = self._sort_candidates(
             candidate_by_id,
             candidates,
-            [str(item["id"]) for item in scored],
+            [item.id for item in scored],
         )
         return ranked_candidates[:resolved_limit]
 
     def _sort_candidates(
         self,
-        candidate_by_id: dict[str, Candidate],
-        candidates: list[Candidate],
+        candidate_by_id: dict[str, RerankerCandidate],
+        candidates: list[RerankerCandidate],
         ranked_candidate_ids: list[str],
-    ) -> list[Candidate]:
+    ) -> list[RerankerCandidate]:
         seen_ids: set[str] = set()
-        ranked_candidates: list[Candidate] = []
+        ranked_candidates: list[RerankerCandidate] = []
 
         for candidate_id in ranked_candidate_ids:
             if candidate_id in seen_ids:
@@ -121,7 +121,7 @@ class CandidateReranker:
 
 
 def rerank_candidates(
-    candidates: list[Candidate],
+    candidates: list[RerankerCandidate],
     *,
     goal: str | None = None,
     query: str | None = None,
@@ -130,7 +130,7 @@ def rerank_candidates(
     limit: int | None = None,
     conversation_model_config: Any | None = None,
     backend: RerankerBackend | None = None,
-) -> list[Candidate]:
+) -> list[RerankerCandidate]:
     return CandidateReranker(
         llm=llm,
         conversation_model_config=conversation_model_config,

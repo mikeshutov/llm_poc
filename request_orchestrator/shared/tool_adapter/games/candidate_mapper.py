@@ -2,39 +2,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from integrations.edhrec import EDHREC_CARD_URL_TEMPLATE
 from integrations.edhrec.models import EdhrecCardView
-from reranker import Candidate, rerank_candidates
+from reranker import RerankerCandidate, rerank_candidates
 
 
-def edhrec_card_to_candidate(card: EdhrecCardView, *, section: str) -> Candidate:
-    summary_parts: list[str] = []
-    if card.synergy is not None:
-        summary_parts.append(f"Synergy: {card.synergy:.3f}")
-    if card.num_decks:
-        summary_parts.append(f"Decks: {card.num_decks}")
-    if card.potential_decks:
-        summary_parts.append(f"Potential decks: {card.potential_decks}")
-
-    return Candidate(
+def edhrec_card_to_candidate(card: EdhrecCardView, *, section: str) -> RerankerCandidate:
+    fields = [f"name: {card.name}", f"section: {section}"]
+    fields.extend(f"{field}: {value}" for field, value in (
+        ("synergy", card.synergy),
+        ("num_decks", card.num_decks),
+        ("potential_decks", card.potential_decks),
+        ("trend_zscore", card.trend_zscore),
+    ) if value is not None)
+    return RerankerCandidate(
         id=card.id or card.slug or card.name,
-        title=card.name,
-        content={
-            "name": card.name,
-            "summary": " | ".join(summary_parts) if summary_parts else None,
-            "description": section,
-            "url": EDHREC_CARD_URL_TEMPLATE.format(path=card.url) if card.url else None,
-        },
-        attributes={
-            "section": section,
-            "synergy": card.synergy,
-            "num_decks": card.num_decks,
-            "potential_decks": card.potential_decks,
-            "trend_zscore": card.trend_zscore,
-        },
-        metadata={
-            "source": "edhrec",
-        },
+        text="\n".join(fields),
     )
 
 
