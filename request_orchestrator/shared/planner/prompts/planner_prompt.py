@@ -22,6 +22,13 @@ MISSING_INFORMATION_REPLAN_RULE = (
     "as the goal, use existing evidence as context, and plan only tool calls that directly "
     "resolve those gaps."
 )
+TOP_LEVEL_PLANNER_SCHEMA = """
+Return exactly one JSON object with a `steps` array. Each step must specify
+exactly one execution target: `tool` for a concrete tool call or `agent` for a
+delegated subtask. Use only discovered tool and agent names.
+Each step must include `id` and `plan`; tool steps also include `args`.
+Do not return goals, categories, or attribute categories.
+"""
 
 
 def _is_profile_management_agent(state: AgentState) -> bool:
@@ -65,6 +72,7 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     rules = {}
 
     agent_tool_categories = list(state.inputs.tool_category_names)
+    requested_tool_names = set(state.inputs.tool_names)
 
     if agent_tool_categories:
         for category_name in agent_tool_categories:
@@ -88,12 +96,56 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     for tool in tools:
         deduped_tools[getattr(tool, 'name')] = tool
 
+    if requested_tool_names:
+        deduped_tools = {
+            name: tool
+            for name, tool in deduped_tools.items()
+            if name in requested_tool_names
+        }
+
+    if state.inputs.discovered_capabilities is not None:
+        discovered_tool_names = {
+            tool.name for tool in state.inputs.discovered_capabilities.tools
+        }
+        discovered_tool_names.update(tool.name for tool in state.agent_profile.extra_tools)
+        deduped_tools = {
+            name: tool
+            for name, tool in deduped_tools.items()
+            if name in discovered_tool_names
+        }
+
     if _is_profile_management_agent(state):
         compiled_tools = "\n".join(_format_minimal_tool_schema(tool) for tool in deduped_tools.values())
     else:
         compiled_tools = "\n".join(f"- {t.name}: {t.description}".strip() for t in deduped_tools.values())
     return CompiledPlannerContext(tools=list(deduped_tools.values()), compiled_tools=compiled_tools, rules=rules)
 def build_planner_prompt(state: AgentState) -> AgentPrompt:
+    if state.available_agent_states is not None:
+        capabilities = state.inputs.discovered_capabilities
+        prompt = AgentPrompt(
+            instruction=(
+                "You are the top-level planner. Create executable steps for the request. "
+                "Use a direct tool when appropriate, or delegate a self-contained subtask to an "
+                "available agent. Do not invent capabilities."
+            ),
+            user_profile=state.execution_context.user_profile,
+            conversation_context=state.execution_context.conversation_context,
+            task=state.inputs.task,
+            available_agents=[] if capabilities is None else capabilities.agents,
+            available_tools=[] if capabilities is None else capabilities.tools,
+            schema=TOP_LEVEL_PLANNER_SCHEMA,
+        )
+        for section in (
+            PromptSectionKeys.USER_PROFILE,
+            PromptSectionKeys.CONVERSATION_CONTEXT,
+            PromptSectionKeys.AVAILABLE_AGENTS,
+            PromptSectionKeys.AVAILABLE_TOOLS,
+            PromptSectionKeys.TASK,
+            PromptSectionKeys.SCHEMA,
+        ):
+            prompt.include_section(section)
+        return prompt
+
     context = _compile_tools_rules_from_state(state)
     tool_results = state.gather_tool_results()
     evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
@@ -109,6 +161,15 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         compiled_rules = f"{compiled_rules}\n\nExecution Feedback:\n- {EMPTY_EXECUTION_REPLAN_RULE}"
     if state.node_states.evaluator.missing_information:
         compiled_rules = f"{compiled_rules}\n\nReplanning Guidance:\n- {MISSING_INFORMATION_REPLAN_RULE}"
+    discovered_attribute_types = sorted({
+        attribute.attribute_type
+        for attribute in state.execution_context.user_profile.user_attributes.attributes
+    })
+    if discovered_attribute_types:
+        compiled_rules = (
+            f"{compiled_rules}\n\nRelevant user attribute types for this iteration:\n"
+            f"- {', '.join(discovered_attribute_types)}"
+        )
 
     prompt = AgentPrompt(
         instruction=state.agent_profile.planner_instruction,

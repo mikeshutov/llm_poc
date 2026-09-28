@@ -3,14 +3,12 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
-from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from request_orchestrator.agents.models.agent import Agent, AgentType
 from request_orchestrator.agents.repository.repo_factory import get_agent_repo
 
 
 SYSTEM_AGENT_PROFILES: tuple[AgentProfile, ...] = (
-    MAIN_AGENT_PROFILE,
     PROFILE_MANAGEMENT_PROFILE,
 )
 

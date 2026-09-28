@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from personalization.profile.service import build_user_profile
-from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.planner.planner import invoke_planner
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
+from request_orchestrator.strategies.main_request_strategy import TOP_LEVEL_PROFILE
 
 
 
@@ -25,7 +25,7 @@ class JobOrchestrator:
         profile = build_user_profile(user_id=user_id)
         execution_context = AgentExecutionContext.new(user_profile=profile)
         state = AgentState.new(
-            MAIN_AGENT_PROFILE,
+            TOP_LEVEL_PROFILE,
             task=prompt.strip(),
             execution_context=execution_context,
         )

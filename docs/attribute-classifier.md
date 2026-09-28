@@ -4,26 +4,13 @@
 
 The SetFit checkpoint must be a model trained with class `0 = irrelevant` and class `1 = relevant`. Configure it with `ATTRIBUTE_CLASSIFIER_MODEL`; the placeholder default is intentionally not a downloadable model.
 
-Start it with after training a local checkpoint:
+Start by training a local checkpoint:
 
 ```text
 docker compose up --build attribute-classifier
 ```
 
 Compose mounts `services/attribute_classifier/training/trained_models` into the service container and loads `/app/services/attribute_classifier/training/trained_models/attribute-relevance-setfit` by default. Set `ATTRIBUTE_CLASSIFIER_MODEL` explicitly if you want to load a different local path or a Hugging Face model.
-
-Request:
-
-```json
-{
-  "context": "Find a waterproof jacket for winter hiking",
-  "attributes": [
-    {"id": "waterproof", "text": "waterproof rating"},
-    {"id": "color", "text": "preferred color"},
-    "insulation type"
-  ]
-}
-```
 
 `POST /classify` returns `relevant_attributes` in the same format as the input, plus `results` containing each candidate's score and boolean decision. The threshold defaults to `0.5` and can be changed with `ATTRIBUTE_CLASSIFIER_THRESHOLD`.
 

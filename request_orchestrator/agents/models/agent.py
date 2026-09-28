@@ -67,6 +67,6 @@ class Agent(BaseModel):
             },
             planner_instruction=self.planner_instruction,
             planner_rules=self.planner_rules,
-            request_analysis_selectable=True,
+            delegatable=True,
             max_turns=self.max_turns,
         )

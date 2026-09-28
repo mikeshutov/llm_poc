@@ -12,7 +12,7 @@ if "pycountry" not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules["pycountry"] = pycountry_module
 
-from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
+from request_orchestrator.strategies.main_request_strategy import TOP_LEVEL_PROFILE
 from request_orchestrator.models.agent_prompt import PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
@@ -21,7 +21,7 @@ from request_orchestrator.shared.planner.prompts.planner_prompt import build_pla
 
 
 def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> None:
-    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     plan = Plan.model_validate(
         {
             "steps": [
@@ -67,7 +67,7 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
 
 
 def test_planner_prompt_explains_an_empty_execution_retry() -> None:
-    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     state.node_states.planner.no_result_attempts = 1
 
     prompt = build_planner_prompt(state)
@@ -76,7 +76,7 @@ def test_planner_prompt_explains_an_empty_execution_retry() -> None:
 
 
 def test_planner_prompt_includes_evaluator_missing_information() -> None:
-    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     state.node_states.evaluator.missing_information = ["Current Canadian pricing", "Shipping availability"]
 
     prompt = build_planner_prompt(state)
@@ -89,7 +89,7 @@ def test_planner_prompt_includes_evaluator_missing_information() -> None:
 
 
 def test_planner_prompt_omits_missing_information_guidance_without_evaluator_feedback() -> None:
-    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
 
     prompt = build_planner_prompt(state)
 

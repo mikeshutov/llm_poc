@@ -103,8 +103,8 @@ def test_list_llm_calls_for_roundtrip_returns_rows_in_order() -> None:
             'conversation_id': uuid4(),
             'roundtrip_id': roundtrip_id,
             'agent': 'main_agent',
-            'stage': 'request_analysis',
-            'callsite': 'request_analysis.analyze_request',
+            'stage': 'planner',
+            'callsite': 'shared_planner.run_planner',
             'model': 'gpt-5.6-luna',
             'input_tokens': 100,
             'output_tokens': 20,
@@ -149,7 +149,7 @@ def test_list_llm_calls_for_roundtrip_returns_rows_in_order() -> None:
     records = repo.list_llm_calls_for_roundtrip(roundtrip_id)
 
     assert 'FROM llm_call' in cursor.executed[0][0]
-    assert [record.stage for record in records] == ['request_analysis', 'synthesis']
+    assert [record.stage for record in records] == ['planner', 'synthesis']
 
 
 def test_create_conversation_persists_default_model_config_rows() -> None:
@@ -169,7 +169,7 @@ def test_create_conversation_persists_default_model_config_rows() -> None:
             'agent': spec.agent,
             'stage': spec.stage,
             'provider': OPENAI_PROVIDER,
-            'model': 'gpt-5.6-luna' if spec.stage in {'request_analysis', 'reranker', 'evaluator'} or spec.agent == 'profile_agent' else 'gpt-5.6-terra',
+            'model': 'gpt-5.6-luna' if spec.stage in {'reranker', 'evaluator'} or spec.agent == 'profile_agent' else 'gpt-5.6-terra',
             'created_at': '2026-08-09T00:00:00Z',
             'updated_at': '2026-08-09T00:00:00Z',
         })
@@ -211,7 +211,7 @@ def test_resolve_conversation_model_config_backfills_missing_default_rows() -> N
             'agent': spec.agent,
             'stage': spec.stage,
             'provider': OPENAI_PROVIDER,
-            'model': 'gpt-5.6-luna' if spec.stage in {'request_analysis', 'reranker', 'evaluator'} or spec.agent == 'profile_agent' else 'gpt-5.6-terra',
+            'model': 'gpt-5.6-luna' if spec.stage in {'reranker', 'evaluator'} or spec.agent == 'profile_agent' else 'gpt-5.6-terra',
             'created_at': '2026-08-09T00:00:00Z',
             'updated_at': '2026-08-09T00:00:00Z',
         })
@@ -224,7 +224,6 @@ def test_resolve_conversation_model_config_backfills_missing_default_rows() -> N
     resolved = repo.resolve(conversation_id)
 
     assert resolved.main_agent.planner.model == 'gpt-5.6-terra'
-    assert resolved.main_agent.request_analysis.model == 'gpt-5.6-luna'
     assert resolved.profile_agent.planner.model == 'gpt-5.6-luna'
     assert resolved.shared.evaluator.model == 'gpt-5.6-luna'
     assert len(backfill_cursors) == len(CONVERSATION_MODEL_CONFIG_SPECS) - 1

@@ -14,7 +14,6 @@ PROFILE_MANAGEMENT_AGENT_NAME = "profile_management"
 DEFAULT_SYNTHESIS_INSTRUCTION = (
     "Solve the following task or problem using the provided evidence. "
 )
-DEFAULT_REQUEST_ANALYSIS_GOAL = ""
 DEFAULT_MAX_TURNS = 10
 
 
@@ -45,9 +44,8 @@ class AgentProfile:
     tools_by_name: dict[str, Any] = field(init=False, default_factory=dict)
     tool_categories: dict[str, Any] = field(init=False, default_factory=dict)
     stage_model_selections: dict[str, ModelSelection] = field(default_factory=dict)
-    request_analysis_selectable: bool = True
+    delegatable: bool = True
     max_turns: int = DEFAULT_MAX_TURNS
-    request_analysis_goal: str = DEFAULT_REQUEST_ANALYSIS_GOAL
     planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
     planner_rules: str = DEFAULT_PLANNER_RULES
     synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION

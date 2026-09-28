@@ -5,7 +5,6 @@ from common.config import CONTENT_KEY, ROLE_DEBUG, ROLE_KEY
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 
 
-REQUEST_ANALYSIS_KIND = "request_analysis"
 PROFILE_LOAD_KIND = "profile_load"
 PLAN_KIND = "plan"
 EVALUATOR_KIND = "evaluator"
@@ -20,12 +19,6 @@ DEFAULT_AGENT_LOG_ORDER = [
     "profile_management",
     "main_agent",
 ]
-
-
-class RequestAnalysisLogPayload(BaseModel):
-    title: str = "Request Analysis"
-    goals: list[dict] = Field(default_factory=list)
-    requested_user_attribute_types: list[str] = Field(default_factory=list)
 
 
 class ProfileLoadLogPayload(BaseModel):
@@ -136,14 +129,6 @@ def emit_debug_message(content, content_title: str) -> None:
     except Exception:
         pass
 
-def _build_request_analysis_payload(entry: dict) -> dict:
-    data = entry.get("data") or {}
-    return RequestAnalysisLogPayload(
-        goals=data.get("goals") or [],
-        requested_user_attribute_types=data.get("requested_user_attribute_types") or [],
-    ).model_dump()
-
-
 def _build_profile_load_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
     return ProfileLoadLogPayload(
@@ -231,9 +216,7 @@ def _build_llm_call_payload(entry: dict) -> dict:
 def _build_log_payload(entry: dict) -> tuple[str, dict]:
     kind = entry.get("kind") or "event"
 
-    if kind == REQUEST_ANALYSIS_KIND:
-        payload = _build_request_analysis_payload(entry)
-    elif kind == PROFILE_LOAD_KIND:
+    if kind == PROFILE_LOAD_KIND:
         payload = _build_profile_load_payload(entry)
     elif kind == PLAN_KIND:
         payload = _build_plan_payload(entry)

@@ -3,13 +3,12 @@ Model selection in this repo is set up to allow you select a model per step and 
 
 ## Current Shape
 The system can use different models for different parts of the loop. Today the configured stages are:
-1. `main_agent.request_analysis`
-2. `main_agent.planner`
-3. `main_agent.synthesis`
-4. `profile_agent.planner`
-5. `shared.evaluator`
+1. `main_agent.planner`
+2. `main_agent.synthesis`
+3. `profile_agent.planner`
+4. `shared.evaluator`
 
-That means request analysis, planning, synthesis, and evaluation do not have to share the same model. 
+That means planning, synthesis, and evaluation do not have to share the same model.
 
 ## Defaults
 The defaults currently live in `llm/conversation_model_config.py`.
@@ -39,11 +38,10 @@ This lets different conversations use different stage/model combinations without
 `AgentState` resolves the model for a stage through the conversation model config.
 
 In practice:
-1. Request analysis asks for the configured `main_agent.request_analysis` model.
-2. Main planning asks for `main_agent.planner`.
-3. Synthesis asks for `main_agent.synthesis`.
-4. Profile management planning asks for `profile_agent.planner`.
-5. Evaluator asks for `shared.evaluator`.
+1. Main planning asks for `main_agent.planner`.
+2. Synthesis asks for `main_agent.synthesis`.
+3. Profile management planning asks for `profile_agent.planner`.
+4. Evaluator asks for `shared.evaluator`.
 
 This keeps model choice close to the purpose of the stage rather than treating the whole request as one uniform LLM call.
 

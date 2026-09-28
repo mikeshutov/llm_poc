@@ -64,8 +64,8 @@ def test_record_llm_call_uses_base_pricing_for_snapshot_model_name() -> None:
             roundtrip_id=None,
             user_id=None,
             agent='main_agent',
-            stage='request_analysis',
-            callsite='request_analysis.analyze_request',
+            stage='planner',
+            callsite='shared_planner.run_planner',
         )
 
     assert len(fake_repo.calls) == 1
@@ -86,8 +86,8 @@ def test_record_llm_call_computes_costs_and_persists() -> None:
             roundtrip_id=str(roundtrip_id),
             user_id='anonymous',
             agent='main_agent',
-            stage='request_analysis',
-            callsite='request_analysis.analyze_request',
+            stage='planner',
+            callsite='shared_planner.run_planner',
             metadata={'kind': 'test'},
         )
 
@@ -123,8 +123,8 @@ def test_record_llm_call_charges_cached_luna_tokens_at_the_cached_rate() -> None
             roundtrip_id=None,
             user_id=None,
             agent='main_agent',
-            stage='request_analysis',
-            callsite='request_analysis.analyze_request',
+            stage='planner',
+            callsite='shared_planner.run_planner',
         )
 
     stored = fake_repo.calls[0]
@@ -148,8 +148,8 @@ def test_record_llm_call_raises_when_model_has_no_pricing() -> None:
                 roundtrip_id=None,
                 user_id=None,
                 agent='main_agent',
-                stage='request_analysis',
-                callsite='request_analysis.analyze_request',
+                stage='planner',
+                callsite='shared_planner.run_planner',
             )
 
 
@@ -164,8 +164,8 @@ def test_record_llm_call_persists_input_and_output_objects() -> None:
             roundtrip_id=None,
             user_id=None,
             agent='main_agent',
-            stage='request_analysis',
-            callsite='request_analysis.analyze_request',
+            stage='planner',
+            callsite='shared_planner.run_planner',
             input_object={'prompt': 'hello', 'items': [1, 2]},
             output_object={'raw_content': '{}'},
             metadata={'kind': 'test'},
@@ -188,8 +188,8 @@ def test_record_llm_call_persists_latency_ms_in_metadata() -> None:
             roundtrip_id=None,
             user_id=None,
             agent='main_agent',
-            stage='request_analysis',
-            callsite='request_analysis.analyze_request',
+            stage='planner',
+            callsite='shared_planner.run_planner',
             latency_ms=321,
         )
 
@@ -201,8 +201,8 @@ def test_serialize_llm_call_record_promotes_input_and_output_objects() -> None:
     serialized = serialize_llm_call_record(
         {
             'agent': 'main_agent',
-            'stage': 'request_analysis',
-            'callsite': 'request_analysis.analyze_request',
+            'stage': 'planner',
+            'callsite': 'shared_planner.run_planner',
             'model': 'gpt-5.6-luna',
             'input_tokens': 120,
             'output_tokens': 30,

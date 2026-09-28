@@ -1,3 +1,3 @@
-from request_orchestrator.shared.executor.executor import run_executor
+from request_orchestrator.shared.executor.executor import execute_step, run_executor
 
-__all__ = ["run_executor"]
+__all__ = ["execute_step", "run_executor"]

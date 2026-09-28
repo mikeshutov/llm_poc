@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.constants import EVALUATE_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
+from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evaluation_result import TERMINAL_EVALUATION_STATUSES
 
 

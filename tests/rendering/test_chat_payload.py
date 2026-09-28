@@ -303,44 +303,6 @@ def test_build_log_payload_labels_reranker_call_entries() -> None:
     assert payload['results'] == [{'id': '1', 'score': 0.92}]
 
 
-def test_build_request_analysis_log_payload_displays_all_agent_goals() -> None:
-    title, payload = _build_log_payload(
-        {
-            'kind': 'request_analysis',
-            'data': {
-                'goals': [
-                    {
-                        'agent': 'main_agent',
-                        'goal': 'Find hiking boots.',
-                        'tool_categories': ['products'],
-                    },
-                    {
-                        'agent': 'profile_management',
-                        'goal': 'Record durable preferences when appropriate.',
-                        'tool_categories': ['user_attributes'],
-                    },
-                ],
-                'requested_user_attribute_types': ['products.likes'],
-            },
-        }
-    )
-
-    assert title == 'Request Analysis'
-    assert payload['goals'] == [
-        {
-            'agent': 'main_agent',
-            'goal': 'Find hiking boots.',
-            'tool_categories': ['products'],
-        },
-        {
-            'agent': 'profile_management',
-            'goal': 'Record durable preferences when appropriate.',
-            'tool_categories': ['user_attributes'],
-        },
-    ]
-    assert payload['requested_user_attribute_types'] == ['products.likes']
-
-
 def test_build_llm_call_payload_reads_input_and_output_objects_from_metadata() -> None:
     payload = _build_llm_call_payload(
         {
@@ -445,7 +407,7 @@ def test_ordered_agent_log_sections_follow_orchestrator_sequence() -> None:
     sections = _ordered_agent_log_sections(
         {
             'main_agent': [{'kind': 'plan'}],
-            'request_orchestrator': [{'kind': 'request_analysis'}],
+            'request_orchestrator': [{'kind': 'planner'}],
             'profile_management': [{'kind': 'plan'}],
             'some_other_agent': [{'kind': 'plan'}],
         }
@@ -462,11 +424,11 @@ def test_ordered_agent_log_sections_follow_orchestrator_sequence() -> None:
 def test_split_orchestrator_entries_places_agents_before_synthesis() -> None:
     before, after = _split_orchestrator_entries_for_agents(
         [
-            {'kind': 'request_analysis'},
+            {'kind': 'planner'},
             {'kind': 'profile_load'},
             {'kind': 'synthesis'},
         ]
     )
 
-    assert [entry['kind'] for entry in before] == ['request_analysis', 'profile_load']
+    assert [entry['kind'] for entry in before] == ['planner', 'profile_load']
     assert [entry['kind'] for entry in after] == ['synthesis']

@@ -13,13 +13,13 @@ if 'pycountry' not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules['pycountry'] = pycountry_module
 
-from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
-from request_orchestrator.agents.main_agent.router.router import router
-from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.result_validator import (
+from request_orchestrator.strategies.main_request_strategy import TOP_LEVEL_PROFILE, run_main_request_strategy
+from request_orchestrator.shared.main_router import router
+from request_orchestrator.strategies.planner_executor_evaluator.result_validator import (
     execution_result_router,
     run_execution_result_validator,
 )
-from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.validator import validator
+from request_orchestrator.strategies.planner_executor_evaluator.validator import validator
 from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_result import ResultStatus
@@ -33,6 +33,7 @@ from request_orchestrator.models.evaluation_result import (
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan, PlanStep
 from request_orchestrator.shared.evaluator import evaluator_router
+from request_orchestrator.models.main_state import MainState
 
 
 def _hydrate_plan_state(
@@ -71,21 +72,21 @@ def _hydrate_plan_state(
 
 
 def test_validator_routes_empty_plan_to_synthesis() -> None:
-    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     _hydrate_plan_state(state, plan=Plan.model_validate({"steps": []}), results={}, plan_count=1)
 
     assert validator(state) == SYNTHESIZE_EDGE
 
 
 def test_validator_routes_empty_plan_to_synthesis_again() -> None:
-    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     _hydrate_plan_state(state, plan=Plan.model_validate({"steps": []}), results={}, plan_count=1)
 
     assert validator(state) == SYNTHESIZE_EDGE
 
 
 def test_validator_routes_action_plan_to_execute() -> None:
-    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     _hydrate_plan_state(
         state,
         plan=Plan.model_validate({
@@ -104,7 +105,7 @@ def test_validator_routes_action_plan_to_execute() -> None:
 
 
 def test_router_routes_executed_results_to_evaluator() -> None:
-    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     _hydrate_plan_state(
         state,
         plan=Plan.model_validate({
@@ -123,7 +124,7 @@ def test_router_routes_executed_results_to_evaluator() -> None:
 
 
 def test_router_routes_missing_results_back_to_plan() -> None:
-    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     _hydrate_plan_state(
         state,
         plan=Plan.model_validate({
@@ -142,7 +143,7 @@ def test_router_routes_missing_results_back_to_plan() -> None:
 
 
 def test_execution_result_router_replans_once_after_an_empty_execution() -> None:
-    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     _hydrate_plan_state(
         state,
         plan=Plan.model_validate({
@@ -177,7 +178,7 @@ def test_execution_result_router_replans_once_after_an_empty_execution() -> None
 
 
 def test_execution_result_router_skips_evaluator_after_second_empty_execution() -> None:
-    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     _hydrate_plan_state(
         state,
         plan=Plan.model_validate({
@@ -213,36 +214,35 @@ def test_execution_result_router_skips_evaluator_after_second_empty_execution() 
 
 
 def test_evaluator_router_returns_synthesis_when_status_is_satisfied() -> None:
-    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
 
     assert evaluator_router(state) == SYNTHESIZE_EDGE
 
 
 def test_evaluator_router_returns_synthesis_when_status_is_partial_but_sufficient() -> None:
-    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT
 
     assert evaluator_router(state) == SYNTHESIZE_EDGE
 
 
 def test_evaluator_router_returns_synthesis_when_status_is_terminal() -> None:
-    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
 
     assert evaluator_router(state) == SYNTHESIZE_EDGE
 
 
 def test_evaluator_router_returns_plan_when_status_is_retryable() -> None:
-    state = AgentState.new(task="Find something", llm=object(), agent_profile=MAIN_AGENT_PROFILE)
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_RETRYABLE
 
     assert evaluator_router(state) == PLAN_EDGE
 
 
 def test_main_agent_graph_executes_plan_after_planner(monkeypatch) -> None:
-    from request_orchestrator.agents.main_agent import agent as main_agent_module
-    from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator import graph as strategy_module
+    from request_orchestrator.strategies.planner_executor_evaluator import graph as strategy_module
 
     planner_called = False
     executor_called = False
@@ -276,12 +276,16 @@ def test_main_agent_graph_executes_plan_after_planner(monkeypatch) -> None:
     monkeypatch.setattr(strategy_module, "run_planner", fake_planner)
     monkeypatch.setattr(strategy_module, "run_executor", fake_executor)
 
-    final_state = main_agent_module.run_agent(
-        user_query="Find something",
-        execution_context=AgentExecutionContext.new(),
-        llm=object(),
+    final_state = run_main_request_strategy(
+        MainState.new(
+            task="Find something",
+            execution_context=AgentExecutionContext.new(),
+            llm=object(),
+            agent_profiles=[],
+        )
     )
 
     assert planner_called is True
     assert executor_called is True
-    assert final_state.node_states.evaluator.evaluation_status == EVALUATION_STATUS_TERMINAL
+    assert final_state.main_agent_state is not None
+    assert final_state.main_agent_state.node_states.evaluator.evaluation_status == EVALUATION_STATUS_TERMINAL

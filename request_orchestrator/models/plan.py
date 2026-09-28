@@ -29,8 +29,15 @@ class PlanStep(BaseModel):
     db_id: UUID = Field(default_factory=uuid4) 
     step_index: int = 0                       
     plan: str
-    tool: str
+    tool: str = ""
+    agent: str = ""
     args: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_execution_target(self) -> "PlanStep":
+        if bool(self.tool.strip()) == bool(self.agent.strip()):
+            raise ValueError("A plan step must specify exactly one of 'tool' or 'agent'.")
+        return self
 
 
 class Plan(BaseModel):

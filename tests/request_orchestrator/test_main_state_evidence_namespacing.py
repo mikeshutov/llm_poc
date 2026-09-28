@@ -16,11 +16,12 @@ if "pycountry" not in sys.modules:
 
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import UserProfile
-from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
+from request_orchestrator.strategies.main_request_strategy import TOP_LEVEL_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.main_state import MainState
+from request_orchestrator.models.agent_state import AgentState
 
 
 def test_main_state_gathers_typed_child_results_without_rebasing_ids() -> None:
@@ -34,7 +35,7 @@ def test_main_state_gathers_typed_child_results_without_rebasing_ids() -> None:
         llm=object(),
         agent_profiles=[
             build_profile_management_profile(user_profile),
-            MAIN_AGENT_PROFILE,
+            TOP_LEVEL_PROFILE,
         ],
     )
 
@@ -79,3 +80,34 @@ def test_main_state_gathers_typed_child_results_without_rebasing_ids() -> None:
 
     assert [tool_result.plan_step_id for tool_result in tool_results] == [profile_step_id, main_step_id]
     assert len(relevant_evidence_ids) == 2
+
+
+def test_main_state_gathers_top_level_main_agent_results() -> None:
+    user_profile = UserProfile()
+    main_state = MainState.new(
+        task="Use main-agent evidence.",
+        execution_context=AgentExecutionContext.new(
+            conversation_context=ConversationContext(),
+            user_profile=user_profile,
+        ),
+        llm=object(),
+        agent_profiles=[TOP_LEVEL_PROFILE],
+    )
+    evidence_id = uuid4()
+    top_level_state = AgentState.new(
+        agent_profile=TOP_LEVEL_PROFILE,
+        task=main_state.task,
+        execution_context=main_state.execution_context,
+        llm=object(),
+    )
+    top_level_state.direct_tool_results = [
+        ToolResult(
+            tool_name="generic_web_search",
+            evidence=[EvidenceView(id=evidence_id, title="Selected result", summary="Relevant")],
+        )
+    ]
+    top_level_state.result = top_level_state.result.copy(relevant_evidence_ids=[evidence_id])
+    main_state.main_agent_state = top_level_state
+
+    assert main_state.gather_tool_results() == top_level_state.direct_tool_results
+    assert main_state.gather_relevant_evidence_ids() == [evidence_id]

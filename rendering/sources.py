@@ -4,7 +4,7 @@ from typing import Any
 
 import streamlit as st
 
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView
+from request_orchestrator.models.evidence import EvidenceView
 
 SOURCES_DIALOG_KEY = "sources_dialog"
 
@@ -103,18 +103,3 @@ def _get_evidence_by_id(payload: dict[str, Any]) -> dict[str, EvidenceView]:
         except Exception:
             continue
     return evidence_by_id
-
-
-def _render_source_links(urls: list[EvidenceUrl]) -> None:
-    deduped_links: list[EvidenceUrl] = []
-    seen_urls: set[str] = set()
-    for entry in urls:
-        cleaned_url = entry.url.strip()
-        if not cleaned_url or cleaned_url in seen_urls:
-            continue
-        seen_urls.add(cleaned_url)
-        deduped_links.append(entry)
-
-    for entry in deduped_links:
-        label = entry.url_type.replace("_", " ").title()
-        st.markdown(f"[{label}]({entry.url})")

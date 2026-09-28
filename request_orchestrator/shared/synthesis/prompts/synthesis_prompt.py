@@ -28,15 +28,7 @@ def _has_profile_information(state: AgentState | MainState) -> bool:
 
 
 def build_synthesis_prompt(evidence: list[EvidenceStep], state: AgentState | MainState) -> AgentPrompt:
-    tool_categories = (
-        [
-            category
-            for goal in state.request_analysis.goals
-            for category in goal.tool_categories
-        ]
-        if isinstance(state, MainState)
-        else list(state.inputs.tool_category_names)
-    )
+    tool_categories = [] if isinstance(state, MainState) else list(state.inputs.tool_category_names)
     prompt = AgentPrompt(
         instruction=(
             DEFAULT_SYNTHESIS_INSTRUCTION

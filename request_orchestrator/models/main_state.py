@@ -11,14 +11,23 @@ from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
-from request_orchestrator.models.request_analysis import RequestAnalysis, RequestAnalysisGoal
+from request_orchestrator.shared.discovery.models import CapabilityDiscoveryResult
+from request_orchestrator.models.evaluation_result import EvaluationStatus, EVALUATION_STATUS_RETRYABLE
+from request_orchestrator.models.plan import Plan
 
 @dataclass
 class MainState:
     task: str
     execution_context: AgentExecutionContext = field(default_factory=AgentExecutionContext)
     agent_profiles: list[AgentProfile] = field(default_factory=list)
-    request_analysis: RequestAnalysis = field(default_factory=RequestAnalysis)
+    discovered_capabilities: CapabilityDiscoveryResult | None = None
+    discovered_attribute_types: list[str] = field(default_factory=list)
+    evaluation_status: EvaluationStatus = EVALUATION_STATUS_RETRYABLE
+    missing_information: list[str] = field(default_factory=list)
+    relevant_evidence_ids: list[UUID] = field(default_factory=list)
+    plan: Plan | None = None
+    main_agent_state: AgentState | None = None
+    direct_tool_results: list[ToolResult] = field(default_factory=list)
     agent_states: dict[str, AgentState] = field(default_factory=dict)
     result: OrchestratorResult = field(default_factory=OrchestratorResult)
     llm: Any = None
@@ -51,35 +60,19 @@ class MainState:
             if agent_profile.name not in self.agent_states:
                 self.agent_states[agent_profile.name] = AgentState.new(
                     agent_profile=agent_profile,
-                    inputs=AgentInputs.new(task=self.task),
+                    inputs=AgentInputs.new(task=self.task, request_task=self.task),
                     execution_context=replace(self.execution_context),
                     llm=self.llm,
                 )
 
-        goals_by_agent = self._goals_by_agent()
         for agent_state in self.agent_states.values():
-            goal_entry = goals_by_agent.get(agent_state.agent_profile.name)
-            if goal_entry is None:
-                agent_state.inputs = AgentInputs.new(task="")
-                continue
-            agent_state.inputs = AgentInputs.new(
-                task=goal_entry.goal,
-                tool_category_names=list(goal_entry.tool_categories),
-            )
-
-    def _goals_by_agent(self) -> dict[str, RequestAnalysisGoal]:
-        goals_by_agent: dict[str, RequestAnalysisGoal] = {}
-        for goal in self.request_analysis.goals:
-            normalized_agent_name = goal.agent.strip()
-            if not normalized_agent_name:
-                continue
-            goals_by_agent[normalized_agent_name] = goal.model_copy(deep=True)
-        return goals_by_agent
+            agent_state.inputs = AgentInputs.new(task="", request_task=self.task)
 
     def gather_relevant_evidence_ids(self) -> list[UUID]:
         relevant_evidence_ids: list[UUID] = []
         seen_evidence_ids: set[UUID] = set()
-        for agent_state in self.agent_states.values():
+        agent_states = self._agent_states_for_aggregation()
+        for agent_state in agent_states:
             for evidence_id in agent_state.result.relevant_evidence_ids:
                 if evidence_id in seen_evidence_ids:
                     continue
@@ -88,17 +81,28 @@ class MainState:
         return relevant_evidence_ids
 
     def gather_tool_call_ids(self) -> list[UUID]:
-        return [
-            tool_call_id
-            for agent_state in self.agent_states.values()
-            for tool_call_id in agent_state.result.tool_call_ids
-        ]
+        tool_call_ids: list[UUID] = []
+        seen_tool_call_ids: set[UUID] = set()
+        agent_states = self._agent_states_for_aggregation()
+        for agent_state in agent_states:
+            for tool_call_id in agent_state.result.tool_call_ids:
+                if tool_call_id in seen_tool_call_ids:
+                    continue
+                seen_tool_call_ids.add(tool_call_id)
+                tool_call_ids.append(tool_call_id)
+        return tool_call_ids
 
     def gather_tool_results(self) -> list[ToolResult]:
-        gathered: list[ToolResult] = []
-        for agent_state in self.agent_states.values():
+        gathered: list[ToolResult] = list(self.direct_tool_results)
+        for agent_state in self._agent_states_for_aggregation():
             gathered.extend(agent_state.gather_tool_results())
         return gathered
+
+    def _agent_states_for_aggregation(self) -> list[AgentState]:
+        """Return each completed execution tree once for synthesis/persistence."""
+        if self.main_agent_state is not None:
+            return [self.main_agent_state]
+        return list(self.agent_states.values())
 
     def gather_used_tools(self) -> list[str]:
         used_tools: list[str] = []
