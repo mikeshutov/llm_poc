@@ -6,7 +6,7 @@ At the start of a turn we assemble a reusable `AgentState` that can hold:
 1. The latest user prompt as the active task.
 2. Conversation context, including top-level summaries and recent roundtrip history.
 3. A lightweight user profile with geo/location-aware metadata.
-4. Request-analysis output such as the refined goal, applicable tool categories, and requested attribute types.
+4. Discovery output such as relevant tools, delegatable agents, and requested attribute types.
 5. Iteration state, including plans and raw tool results gathered so far.
 6. Subagent state for secondary agent paths such as profile management.
 7. Final result fields, logs, and runtime data needed across the graph.
@@ -29,8 +29,8 @@ Important detail:
 We also prepare a separate `User Profile` object inside state.
 
 That profile starts with lightweight durable identity and geometadata. Stored user attributes are then loaded in stages:
-1. `request_analysis` sees the lightweight profile, not the full durable attribute set.
-2. It requests specific attribute types such as `food.likes` or `projects.goals` when they would materially help.
+1. Attribute discovery sees the lightweight profile, not the full durable attribute set.
+2. It selects specific attribute types such as `food.likes` or `projects.goals` when they would materially help.
 3. `load_user_profile` hydrates only those requested attribute types into the profile.
 4. Later steps use that hydrated profile slice instead of preloading everything.
 
@@ -42,23 +42,23 @@ Tone also follows this selective pattern:
 ## Prompt Assembly Per Step
 After shared state exists, each prompt is built from the smallest useful slice of it.
 
-### Request Analysis
-`request_analysis` gets:
+### Discovery
+Capability and attribute discovery get:
 1. The latest user prompt.
 2. Conversation context.
 3. Lightweight user profile metadata.
-4. Available tool categories.
+4. Available tools, agent profiles, and attribute types.
 
-Its job is to produce a self-contained goal plus any needed tool categories and requested durable attribute types.
+Their job is to narrow the capabilities and profile data made available to the main planner.
 
 ### Profile Loading
 `load_user_profile` is not an LLM prompt step.
 
-It uses the request-analysis output in state to hydrate only the requested durable attribute types before later prompts run.
+It uses attribute-discovery output in state to hydrate only the requested durable attribute types before later prompts run.
 
 ### Planner
 The planner currently gets:
-1. A goal built from `request_analysis.goal` or the latest task.
+1. The latest task and any unresolved evaluator feedback.
 2. Conversation context.
 3. The hydrated user profile, including tone.
 4. Allowed tools and planner rules.

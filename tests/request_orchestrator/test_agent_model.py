@@ -4,6 +4,7 @@ import pytest
 
 from request_orchestrator.agents.models.agent import Agent, AgentType
 from request_orchestrator.agents import seeder
+from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 
 
 def _agent(**overrides) -> Agent:
@@ -34,7 +35,7 @@ def test_system_agent_can_be_global() -> None:
 
 
 def test_system_agent_seeder_delegates_each_profile(monkeypatch) -> None:
-    profiles = [seeder.MAIN_AGENT_PROFILE]
+    profiles = [PROFILE_MANAGEMENT_PROFILE]
     seeded = [object()]
     calls = []
 
@@ -63,7 +64,7 @@ def test_system_agent_seeder_delegates_each_profile(monkeypatch) -> None:
 
 
 def test_system_agent_seeder_deletes_profiles_removed_from_code(monkeypatch) -> None:
-    profiles = [seeder.MAIN_AGENT_PROFILE]
+    profiles = [PROFILE_MANAGEMENT_PROFILE]
     stale_agent = _agent(agent_type=AgentType.SYSTEM, name="removed-agent")
     deleted = []
 

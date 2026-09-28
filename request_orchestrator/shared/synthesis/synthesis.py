@@ -21,7 +21,10 @@ from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resol
 from request_orchestrator.shared.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
 from rendering.debug import SYNTHESIS_KIND
 def _resolve_relevant_evidence_ids(state: MainState) -> set[str]:
-    return {str(evidence_id) for evidence_id in state.gather_relevant_evidence_ids()}
+    return {
+        str(evidence_id)
+        for evidence_id in [*state.relevant_evidence_ids, *state.gather_relevant_evidence_ids()]
+    }
 
 
 def _resolve_agent_name(state: MainState) -> str:

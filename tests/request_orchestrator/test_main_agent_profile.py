@@ -13,8 +13,8 @@ if "pycountry" not in sys.modules:
     )
     sys.modules["pycountry"] = pycountry_module
 
-from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
+from request_orchestrator.strategies.main_request_strategy import TOP_LEVEL_PROFILE
 
 
-def test_main_agent_profile_excludes_games_category() -> None:
-    assert "games" not in MAIN_AGENT_PROFILE.allowed_category_names()
+def test_top_level_profile_is_owned_by_main_request_strategy() -> None:
+    assert TOP_LEVEL_PROFILE.name == "request_orchestrator"

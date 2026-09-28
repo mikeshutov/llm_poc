@@ -9,8 +9,8 @@ from request_orchestrator.agent_runner.models.agent_profile import (
     AgentKind,
     AgentProfile,
 )
-from request_orchestrator.agent_runner.stratagies.planner_executor_evaluator.graph import PlannerExecutorEvaluatorStratagy
-from request_orchestrator.agents.main_agent.router.router import router
+from request_orchestrator.strategies.planner_executor_evaluator.graph import PlannerExecutorEvaluatorStratagy
+from request_orchestrator.shared.main_router import router
 
 
 class AgentRegistry:

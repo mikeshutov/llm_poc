@@ -11,8 +11,8 @@ if 'pycountry' not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules['pycountry'] = pycountry_module
 
-from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
-from request_orchestrator.agents.main_agent.router.router import router as main_router
+from request_orchestrator.strategies.main_request_strategy import TOP_LEVEL_PROFILE
+from request_orchestrator.shared.main_router import router as main_router
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from request_orchestrator.agents.profile_management.router.router import router as profile_router
 from request_orchestrator.constants import EVALUATE_EDGE
@@ -21,7 +21,7 @@ from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
 
 
-def _state_with_completed_plan(*, needs_replan: bool, profile=MAIN_AGENT_PROFILE) -> AgentState:
+def _state_with_completed_plan(*, needs_replan: bool, profile=TOP_LEVEL_PROFILE) -> AgentState:
     state = AgentState.new(
         task="Run tools",
         llm=object(),

@@ -13,7 +13,6 @@ MAIN_AGENT_MODEL_SCOPE = "main_agent"
 PROFILE_AGENT_MODEL_SCOPE = "profile_agent"
 SHARED_MODEL_SCOPE = "shared"
 
-REQUEST_ANALYSIS_STAGE = "request_analysis"
 PLANNER_STAGE = "planner"
 SYNTHESIS_STAGE = "synthesis"
 EVALUATOR_STAGE = "evaluator"
@@ -33,7 +32,6 @@ def _configured_model(environment_variable: str, default: str) -> str:
 
 DEFAULT_MINI_MODEL = "gpt-5.6-luna"
 DEFAULT_MAIN_AGENT_MODEL = _configured_model("LLM_MODEL", DEFAULT_MINI_MODEL)
-DEFAULT_MAIN_AGENT_REQUEST_ANALYSIS_MODEL = DEFAULT_MINI_MODEL
 DEFAULT_MAIN_AGENT_PLANNER_MODEL = _configured_model("MAIN_AGENT_PLANNER_MODEL", DEFAULT_MAIN_AGENT_MODEL)
 DEFAULT_MAIN_AGENT_SYNTHESIS_MODEL = _configured_model("MAIN_AGENT_SYNTHESIS_MODEL", DEFAULT_MAIN_AGENT_MODEL)
 DEFAULT_PROFILE_AGENT_PLANNER_MODEL = _configured_model("PROFILE_AGENT_PLANNER_MODEL", DEFAULT_MINI_MODEL)
@@ -65,13 +63,6 @@ class ConversationModelConfigSpec:
 
 
 CONVERSATION_MODEL_CONFIG_SPECS: tuple[ConversationModelConfigSpec, ...] = (
-    ConversationModelConfigSpec(
-        agent=MAIN_AGENT_MODEL_SCOPE,
-        stage=REQUEST_ANALYSIS_STAGE,
-        label="MainAgent / request_analysis",
-        default_provider=OPENAI_PROVIDER,
-        default_model=DEFAULT_MAIN_AGENT_REQUEST_ANALYSIS_MODEL,
-    ),
     ConversationModelConfigSpec(
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=PLANNER_STAGE,
@@ -122,7 +113,6 @@ class ConversationModelConfigEntry:
 
 
 class MainAgentConversationModelConfig(BaseModel):
-    request_analysis: ModelSelection
     planner: ModelSelection
     synthesis: ModelSelection
 
@@ -195,7 +185,6 @@ class ConversationModelConfig(BaseModel):
     def build_default(cls) -> ConversationModelConfig:
         return cls(
             main_agent=MainAgentConversationModelConfig(
-                request_analysis=ModelSelection(provider=OPENAI_PROVIDER, model=DEFAULT_MAIN_AGENT_REQUEST_ANALYSIS_MODEL),
                 planner=ModelSelection(provider=OPENAI_PROVIDER, model=DEFAULT_MAIN_AGENT_PLANNER_MODEL),
                 synthesis=ModelSelection(provider=OPENAI_PROVIDER, model=DEFAULT_MAIN_AGENT_SYNTHESIS_MODEL),
             ),
@@ -278,12 +267,3 @@ class ConversationModelConfig(BaseModel):
     def resolve_pricing(self, agent: str, stage: str) -> ModelPricing:
         selection = self.resolve_selection(agent, stage)
         return self.resolve_model_pricing(selection.provider, selection.model)
-
-    def to_flat_dict(self) -> dict[str, str]:
-        return {
-            spec.path: self.resolve(spec.agent, spec.stage)
-            for spec in CONVERSATION_MODEL_CONFIG_SPECS
-        }
-
-    def to_metadata_payload(self) -> dict[str, Any]:
-        return self.model_dump()

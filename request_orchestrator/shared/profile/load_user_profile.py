@@ -13,7 +13,7 @@ ORCHESTRATOR_AGENT_NAME = "request_orchestrator"
 
 @traceable(name="Load User Profile Node")
 def load_user_profile(main_state: MainState) -> MainState:
-    requested_attribute_types = list(main_state.request_analysis.requested_user_attribute_types)
+    requested_attribute_types = list(main_state.discovered_attribute_types)
     user_profile = main_state.execution_context.user_profile
     hydrate_user_profile_core(user_profile)
     load_user_profile_attributes(

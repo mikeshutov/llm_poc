@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from request_orchestrator.models.main_state import MainState
-from request_orchestrator.shared.request_analysis.attribute_discovery import attribute_discovery
+from request_orchestrator.shared.discovery.attribute_discovery import attribute_discovery
 
 
 class FakeAttributeClassifier:
@@ -29,3 +29,15 @@ def test_attribute_discovery_sends_context_and_all_available_attributes() -> Non
     assert "food.likes" in client.attributes
     assert len(client.attributes) == 36
     assert result == ["food.likes"]
+
+
+def test_attribute_discovery_limits_results_to_ten() -> None:
+    state = MainState.new(task="food", agent_profiles=[])
+
+    class FakeClient:
+        def relevant_attributes(self, context: str, attributes: list[str]) -> list[str]:
+            return list(attributes[:12])
+
+    result = attribute_discovery(state, client=FakeClient())
+
+    assert len(result) == 10

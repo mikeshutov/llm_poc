@@ -4,24 +4,19 @@ from langgraph.graph import END, StateGraph
 from langsmith import traceable
 
 from request_orchestrator.constants import (
-    APPLY_AGENT_UPDATES_EDGE,
-    DISTRIBUTE_GOALS_EDGE,
+    ENRICH_STATE_EDGE,
     LOAD_AGENTS_EDGE,
     PROFILE_LOADING_EDGE,
-    REQUEST_ANALYSIS_EDGE,
-    RUN_SINGLE_AGENT_EDGE,
     SYNTHESIZE_EDGE,
 )
 from request_orchestrator.models.orchestrator_graph_state import OrchestratorGraphState
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
-from request_orchestrator.nodes.agent_execution_nodes import fanout_agent_runs_node, run_single_agent_node
 from request_orchestrator.nodes.main_state_nodes import (
-    apply_agent_updates_node,
-    distribute_goals_node,
+    enrich_state_node,
     load_agents_node,
     load_user_profile_node,
-    run_request_analysis_node,
+    run_main_request_strategy_node,
     run_synthesis_node,
 )
 
@@ -33,20 +28,16 @@ class OrchestratorGraph:
     def _build_graph(self):
         builder = StateGraph(OrchestratorGraphState)
         builder.add_node(LOAD_AGENTS_EDGE, load_agents_node)
-        builder.add_node(REQUEST_ANALYSIS_EDGE, run_request_analysis_node)
+        builder.add_node(ENRICH_STATE_EDGE, enrich_state_node)
         builder.add_node(PROFILE_LOADING_EDGE, load_user_profile_node)
-        builder.add_node(DISTRIBUTE_GOALS_EDGE, distribute_goals_node)
-        builder.add_node(RUN_SINGLE_AGENT_EDGE, run_single_agent_node)
-        builder.add_node(APPLY_AGENT_UPDATES_EDGE, apply_agent_updates_node)
+        builder.add_node("main_request_strategy", run_main_request_strategy_node)
         builder.add_node(SYNTHESIZE_EDGE, run_synthesis_node)
         builder.set_entry_point(LOAD_AGENTS_EDGE)
 
-        builder.add_edge(LOAD_AGENTS_EDGE, REQUEST_ANALYSIS_EDGE)
-        builder.add_edge(REQUEST_ANALYSIS_EDGE, PROFILE_LOADING_EDGE)
-        builder.add_edge(PROFILE_LOADING_EDGE, DISTRIBUTE_GOALS_EDGE)
-        builder.add_conditional_edges(DISTRIBUTE_GOALS_EDGE, fanout_agent_runs_node)
-        builder.add_edge(RUN_SINGLE_AGENT_EDGE, APPLY_AGENT_UPDATES_EDGE)
-        builder.add_edge(APPLY_AGENT_UPDATES_EDGE, SYNTHESIZE_EDGE)
+        builder.add_edge(LOAD_AGENTS_EDGE, ENRICH_STATE_EDGE)
+        builder.add_edge(ENRICH_STATE_EDGE, PROFILE_LOADING_EDGE)
+        builder.add_edge(PROFILE_LOADING_EDGE, "main_request_strategy")
+        builder.add_edge("main_request_strategy", SYNTHESIZE_EDGE)
         builder.add_edge(SYNTHESIZE_EDGE, END)
         
         return builder.compile()

@@ -10,9 +10,7 @@ def validator(state: AgentState) -> str:
     evaluator_state = state.node_states.evaluator
     if evaluator_state.evaluation_status in TERMINAL_EVALUATION_STATUSES or planner_state.plan is None:
         return SYNTHESIZE_EDGE
-
     plan = planner_state.plan
     if plan is None or len(plan.steps) == 0:
         return SYNTHESIZE_EDGE
-
     return EXECUTE_TOOLS_EDGE

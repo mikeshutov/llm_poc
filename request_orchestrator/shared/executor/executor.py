@@ -14,6 +14,7 @@ from common.data import sanitize_for_json_storage
 from common.signatures import build_signature
 from common.logging import create_conversation_event
 from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
 from request_orchestrator.models.evidence import ToolResult
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan import PlanStep
@@ -107,6 +108,39 @@ def _execute_step(
     )
 
 
+def execute_step(
+    step: PlanStep,
+    *,
+    tool_results_by_step_id: dict[str, ToolResult] | None = None,
+    agent_profile: AgentProfile | None = None,
+    execution_context=None,
+    resolved_args: dict[str, Any] | None = None,
+) -> StepExecutionResult:
+    """Execute one step with optional agent authorization.
+
+    Top-level planner execution may omit an agent profile. In that case the
+    tool registry performs normal existence and input validation without an
+    agent-specific allowlist. Subagents should pass their profile so the
+    allowlist remains enforced.
+    """
+    allowed_tool_names = None if agent_profile is None else set(agent_profile.tool_names)
+    kwargs = {
+        "tool_results_by_step_id": tool_results_by_step_id or {},
+        "allowed_tool_names": allowed_tool_names,
+    }
+    if resolved_args is not None:
+        kwargs["resolved_args"] = resolved_args
+    if execution_context is None:
+        return _execute_step(step, **kwargs)
+    with bind_runtime_context(
+        conversation_id=execution_context.conversation_id,
+        conversation_model_config=execution_context.model_config,
+        roundtrip_id=str(execution_context.roundtrip_id) if execution_context.roundtrip_id else None,
+        user_id=execution_context.user_profile.user_id,
+    ):
+        return _execute_step(step, **kwargs)
+
+
 def _record_step_result(
     agent_state: AgentState,
     *,
@@ -171,6 +205,8 @@ def run_executor(agent_state: AgentState) -> AgentState:
     plan = planner_state.plan
     if plan is None:
         return agent_state
+    if agent_state.available_agent_states is not None:
+        return _run_top_level_executor(agent_state)
     tool_repo = ToolCallRepository() if isinstance(agent_state.execution_context.roundtrip_id, UUID) else None
     allowed_tool_names = set(agent_state.agent_profile.tool_names)
     iteration_number = planner_state.plan_count
@@ -234,4 +270,78 @@ def run_executor(agent_state: AgentState) -> AgentState:
                     execution_result=execution_result,
                 )
 
+    return agent_state
+
+
+def _run_top_level_executor(agent_state: AgentState) -> AgentState:
+    """Execute a common-strategy plan as either a tool call or agent call."""
+    from request_orchestrator.agents.registry import agent_registry
+    from request_orchestrator.models.agent_inputs import AgentInputs
+
+    plan = agent_state.node_states.planner.plan
+    if plan is None:
+        return agent_state
+    tool_repo = ToolCallRepository() if isinstance(agent_state.execution_context.roundtrip_id, UUID) else None
+    iteration_number = agent_state.node_states.planner.plan_count
+    for step in plan.steps:
+        if step.agent:
+            request_signature = build_signature({
+                "agent_name": step.agent,
+                "task": step.plan,
+            })
+            if request_signature in agent_state.executed_request_signatures:
+                continue
+            agent_state.executed_request_signatures.append(request_signature)
+            delegated = agent_state.available_agent_states.get(step.agent)
+            if delegated is None:
+                continue
+            delegated.inputs = AgentInputs.new(
+                task=step.plan,
+                request_task=delegated.inputs.request_task,
+            )
+            runner = agent_registry.get(delegated.agent_profile)
+            agent_state.delegated_agent_states[step.agent] = runner(delegated)
+            continue
+
+        resolved_args = _substitute_refs(step.args, {})
+        request_signature = build_signature({
+            "tool_name": step.tool,
+            "input": resolved_args,
+        })
+        if request_signature in agent_state.executed_request_signatures:
+            continue
+        if (
+            tool_repo is not None
+            and agent_state.execution_context.roundtrip_id is not None
+            and tool_repo.has_request_hash(agent_state.execution_context.roundtrip_id, request_signature)
+        ):
+            agent_state.executed_request_signatures.append(request_signature)
+            continue
+        agent_state.executed_request_signatures.append(request_signature)
+        execution_result = execute_step(
+            step,
+            tool_results_by_step_id={},
+            resolved_args=resolved_args,
+            execution_context=agent_state.execution_context,
+        )
+        output = execution_result.output
+        if not isinstance(output, ToolResult):
+            output = ToolResult(result=output, evidence=[])
+        execution_result = StepExecutionResult(
+            step=step,
+            args=resolved_args,
+            output=output,
+        )
+        if tool_repo is not None:
+            _record_step_result(
+                agent_state,
+                plan=plan,
+                tool_repo=tool_repo,
+                iteration_number=iteration_number,
+                execution_result=execution_result,
+            )
+        else:
+            agent_state.direct_tool_results.append(
+                output.model_copy(update={"tool_name": step.tool})
+            )
     return agent_state

@@ -12,7 +12,6 @@ class MockLLMResponse:
 
 @dataclass
 class MockLLMScenario:
-    request_analysis: str | None = None
     profile_planner: list[str] = field(default_factory=list)
     main_planner: list[str] = field(default_factory=list)
     synthesis: list[str] = field(default_factory=list)
@@ -37,9 +36,6 @@ class MockLLM:
         with self._lock:
             self.responses.append(content)
 
-    def _is_request_analysis_prompt(self, prompt: str) -> bool:
-        return 'Response Schema:' in prompt and 'requested_user_attribute_types' in prompt
-
     def _is_synthesis_prompt(self, prompt: str) -> bool:
         return (
             'Evidence (JSON):' in prompt
@@ -60,13 +56,6 @@ class MockLLM:
 
     def _pop_from_scenario(self, prompt: str) -> str:
         assert self._scenario is not None
-
-        if self._is_request_analysis_prompt(prompt):
-            if self._scenario.request_analysis is None:
-                raise AssertionError('MockLLM request-analysis response was not configured.')
-            response = self._scenario.request_analysis
-            self._scenario.request_analysis = None
-            return response
 
         if self._is_evaluator_prompt(prompt):
             if self._scenario.evaluator:

@@ -9,6 +9,7 @@ from personalization.user_attributes.models.user_attribute_types import ATTRIBUT
 from request_orchestrator.models.main_state import MainState
 
 logger = logging.getLogger(__name__)
+MAX_DISCOVERED_ATTRIBUTE_TYPES = 10
 
 
 def attribute_discovery(
@@ -34,4 +35,8 @@ def attribute_discovery(
         return []
 
     available = set(ATTRIBUTE_TYPE_VALUES)
-    return [attribute for attribute in discovered if isinstance(attribute, str) and attribute in available]
+    return [
+        attribute
+        for attribute in discovered
+        if isinstance(attribute, str) and attribute in available
+    ][:MAX_DISCOVERED_ATTRIBUTE_TYPES]

@@ -119,14 +119,6 @@ def build_chat_model(*, provider: str, model_name: str) -> Any:
     raise KeyError(f"Unsupported model provider: {provider}")
 
 
-def is_provider_model_instance(llm: Any, provider: str) -> bool:
-    if provider == OPENAI_PROVIDER:
-        return isinstance(llm, ChatOpenAI)
-    if provider == ANTHROPIC_PROVIDER:
-        return isinstance(llm, ChatAnthropic)
-    return False
-
-
 def build_llm_for_stage(
     *,
     execution_context: AgentExecutionContext,

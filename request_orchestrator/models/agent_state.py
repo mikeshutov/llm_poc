@@ -17,6 +17,10 @@ from request_orchestrator.shared.node_state import AgentNodeStates
 class AgentState:
     agent_profile: AgentProfile
     inputs: AgentInputs = field(default_factory=AgentInputs)
+    available_agent_states: dict[str, "AgentState"] | None = None
+    delegated_agent_states: dict[str, "AgentState"] = field(default_factory=dict)
+    direct_tool_results: list[ToolResult] = field(default_factory=list)
+    executed_request_signatures: list[str] = field(default_factory=list)
     execution_context: AgentExecutionContext = field(default_factory=AgentExecutionContext)
     node_states: AgentNodeStates = field(default_factory=AgentNodeStates)
     result: AgentResult = field(default_factory=AgentResult)
@@ -80,18 +84,22 @@ class AgentState:
         return self.agent_profile.scope
 
     def gather_tool_results(self) -> list[ToolResult]:
-        if not self.result.tool_call_ids:
-            return []
+        gathered = list(self.direct_tool_results)
         from tool.repository.tool_call_repository import ToolCallRepository
-
-        return ToolCallRepository().get_tool_results(self.result.tool_call_ids)
+        if self.result.tool_call_ids:
+            gathered.extend(ToolCallRepository().get_tool_results(self.result.tool_call_ids))
+        for agent_state in self.delegated_agent_states.values():
+            gathered.extend(agent_state.gather_tool_results())
+        return gathered
 
     def gather_tool_calls(self):
-        if not self.result.tool_call_ids:
-            return []
+        gathered = []
         from tool.repository.tool_call_repository import ToolCallRepository
-
-        return ToolCallRepository().get_tool_calls(self.result.tool_call_ids)
+        if self.result.tool_call_ids:
+            gathered.extend(ToolCallRepository().get_tool_calls(self.result.tool_call_ids))
+        for agent_state in self.delegated_agent_states.values():
+            gathered.extend(agent_state.gather_tool_calls())
+        return gathered
 
     def gather_used_tools(self) -> list[str]:
         used_tools: list[str] = []

@@ -32,7 +32,6 @@ from llm.conversation_model_config import (
     OPENAI_PROVIDER,
     PLANNER_STAGE,
     PROFILE_AGENT_MODEL_SCOPE,
-    REQUEST_ANALYSIS_STAGE,
     SHARED_MODEL_SCOPE,
     SYNTHESIS_STAGE,
     XAI_PROVIDER,
@@ -40,7 +39,7 @@ from llm.conversation_model_config import (
 from llm.model_config_resolver import resolve_conversation_model_config
 from personalization.profile.models import UserProfile
 from rendering.sidebar import build_model_config_rows
-from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
+from request_orchestrator.strategies.main_request_strategy import TOP_LEVEL_PROFILE
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
@@ -155,13 +154,6 @@ def test_conversation_model_config_resolves_partial_overrides_with_defaults() ->
         [
             ConversationModelConfigEntry(
                 conversation_id=conversation_id,
-                agent=MAIN_AGENT_MODEL_SCOPE,
-                stage=REQUEST_ANALYSIS_STAGE,
-                provider=OPENAI_PROVIDER,
-                model='gpt-5.6-terra',
-            ),
-            ConversationModelConfigEntry(
-                conversation_id=conversation_id,
                 agent=SHARED_MODEL_SCOPE,
                 stage=EVALUATOR_STAGE,
                 provider=OPENAI_PROVIDER,
@@ -170,8 +162,6 @@ def test_conversation_model_config_resolves_partial_overrides_with_defaults() ->
         ]
     )
 
-    assert config.main_agent.request_analysis.provider == OPENAI_PROVIDER
-    assert config.main_agent.request_analysis.model == 'gpt-5.6-terra'
     assert config.main_agent.planner.model == 'gpt-5.6-luna'
     assert config.main_agent.synthesis.model == 'gpt-5.6-luna'
     assert config.profile_agent.planner.model == 'gpt-5.6-luna'
@@ -181,8 +171,6 @@ def test_conversation_model_config_resolves_partial_overrides_with_defaults() ->
 def test_conversation_model_config_build_default_returns_defaults() -> None:
     config = ConversationModelConfig.build_default()
 
-    assert config.main_agent.request_analysis.provider == OPENAI_PROVIDER
-    assert config.main_agent.request_analysis.model == 'gpt-5.6-luna'
     assert config.main_agent.planner.model == 'gpt-5.6-luna'
     assert config.main_agent.synthesis.model == 'gpt-5.6-luna'
     assert config.profile_agent.planner.model == 'gpt-5.6-luna'
@@ -192,11 +180,6 @@ def test_conversation_model_config_build_default_returns_defaults() -> None:
 def test_conversation_model_config_build_default_resolves_pricing_for_every_stage() -> None:
     config = ConversationModelConfig.build_default()
 
-    assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, REQUEST_ANALYSIS_STAGE) == ModelPricing(
-        input_price_per_million_tokens=Decimal('0.20'),
-        cached_input_price_per_million_tokens=Decimal('0.02'),
-        output_price_per_million_tokens=Decimal('1.20'),
-    )
     assert config.resolve_pricing(MAIN_AGENT_MODEL_SCOPE, PLANNER_STAGE) == ModelPricing(
         input_price_per_million_tokens=Decimal('0.20'),
         cached_input_price_per_million_tokens=Decimal('0.02'),
@@ -278,7 +261,7 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
             ConversationModelConfigEntry(
                 conversation_id=conversation_id,
                 agent=MAIN_AGENT_MODEL_SCOPE,
-                stage=REQUEST_ANALYSIS_STAGE,
+                stage=PLANNER_STAGE,
                 provider=OPENAI_PROVIDER,
                 model='gpt-5.6-terra',
             ),
@@ -307,17 +290,16 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
                 user_profile=UserProfile(),
                 model_config=config,
             ),
-            agent_profile=MAIN_AGENT_PROFILE,
+            agent_profile=TOP_LEVEL_PROFILE,
             llm=TrackingChatOpenAI(model='gpt-5.6-luna'),
         )
 
-        request_analysis_llm = build_llm_for_stage(
+        planner_llm = build_llm_for_stage(
             execution_context=state.execution_context,
             llm=state.llm,
             agent=MAIN_AGENT_MODEL_SCOPE,
-            stage=REQUEST_ANALYSIS_STAGE,
+            stage=PLANNER_STAGE,
         )
-        assert request_analysis_llm.model == 'gpt-5.6-terra'
 
         profile_planner_llm = build_llm_for_stage(
             execution_context=state.execution_context,
@@ -333,7 +315,7 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
             llm=state.llm,
             agent=MAIN_AGENT_MODEL_SCOPE,
             stage=PLANNER_STAGE,
-            agent_profile=MAIN_AGENT_PROFILE,
+            agent_profile=TOP_LEVEL_PROFILE,
             reuse_llm_for_agent_scope=state.resolve_agent_scope(),
         )
         assert main_planner_llm.model == 'gpt-5.6-luna'
@@ -348,7 +330,7 @@ def test_llm_factory_build_llm_for_stage_uses_anthropic_provider() -> None:
             ConversationModelConfigEntry(
                 conversation_id=conversation_id,
                 agent=MAIN_AGENT_MODEL_SCOPE,
-                stage=REQUEST_ANALYSIS_STAGE,
+                stage=PLANNER_STAGE,
                 provider=ANTHROPIC_PROVIDER,
                 model='claude-sonnet-5',
             ),
@@ -366,17 +348,17 @@ def test_llm_factory_build_llm_for_stage_uses_anthropic_provider() -> None:
                 user_profile=UserProfile(),
                 model_config=config,
             ),
-            agent_profile=MAIN_AGENT_PROFILE,
+            agent_profile=TOP_LEVEL_PROFILE,
         )
 
-        request_analysis_llm = build_llm_for_stage(
+        planner_llm = build_llm_for_stage(
             execution_context=state.execution_context,
             llm=state.llm,
             agent=MAIN_AGENT_MODEL_SCOPE,
-            stage=REQUEST_ANALYSIS_STAGE,
+            stage=PLANNER_STAGE,
         )
 
-    assert request_analysis_llm.model == 'claude-sonnet-5'
+    assert planner_llm.model == 'claude-sonnet-5'
 
 
 def test_llm_factory_build_llm_for_stage_uses_deepseek_openai_compatible_endpoint() -> None:
@@ -388,7 +370,7 @@ def test_llm_factory_build_llm_for_stage_uses_deepseek_openai_compatible_endpoin
             ConversationModelConfigEntry(
                 conversation_id=conversation_id,
                 agent=MAIN_AGENT_MODEL_SCOPE,
-                stage=REQUEST_ANALYSIS_STAGE,
+                stage=PLANNER_STAGE,
                 provider=DEEPSEEK_PROVIDER,
                 model='deepseek-v4-flash',
             ),
@@ -406,18 +388,18 @@ def test_llm_factory_build_llm_for_stage_uses_deepseek_openai_compatible_endpoin
                 user_profile=UserProfile(),
                 model_config=config,
             ),
-            agent_profile=MAIN_AGENT_PROFILE,
+            agent_profile=TOP_LEVEL_PROFILE,
         )
 
-        request_analysis_llm = build_llm_for_stage(
+        planner_llm = build_llm_for_stage(
             execution_context=state.execution_context,
             llm=state.llm,
             agent=MAIN_AGENT_MODEL_SCOPE,
-            stage=REQUEST_ANALYSIS_STAGE,
+            stage=PLANNER_STAGE,
         )
 
-    assert request_analysis_llm.model == 'deepseek-v4-flash'
-    assert request_analysis_llm.kwargs['base_url'] == 'https://api.deepseek.com'
+    assert planner_llm.model == 'deepseek-v4-flash'
+    assert planner_llm.kwargs['base_url'] == 'https://api.deepseek.com'
 
 
 def test_llm_factory_build_llm_for_stage_uses_google_openai_compatible_endpoint() -> None:
@@ -429,7 +411,7 @@ def test_llm_factory_build_llm_for_stage_uses_google_openai_compatible_endpoint(
             ConversationModelConfigEntry(
                 conversation_id=conversation_id,
                 agent=MAIN_AGENT_MODEL_SCOPE,
-                stage=REQUEST_ANALYSIS_STAGE,
+                stage=PLANNER_STAGE,
                 provider=GOOGLE_PROVIDER,
                 model='gemini-3.5-flash',
             ),
@@ -447,19 +429,19 @@ def test_llm_factory_build_llm_for_stage_uses_google_openai_compatible_endpoint(
                 user_profile=UserProfile(),
                 model_config=config,
             ),
-            agent_profile=MAIN_AGENT_PROFILE,
+            agent_profile=TOP_LEVEL_PROFILE,
         )
 
-        request_analysis_llm = build_llm_for_stage(
+        planner_llm = build_llm_for_stage(
             execution_context=state.execution_context,
             llm=state.llm,
             agent=MAIN_AGENT_MODEL_SCOPE,
-            stage=REQUEST_ANALYSIS_STAGE,
+            stage=PLANNER_STAGE,
         )
 
-    assert request_analysis_llm.model == 'gemini-3.5-flash'
+    assert planner_llm.model == 'gemini-3.5-flash'
     assert (
-        request_analysis_llm.kwargs['base_url']
+        planner_llm.kwargs['base_url']
         == 'https://generativelanguage.googleapis.com/v1beta/openai/'
     )
 
@@ -473,7 +455,7 @@ def test_llm_factory_build_llm_for_stage_uses_xai_openai_compatible_endpoint() -
             ConversationModelConfigEntry(
                 conversation_id=conversation_id,
                 agent=MAIN_AGENT_MODEL_SCOPE,
-                stage=REQUEST_ANALYSIS_STAGE,
+                stage=PLANNER_STAGE,
                 provider=XAI_PROVIDER,
                 model='grok-4.5',
             ),
@@ -491,18 +473,18 @@ def test_llm_factory_build_llm_for_stage_uses_xai_openai_compatible_endpoint() -
                 user_profile=UserProfile(),
                 model_config=config,
             ),
-            agent_profile=MAIN_AGENT_PROFILE,
+            agent_profile=TOP_LEVEL_PROFILE,
         )
 
-        request_analysis_llm = build_llm_for_stage(
+        planner_llm = build_llm_for_stage(
             execution_context=state.execution_context,
             llm=state.llm,
             agent=MAIN_AGENT_MODEL_SCOPE,
-            stage=REQUEST_ANALYSIS_STAGE,
+            stage=PLANNER_STAGE,
         )
 
-    assert request_analysis_llm.model == 'grok-4.5'
-    assert request_analysis_llm.kwargs['base_url'] == 'https://api.x.ai/v1'
+    assert planner_llm.model == 'grok-4.5'
+    assert planner_llm.kwargs['base_url'] == 'https://api.x.ai/v1'
 
 
 def test_llm_factory_build_llm_for_stage_uses_cohere_openai_compatible_endpoint() -> None:
@@ -514,7 +496,7 @@ def test_llm_factory_build_llm_for_stage_uses_cohere_openai_compatible_endpoint(
             ConversationModelConfigEntry(
                 conversation_id=conversation_id,
                 agent=MAIN_AGENT_MODEL_SCOPE,
-                stage=REQUEST_ANALYSIS_STAGE,
+                stage=PLANNER_STAGE,
                 provider=COHERE_PROVIDER,
                 model='command-a-plus-05-2026',
             ),
@@ -532,18 +514,18 @@ def test_llm_factory_build_llm_for_stage_uses_cohere_openai_compatible_endpoint(
                 user_profile=UserProfile(),
                 model_config=config,
             ),
-            agent_profile=MAIN_AGENT_PROFILE,
+            agent_profile=TOP_LEVEL_PROFILE,
         )
 
-        request_analysis_llm = build_llm_for_stage(
+        planner_llm = build_llm_for_stage(
             execution_context=state.execution_context,
             llm=state.llm,
             agent=MAIN_AGENT_MODEL_SCOPE,
-            stage=REQUEST_ANALYSIS_STAGE,
+            stage=PLANNER_STAGE,
         )
 
-    assert request_analysis_llm.model == 'command-a-plus-05-2026'
-    assert request_analysis_llm.kwargs['base_url'] == 'https://api.cohere.ai/compatibility/v1'
+    assert planner_llm.model == 'command-a-plus-05-2026'
+    assert planner_llm.kwargs['base_url'] == 'https://api.cohere.ai/compatibility/v1'
 
 
 def test_llm_factory_build_llm_for_stage_uses_mistral_openai_compatible_endpoint() -> None:
@@ -555,7 +537,7 @@ def test_llm_factory_build_llm_for_stage_uses_mistral_openai_compatible_endpoint
             ConversationModelConfigEntry(
                 conversation_id=conversation_id,
                 agent=MAIN_AGENT_MODEL_SCOPE,
-                stage=REQUEST_ANALYSIS_STAGE,
+                stage=PLANNER_STAGE,
                 provider=MISTRAL_PROVIDER,
                 model='mistral-small-latest',
             ),
@@ -573,18 +555,18 @@ def test_llm_factory_build_llm_for_stage_uses_mistral_openai_compatible_endpoint
                 user_profile=UserProfile(),
                 model_config=config,
             ),
-            agent_profile=MAIN_AGENT_PROFILE,
+            agent_profile=TOP_LEVEL_PROFILE,
         )
 
-        request_analysis_llm = build_llm_for_stage(
+        planner_llm = build_llm_for_stage(
             execution_context=state.execution_context,
             llm=state.llm,
             agent=MAIN_AGENT_MODEL_SCOPE,
-            stage=REQUEST_ANALYSIS_STAGE,
+            stage=PLANNER_STAGE,
         )
 
-    assert request_analysis_llm.model == 'mistral-small-latest'
-    assert request_analysis_llm.kwargs['base_url'] == 'https://api.mistral.ai/v1'
+    assert planner_llm.model == 'mistral-small-latest'
+    assert planner_llm.kwargs['base_url'] == 'https://api.mistral.ai/v1'
 
 
 def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> None:
@@ -699,12 +681,12 @@ def test_build_model_config_rows_reset_to_default_restores_model_and_pricing() -
     resolved = ConversationModelConfig.build_default()
 
     rows = build_model_config_rows(resolved, [])
-    request_analysis_row = next(row for row in rows if row['agent'] == MAIN_AGENT_MODEL_SCOPE and row['stage'] == REQUEST_ANALYSIS_STAGE)
+    planner_row = next(row for row in rows if row['agent'] == MAIN_AGENT_MODEL_SCOPE and row['stage'] == PLANNER_STAGE)
 
-    assert request_analysis_row['effective_model'] == 'gpt-5.6-luna'
-    assert request_analysis_row['override_model'] is None
-    assert request_analysis_row['input_price'] == '$0.2 per 1M'
-    assert request_analysis_row['output_price'] == '$1.2 per 1M'
+    assert planner_row['effective_model'] == 'gpt-5.6-luna'
+    assert planner_row['override_model'] is None
+    assert planner_row['input_price'] == '$0.2 per 1M'
+    assert planner_row['output_price'] == '$1.2 per 1M'
 
 
 def test_build_model_config_rows_exposes_provider_filtered_options() -> None:

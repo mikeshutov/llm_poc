@@ -13,4 +13,3 @@ services/attribute_classifier/training/trained_models/
 checkpoints/
 
 .vscode
-.claude

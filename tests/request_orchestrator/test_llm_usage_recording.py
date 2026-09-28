@@ -18,16 +18,14 @@ from integrations.brave.models import NewsResult
 from llm.clients.llm_client import LlmClient
 from personalization.profile.models import UserProfile
 from common.logging import create_conversation_event
-from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
+from request_orchestrator.strategies.main_request_strategy import TOP_LEVEL_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
-from request_orchestrator.shared.request_analysis.analyze_request import analyze_request
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.agent_prompt import PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.agent_result import AgentResult
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
-from request_orchestrator.models.request_analysis import RequestAnalysis, RequestAnalysisGoal
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE, EVALUATION_STATUS_TERMINAL
@@ -103,7 +101,7 @@ class FakeOpenAIClient:
 def _agent_profiles_for(user_profile: UserProfile) -> list:
     return [
         build_profile_management_profile(user_profile),
-        MAIN_AGENT_PROFILE,
+        TOP_LEVEL_PROFILE,
     ]
 
 
@@ -163,42 +161,6 @@ def _set_agent_tool_results(
     state.gather_tool_results = lambda: normalized_tool_results
 
 
-def test_request_analysis_records_llm_usage() -> None:
-    user_profile = UserProfile()
-    repo = RecordingRepo()
-    state = MainState.new(
-        task='Find me boots.',
-        execution_context=AgentExecutionContext.new(
-            conversation_context=ConversationContext(),
-            user_profile=user_profile,
-            conversation_id=str(uuid4()),
-        ),
-        llm=FakeInvokeLLM('{"goals":[{"agent":"main_agent","goal":"Find boots","tool_categories":[]}],"requested_user_attribute_types":[]}'),
-        agent_profiles=_agent_profiles_for(user_profile),
-    )
-
-    with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
-        'common.logging.conversation_event_logger.get_conversation_repo',
-        return_value=repo,
-    ), patch(
-        'llm.chat_models.build_chat_model',
-        return_value=state.llm,
-    ):
-        with bind_runtime_context(**_bind_args_for_main_state(state)):
-            analyze_request(state)
-
-    assert len(repo.llm_calls) == 1
-    assert repo.llm_calls[0]['agent'] == 'main_agent'
-    assert repo.llm_calls[0]['stage'] == 'request_analysis'
-    input_object = repo.llm_calls[0]['metadata']['input_object']
-    assert input_object['prompt_token_count'] > 0
-    assert PromptSectionKeys.TASK in input_object['sections_raw']
-    assert PromptSectionKeys.USER_PROFILE not in input_object['sections_raw']
-    payload = _latest_event_payload(repo, event_type='request_analysis', agent_name='request_orchestrator')
-    assert payload['data']['llm_usage']['total_tokens'] == 120
-    assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
-
-
 def test_run_planner_records_main_and_profile_scopes() -> None:
     repo = RecordingRepo()
     main_state = AgentState.new(
@@ -209,7 +171,7 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
             conversation_id=str(uuid4()),
         ),
         llm=FakeInvokeLLM('{"steps": [], "needs_replan": false}'),
-        agent_profile=MAIN_AGENT_PROFILE,
+        agent_profile=TOP_LEVEL_PROFILE,
     )
     profile_state = AgentState.new(
         task='Remember I like pizza.',
@@ -253,7 +215,7 @@ def test_agent_log_persists_conversation_event_immediately() -> None:
             conversation_id=str(conversation_id),
         ),
         llm=FakeInvokeLLM('{"steps": [], "needs_replan": false}'),
-        agent_profile=MAIN_AGENT_PROFILE,
+        agent_profile=TOP_LEVEL_PROFILE,
     )
 
     with patch('common.logging.conversation_event_logger.get_conversation_repo', return_value=repo):
@@ -302,7 +264,7 @@ def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_retu
             conversation_id=str(uuid4()),
         ),
         llm=FakeInvokeLLM('{"steps": [], "status": "blocked", "reason": "required capability unavailable.", "needs_replan": false}'),
-        agent_profile=MAIN_AGENT_PROFILE,
+        agent_profile=TOP_LEVEL_PROFILE,
     )
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.conversation_event_logger.get_conversation_repo',
@@ -418,7 +380,7 @@ def test_run_evaluator_records_llm_usage_and_preserves_missing_information_for_r
             conversation_id=str(uuid4()),
         ),
         llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["25a4bcc1-2b18-5a36-940c-29c535bae654"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"]}', 'gpt-5.6-terra'),
-        agent_profile=MAIN_AGENT_PROFILE,
+        agent_profile=TOP_LEVEL_PROFILE,
     )
     _set_agent_tool_results(
         state,

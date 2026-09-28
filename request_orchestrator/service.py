@@ -6,7 +6,6 @@ from llm.clients.embeddings import embed_text
 from llm.repository.repo_factory import get_conversation_model_config_repo
 from personalization.profile.models import GeoMetadata
 from personalization.profile.service import build_user_profile
-from request_orchestrator.agents.main_agent.profile import MAIN_AGENT_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
 from request_orchestrator.models.main_state import MainState
@@ -71,7 +70,6 @@ def run_request_orchestrator_for_query(
         execution_context=execution_context,
         agent_profiles=[
             build_profile_management_profile(user_profile),
-            MAIN_AGENT_PROFILE,
         ],
     )
 

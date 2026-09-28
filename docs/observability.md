@@ -3,7 +3,7 @@ The repo now has a fairly deep observability layer across prompts, LLM calls, to
 
 ## What We Record
 At a high level, each turn can produce observable data in a few layers:
-1. Agent-stage logs such as request analysis, profile hydration, planning, evaluation, synthesis, and tool calls.
+1. Agent-stage logs such as capability discovery, profile hydration, planning, evaluation, synthesis, and tool calls.
 2. Stored prompt rows for important LLM stages.
 3. Structured LLM call records with usage, cost, latency, and prompt metadata.
 4. Structured local reranker events with model, candidate, evidence, and latency metadata.
@@ -16,12 +16,11 @@ Local BGE reranking is not recorded as an LLM call and therefore has no token us
 The Streamlit debug experience renders structured agent logs rather than raw text blobs.
 
 Current log types include:
-1. `request_analysis`
-2. `profile_load`
-3. `plan`
-4. `evaluator`
-5. `tool_call`
-6. `synthesis`
+1. `profile_load`
+2. `plan`
+3. `evaluator`
+4. `tool_call`
+5. `synthesis`
 
 These logs are shaped into typed payloads in `rendering/debug.py`, which keeps the UI consistent and makes the logs easier to scan as JSON.
 
@@ -40,10 +39,9 @@ Prompt construction is observable at the section level.
 That means we can inspect not just the final prompt, but also which sections were included and how expensive each section was.
 
 Important LLM-stage prompts are also stored as roundtrip prompt rows, including:
-1. request analysis
-2. planner
-3. evaluator
-4. synthesis
+1. planner
+2. evaluator
+3. synthesis
 
 ## LLM Call Records
 Each recorded LLM call can include:
