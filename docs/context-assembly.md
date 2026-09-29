@@ -122,17 +122,18 @@ flowchart TD
         S1[Latest User Prompt / Task]
         S2[Conversation Context]
         S3[Lightweight User Profile]
-        S4[Request Analysis Output]
+        S4[Discovered Capabilities And Attributes]
         S5[Iteration Trace / Raw Tool Results]
         S6[Subagent States]
     end
 
     B --> C
-    C --> D[Request Analysis selects needed state fields]
+    C --> D[Capability And Attribute Discovery]
     D --> E[Profile Loader hydrates requested attributes]
     E --> F[Planner builds prompt from goal, context, tools, profile, prior iterations]
     F --> G[Executor runs current plan]
     G --> H[Evaluator checks evidence sufficiency]
-    H -->|Needs more work| F
+    H -->|Needs more work| J[Re-enrich Agent State]
+    J --> F
     H -->|Enough evidence| I[Synthesis builds prompt from summaries plus evidence]
 ```

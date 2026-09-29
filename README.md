@@ -36,22 +36,28 @@ We also store conversations, roundtrips, prompt rows, summaries, and tool calls 
 
 ```mermaid
 flowchart TD
-    A[User Prompt] --> B[Build Context And Agent State]
-    B --> LUA[Load Likely Useful User Agents]
-    LUA --> C[Discover Capabilities And Attributes]
-    C --> D[Hydrate Profile]
-    subgraph MAR[Main Agent]
-        P1[Main Planner] --> X[Main Agent Executor]
-        X --> EV[Main Agent Evaluator]
-        EV -->|retryable| P1
-    end
+    A[User Prompt] --> B[Build MainState With Context And Profile]
+    B --> LUA[Load Relevant User Agents]
+    LUA --> C[Enrich State]
+    C --> CD[Capability Discovery]
+    C --> AD[Attribute Discovery]
+    CD --> D[Load Requested Profile Attributes]
+    AD --> D
     D --> P1
-    X -.->|delegates| DA[Profile/User Agent State]
-    DA --> DX[Delegated Agent Execution]
-    DX --> EV
-    EV -.->|satisfied or terminal| S[Synthesis]
-    PMV -.->|satisfied or terminal| S
-    UCA -.->|Agent Result| S
+
+    subgraph MAR[Main Request Strategy]
+        P1[Planner] --> X[Executor]
+        X --> V[Validate Execution Result]
+        V -->|needs evaluation| EV[Evaluator]
+        V -->|replan| R[Re-enrich Agent State]
+        R --> P1
+        EV -->|needs more work| R
+    end
+
+    X -.->|delegates to nested strategy| DA[Delegated Agent State]
+    DA -.-> DX[Delegated Planner / Executor / Evaluator]
+    DX -.-> X
+    EV -->|terminal| S[Synthesis]
     S --> L[Response]
 ```
 
