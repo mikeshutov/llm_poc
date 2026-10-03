@@ -12,6 +12,7 @@ class AgentInputs:
     tool_names: list[str] = field(default_factory=list)
     tool_category_names: list[str] = field(default_factory=list)
     discovered_capabilities: CapabilityDiscoveryResult | None = None
+    discovered_attribute_types: list[str] = field(default_factory=list)
 
     @classmethod
     def new(
@@ -22,6 +23,7 @@ class AgentInputs:
         tool_names: list[str] | None = None,
         tool_category_names: list[str] | None = None,
         discovered_capabilities: CapabilityDiscoveryResult | None = None,
+        discovered_attribute_types: list[str] | None = None,
     ) -> "AgentInputs":
         return cls(
             task=task.strip(),
@@ -37,4 +39,5 @@ class AgentInputs:
                 if isinstance(category, str) and category.strip()
             ],
             discovered_capabilities=discovered_capabilities,
+            discovered_attribute_types=[] if discovered_attribute_types is None else list(discovered_attribute_types),
         )

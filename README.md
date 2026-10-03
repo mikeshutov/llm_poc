@@ -35,30 +35,38 @@ Rough breakdown of the current agent loop flow.
 We also store conversations, roundtrips, prompt rows, summaries, and tool calls for future prompts.
 
 ```mermaid
-flowchart TD
-    A[User Prompt] --> B[Build MainState With Context And Profile]
-    B --> LUA[Load Relevant User Agents]
-    LUA --> C[Enrich State]
-    C --> CD[Capability Discovery]
-    C --> AD[Attribute Discovery]
-    CD --> D[Load Requested Profile Attributes]
-    AD --> D
-    D --> P1
+flowchart LR
+    PROMPT["User prompt"]
 
-    subgraph MAR[Main Request Strategy]
-        P1[Planner] --> X[Executor]
-        X --> V[Validate Execution Result]
-        V -->|needs evaluation| EV[Evaluator]
-        V -->|replan| R[Re-enrich Agent State]
-        R --> P1
-        EV -->|needs more work| R
+    subgraph ORCHESTRATOR["Request orchestrator agent boundary"]
+        subgraph ENRICHMENT["Capability and State Enrichment Layer"]
+            CAPABILITY["Capability discovery<br/>Load tools and agents via<br/>embeddings"]
+            ATTRIBUTE["Attribute discovery for<br/>profile enrichment"]
+        end
+
+        PLANNER["Planner"]
+
+        subgraph CAPABILITY_EXECUTION["Capability execution"]
+            AGENT_TOOL_EXEC["Agent / Tool Executor"]
+            RERANK["Rerank results"]
+            AGENT_TOOL_EXEC --> RERANK
+        end
+
+        EVALUATOR["Evaluator"]
+        SYNTHESIS["Synthesis"]
+        RESPONSE["Assistant response"]
+
+        ENRICHMENT --> PLANNER
+
+        PLANNER --> CAPABILITY_EXECUTION
+        RERANK --> EVALUATOR
+
+        EVALUATOR -->|missing information| ENRICHMENT
+        EVALUATOR -->|sufficient evidence or terminal| SYNTHESIS
+        SYNTHESIS --> RESPONSE
     end
 
-    X -.->|delegates to nested strategy| DA[Delegated Agent State]
-    DA -.-> DX[Delegated Planner / Executor / Evaluator]
-    DX -.-> X
-    EV -->|terminal| S[Synthesis]
-    S --> L[Response]
+    PROMPT --> ENRICHMENT
 ```
 
 ## Documentation

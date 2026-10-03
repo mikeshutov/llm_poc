@@ -7,6 +7,7 @@ from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.orchestrator_graph_state import OrchestratorGraphState
 from request_orchestrator.shared.discovery.attribute_discovery import attribute_discovery
 from request_orchestrator.shared.discovery.capability_discovery import capability_discovery
+from request_orchestrator.shared.profile.load_user_profile import load_user_profile
 
 
 def enrich_state(
@@ -37,7 +38,13 @@ def enrich_state_node(state: OrchestratorGraphState) -> dict[str, MainState]:
     return {"main_state": enrich_state(state.main_state)}
 
 
-def enrich_agent_state(agent_state: AgentState) -> AgentState:
+def enrich_agent_state(
+    agent_state: AgentState,
+    *,
+    attribute_lookup=attribute_discovery,
+    capability_lookup=capability_discovery,
+    profile_loader=load_user_profile,
+) -> AgentState:
     """Recompute tools and relevant attributes for one planner iteration."""
     iteration_task_parts = [agent_state.inputs.task]
     missing_information = agent_state.node_states.evaluator.missing_information
@@ -65,19 +72,24 @@ def enrich_agent_state(agent_state: AgentState) -> AgentState:
         ),
     )
     attribute_state = MainState(
-        task=agent_state.inputs.request_task or agent_state.inputs.task,
+        task=iteration_state.task,
         execution_context=agent_state.execution_context,
         agent_profiles=[agent_state.agent_profile],
         agent_states={agent_state.agent_profile.name: agent_state},
     )
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="agent-state-enrichment") as executor:
-        attribute_future = executor.submit(attribute_discovery, attribute_state)
+        attribute_future = executor.submit(attribute_lookup, attribute_state)
         capability_future = executor.submit(
-            capability_discovery,
+            capability_lookup,
             iteration_state,
             include_agents=agent_state.available_agent_states is not None,
         )
+        discovered_attribute_types = attribute_future.result()
+        attribute_state.discovered_attribute_types = discovered_attribute_types
+        agent_state.inputs.discovered_attribute_types = discovered_attribute_types
         agent_state.inputs.discovered_capabilities = capability_future.result()
+    if discovered_attribute_types:
+        profile_loader(attribute_state)
     return agent_state
 
 
