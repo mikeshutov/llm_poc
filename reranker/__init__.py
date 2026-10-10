@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from reranker.client import RerankerClient, RerankerUnavailableError
+from serviceclients.reranker import RerankerClient, RerankerUnavailableError
 from reranker.query import build_reranker_query
 from reranker.models import (
     Candidate,

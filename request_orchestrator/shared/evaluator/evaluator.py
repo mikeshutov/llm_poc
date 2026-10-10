@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from time import perf_counter
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from common.logging import create_conversation_event, log_roundtrip_prompt
 from llm.conversation_model_config import EVALUATOR_STAGE, SHARED_MODEL_SCOPE
 from llm.usage import record_llm_call
 from request_orchestrator.constants import EVALUATOR_PROMPT_KIND
+from request_orchestrator.models.agent_prompt import EvidenceStep
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evaluator_event_payload import EvaluatorEventPayload
 from request_orchestrator.models.evaluation_result import (
@@ -25,9 +27,11 @@ from request_orchestrator.shared.evidence import (
     build_evidence_steps_from_tool_results,
 )
 from request_orchestrator.shared.evaluator.prompts.evaluator_prompt import build_evaluator_prompt
+from request_orchestrator.shared.evaluator.completion_gate import try_completion_evaluation
 from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
 
 EVALUATOR_KIND = "evaluator"
+logger = logging.getLogger(__name__)
 
 
 def _dedupe_evidence_ids(values: list[str]) -> list[UUID]:
@@ -45,6 +49,31 @@ def _dedupe_evidence_ids(values: list[str]) -> list[UUID]:
     return deduped
 
 
+def _apply_evaluation(
+    state: AgentState,
+    evaluation: EvaluationResult,
+    evidence_steps: list[EvidenceStep],
+) -> list[UUID]:
+    all_evidence_ids = [
+        str(evidence.id)
+        for step in evidence_steps
+        for evidence in step.evidence
+    ]
+    deduped_relevant_evidence = _dedupe_evidence_ids(all_evidence_ids)
+    state.result = state.result.copy(relevant_evidence_ids=deduped_relevant_evidence)
+    state.node_states.evaluator.evaluation_status = evaluation.status
+    state.node_states.evaluator.missing_information = evaluation.missing_information
+    if evaluation.status in TERMINAL_EVALUATION_STATUSES:
+        state.result = state.result.copy(
+            result_status=(
+                ResultStatus.SUCCESS
+                if evaluation.status in {EVALUATION_STATUS_SATISFIED, EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT}
+                else ResultStatus.FAILED
+            )
+        )
+    return deduped_relevant_evidence
+
+
 @traceable(name="Evaluator Node")
 def run_evaluator(state: AgentState) -> AgentState:
     execution_context = state.execution_context
@@ -54,6 +83,47 @@ def run_evaluator(state: AgentState) -> AgentState:
         tool_results,
         evidence_bundle.evidence_views_by_tool_call_id,
     )
+    try:
+        # NLI is only a fast-path completion check. A negative/uncertain result
+        # must fall through so the LLM can make the authoritative status decision.
+        completion_satisfied = try_completion_evaluation(state, evidence_steps)
+    except Exception:
+        logger.warning(
+            "Completion evaluator unavailable; falling back to the LLM evaluator",
+            exc_info=True,
+        )
+        completion_satisfied = False
+    if completion_satisfied:
+        all_evidence_ids = [
+            str(evidence.id)
+            for step in evidence_steps
+            for evidence in step.evidence
+        ]
+        deduped_relevant_evidence = _dedupe_evidence_ids(all_evidence_ids)
+        state.result = state.result.copy(
+            relevant_evidence_ids=deduped_relevant_evidence,
+            result_status=ResultStatus.SUCCESS,
+        )
+        state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
+        state.node_states.evaluator.missing_information = []
+        create_conversation_event(
+            conversation_id=execution_context.conversation_id,
+            roundtrip_id=execution_context.roundtrip_id,
+            event_type=EVALUATOR_KIND,
+            source=state.agent_profile.name,
+            agent_name=state.agent_profile.name,
+            agent_version=state.agent_profile.version,
+            payload=EvaluatorEventPayload.from_evaluation(
+                agent_name=state.agent_profile.name,
+                kind=EVALUATOR_KIND,
+                status=EVALUATION_STATUS_SATISFIED,
+                relevant_evidence=[str(evidence_id) for evidence_id in deduped_relevant_evidence],
+                missing_information=[],
+                llm_call=None,
+            ).model_dump(),
+        )
+        return state
+
     prompt = build_evaluator_prompt(state=state, evidence=evidence_steps)
     prompt_text = prompt.build()
     prompt_input_object = prompt.to_log_input_object()
@@ -119,19 +189,7 @@ def run_evaluator(state: AgentState) -> AgentState:
         )
         return state
 
-    deduped_relevant_evidence = _dedupe_evidence_ids(evaluation.relevant_evidence)
-    state.result = state.result.copy(relevant_evidence_ids=deduped_relevant_evidence)
-    state.node_states.evaluator.evaluation_status = evaluation.status
-    state.node_states.evaluator.missing_information = evaluation.missing_information
-
-    if evaluation.status in TERMINAL_EVALUATION_STATUSES:
-        state.result = state.result.copy(
-            result_status=(
-                ResultStatus.SUCCESS
-                if evaluation.status in {EVALUATION_STATUS_SATISFIED, EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT}
-                else ResultStatus.FAILED
-            )
-        )
+    deduped_relevant_evidence = _apply_evaluation(state, evaluation, evidence_steps)
     create_conversation_event(
         conversation_id=execution_context.conversation_id,
         roundtrip_id=execution_context.roundtrip_id,
