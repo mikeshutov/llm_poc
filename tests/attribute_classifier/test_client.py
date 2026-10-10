@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from attribute_classifier.client import AttributeClassifierClient
+from serviceclients.attribute_classifier.client import AttributeClassifierClient
 
 
 class FakeResponse:
@@ -18,9 +18,9 @@ def test_client_returns_relevant_attributes(monkeypatch, caplog) -> None:
         calls.update(url=url, json=json, timeout=timeout)
         return FakeResponse()
 
-    monkeypatch.setattr("attribute_classifier.client.requests.post", post)
+    monkeypatch.setattr("serviceclients.attribute_classifier.client.requests.post", post)
 
-    with caplog.at_level("INFO", logger="attribute_classifier.client"):
+    with caplog.at_level("INFO", logger="serviceclients.attribute_classifier.client"):
         result = AttributeClassifierClient(base_url="http://classifier").relevant_attributes(
             "winter hiking", ["waterproof rating", "color"]
         )

@@ -73,7 +73,7 @@ def test_reranker_client_applies_candidate_budget_before_serialization() -> None
     response.raise_for_status.return_value = None
     response.json.return_value = {"results": [{"id": "1", "score": 0.5}]}
 
-    with patch("reranker.client.requests.post", return_value=response) as post:
+    with patch("serviceclients.reranker.client.requests.post", return_value=response) as post:
         RerankerClient(base_url="http://reranker").rerank(
             "query",
             [Candidate(id="1", fields={"description": "word " * 500})],
@@ -88,7 +88,7 @@ def test_reranker_client_rejects_invalid_response() -> None:
     response.raise_for_status.return_value = None
     response.json.return_value = {"results": [{"id": "1", "score": "bad"}]}
 
-    with patch("reranker.client.requests.post", return_value=response):
+    with patch("serviceclients.reranker.client.requests.post", return_value=response):
         with pytest.raises(RerankerUnavailableError):
             RerankerClient(base_url="http://reranker").rerank(
                 "query",

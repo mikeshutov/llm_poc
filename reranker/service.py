@@ -6,7 +6,7 @@ from typing import Any
 from common.data import sanitize_for_json_storage
 from common.logging import create_conversation_event
 from personalization.profile.models import UserProfile
-from reranker.client import RerankerBackend, RerankerClient
+from serviceclients.reranker import RerankerBackend, RerankerClient
 from reranker.constants import DEFAULT_TOP_K, RERANKER_EVENT_TYPE, RERANKER_MODEL_NAME
 from reranker.models import Candidate, RerankerScore
 from reranker.query import build_reranker_query

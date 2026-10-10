@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 
-from attribute_classifier.client import AttributeClassifierClient, AttributeClassifierUnavailableError
+from serviceclients.attribute_classifier import AttributeClassifierClient, AttributeClassifierUnavailableError
 from conversation.utils import build_conversation_context_json
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
 from request_orchestrator.models.main_state import MainState

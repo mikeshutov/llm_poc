@@ -36,7 +36,20 @@ services:
       - ./services/attribute_classifier/training/trained_models:/app/services/attribute_classifier/training/trained_models:ro
       - attribute-classifier-model-cache:/root/.cache/huggingface
 
+  completion-evaluator:
+    build:
+      context: .
+      dockerfile: services/completion_evaluator/Dockerfile
+    ports:
+      - "5435:8082"
+    environment:
+      COMPLETION_EVALUATOR_MODEL: ${COMPLETION_EVALUATOR_MODEL:-MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7}
+      COMPLETION_EVALUATOR_MAX_LENGTH: ${COMPLETION_EVALUATOR_MAX_LENGTH:-512}
+    volumes:
+      - completion-evaluator-model-cache:/root/.cache/huggingface
+
 volumes:
   pgdata:
   reranker-model-cache:
   attribute-classifier-model-cache:
+  completion-evaluator-model-cache:
