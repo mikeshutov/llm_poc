@@ -88,8 +88,10 @@ from tool.constants import TOOL_RESULT_TYPE_TIME
 from tool.constants import TOOL_RESULT_TYPE_TONE
 from tool.constants import TOOL_RESULT_TYPE_USER_ATTRIBUTE
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
+from tool.cache.policy import ToolCachePolicy
+from tool.retry.policy import RetryPolicy
 from tool.constants import TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS
-from tool.models import RateLimitPolicy, RetryPolicy, Tool, ToolCategory
+from tool.models import RateLimitPolicy, Tool, ToolCategory
 
 # Rate limiter and retry policy
 BRAVE_RATE_LIMIT_POLICY = RateLimitPolicy(
@@ -105,51 +107,51 @@ BRAVE_RETRY_POLICY = RetryPolicy(
 )
 
 # Tool Definitions
-PRODUCT_TOOLS = [Tool(find_products, result_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS), Tool(list_product_categories, result_type=TOOL_RESULT_TYPE_PRODUCT_CATEGORIES)]
-PRODUCT_WEB_TOOLS = [Tool(find_products_web, result_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS)]
+PRODUCT_TOOLS = [Tool(find_products, result_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS, cache_policy=ToolCachePolicy(900)), Tool(list_product_categories, result_type=TOOL_RESULT_TYPE_PRODUCT_CATEGORIES, cache_policy=ToolCachePolicy(3600))]
+PRODUCT_WEB_TOOLS = [Tool(find_products_web, result_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS, cache_policy=ToolCachePolicy(900))]
 WEATHER_TOOLS = [
-    Tool(resolve_city_location, result_type=TOOL_RESULT_TYPE_LOCATION),
-    Tool(get_current_weather, result_type=TOOL_RESULT_TYPE_WEATHER),
-    Tool(get_historical_month_weather, result_type=TOOL_RESULT_TYPE_WEATHER),
+    Tool(resolve_city_location, result_type=TOOL_RESULT_TYPE_LOCATION, cache_policy=ToolCachePolicy(3600)),
+    Tool(get_current_weather, result_type=TOOL_RESULT_TYPE_WEATHER, cache_policy=ToolCachePolicy(300)),
+    Tool(get_historical_month_weather, result_type=TOOL_RESULT_TYPE_WEATHER, cache_policy=ToolCachePolicy(3600)),
 ]
 FINANCE_TOOLS = [
-    Tool(exchange_rates_lookup, result_type=TOOL_RESULT_TYPE_FINANCE),
-    Tool(exchange_rates_time_series, result_type=TOOL_RESULT_TYPE_FINANCE),
-    Tool(get_latest_exchange_rates, result_type=TOOL_RESULT_TYPE_FINANCE),
-    Tool(get_stock_price, result_type=TOOL_RESULT_TYPE_FINANCE),
+    Tool(exchange_rates_lookup, result_type=TOOL_RESULT_TYPE_FINANCE, cache_policy=ToolCachePolicy(300)),
+    Tool(exchange_rates_time_series, result_type=TOOL_RESULT_TYPE_FINANCE, cache_policy=ToolCachePolicy(900)),
+    Tool(get_latest_exchange_rates, result_type=TOOL_RESULT_TYPE_FINANCE, cache_policy=ToolCachePolicy(300)),
+    Tool(get_stock_price, result_type=TOOL_RESULT_TYPE_FINANCE, cache_policy=ToolCachePolicy(300)),
 ]
-CRYPTO_TOOLS = [Tool(get_crypto_markets, result_type=TOOL_RESULT_TYPE_CRYPTO_MARKET)]
+CRYPTO_TOOLS = [Tool(get_crypto_markets, result_type=TOOL_RESULT_TYPE_CRYPTO_MARKET, cache_policy=ToolCachePolicy(300))]
 WEB_SEARCH_TOOLS = [
-    Tool(generic_web_search, result_type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS, rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
-    Tool(news_search, result_type=TOOL_RESULT_TYPE_NEWS_RESULTS, rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
+    Tool(generic_web_search, result_type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS, cache_policy=ToolCachePolicy(300), rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
+    Tool(news_search, result_type=TOOL_RESULT_TYPE_NEWS_RESULTS, cache_policy=ToolCachePolicy(300), rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
 ]
 KNOWLEDGE_TOOLS = [
-    Tool(wikipedia_search, result_type=TOOL_RESULT_TYPE_KNOWLEDGE),
-    Tool(structured_facts_lookup, result_type=TOOL_RESULT_TYPE_STRUCTURED_FACTS),
-    Tool(hn_search, result_type=TOOL_RESULT_TYPE_NEWS_RESULTS),
-    Tool(country_lookup, result_type=TOOL_RESULT_TYPE_COUNTRY),
+    Tool(wikipedia_search, result_type=TOOL_RESULT_TYPE_KNOWLEDGE, cache_policy=ToolCachePolicy(3600)),
+    Tool(structured_facts_lookup, result_type=TOOL_RESULT_TYPE_STRUCTURED_FACTS, cache_policy=ToolCachePolicy(3600)),
+    Tool(hn_search, result_type=TOOL_RESULT_TYPE_NEWS_RESULTS, cache_policy=ToolCachePolicy(300)),
+    Tool(country_lookup, result_type=TOOL_RESULT_TYPE_COUNTRY, cache_policy=ToolCachePolicy(86400)),
 ]
-CALENDAR_TOOLS = [Tool(public_holidays_lookup, result_type=TOOL_RESULT_TYPE_CALENDAR), Tool(get_world_time, result_type=TOOL_RESULT_TYPE_TIME)]
+CALENDAR_TOOLS = [Tool(public_holidays_lookup, result_type=TOOL_RESULT_TYPE_CALENDAR, cache_policy=ToolCachePolicy(86400)), Tool(get_world_time, result_type=TOOL_RESULT_TYPE_TIME, cache_policy=ToolCachePolicy(30))]
 LOCATION_TOOLS = [Tool(get_caller_location, result_type=TOOL_RESULT_TYPE_LOCATION)]
-BOOKS_TOOLS = [Tool(search_books, result_type=TOOL_RESULT_TYPE_BOOK_RESULTS)]
-LANGUAGE_TOOLS = [Tool(define_word, result_type=TOOL_RESULT_TYPE_DEFINITION)]
-FOOD_TOOLS = [Tool(search_meals, result_type=TOOL_RESULT_TYPE_MEAL_RESULTS), Tool(search_cocktails, result_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS)]
-FUN_TOOLS = [Tool(get_advice, result_type=TOOL_RESULT_TYPE_ADVICE), Tool(get_quote, result_type=TOOL_RESULT_TYPE_QUOTE), Tool(get_astronomy_picture, result_type=TOOL_RESULT_TYPE_ASTRONOMY_PICTURE)]
-MATH_TOOLS = [Tool(calculate, result_type=TOOL_RESULT_TYPE_CALCULATION)]
+BOOKS_TOOLS = [Tool(search_books, result_type=TOOL_RESULT_TYPE_BOOK_RESULTS, cache_policy=ToolCachePolicy(3600))]
+LANGUAGE_TOOLS = [Tool(define_word, result_type=TOOL_RESULT_TYPE_DEFINITION, cache_policy=ToolCachePolicy(86400))]
+FOOD_TOOLS = [Tool(search_meals, result_type=TOOL_RESULT_TYPE_MEAL_RESULTS, cache_policy=ToolCachePolicy(3600)), Tool(search_cocktails, result_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS, cache_policy=ToolCachePolicy(3600))]
+FUN_TOOLS = [Tool(get_advice, result_type=TOOL_RESULT_TYPE_ADVICE, cache_policy=ToolCachePolicy(86400)), Tool(get_quote, result_type=TOOL_RESULT_TYPE_QUOTE, cache_policy=ToolCachePolicy(86400)), Tool(get_astronomy_picture, result_type=TOOL_RESULT_TYPE_ASTRONOMY_PICTURE, cache_policy=ToolCachePolicy(3600))]
+MATH_TOOLS = [Tool(calculate, result_type=TOOL_RESULT_TYPE_CALCULATION, cache_policy=ToolCachePolicy(86400))]
 GAMES_TOOLS = [
-    Tool(get_commander_details, result_type=TOOL_RESULT_TYPE_DECKS),
-    Tool(get_commander_cards, result_type=TOOL_RESULT_TYPE_CARD_RESULTS),
-    Tool(search_magic_cards, result_type=TOOL_RESULT_TYPE_CARD_RESULTS),
-    Tool(get_magic_card_rulings, result_type=TOOL_RESULT_TYPE_RULES),
+    Tool(get_commander_details, result_type=TOOL_RESULT_TYPE_DECKS, cache_policy=ToolCachePolicy(3600)),
+    Tool(get_commander_cards, result_type=TOOL_RESULT_TYPE_CARD_RESULTS, cache_policy=ToolCachePolicy(3600)),
+    Tool(search_magic_cards, result_type=TOOL_RESULT_TYPE_CARD_RESULTS, cache_policy=ToolCachePolicy(3600)),
+    Tool(get_magic_card_rulings, result_type=TOOL_RESULT_TYPE_RULES, cache_policy=ToolCachePolicy(3600)),
 ]
 MEMORY_TOOLS = [
-    Tool(get_memory_detail, result_type=TOOL_RESULT_TYPE_MEMORY_DETAIL),
-    Tool(lookup_evidence, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS),
-    Tool(search_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS),
-    Tool(search_roundtrip_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS),
+    Tool(get_memory_detail, result_type=TOOL_RESULT_TYPE_MEMORY_DETAIL, cache_policy=ToolCachePolicy(300, user_specific=True)),
+    Tool(lookup_evidence, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, user_specific=True)),
+    Tool(search_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, user_specific=True)),
+    Tool(search_roundtrip_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, user_specific=True)),
 ]
-USER_ATTRIBUTE_TOOLS = [Tool(create_user_attribute, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(update_user_attribute, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(get_user_attributes, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(search_user_attributes, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE)]
-FILE_TOOLS = [Tool(search_files, result_type=TOOL_RESULT_TYPE_FILE_RESULTS), Tool(search_file_for_details, result_type=TOOL_RESULT_TYPE_FILE_DETAILS), Tool(get_file_by_id, result_type=TOOL_RESULT_TYPE_FILE)]
+USER_ATTRIBUTE_TOOLS = [Tool(create_user_attribute, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(update_user_attribute, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(get_user_attributes, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE, cache_policy=ToolCachePolicy(300, user_specific=True)), Tool(search_user_attributes, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE, cache_policy=ToolCachePolicy(300, user_specific=True))]
+FILE_TOOLS = [Tool(search_files, result_type=TOOL_RESULT_TYPE_FILE_RESULTS, cache_policy=ToolCachePolicy(300, user_specific=True)), Tool(search_file_for_details, result_type=TOOL_RESULT_TYPE_FILE_DETAILS, cache_policy=ToolCachePolicy(300, user_specific=True)), Tool(get_file_by_id, result_type=TOOL_RESULT_TYPE_FILE, cache_policy=ToolCachePolicy(300, user_specific=True))]
 PROFILE_TOOLS = [Tool(set_user_display_name, result_type=TOOL_RESULT_TYPE_PROFILE), Tool(set_user_first_name, result_type=TOOL_RESULT_TYPE_PROFILE), Tool(set_user_last_name, result_type=TOOL_RESULT_TYPE_PROFILE), Tool(update_user_tone, result_type=TOOL_RESULT_TYPE_TONE)]
 
 # if this were to grow much larger I would probably create sub categories or a tree structure of tools

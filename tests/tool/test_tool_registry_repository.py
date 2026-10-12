@@ -1,8 +1,9 @@
 from uuid import uuid4
 
-from tool.models import RegisteredTool, RateLimitPolicy, RetryPolicy
+from tool.models import RegisteredTool, RateLimitPolicy
 from tool.seeder import _to_registered_tool
 from tool.models.tool_definition import Tool
+from tool.retry.policy import RetryPolicy
 
 
 def test_registered_tool_validates_version_and_policies() -> None:
