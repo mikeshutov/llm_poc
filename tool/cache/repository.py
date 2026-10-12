@@ -28,7 +28,20 @@ class ToolCacheRepository:
             key["user_id"] = user_id
         return build_signature(key)
 
-    def get(self, *, cache_key: str) -> Any | None:
+    def get(
+        self,
+        *,
+        tool_name: str,
+        tool_version: int,
+        tool_input: Any,
+        user_id: str | None = None,
+    ) -> Any | None:
+        cache_key = self.build_cache_key(
+            tool_name=tool_name,
+            tool_version=tool_version,
+            tool_input=tool_input,
+            user_id=user_id,
+        )
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -44,13 +57,19 @@ class ToolCacheRepository:
     def put(
         self,
         *,
-        cache_key: str,
         tool_name: str,
         tool_version: int,
-        input_payload: Any,
+        tool_input: Any,
         output_payload: Any,
         cache_ttl_seconds: int,
+        user_id: str | None = None,
     ) -> None:
+        cache_key = self.build_cache_key(
+            tool_name=tool_name,
+            tool_version=tool_version,
+            tool_input=tool_input,
+            user_id=user_id,
+        )
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=cache_ttl_seconds)
         with self._conn.cursor() as cur:
             cur.execute(
@@ -72,7 +91,7 @@ class ToolCacheRepository:
                     cache_key,
                     tool_name,
                     tool_version,
-                    Jsonb(input_payload),
+                    Jsonb(tool_input),
                     Jsonb(output_payload),
                     expires_at,
                 ),

@@ -49,13 +49,25 @@ class _FakeCacheRepository:
     def build_cache_key(*, tool_name, tool_version, tool_input, user_id=None):
         return (tool_name, tool_version, user_id, repr(tool_input))
 
-    def get(self, *, cache_key):
+    def get(self, *, tool_name, tool_version, tool_input, user_id=None):
         self.get_calls += 1
+        cache_key = self.build_cache_key(
+            tool_name=tool_name,
+            tool_version=tool_version,
+            tool_input=tool_input,
+            user_id=user_id,
+        )
         return self.entries.get(cache_key)
 
     def put(self, **kwargs):
         self.put_calls += 1
-        self.entries[kwargs["cache_key"]] = kwargs["output_payload"]
+        cache_key = self.build_cache_key(
+            tool_name=kwargs["tool_name"],
+            tool_version=kwargs["tool_version"],
+            tool_input=kwargs["tool_input"],
+            user_id=kwargs.get("user_id"),
+        )
+        self.entries[cache_key] = kwargs["output_payload"]
 
 
 class _FailingCacheRepository(_FakeCacheRepository):
@@ -64,11 +76,11 @@ class _FailingCacheRepository(_FakeCacheRepository):
         self.fail_get = fail_get
         self.fail_put = fail_put
 
-    def get(self, *, cache_key):
+    def get(self, **kwargs):
         self.get_calls += 1
         if self.fail_get:
             raise RuntimeError("cache lookup unavailable")
-        return super().get(cache_key=cache_key)
+        return super().get(**kwargs)
 
     def put(self, **kwargs):
         self.put_calls += 1

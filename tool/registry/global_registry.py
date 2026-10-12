@@ -99,22 +99,20 @@ class ToolRegistry:
         tool = self.get(name)
         cache_policy = getattr(tool, "cache_policy", None) if self._enable_cache else None
         cache_ttl_seconds = cache_policy.cache_ttl_seconds if cache_policy is not None else 0
-        cache_key = None
         cache_repository = None
         normalized_input = None
+        tool_version = int(getattr(tool, "version", 1))
         cache_user_id = get_current_user_id() if cache_policy and cache_policy.is_user_specific else None
         if cache_policy is not None and cache_policy.is_cache_allowed_for_user(cache_user_id):
             try:
                 cache_repository = self._cache_repository or ToolCacheRepository()
                 normalized_input = sanitize_for_json_storage(tool_input or {})
-                tool_version = int(getattr(tool, "version", 1))
-                cache_key = cache_repository.build_cache_key(
+                cached_output = cache_repository.get(
                     tool_name=name,
                     tool_version=tool_version,
                     tool_input=normalized_input,
                     user_id=cache_user_id,
                 )
-                cached_output = cache_repository.get(cache_key=cache_key)
                 if cached_output is not None:
                     # Tool adapters return ToolResult models. Restore that type so
                     # cached results retain evidence and metadata behavior.
@@ -132,7 +130,6 @@ class ToolRegistry:
                     },
                     content_title="Tool Cache Lookup Failed",
                 )
-                cache_key = None
                 cache_repository = None
                 normalized_input = None
         retry_policy = getattr(tool, "retry_policy", None)
@@ -142,15 +139,15 @@ class ToolRegistry:
                 self._acquire_rate_limit_slot(tool)
                 try:
                     output = tool.invoke(tool_input or {})
-                    if cache_key is not None:
+                    if cache_repository is not None:
                         try:
                             cache_repository.put(
-                                cache_key=cache_key,
                                 tool_name=name,
-                                tool_version=int(getattr(tool, "version", 1)),
-                                input_payload=normalized_input,
+                                tool_version=tool_version,
+                                tool_input=normalized_input,
                                 output_payload=sanitize_for_json_storage(output),
                                 cache_ttl_seconds=cache_ttl_seconds,
+                                user_id=cache_user_id,
                             )
                         except Exception as exc:
                             emit_debug_message(
