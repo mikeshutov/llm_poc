@@ -9,6 +9,8 @@ from typing import Any
 from common.http import HttpClientError
 from rendering.debug import emit_debug_message
 from tool.tools import tools
+from tool.cache.repository import ToolCacheRepository
+from request_orchestrator.shared.runtime_context import get_current_user_id
 from requests.exceptions import Timeout
 
 
@@ -31,9 +33,11 @@ class _RateLimitState:
 
 
 class ToolRegistry:
-    def __init__(self) -> None:
+    def __init__(self, *, cache_repository=None, enable_cache: bool = False) -> None:
         self._tools: dict[str, Any] = {}
         self._rate_limit_states: dict[str, _RateLimitState] = defaultdict(_RateLimitState)
+        self._cache_repository = cache_repository
+        self._enable_cache = enable_cache
 
     def register(self, tool: Any) -> None:
         name = getattr(tool, "name", None)
@@ -92,13 +96,62 @@ class ToolRegistry:
         if allowed_tool_names is not None and name not in allowed_tool_names:
             raise DisallowedToolError(f"Tool '{name}' is not allowed for this agent.")
         tool = self.get(name)
+        cache_policy = tool.cache_policy if self._enable_cache else None
+        cache_ttl_seconds = cache_policy.cache_ttl_seconds if cache_policy is not None else 0
+        cache_repository = None
+        cache_user_id = get_current_user_id() if cache_policy and cache_policy.is_user_specific else None
+        if cache_policy is not None and cache_policy.is_cache_allowed_for_user(cache_user_id):
+            try:
+                cache_repository = self._cache_repository or ToolCacheRepository()
+                cached_output = cache_repository.get(
+                    tool=tool,
+                    tool_input=tool_input,
+                    user_id=cache_user_id,
+                )
+                if cached_output is not None:
+                    # Tool adapters return ToolResult models. Restore that type so
+                    # cached results retain evidence and metadata behavior.
+                    if isinstance(cached_output, dict) and "result" in cached_output and "evidence" in cached_output:
+                        from request_orchestrator.models.evidence import ToolResult
+
+                        return ToolResult.model_validate(cached_output)
+                    return cached_output
+            except Exception as exc:
+                emit_debug_message(
+                    content={
+                        "tool": name,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    },
+                    content_title="Tool Cache Lookup Failed",
+                )
+                cache_repository = None
         retry_policy = getattr(tool, "retry_policy", None)
         max_attempts = max(1, getattr(retry_policy, "max_attempts", 1))
         try:
             for attempt in range(1, max_attempts + 1):
                 self._acquire_rate_limit_slot(tool)
                 try:
-                    return tool.invoke(tool_input or {})
+                    output = tool.invoke(tool_input or {})
+                    if cache_repository is not None:
+                        try:
+                            cache_repository.put(
+                                tool=tool,
+                                tool_input=tool_input,
+                                output_payload=output,
+                                cache_ttl_seconds=cache_ttl_seconds,
+                                user_id=cache_user_id,
+                            )
+                        except Exception as exc:
+                            emit_debug_message(
+                                content={
+                                    "tool": name,
+                                    "error_type": type(exc).__name__,
+                                    "error": str(exc),
+                                },
+                                content_title="Tool Cache Store Failed",
+                            )
+                    return output
                 except Exception as exc:
                     should_retry = attempt < max_attempts and self._should_retry(exc, tool)
                     if not should_retry:
@@ -119,7 +172,7 @@ class ToolRegistry:
             raise
 
 
-GLOBAL_TOOL_REGISTRY = ToolRegistry()
+GLOBAL_TOOL_REGISTRY = ToolRegistry(enable_cache=True)
 _REGISTERED_DEFAULTS = False
 
 

@@ -6,7 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
-from tool.models.tool_definition import RateLimitPolicy, RetryPolicy
+from tool.models.tool_definition import RateLimitPolicy
+from tool.retry.policy import RetryPolicy
 
 
 class RegisteredTool(BaseModel):

@@ -3,14 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
-@dataclass(frozen=True)
-class RetryPolicy:
-    max_attempts: int = 1
-    retry_on_timeout: bool = True
-    retry_on_429: bool = True
-    retry_on_5xx: bool = True
-    backoff_seconds: float = 1.0
+from tool.cache.policy import ToolCachePolicy
+from tool.retry.policy import RetryPolicy
 
 
 @dataclass(frozen=True)
@@ -27,6 +21,7 @@ class Tool:
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
     rate_limit_policy: RateLimitPolicy | None = None
     version: int = 1
+    cache_policy: ToolCachePolicy | None = None
 
     @property
     def name(self) -> str:

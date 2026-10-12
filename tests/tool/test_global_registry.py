@@ -4,6 +4,9 @@ import sys
 import threading
 import time
 from types import ModuleType, SimpleNamespace
+from unittest.mock import patch
+
+import pytest
 
 if 'yfinance' not in sys.modules:
     sys.modules['yfinance'] = ModuleType('yfinance')
@@ -16,7 +19,9 @@ if 'pycountry' not in sys.modules:
 from common.http import HttpClientError
 from requests.exceptions import Timeout
 from tool.registry.global_registry import ToolRegistry
-from tool.models import RateLimitPolicy, RetryPolicy, Tool
+from tool.cache.policy import ToolCachePolicy
+from tool.models import RateLimitPolicy, Tool
+from tool.retry.policy import RetryPolicy
 
 
 class _FakeTool:
@@ -28,6 +33,60 @@ class _FakeTool:
 
     def invoke(self, tool_input=None):
         return self._callback(tool_input or {})
+
+
+class _FakeCacheRepository:
+    def __init__(self):
+        self.entries = {}
+        self.get_calls = 0
+        self.put_calls = 0
+
+    @staticmethod
+    def sanitize(value):
+        return value
+
+    @staticmethod
+    def build_cache_key(*, tool_name, tool_version, tool_input, user_id=None):
+        return (tool_name, tool_version, user_id, repr(tool_input))
+
+    def get(self, *, tool, tool_input, user_id=None):
+        self.get_calls += 1
+        cache_key = self.build_cache_key(
+            tool_name=tool.name,
+            tool_version=tool.version,
+            tool_input=tool_input,
+            user_id=user_id,
+        )
+        return self.entries.get(cache_key)
+
+    def put(self, **kwargs):
+        self.put_calls += 1
+        cache_key = self.build_cache_key(
+            tool_name=kwargs["tool"].name,
+            tool_version=kwargs["tool"].version,
+            tool_input=kwargs["tool_input"],
+            user_id=kwargs.get("user_id"),
+        )
+        self.entries[cache_key] = kwargs["output_payload"]
+
+
+class _FailingCacheRepository(_FakeCacheRepository):
+    def __init__(self, *, fail_get=False, fail_put=False):
+        super().__init__()
+        self.fail_get = fail_get
+        self.fail_put = fail_put
+
+    def get(self, **kwargs):
+        self.get_calls += 1
+        if self.fail_get:
+            raise RuntimeError("cache lookup unavailable")
+        return super().get(**kwargs)
+
+    def put(self, **kwargs):
+        self.put_calls += 1
+        if self.fail_put:
+            raise RuntimeError("cache store unavailable")
+        super().put(**kwargs)
 
 
 def test_tool_registry_serializes_calls_for_shared_rate_limit_key() -> None:
@@ -128,3 +187,137 @@ def test_tool_registry_retries_wrapped_http_429_when_policy_allows() -> None:
 
     assert result == {"ok": True}
     assert attempts == 2
+
+
+def test_tool_registry_cache_miss_invokes_tool_and_stores_result() -> None:
+    cache = _FakeCacheRepository()
+    calls = 0
+
+    def callback(_tool_input):
+        nonlocal calls
+        calls += 1
+        return {"value": calls}
+
+    registry = ToolRegistry(cache_repository=cache, enable_cache=True)
+    registry.register(Tool(_FakeTool("cache_tool", callback), cache_policy=ToolCachePolicy(60), version=2))
+
+    result = registry.call_tool("cache_tool", {"query": "chicken"})
+
+    assert result == {"value": 1}
+    assert calls == 1
+    assert cache.get_calls == 1
+    assert cache.put_calls == 1
+
+
+def test_tool_registry_cache_hit_skips_tool_invocation() -> None:
+    cache = _FakeCacheRepository()
+    calls = 0
+
+    def callback(_tool_input):
+        nonlocal calls
+        calls += 1
+        return {"value": calls}
+
+    registry = ToolRegistry(cache_repository=cache, enable_cache=True)
+    registry.register(Tool(_FakeTool("cache_tool", callback), cache_policy=ToolCachePolicy(60), version=2))
+
+    first = registry.call_tool("cache_tool", {"query": "chicken"})
+    second = registry.call_tool("cache_tool", {"query": "chicken"})
+
+    assert first == {"value": 1}
+    assert second == {"value": 1}
+    assert calls == 1
+    assert cache.get_calls == 2
+    assert cache.put_calls == 1
+
+
+def test_tool_registry_cache_lookup_error_falls_back_to_tool() -> None:
+    cache = _FailingCacheRepository(fail_get=True)
+    calls = 0
+
+    def callback(_tool_input):
+        nonlocal calls
+        calls += 1
+        return {"value": calls}
+
+    registry = ToolRegistry(cache_repository=cache, enable_cache=True)
+    registry.register(Tool(_FakeTool("cache_tool", callback), cache_policy=ToolCachePolicy(60)))
+
+    assert registry.call_tool("cache_tool", {"query": "chicken"}) == {"value": 1}
+    assert calls == 1
+
+
+def test_tool_registry_cache_store_error_does_not_fail_tool_request() -> None:
+    cache = _FailingCacheRepository(fail_put=True)
+    calls = 0
+
+    def callback(_tool_input):
+        nonlocal calls
+        calls += 1
+        return {"value": calls}
+
+    registry = ToolRegistry(cache_repository=cache, enable_cache=True)
+    registry.register(Tool(_FakeTool("cache_tool", callback), cache_policy=ToolCachePolicy(60)))
+
+    assert registry.call_tool("cache_tool", {"query": "chicken"}) == {"value": 1}
+    assert calls == 1
+
+
+def test_user_specific_cache_isolated_by_user() -> None:
+    cache = _FakeCacheRepository()
+    calls = 0
+
+    def callback(_tool_input):
+        nonlocal calls
+        calls += 1
+        return {"value": calls}
+
+    registry = ToolRegistry(cache_repository=cache, enable_cache=True)
+    registry.register(
+        Tool(_FakeTool("private_search", callback), cache_policy=ToolCachePolicy(60, is_user_specific=True))
+    )
+
+    with patch("tool.registry.global_registry.get_current_user_id", return_value="user-a"):
+        first = registry.call_tool("private_search", {"query": "chicken"})
+        second = registry.call_tool("private_search", {"query": "chicken"})
+    with patch("tool.registry.global_registry.get_current_user_id", return_value="user-b"):
+        third = registry.call_tool("private_search", {"query": "chicken"})
+
+    assert first == {"value": 1}
+    assert second == {"value": 1}
+    assert third == {"value": 2}
+    assert calls == 2
+    assert cache.put_calls == 2
+
+
+def test_user_specific_cache_bypasses_anonymous_requests() -> None:
+    cache = _FakeCacheRepository()
+    calls = 0
+
+    def callback(_tool_input):
+        nonlocal calls
+        calls += 1
+        return {"value": calls}
+
+    registry = ToolRegistry(cache_repository=cache, enable_cache=True)
+    registry.register(
+        Tool(_FakeTool("private_search", callback), cache_policy=ToolCachePolicy(60, is_user_specific=True))
+    )
+
+    with patch("tool.registry.global_registry.get_current_user_id", return_value=None):
+        first = registry.call_tool("private_search", {"query": "chicken"})
+        second = registry.call_tool("private_search", {"query": "chicken"})
+
+    assert first == {"value": 1}
+    assert second == {"value": 2}
+    assert calls == 2
+    assert cache.get_calls == 0
+    assert cache.put_calls == 0
+
+
+def test_cache_policy_controls_cacheability() -> None:
+    assert ToolCachePolicy(60).is_cache_allowed_for_user(None) is True
+    assert ToolCachePolicy(60, is_user_specific=True).is_cache_allowed_for_user("user-1") is True
+    assert ToolCachePolicy(60, is_user_specific=True).is_cache_allowed_for_user(None) is False
+    with pytest.raises(ValueError, match="cache_ttl_seconds must be positive"):
+        ToolCachePolicy(0)
