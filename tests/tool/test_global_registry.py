@@ -46,7 +46,7 @@ class _FakeCacheRepository:
         return value
 
     @staticmethod
-    def build_key(*, tool_name, tool_version, tool_input, user_id=None):
+    def build_cache_key(*, tool_name, tool_version, tool_input, user_id=None):
         return (tool_name, tool_version, user_id, repr(tool_input))
 
     def get(self, *, cache_key):

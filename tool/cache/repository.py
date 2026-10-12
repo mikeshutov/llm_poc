@@ -6,6 +6,7 @@ from typing import Any
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from common.data.serialization import sanitize_for_json_storage
 from common.signatures import build_signature
 from db.connection import get_connection
 
@@ -17,7 +18,7 @@ class ToolCacheRepository:
         self._conn = conn or get_connection()
 
     @staticmethod
-    def build_key(*, tool_name: str, tool_version: int, tool_input: Any, user_id: str | None = None) -> str:
+    def build_cache_key(*, tool_name: str, tool_version: int, tool_input: Any, user_id: str | None = None) -> str:
         key = {
             "tool_name": tool_name,
             "tool_version": tool_version,
@@ -76,15 +77,3 @@ class ToolCacheRepository:
                     expires_at,
                 ),
             )
-
-    @staticmethod
-    def sanitize(value: Any) -> Any:
-        if hasattr(value, "model_dump"):
-            return ToolCacheRepository.sanitize(value.model_dump(mode="json"))
-        if isinstance(value, dict):
-            return {str(key): ToolCacheRepository.sanitize(item) for key, item in value.items()}
-        if isinstance(value, (list, tuple, set)):
-            return [ToolCacheRepository.sanitize(item) for item in value]
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            return value
-        return str(value)

@@ -7,6 +7,7 @@ from time import monotonic, sleep
 from typing import Any
 
 from common.http import HttpClientError
+from common.data.serialization import sanitize_for_json_storage
 from rendering.debug import emit_debug_message
 from tool.tools import tools
 from tool.cache.repository import ToolCacheRepository
@@ -105,9 +106,9 @@ class ToolRegistry:
         if cache_policy is not None and cache_policy.is_cache_allowed_for_user(cache_user_id):
             try:
                 cache_repository = self._cache_repository or ToolCacheRepository()
-                normalized_input = cache_repository.sanitize(tool_input or {})
+                normalized_input = sanitize_for_json_storage(tool_input or {})
                 tool_version = int(getattr(tool, "version", 1))
-                cache_key = cache_repository.build_key(
+                cache_key = cache_repository.build_cache_key(
                     tool_name=name,
                     tool_version=tool_version,
                     tool_input=normalized_input,
@@ -148,7 +149,7 @@ class ToolRegistry:
                                 tool_name=name,
                                 tool_version=int(getattr(tool, "version", 1)),
                                 input_payload=normalized_input,
-                                output_payload=cache_repository.sanitize(output),
+                                output_payload=sanitize_for_json_storage(output),
                                 cache_ttl_seconds=cache_ttl_seconds,
                             )
                         except Exception as exc:
