@@ -48,9 +48,9 @@ class ToolCacheRepository:
         tool_version: int,
         input_payload: Any,
         output_payload: Any,
-        ttl_seconds: int,
+        cache_ttl_seconds: int,
     ) -> None:
-        expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=cache_ttl_seconds)
         with self._conn.cursor() as cur:
             cur.execute(
                 """

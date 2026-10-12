@@ -97,12 +97,12 @@ class ToolRegistry:
             raise DisallowedToolError(f"Tool '{name}' is not allowed for this agent.")
         tool = self.get(name)
         cache_policy = getattr(tool, "cache_policy", None) if self._enable_cache else None
-        cache_ttl_seconds = cache_policy.ttl_seconds if cache_policy is not None else 0
+        cache_ttl_seconds = cache_policy.cache_ttl_seconds if cache_policy is not None else 0
         cache_key = None
         cache_repository = None
         normalized_input = None
-        cache_user_id = get_current_user_id() if cache_policy and cache_policy.user_specific else None
-        if cache_policy is not None and cache_policy.allows(cache_user_id):
+        cache_user_id = get_current_user_id() if cache_policy and cache_policy.is_user_specific else None
+        if cache_policy is not None and cache_policy.is_cache_allowed_for_user(cache_user_id):
             try:
                 cache_repository = self._cache_repository or ToolCacheRepository()
                 normalized_input = cache_repository.sanitize(tool_input or {})
@@ -149,7 +149,7 @@ class ToolRegistry:
                                 tool_version=int(getattr(tool, "version", 1)),
                                 input_payload=normalized_input,
                                 output_payload=cache_repository.sanitize(output),
-                                ttl_seconds=cache_ttl_seconds,
+                                cache_ttl_seconds=cache_ttl_seconds,
                             )
                         except Exception as exc:
                             emit_debug_message(

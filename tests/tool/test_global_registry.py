@@ -262,7 +262,7 @@ def test_user_specific_cache_isolated_by_user() -> None:
 
     registry = ToolRegistry(cache_repository=cache, enable_cache=True)
     registry.register(
-        Tool(_FakeTool("private_search", callback), cache_policy=ToolCachePolicy(60, user_specific=True))
+        Tool(_FakeTool("private_search", callback), cache_policy=ToolCachePolicy(60, is_user_specific=True))
     )
 
     with patch("tool.registry.global_registry.get_current_user_id", return_value="user-a"):
@@ -289,7 +289,7 @@ def test_user_specific_cache_bypasses_anonymous_requests() -> None:
 
     registry = ToolRegistry(cache_repository=cache, enable_cache=True)
     registry.register(
-        Tool(_FakeTool("private_search", callback), cache_policy=ToolCachePolicy(60, user_specific=True))
+        Tool(_FakeTool("private_search", callback), cache_policy=ToolCachePolicy(60, is_user_specific=True))
     )
 
     with patch("tool.registry.global_registry.get_current_user_id", return_value=None):
@@ -304,8 +304,8 @@ def test_user_specific_cache_bypasses_anonymous_requests() -> None:
 
 
 def test_cache_policy_controls_cacheability() -> None:
-    assert ToolCachePolicy(60).allows(None) is True
-    assert ToolCachePolicy(60, user_specific=True).allows("user-1") is True
-    assert ToolCachePolicy(60, user_specific=True).allows(None) is False
-    with pytest.raises(ValueError, match="ttl_seconds must be positive"):
+    assert ToolCachePolicy(60).is_cache_allowed_for_user(None) is True
+    assert ToolCachePolicy(60, is_user_specific=True).is_cache_allowed_for_user("user-1") is True
+    assert ToolCachePolicy(60, is_user_specific=True).is_cache_allowed_for_user(None) is False
+    with pytest.raises(ValueError, match="cache_ttl_seconds must be positive"):
         ToolCachePolicy(0)

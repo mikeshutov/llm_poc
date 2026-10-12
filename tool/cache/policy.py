@@ -5,13 +5,13 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ToolCachePolicy:
-    ttl_seconds: int
-    user_specific: bool = False
+    cache_ttl_seconds: int
+    is_user_specific: bool = False
 
     def __post_init__(self) -> None:
-        if self.ttl_seconds <= 0:
-            raise ValueError("Tool cache policy ttl_seconds must be positive.")
+        if self.cache_ttl_seconds <= 0:
+            raise ValueError("Tool cache policy cache_ttl_seconds must be positive.")
 
-    def allows(self, user_id: str | None) -> bool:
+    def is_cache_allowed_for_user(self, user_id: str | None) -> bool:
         """Return whether this policy may cache for the current identity."""
-        return not self.user_specific or bool(user_id and user_id.strip())
+        return not self.is_user_specific or bool(user_id and user_id.strip())

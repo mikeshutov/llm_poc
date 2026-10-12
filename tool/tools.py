@@ -145,13 +145,13 @@ GAMES_TOOLS = [
     Tool(get_magic_card_rulings, result_type=TOOL_RESULT_TYPE_RULES, cache_policy=ToolCachePolicy(3600)),
 ]
 MEMORY_TOOLS = [
-    Tool(get_memory_detail, result_type=TOOL_RESULT_TYPE_MEMORY_DETAIL, cache_policy=ToolCachePolicy(300, user_specific=True)),
-    Tool(lookup_evidence, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, user_specific=True)),
-    Tool(search_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, user_specific=True)),
-    Tool(search_roundtrip_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, user_specific=True)),
+    Tool(get_memory_detail, result_type=TOOL_RESULT_TYPE_MEMORY_DETAIL, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
+    Tool(lookup_evidence, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
+    Tool(search_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
+    Tool(search_roundtrip_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
 ]
-USER_ATTRIBUTE_TOOLS = [Tool(create_user_attribute, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(update_user_attribute, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(get_user_attributes, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE, cache_policy=ToolCachePolicy(300, user_specific=True)), Tool(search_user_attributes, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE, cache_policy=ToolCachePolicy(300, user_specific=True))]
-FILE_TOOLS = [Tool(search_files, result_type=TOOL_RESULT_TYPE_FILE_RESULTS, cache_policy=ToolCachePolicy(300, user_specific=True)), Tool(search_file_for_details, result_type=TOOL_RESULT_TYPE_FILE_DETAILS, cache_policy=ToolCachePolicy(300, user_specific=True)), Tool(get_file_by_id, result_type=TOOL_RESULT_TYPE_FILE, cache_policy=ToolCachePolicy(300, user_specific=True))]
+USER_ATTRIBUTE_TOOLS = [Tool(create_user_attribute, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(update_user_attribute, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE), Tool(get_user_attributes, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(search_user_attributes, result_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE, cache_policy=ToolCachePolicy(300, is_user_specific=True))]
+FILE_TOOLS = [Tool(search_files, result_type=TOOL_RESULT_TYPE_FILE_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(search_file_for_details, result_type=TOOL_RESULT_TYPE_FILE_DETAILS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(get_file_by_id, result_type=TOOL_RESULT_TYPE_FILE, cache_policy=ToolCachePolicy(300, is_user_specific=True))]
 PROFILE_TOOLS = [Tool(set_user_display_name, result_type=TOOL_RESULT_TYPE_PROFILE), Tool(set_user_first_name, result_type=TOOL_RESULT_TYPE_PROFILE), Tool(set_user_last_name, result_type=TOOL_RESULT_TYPE_PROFILE), Tool(update_user_tone, result_type=TOOL_RESULT_TYPE_TONE)]
 
 # if this were to grow much larger I would probably create sub categories or a tree structure of tools
