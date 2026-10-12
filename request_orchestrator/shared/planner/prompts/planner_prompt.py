@@ -23,11 +23,12 @@ MISSING_INFORMATION_REPLAN_RULE = (
     "resolve those gaps."
 )
 TOP_LEVEL_PLANNER_SCHEMA = """
-Return exactly one JSON object with a `steps` array. Each step must specify
+Return exactly one JSON object with a `steps` array. Each step must include a hypothesis
+describing what the step is expected to establish or produce. Each step must specify
 exactly one execution target: `tool` for a concrete tool call or `agent` for a
 delegated subtask. Use only discovered tool and agent names.
-Each step must include `id` and `plan`; tool steps also include `args`.
-Do not return goals, categories, or attribute categories.
+Each step must include `id`, `plan`, and `hypothesis`; tool steps also include `args`.
+Do not return categories or attribute categories.
 """
 
 

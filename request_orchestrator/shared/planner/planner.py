@@ -126,6 +126,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         "status": planning_result.status,
         "data": sanitize_for_json_storage({
             "step_plans": [step.plan for step in plan.steps],
+            "step_hypotheses": [step.hypothesis for step in plan.steps],
             "planner_status": planning_result.status,
             "planner_reason": planning_result.reason,
             "needs_replan": planning_result.needs_replan,

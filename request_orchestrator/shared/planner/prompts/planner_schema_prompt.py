@@ -15,6 +15,7 @@ You MUST output valid JSON with this structure:
     {
       "id": "E1",
       "plan": "<one sentence>",
+      "hypothesis": "<what this step is expected to establish or produce>",
       "tool": "<TOOL_NAME>",
       "args": { <JSON object> }
     }

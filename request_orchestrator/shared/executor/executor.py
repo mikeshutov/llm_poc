@@ -168,6 +168,7 @@ def _record_step_result(
         "response": sanitize_for_json_storage(output),
         "data": sanitize_for_json_storage({
             "step_plan": step.plan,
+            "step_hypothesis": step.hypothesis,
             "latency_ms": execution_result.latency_ms,
         }),
     }

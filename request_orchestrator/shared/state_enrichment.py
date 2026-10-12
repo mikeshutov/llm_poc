@@ -89,7 +89,13 @@ def enrich_agent_state(
         agent_state.inputs.discovered_attribute_types = discovered_attribute_types
         agent_state.inputs.discovered_capabilities = capability_future.result()
     if discovered_attribute_types:
-        profile_loader(attribute_state)
+        if profile_loader is load_user_profile:
+            profile_loader(
+                attribute_state,
+                title="Additional User Attributes Loaded",
+            )
+        else:
+            profile_loader(attribute_state)
     return agent_state
 
 
