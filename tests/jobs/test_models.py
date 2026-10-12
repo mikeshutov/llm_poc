@@ -8,7 +8,7 @@ from artifacts.models import Artifact
 from jobs.models import JobSchedule
 from jobs.repository.job_repository import JobRepository
 from jobs.repository.job_result_repository import JobResultRepository
-from request_orchestrator.models.plan import Plan, PlanStep
+from request_orchestrator.models.plan import Plan, PlanStep, PlanningResult
 
 
 def test_job_schedule_normalizes_and_validates_weekdays() -> None:
@@ -43,13 +43,27 @@ def test_artifact_normalizes_generic_reference() -> None:
 
 def test_plan_can_be_round_tripped_as_job_payload() -> None:
     plan = Plan(
-        steps=[PlanStep(id="step-1", plan="Find products", tool="find_products")]
+        steps=[PlanStep(id="step-1", plan="Find products", hypothesis="The database contains matching products.", tool="find_products")],
     )
 
     restored = Plan.model_validate(plan.model_dump(mode="json"))
 
     assert restored.steps[0].tool == "find_products"
     assert restored.steps[0].step_index == 0
+    assert restored.steps[0].hypothesis == "The database contains matching products."
+
+
+def test_planning_result_accepts_step_hypothesis() -> None:
+    result = PlanningResult.model_validate({
+        "steps": [{
+            "id": "step-1",
+            "plan": "Find products",
+            "hypothesis": "The database contains matching products.",
+            "tool": "find_products",
+        }],
+    })
+
+    assert result.steps[0].hypothesis == "The database contains matching products."
 
 
 def test_job_repositories_require_user_scope() -> None:

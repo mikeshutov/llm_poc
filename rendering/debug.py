@@ -34,6 +34,7 @@ class PlanLogPayload(BaseModel):
     status: str = ""
     reason: str = ""
     step_plans: list[str] = Field(default_factory=list)
+    step_hypotheses: list[str] = Field(default_factory=list)
 
 
 class SynthesisLogPayload(BaseModel):
@@ -132,6 +133,7 @@ def emit_debug_message(content, content_title: str) -> None:
 def _build_profile_load_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
     return ProfileLoadLogPayload(
+        title=data.get("title") or "User Profile Loaded",
         requested_user_attribute_types=data.get("requested_user_attribute_types") or [],
         loaded_attribute_types=data.get("loaded_attribute_types") or [],
         loaded_attribute_count=data.get("loaded_attribute_count", 0),
@@ -145,6 +147,7 @@ def _build_plan_payload(entry: dict) -> dict:
         status=entry.get("status") or data.get("planner_status") or "",
         reason=data.get("planner_reason") or "",
         step_plans=data.get("step_plans") or [],
+        step_hypotheses=data.get("step_hypotheses") or [],
     ).model_dump()
 
 

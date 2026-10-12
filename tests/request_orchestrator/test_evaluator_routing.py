@@ -104,6 +104,26 @@ def test_validator_routes_action_plan_to_execute() -> None:
     assert validator(state) == EXECUTE_TOOLS_EDGE
 
 
+def test_validator_executes_new_action_plan_even_if_evaluator_is_terminal() -> None:
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
+    _hydrate_plan_state(
+        state,
+        plan=Plan.model_validate({
+            "steps": [{
+                "id": "E1",
+                "plan": "Look it up",
+                "tool": "generic_web_search",
+                "args": {"query_text": "okonomiyaki kit"},
+            }]
+        }),
+        results={},
+        plan_count=1,
+    )
+    state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
+
+    assert validator(state) == EXECUTE_TOOLS_EDGE
+
+
 def test_router_routes_executed_results_to_evaluator() -> None:
     state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     _hydrate_plan_state(
@@ -257,6 +277,7 @@ def test_main_agent_graph_executes_plan_after_planner(monkeypatch) -> None:
                     PlanStep(
                         id="E1",
                         plan="Look it up",
+                        hypothesis="The search will return useful results.",
                         tool="generic_web_search",
                         args={"query_text": "okonomiyaki kit"},
                     )

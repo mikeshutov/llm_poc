@@ -11,7 +11,7 @@ def _planning_result(*, steps: list[PlanStep], status: str = "ready") -> Plannin
 
 
 def test_job_orchestrator_returns_generated_plan(monkeypatch) -> None:
-    step = PlanStep(id="step-1", plan="Search", tool="search", args={})
+    step = PlanStep(id="step-1", plan="Search", hypothesis="The search returns relevant results.", tool="search", args={})
     monkeypatch.setattr(job_orchestrator, "build_user_profile", lambda user_id: SimpleNamespace(user_id=user_id))
     monkeypatch.setattr(job_orchestrator.AgentState, "new", lambda *args, **kwargs: object())
     monkeypatch.setattr(
@@ -22,7 +22,10 @@ def test_job_orchestrator_returns_generated_plan(monkeypatch) -> None:
     monkeypatch.setattr(
         job_orchestrator,
         "invoke_planner",
-        lambda *args, **kwargs: (_planning_result(steps=[step]), None),
+        lambda *args, **kwargs: (
+            PlanningResult(steps=[step]),
+            None,
+        ),
     )
 
     plan, error = job_orchestrator.JobOrchestrator().generate_plan(

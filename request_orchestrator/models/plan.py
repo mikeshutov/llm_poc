@@ -29,6 +29,7 @@ class PlanStep(BaseModel):
     db_id: UUID = Field(default_factory=uuid4) 
     step_index: int = 0                       
     plan: str
+    hypothesis: str = ""
     tool: str = ""
     agent: str = ""
     args: dict[str, Any] = Field(default_factory=dict)
