@@ -7,7 +7,6 @@ from time import monotonic, sleep
 from typing import Any
 
 from common.http import HttpClientError
-from common.data.serialization import sanitize_for_json_storage
 from rendering.debug import emit_debug_message
 from tool.tools import tools
 from tool.cache.repository import ToolCacheRepository
@@ -97,20 +96,16 @@ class ToolRegistry:
         if allowed_tool_names is not None and name not in allowed_tool_names:
             raise DisallowedToolError(f"Tool '{name}' is not allowed for this agent.")
         tool = self.get(name)
-        cache_policy = getattr(tool, "cache_policy", None) if self._enable_cache else None
+        cache_policy = tool.cache_policy if self._enable_cache else None
         cache_ttl_seconds = cache_policy.cache_ttl_seconds if cache_policy is not None else 0
         cache_repository = None
-        normalized_input = None
-        tool_version = int(getattr(tool, "version", 1))
         cache_user_id = get_current_user_id() if cache_policy and cache_policy.is_user_specific else None
         if cache_policy is not None and cache_policy.is_cache_allowed_for_user(cache_user_id):
             try:
                 cache_repository = self._cache_repository or ToolCacheRepository()
-                normalized_input = sanitize_for_json_storage(tool_input or {})
                 cached_output = cache_repository.get(
-                    tool_name=name,
-                    tool_version=tool_version,
-                    tool_input=normalized_input,
+                    tool=tool,
+                    tool_input=tool_input,
                     user_id=cache_user_id,
                 )
                 if cached_output is not None:
@@ -131,7 +126,6 @@ class ToolRegistry:
                     content_title="Tool Cache Lookup Failed",
                 )
                 cache_repository = None
-                normalized_input = None
         retry_policy = getattr(tool, "retry_policy", None)
         max_attempts = max(1, getattr(retry_policy, "max_attempts", 1))
         try:
@@ -142,10 +136,9 @@ class ToolRegistry:
                     if cache_repository is not None:
                         try:
                             cache_repository.put(
-                                tool_name=name,
-                                tool_version=tool_version,
-                                tool_input=normalized_input,
-                                output_payload=sanitize_for_json_storage(output),
+                                tool=tool,
+                                tool_input=tool_input,
+                                output_payload=output,
                                 cache_ttl_seconds=cache_ttl_seconds,
                                 user_id=cache_user_id,
                             )

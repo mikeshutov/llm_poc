@@ -49,11 +49,11 @@ class _FakeCacheRepository:
     def build_cache_key(*, tool_name, tool_version, tool_input, user_id=None):
         return (tool_name, tool_version, user_id, repr(tool_input))
 
-    def get(self, *, tool_name, tool_version, tool_input, user_id=None):
+    def get(self, *, tool, tool_input, user_id=None):
         self.get_calls += 1
         cache_key = self.build_cache_key(
-            tool_name=tool_name,
-            tool_version=tool_version,
+            tool_name=tool.name,
+            tool_version=tool.version,
             tool_input=tool_input,
             user_id=user_id,
         )
@@ -62,8 +62,8 @@ class _FakeCacheRepository:
     def put(self, **kwargs):
         self.put_calls += 1
         cache_key = self.build_cache_key(
-            tool_name=kwargs["tool_name"],
-            tool_version=kwargs["tool_version"],
+            tool_name=kwargs["tool"].name,
+            tool_version=kwargs["tool"].version,
             tool_input=kwargs["tool_input"],
             user_id=kwargs.get("user_id"),
         )

@@ -31,15 +31,15 @@ class ToolCacheRepository:
     def get(
         self,
         *,
-        tool_name: str,
-        tool_version: int,
+        tool: Any,
         tool_input: Any,
         user_id: str | None = None,
     ) -> Any | None:
+        normalized_tool_input = sanitize_for_json_storage(tool_input or {})
         cache_key = self.build_cache_key(
-            tool_name=tool_name,
-            tool_version=tool_version,
-            tool_input=tool_input,
+            tool_name=tool.name,
+            tool_version=tool.version,
+            tool_input=normalized_tool_input,
             user_id=user_id,
         )
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -57,17 +57,18 @@ class ToolCacheRepository:
     def put(
         self,
         *,
-        tool_name: str,
-        tool_version: int,
+        tool: Any,
         tool_input: Any,
         output_payload: Any,
         cache_ttl_seconds: int,
         user_id: str | None = None,
     ) -> None:
+        normalized_tool_input = sanitize_for_json_storage(tool_input or {})
+        normalized_output = sanitize_for_json_storage(output_payload)
         cache_key = self.build_cache_key(
-            tool_name=tool_name,
-            tool_version=tool_version,
-            tool_input=tool_input,
+            tool_name=tool.name,
+            tool_version=tool.version,
+            tool_input=normalized_tool_input,
             user_id=user_id,
         )
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=cache_ttl_seconds)
@@ -89,10 +90,10 @@ class ToolCacheRepository:
                 """,
                 (
                     cache_key,
-                    tool_name,
-                    tool_version,
-                    Jsonb(tool_input),
-                    Jsonb(output_payload),
+                    tool.name,
+                    tool.version,
+                    Jsonb(normalized_tool_input),
+                    Jsonb(normalized_output),
                     expires_at,
                 ),
             )
