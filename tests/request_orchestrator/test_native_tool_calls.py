@@ -38,7 +38,7 @@ def test_native_tool_collection_includes_delegation_action() -> None:
     assert "parameters" in tools[-1].args_schema.model_fields
 
 
-def test_native_tool_call_keeps_provider_metadata_separate_from_parameters() -> None:
+def test_native_tool_call_becomes_plan_step() -> None:
     result = PlanningResult(
         steps=[PlanStep(
             id="call-1",

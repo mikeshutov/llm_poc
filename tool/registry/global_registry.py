@@ -8,7 +8,6 @@ from typing import Any
 
 from common.http import HttpClientError
 from rendering.debug import emit_debug_message
-from request_orchestrator.models.evidence import ToolResult
 from tool.tools import tools
 from tool.cache.repository import ToolCacheRepository
 from request_orchestrator.shared.runtime_context import get_current_user_id
@@ -113,6 +112,7 @@ class ToolRegistry:
                     # Tool adapters return ToolResult models. Restore that type so
                     # cached results retain evidence and metadata behavior.
                     if isinstance(cached_output, dict) and "result" in cached_output and "evidence" in cached_output:
+                        from request_orchestrator.models.evidence import ToolResult
                         return ToolResult.model_validate(cached_output)
                     return cached_output
             except Exception as exc:

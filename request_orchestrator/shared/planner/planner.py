@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from time import perf_counter
-from uuid import uuid4
 
 from langsmith import traceable
 
@@ -48,15 +47,7 @@ def invoke_planner(
         reuse_llm_for_agent_scope=agent_scope,
     )
     context = _compile_tools_rules_from_state(agent_state)
-    if agent_state.available_agent_states is not None and agent_state.inputs.discovered_capabilities is not None:
-        discovered_names = {candidate.name for candidate in agent_state.inputs.discovered_capabilities.tools}
-        native_candidates = [
-            candidate
-            for name, candidate in agent_state.agent_profile.tools_by_name.items()
-            if name in discovered_names
-        ]
-    else:
-        native_candidates = context.tools
+    native_candidates = context.tools
     agent_names = (
         []
         if agent_state.available_agent_states is None
@@ -136,7 +127,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         return agent_state
 
     steps = planning_result.steps
-    plan = Plan(steps=steps, db_id=uuid4())
+    plan = Plan(steps=steps)
     if agent_state.execution_context.roundtrip_id:
         plan.db_id = PlanRepository().save_interactive_plan(
             agent_state.execution_context.roundtrip_id,

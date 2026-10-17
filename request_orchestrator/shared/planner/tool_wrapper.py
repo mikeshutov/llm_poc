@@ -34,15 +34,6 @@ def wrap_tool(original: BaseTool) -> StructuredTool:
         name=original.name,
         description=original.description,
         args_schema=envelope_schema,
-        metadata={
-            "source_tool": original.name,
-            "result_type": getattr(original, "result_type", "generic"),
-            "version": getattr(original, "version", 1),
-            "rate_limit_key": getattr(original, "rate_limit_key", None),
-            "retry_policy": getattr(original, "retry_policy", None),
-            "rate_limit_policy": getattr(original, "rate_limit_policy", None),
-            "cache_policy": getattr(original, "cache_policy", None),
-        },
     )
 
 

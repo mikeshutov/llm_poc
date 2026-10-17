@@ -247,7 +247,6 @@ class ToolCallRepository:
                 result.model_copy(
                     update={
                         "tool_call_id": tool_call.id,
-                        "plan_id": tool_call.plan_id,
                         "plan_step_id": tool_call.plan_step_id,
                         "tool_name": tool_call.tool_name,
                         "hypothesis": tool_call.hypothesis,
