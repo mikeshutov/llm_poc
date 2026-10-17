@@ -10,24 +10,6 @@ from request_orchestrator.models.agent_state import AgentState
 
 
 def run_execution_result_validator(state: AgentState) -> AgentState:
-    if state.node_states.planner.tool_calls:
-        plan = state.node_states.planner.plan
-        results = [
-            result for result in state.gather_tool_results()
-            if plan and result.plan_id == plan.db_id
-        ]
-        if results and any(result.evidence for result in results):
-            status = ResultStatus.PARTIAL_SUCCESS
-        elif results:
-            status = ResultStatus.FAILED
-        else:
-            status = ResultStatus.NO_NEW_WORK
-        state.result = state.result.copy(result_status=status)
-        if status is ResultStatus.FAILED:
-            state.node_states.planner.no_result_attempts += 1
-        else:
-            state.node_states.planner.no_result_attempts = 0
-        return state
     plan = state.node_states.planner.plan
     if plan is None:
         state.result = state.result.copy(result_status=ResultStatus.FAILED)

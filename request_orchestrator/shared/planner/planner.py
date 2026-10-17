@@ -11,7 +11,7 @@ from common.logging import create_conversation_event, log_roundtrip_prompt
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_TERMINAL
 from request_orchestrator.models.plan import PlanningResult
-from request_orchestrator.models.plan import Plan
+from request_orchestrator.models.plan import Plan, PlanStep
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
@@ -121,13 +121,32 @@ def run_planner(agent_state: AgentState) -> AgentState:
         return agent_state
 
     tool_calls = planning_result.tool_calls
-    plan = Plan(steps=[], db_id=uuid4())
+    steps = []
+    for index, call in enumerate(tool_calls):
+        name = call.get("name", "")
+        args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
+        parameters = args.get("parameters", {}) if isinstance(args.get("parameters", {}), dict) else {}
+        hypothesis = str(args.get("hypothesis", ""))
+        is_delegation = name == "delegate_agent"
+        steps.append(PlanStep(
+            id=str(call.get("id") or f"E{index + 1}"),
+            plan=hypothesis,
+            hypothesis=hypothesis,
+            tool="" if is_delegation else name,
+            agent=str(parameters.get("agent_name", "")) if is_delegation else "",
+            args=parameters,
+        ))
+    plan = Plan(steps=steps, db_id=uuid4())
     if agent_state.execution_context.roundtrip_id:
         plan.db_id = PlanRepository().save_interactive_plan(
             agent_state.execution_context.roundtrip_id,
             plan,
         )
-    agent_state.begin_tool_calls(tool_calls, plan=plan)
+    planner_state = agent_state.node_states.planner
+    planner_state.tool_calls = tool_calls
+    planner_state.plan = plan
+    planner_state.needs_replan = False
+    planner_state.plan_count += 1
 
     if not tool_calls:
         agent_state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL

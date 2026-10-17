@@ -88,6 +88,7 @@ class ToolCallRepository:
         request: dict[str, Any],
         *,
         plan_id: UUID | None = None,
+        plan_step_id: UUID | None = None,
         input_payload: Any | None = None,
         output_payload: Any | None = None,
         evidence: list[EvidenceView] | None = None,
@@ -108,16 +109,17 @@ class ToolCallRepository:
             cur.execute(
                 """
                 INSERT INTO tool_calls (
-                    roundtrip_id, plan_id, step_index, tool_name, request_hash, status,
+                    roundtrip_id, plan_id, plan_step_id, step_index, tool_name, request_hash, status,
                     input_payload, output_payload, error_message, duration_ms,
                     goal, hypothesis, call_metadata
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
                 (
                     roundtrip_id,
                     plan_id,
+                    plan_step_id,
                     0,
                     tool_name,
                     request_hash,

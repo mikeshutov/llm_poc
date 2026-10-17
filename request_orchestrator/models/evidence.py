@@ -48,7 +48,6 @@ class EvaluatorEvidenceView(BaseModel):
 class EvidenceView(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     tool_call_id: UUID | None = None
-    plan_id: UUID | None = None
     hash: str = ""
     item_id: str = ""
     tool_name: str = ""

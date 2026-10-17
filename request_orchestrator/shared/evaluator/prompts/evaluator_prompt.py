@@ -12,13 +12,12 @@ from request_orchestrator.shared.evaluator.prompts.evaluator_schema_prompt impor
 
 
 def _build_instruction(state: AgentState) -> str:
-    instruction = (
+    return (
         "You are an evaluator between planning and synthesis. "
         "Decide whether the current evidence is sufficient to answer the user's stated question or goal,"
         "Do not expand the user's scope or require optional information that was not requested unless absolutely necessary. "
         "Return exactly one JSON object matching the provided schema, with the `status` field set to SATISFIED, PARTIAL_BUT_SUFFICIENT, RETRYABLE, or TERMINAL."
     )
-    return instruction
 
 
 def build_evaluator_prompt(state: AgentState | MainState, evidence: list[EvidenceStep]) -> AgentPrompt:

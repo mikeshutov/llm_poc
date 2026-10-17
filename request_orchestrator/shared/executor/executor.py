@@ -249,7 +249,6 @@ def _execute_native_request(
     latency_ms = int((perf_counter() - started_at) * 1000)
     output = output.model_copy(update={
         "tool_name": _native_name(request),
-        "plan_id": agent_state.node_states.planner.plan.db_id if agent_state.node_states.planner.plan else None,
         "iteration": iteration_number,
         "hypothesis": _native_hypothesis(request),
         "call_metadata": _native_metadata(request),
@@ -262,11 +261,13 @@ def _record_native_result(
     *,
     request: dict[str, Any],
     output: ToolResult,
+    plan_step_id: UUID | None,
     error_text: str,
     latency_ms: int,
     tool_repo: ToolCallRepository | None,
     iteration_number: int,
 ) -> None:
+    output = output.model_copy(update={"plan_step_id": plan_step_id})
     execution_context = agent_state.execution_context
     payload = {
         "agent_name": agent_state.agent_profile.name,
@@ -299,6 +300,7 @@ def _record_native_result(
             execution_context.roundtrip_id,
             request,
             plan_id=agent_state.node_states.planner.plan.db_id if agent_state.node_states.planner.plan else None,
+            plan_step_id=plan_step_id,
             input_payload=_native_parameters(request),
             output_payload=output,
             evidence=output.evidence,
@@ -319,19 +321,24 @@ def _run_native_tool_calls(agent_state: AgentState) -> AgentState:
     allowed_tool_names = set(agent_state.agent_profile.tool_names)
     iteration_number = agent_state.node_states.planner.plan_count
     direct_requests = [request for request in tool_calls if _native_name(request) != "delegate_agent"]
+    step_ids = {
+        id(request): agent_state.node_states.planner.plan.steps[index].db_id
+        for index, request in enumerate(tool_calls)
+    } if agent_state.node_states.planner.plan else {}
     seen_signatures: set[str] = set()
-    executable_requests: list[dict[str, Any]] = []
-    rejected: list[tuple[dict[str, Any], str]] = []
+    executable_requests: list[tuple[dict[str, Any], UUID | None]] = []
+    rejected: list[tuple[dict[str, Any], UUID | None, str]] = []
     for request in direct_requests:
+        step_id = step_ids.get(id(request))
         name = _native_name(request)
         signature = build_signature({"tool_name": name, "input": _native_parameters(request)})
         if name not in allowed_tool_names:
-            rejected.append((request, f"Tool '{name}' is not allowed for this agent."))
+            rejected.append((request, step_id, f"Tool '{name}' is not allowed for this agent."))
         elif signature in seen_signatures or (tool_repo and tool_repo.has_request_hash(agent_state.execution_context.roundtrip_id, signature)):
-            rejected.append((request, f"Tool request for '{name}' was already made in this roundtrip."))
+            rejected.append((request, step_id, f"Tool request for '{name}' was already made in this roundtrip."))
         else:
             seen_signatures.add(signature)
-            executable_requests.append(request)
+            executable_requests.append((request, step_id))
 
     with bind_runtime_context(
         conversation_id=agent_state.execution_context.conversation_id,
@@ -341,19 +348,18 @@ def _run_native_tool_calls(agent_state: AgentState) -> AgentState:
     ):
         with bind_agent_context(agent_name=agent_state.agent_profile.name):
             with ThreadPoolExecutor(max_workers=max(1, len(executable_requests))) as executor:
-                futures = [executor.submit(_execute_native_request, request, agent_state=agent_state, allowed_tool_names=allowed_tool_names, iteration_number=iteration_number) for request in executable_requests]
+                futures = [executor.submit(_execute_native_request, request, agent_state=agent_state, allowed_tool_names=allowed_tool_names, iteration_number=iteration_number) for request, step_id in executable_requests]
                 results = [future.result() for future in futures]
-            for request, output, error_text, latency_ms in results:
-                _record_native_result(agent_state, request=request, output=output, error_text=error_text, latency_ms=latency_ms, tool_repo=tool_repo, iteration_number=iteration_number)
-            for request, rejection_reason in rejected:
+            for (request, step_id), (_, output, error_text, latency_ms) in zip(executable_requests, results):
+                _record_native_result(agent_state, request=request, output=output, plan_step_id=step_id, error_text=error_text, latency_ms=latency_ms, tool_repo=tool_repo, iteration_number=iteration_number)
+            for request, step_id, rejection_reason in rejected:
                 output = ToolResult.error(rejection_reason, tool=_native_name(request)).model_copy(update={
                     "tool_name": _native_name(request),
-                    "plan_id": agent_state.node_states.planner.plan.db_id if agent_state.node_states.planner.plan else None,
                     "iteration": iteration_number,
                     "hypothesis": _native_hypothesis(request),
                     "call_metadata": _native_metadata(request),
                 })
-                _record_native_result(agent_state, request=request, output=output, error_text=rejection_reason, latency_ms=0, tool_repo=tool_repo, iteration_number=iteration_number)
+                _record_native_result(agent_state, request=request, output=output, plan_step_id=step_id, error_text=rejection_reason, latency_ms=0, tool_repo=tool_repo, iteration_number=iteration_number)
 
     # Delegated agents mutate their own state and are intentionally dispatched
     # after direct calls so direct tool execution remains parallel and isolated.
@@ -361,6 +367,7 @@ def _run_native_tool_calls(agent_state: AgentState) -> AgentState:
         from request_orchestrator.agents.registry import agent_registry
         from request_orchestrator.models.agent_inputs import AgentInputs
         for request in (item for item in tool_calls if _native_name(item) == "delegate_agent"):
+            step_id = step_ids.get(id(request))
             parameters = _native_parameters(request)
             agent_name = parameters.get("agent_name", "")
             delegated = agent_state.available_agent_states.get(agent_name)
@@ -378,7 +385,6 @@ def _run_native_tool_calls(agent_state: AgentState) -> AgentState:
                 evidence=[],
             ).model_copy(update={
                 "tool_name": _native_name(request),
-                "plan_id": agent_state.node_states.planner.plan.db_id if agent_state.node_states.planner.plan else None,
                 "iteration": iteration_number,
                 "hypothesis": _native_hypothesis(request),
                 "call_metadata": _native_metadata(request),
@@ -387,6 +393,7 @@ def _run_native_tool_calls(agent_state: AgentState) -> AgentState:
                 agent_state,
                 request=request,
                 output=output,
+                plan_step_id=step_id,
                 error_text="",
                 latency_ms=0,
                 tool_repo=tool_repo,
