@@ -155,7 +155,9 @@ def _build_tool_candidates() -> list[tuple[str, str, AvailableTool]]:
     return candidates
 
 
-def _discover_persisted_tools(query_embedding: list[float]) -> list[tuple[float, AvailableTool]]:
+def _discover_persisted_tools(query_embedding: list[float] | None) -> list[tuple[float, AvailableTool]]:
+    if query_embedding is None:
+        return []
     registered_tools = get_tool_registry_repo().list_relevant(
         query_embedding=query_embedding,
     )
@@ -211,15 +213,13 @@ def capability_discovery(
         query_embedding = None
 
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="capability-discovery") as executor:
+        tool_future = executor.submit(_discover_persisted_tools, query_embedding)
         agent_future = executor.submit(_rank_candidates, query, query_embedding, agent_candidates)
-        if query_embedding is None:
+        try:
+            tool_matches = tool_future.result()
+        except Exception:
+            logger.warning("Persisted tool capability lookup failed; using unranked tool fallback", exc_info=True)
             tool_matches = []
-        else:
-            try:
-                tool_matches = _discover_persisted_tools(query_embedding)
-            except Exception:
-                logger.warning("Persisted tool capability lookup failed; using unranked tool fallback", exc_info=True)
-                tool_matches = []
         agent_matches = agent_future.result()
 
     # Preserve a useful discovery result for a query with no lexical or
