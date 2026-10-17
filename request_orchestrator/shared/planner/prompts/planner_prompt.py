@@ -54,7 +54,7 @@ def _format_minimal_tool_schema(tool) -> str:
             lines.append('  Optional fields:')
             lines.extend(f"  {line}" for line in optional_fields)
 
-    result_fields = tuple(getattr(tool, "result_fields", ()) or ())
+    result_fields = tuple(getattr(tool, "available_result_fields", ()) or ())
     if result_fields:
         lines.append(f"  Result fields: {', '.join(result_fields)}")
 

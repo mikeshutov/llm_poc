@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from request_orchestrator.models.plan import PlanStep, PlanningResult
 from request_orchestrator.shared.planner.tool_wrapper import build_tools, wrap_tool
+from tool.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
 from tool.models import Tool
 
 
@@ -40,9 +41,9 @@ def test_native_tool_collection_wraps_only_discovered_tools() -> None:
 
 
 def test_native_tool_description_exposes_declared_result_fields() -> None:
-    native = wrap_tool(Tool(lookup, result_fields=("name", "url", "ingredients")))
+    native = wrap_tool(Tool(lookup, result_type=TOOL_RESULT_TYPE_MEAL_RESULTS))
 
-    assert "Returns entities with fields: name, url, ingredients" in native.description
+    assert "Returns entities with fields: category, area, tags, ingredients, instructions, url" in native.description
 
 
 def test_native_tool_call_becomes_plan_step() -> None:

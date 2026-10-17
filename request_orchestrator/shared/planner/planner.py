@@ -98,6 +98,10 @@ def invoke_planner(
     )
     tool_calls = getattr(response, "tool_calls", None) or []
     steps = []
+    available_fields_by_tool = {
+        candidate.name: set(getattr(candidate, "available_result_fields", ()))
+        for candidate in tools
+    }
     for index, call in enumerate(tool_calls):
         name = call.get("name", "")
         args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
@@ -106,7 +110,12 @@ def invoke_planner(
         evaluation_fields = [
             field.strip()
             for field in args.get("evaluation_fields", [])
-            if isinstance(field, str) and field.strip() and field.strip().lower() != "name"
+            if (
+                isinstance(field, str)
+                and field.strip()
+                and field.strip().lower() not in {"name", "title"}
+                and field.strip() in available_fields_by_tool.get(name, set())
+            )
         ] if isinstance(args.get("evaluation_fields", []), list) else []
         metadata = args.get("metadata", {}) if isinstance(args.get("metadata", {}), dict) else {}
         if evaluation_fields:

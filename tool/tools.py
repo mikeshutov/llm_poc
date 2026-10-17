@@ -139,7 +139,6 @@ FOOD_TOOLS = [
     Tool(
         search_meals,
         result_type=TOOL_RESULT_TYPE_MEAL_RESULTS,
-        result_fields=("category", "area", "tags", "ingredients", "instructions", "url"),
         cache_policy=ToolCachePolicy(3600),
     ),
     Tool(search_cocktails, result_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS, cache_policy=ToolCachePolicy(3600)),

@@ -18,7 +18,7 @@ def _to_registered_tool(tool: Tool) -> RegisteredTool:
         rate_limit_key=tool.rate_limit_key,
         retry_policy=tool.retry_policy,
         rate_limit_policy=tool.rate_limit_policy,
-        metadata={"result_fields": list(tool.result_fields)},
+        metadata={"result_fields": list(tool.available_result_fields)},
     )
 
 

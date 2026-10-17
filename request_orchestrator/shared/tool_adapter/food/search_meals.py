@@ -35,6 +35,15 @@ class MealIngredientMetadata(BaseModel):
     measure: str | None = None
 
 
+class MealEvaluationFields(BaseModel):
+    category: str | None = None
+    area: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    ingredients: list[MealIngredientMetadata] = Field(default_factory=list)
+    instructions: str | None = None
+    url: str | None = None
+
+
 def _tool_result(result: MealSearchResult) -> ToolResult:
     evidence: list[EvidenceView] = []
     for meal in result.meals:
