@@ -17,6 +17,27 @@ from common.signatures import build_signature
 from tool.repository.models import ToolCall
 
 
+def _merge_evidence_views(
+    persisted_evidence: list[EvidenceView],
+    payload_evidence: list[EvidenceView],
+) -> list[EvidenceView]:
+    evidence = list(persisted_evidence)
+    evidence_ids = {evidence_view.id for evidence_view in evidence if evidence_view.id is not None}
+    evidence_hashes = {evidence_view.hash for evidence_view in evidence if evidence_view.hash}
+    for evidence_view in payload_evidence:
+        if (
+            (evidence_view.id is not None and evidence_view.id in evidence_ids)
+            or (evidence_view.hash and evidence_view.hash in evidence_hashes)
+        ):
+            continue
+        evidence.append(evidence_view)
+        if evidence_view.id is not None:
+            evidence_ids.add(evidence_view.id)
+        if evidence_view.hash:
+            evidence_hashes.add(evidence_view.hash)
+    return evidence
+
+
 class ToolCallRepository:
     def __init__(self):
         self._conn = get_connection()
@@ -243,6 +264,10 @@ class ToolCallRepository:
                 continue
             payload = tool_call.output_payload if isinstance(tool_call.output_payload, dict) else {}
             result = ToolResult.model_validate(payload)
+            evidence = _merge_evidence_views(
+                evidence_by_tool_call_id.get(tool_call.id, []),
+                result.evidence,
+            )
             results.append(
                 result.model_copy(
                     update={
@@ -251,7 +276,7 @@ class ToolCallRepository:
                         "tool_name": tool_call.tool_name,
                         "hypothesis": tool_call.hypothesis,
                         "call_metadata": tool_call.call_metadata,
-                        "evidence": evidence_by_tool_call_id.get(tool_call.id, []),
+                        "evidence": evidence,
                     }
                 )
             )

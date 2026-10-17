@@ -14,6 +14,7 @@ from request_orchestrator.models.plan import PlanningResult
 from request_orchestrator.models.plan import Plan, PlanStep
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
+from llm.conversation_model_config import OPENAI_PROVIDER
 from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from llm.conversation_model_config import PLANNER_STAGE
 from llm.usage import record_llm_call, serialize_llm_call_record
@@ -47,7 +48,23 @@ def invoke_planner(
         agent_profile=agent_state.agent_profile,
         reuse_llm_for_agent_scope=agent_scope,
     )
-    llm = llm.bind_tools(build_tools(tools))
+    model_name = resolve_stage_model_name(
+        execution_context=execution_context,
+        agent=agent_scope,
+        stage=PLANNER_STAGE,
+        agent_profile=agent_state.agent_profile,
+    )
+    bind_kwargs = (
+        {"reasoning_effort": "none"}
+        if resolve_stage_provider_name(
+            execution_context=execution_context,
+            agent=agent_scope,
+            stage=PLANNER_STAGE,
+            agent_profile=agent_state.agent_profile,
+        ) == OPENAI_PROVIDER and model_name.startswith("gpt-5")
+        else {}
+    )
+    llm = llm.bind_tools(build_tools(tools), **bind_kwargs)
     started_at = perf_counter()
     response = llm.invoke(prompt_text)
     latency_ms = int((perf_counter() - started_at) * 1000)

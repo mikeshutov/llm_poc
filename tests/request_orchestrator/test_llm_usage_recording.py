@@ -87,7 +87,7 @@ class FakeInvokeLLM:
         self.model_name = model_name
         self.tool_calls = tool_calls or []
 
-    def bind_tools(self, tools):
+    def bind_tools(self, tools, **kwargs):
         return self
 
     def invoke(self, prompt: str):

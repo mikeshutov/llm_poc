@@ -9,7 +9,7 @@ from typing import Any
 from common.http import HttpClientError
 from rendering.debug import emit_debug_message
 from tool.tools import tools
-from tool.cache.repository import ToolCacheRepository
+from tool.cache.repository import InvalidCachePayloadError, ToolCacheRepository
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from requests.exceptions import Timeout
 
@@ -109,12 +109,20 @@ class ToolRegistry:
                     user_id=cache_user_id,
                 )
                 if cached_output is not None:
-                    # Tool adapters return ToolResult models. Restore that type so
-                    # cached results retain evidence and metadata behavior.
-                    if isinstance(cached_output, dict) and "result" in cached_output and "evidence" in cached_output:
-                        from request_orchestrator.models.evidence import ToolResult
-                        return ToolResult.model_validate(cached_output)
+                    emit_debug_message(
+                        content={"tool": name},
+                        content_title="Tool Cache Hit",
+                    )
                     return cached_output
+            except InvalidCachePayloadError as exc:
+                emit_debug_message(
+                    content={
+                        "tool": name,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    },
+                    content_title="Tool Cache Payload Invalid",
+                )
             except Exception as exc:
                 emit_debug_message(
                     content={

@@ -19,9 +19,11 @@ if 'pycountry' not in sys.modules:
 from common.http import HttpClientError
 from requests.exceptions import Timeout
 from tool.registry.global_registry import ToolRegistry
+from tool.cache.repository import decode_cache_output, encode_cache_output
 from tool.cache.policy import ToolCachePolicy
 from tool.models import RateLimitPolicy, Tool
 from tool.retry.policy import RetryPolicy
+from request_orchestrator.models.evidence import EvidenceView, ToolResult
 
 
 class _FakeTool:
@@ -57,7 +59,8 @@ class _FakeCacheRepository:
             tool_input=tool_input,
             user_id=user_id,
         )
-        return self.entries.get(cache_key)
+        cached_output = self.entries.get(cache_key)
+        return None if cached_output is None else decode_cache_output(cached_output)
 
     def put(self, **kwargs):
         self.put_calls += 1
@@ -67,7 +70,7 @@ class _FakeCacheRepository:
             tool_input=kwargs["tool_input"],
             user_id=kwargs.get("user_id"),
         )
-        self.entries[cache_key] = kwargs["output_payload"]
+        self.entries[cache_key] = encode_cache_output(kwargs["output_payload"])
 
 
 class _FailingCacheRepository(_FakeCacheRepository):
@@ -229,6 +232,88 @@ def test_tool_registry_cache_hit_skips_tool_invocation() -> None:
     assert calls == 1
     assert cache.get_calls == 2
     assert cache.put_calls == 1
+
+
+def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence() -> None:
+    cache = _FakeCacheRepository()
+    calls = 0
+    evidence = EvidenceView(
+        item_id="meal-1",
+        tool_name="search_meals",
+        title="Chicken soup",
+        summary="A chicken soup recipe.",
+        source="search_meals",
+        entity_type="meal_results",
+    )
+
+    def callback(_tool_input):
+        nonlocal calls
+        calls += 1
+        return ToolResult(result={"name": "Chicken soup"}, evidence=[evidence])
+
+    registry = ToolRegistry(cache_repository=cache, enable_cache=True)
+    registry.register(Tool(_FakeTool("search_meals", callback), cache_policy=ToolCachePolicy(60), version=2))
+
+    first = registry.call_tool("search_meals", {"query": "chicken"})
+    second = registry.call_tool("search_meals", {"query": "chicken"})
+
+    assert isinstance(first, ToolResult)
+    assert isinstance(second, ToolResult)
+    assert second.evidence[0].title == "Chicken soup"
+    assert calls == 1
+
+
+def test_tool_registry_legacy_cache_payload_is_treated_as_miss() -> None:
+    cache = _FakeCacheRepository()
+    calls = 0
+
+    def callback(_tool_input):
+        nonlocal calls
+        calls += 1
+        return ToolResult(result={"value": calls}, evidence=[])
+
+    tool = Tool(_FakeTool("cache_tool", callback), cache_policy=ToolCachePolicy(60), version=2)
+    registry = ToolRegistry(cache_repository=cache, enable_cache=True)
+    registry.register(tool)
+    cache_key = cache.build_cache_key(
+        tool_name=tool.name,
+        tool_version=tool.version,
+        tool_input={"query": "chicken"},
+    )
+    cache.entries[cache_key] = {"result": {"value": 0}, "evidence": []}
+
+    result = registry.call_tool(tool.name, {"query": "chicken"})
+
+    assert isinstance(result, ToolResult)
+    assert result.result == {"value": 1}
+    assert calls == 1
+
+
+def test_tool_registry_malformed_cache_envelope_is_treated_as_miss() -> None:
+    cache = _FakeCacheRepository()
+    calls = 0
+
+    def callback(_tool_input):
+        nonlocal calls
+        calls += 1
+        return {"value": calls}
+
+    tool = Tool(_FakeTool("cache_tool", callback), cache_policy=ToolCachePolicy(60), version=2)
+    registry = ToolRegistry(cache_repository=cache, enable_cache=True)
+    registry.register(tool)
+    cache_key = cache.build_cache_key(
+        tool_name=tool.name,
+        tool_version=tool.version,
+        tool_input={"query": "chicken"},
+    )
+    cache.entries[cache_key] = {
+        "cache_payload_version": 1,
+        "output_kind": "tool_result",
+        "output": {"result": {"value": 0}, "evidence": ["invalid"]},
+    }
+
+    assert registry.call_tool(tool.name, {"query": "chicken"}) == {"value": 1}
+    assert calls == 1
 
 
 def test_tool_registry_cache_lookup_error_falls_back_to_tool() -> None:

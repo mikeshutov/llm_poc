@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView, ToolMetadata, ToolResult
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from common.signatures import build_signature
-from tool.repository.tool_call_repository import ToolCallRepository
+from tool.repository.tool_call_repository import ToolCallRepository, _merge_evidence_views
 
 
 def test_compact_evidence_view_excludes_hydrated_fields() -> None:
@@ -110,3 +110,12 @@ def test_append_evidence_views_uses_the_runtime_user_id() -> None:
     assert "SELECT evidence_views.hash" in cursor.executed[0][0]
     assert "conversation_roundtrip" not in cursor.executed[0][0]
     assert cursor.inserted[0][2] == "user-123"
+
+
+def test_reconstructed_results_keep_payload_evidence_when_linked_rows_are_missing() -> None:
+    persisted = EvidenceView(id=uuid4(), tool_name="search_meals", title="Soup")
+    cached = EvidenceView(id=uuid4(), tool_name="search_meals", title="Curry")
+
+    merged = _merge_evidence_views([persisted], [persisted, cached])
+
+    assert [evidence.title for evidence in merged] == ["Soup", "Curry"]
