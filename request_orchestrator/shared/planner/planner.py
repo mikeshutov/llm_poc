@@ -4,6 +4,7 @@ import logging
 from time import perf_counter
 
 from langsmith import traceable
+from langchain_core.tools import BaseTool
 
 from common.data import sanitize_for_json_storage
 from common.logging import create_conversation_event, log_roundtrip_prompt
@@ -17,7 +18,6 @@ from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from llm.conversation_model_config import PLANNER_STAGE
 from llm.usage import record_llm_call, serialize_llm_call_record
 from rendering.debug import PLAN_KIND
-from request_orchestrator.shared.planner.prompts.planner_prompt import _compile_tools_rules_from_state
 from request_orchestrator.shared.planner.tool_wrapper import build_tools
 from tool.repository.plan_repository import PlanRepository
 
@@ -34,6 +34,7 @@ def invoke_planner(
     agent_state: AgentState,
     prompt_text: str,
     *,
+    tools: list[BaseTool],
     prompt_input_object: dict[str, object],
 ) -> tuple[PlanningResult, object | None]:
     execution_context = agent_state.execution_context
@@ -46,9 +47,7 @@ def invoke_planner(
         agent_profile=agent_state.agent_profile,
         reuse_llm_for_agent_scope=agent_scope,
     )
-    context = _compile_tools_rules_from_state(agent_state)
-    native_candidates = context.tools
-    llm = llm.bind_tools(build_tools(native_candidates))
+    llm = llm.bind_tools(build_tools(tools))
     started_at = perf_counter()
     response = llm.invoke(prompt_text)
     latency_ms = int((perf_counter() - started_at) * 1000)
@@ -100,7 +99,7 @@ def invoke_planner(
 
 @traceable(name="Planner Node")
 def run_planner(agent_state: AgentState) -> AgentState:
-    prompt = build_planner_prompt(state=agent_state)
+    prompt, tools = build_planner_prompt(state=agent_state)
     prompt_text = prompt.build()
     prompt_input_object = prompt.to_log_input_object()
     llm_calls: list[dict[str, object]] = []
@@ -109,6 +108,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         planning_result, llm_call = invoke_planner(
             agent_state,
             prompt_text,
+            tools=tools,
             prompt_input_object=prompt_input_object,
         )
         serialized = _serialize_llm_call_for_log(llm_call)

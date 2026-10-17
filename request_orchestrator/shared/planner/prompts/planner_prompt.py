@@ -1,6 +1,7 @@
 from request_orchestrator.agent_runner.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
 import json
 
+from langchain_core.tools import BaseTool
 from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.evidence import (
@@ -109,7 +110,8 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     else:
         compiled_tools = "\n".join(f"- {t.name}: {t.description}".strip() for t in deduped_tools.values())
     return CompiledPlannerContext(tools=list(deduped_tools.values()), compiled_tools=compiled_tools, rules=rules)
-def build_planner_prompt(state: AgentState) -> AgentPrompt:
+def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]]:
+    context = _compile_tools_rules_from_state(state)
     if state.available_agent_states is not None:
         capabilities = state.inputs.discovered_capabilities
         prompt = AgentPrompt(
@@ -131,9 +133,8 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
             PromptSectionKeys.TASK,
         ):
             prompt.include_section(section)
-        return prompt
+        return prompt, context.tools
 
-    context = _compile_tools_rules_from_state(state)
     tool_results = state.gather_tool_results()
     evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
     evidence_steps = build_evidence_steps_from_tool_results(
@@ -181,4 +182,4 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
     prompt.include_section(PromptSectionKeys.EVIDENCE)
     prompt.include_section(PromptSectionKeys.MISSING_INFORMATION)
     prompt.include_section(PromptSectionKeys.TASK)
-    return prompt
+    return prompt, context.tools
