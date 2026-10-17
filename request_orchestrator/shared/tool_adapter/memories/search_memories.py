@@ -28,8 +28,6 @@ class MemorySearchMetadata(BaseModel):
     description=f"""
 Search prior conversation memories by semantic similarity over conversation summaries.
 
-Required fields:
-- query (string): Natural language description of the memory or prior conversation you want to find.
 
 Returns up to {DEFAULT_MEMORY_RESULT_LIMIT} relevant conversation memories for the current user.
 """,

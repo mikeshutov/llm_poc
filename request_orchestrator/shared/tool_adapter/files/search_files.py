@@ -58,15 +58,8 @@ def _tool_result(result: list[dict]) -> ToolResult:
     description="""
 Search uploaded files by semantic similarity to a query. Returns file names that are relevant to the query.
 
-Required fields:
-- query (string): Natural language description of what you are looking for.
 
-Optional fields:
-- file_type (string): Filter by file type. Use "image" for images (jpg, jpeg, png, webp) or "text" for documents (pdf, txt, docx).
 
-Example valid calls:
-{"query": "work experience at tech companies"}
-{"query": "profile photo", "file_type": "image"}
 """,
 )
 def search_files(query: str, file_type: Optional[FileTypeFilter] = None) -> ToolResult:

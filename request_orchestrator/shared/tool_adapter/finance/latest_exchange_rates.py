@@ -58,13 +58,9 @@ def _tool_result(result: ExchangeRates) -> ToolResult:
     description="""
 Get the latest exchange rates for a base currency against all supported currencies.
 
-Optional fields:
-- base: base currency code (default 'USD')
 
 Returns a map of currency codes to their exchange rates relative to the base.
 
-Example valid calls:
-{"base": "EUR"}
 """,
 )
 def get_latest_exchange_rates(base: str = "USD") -> ToolResult:

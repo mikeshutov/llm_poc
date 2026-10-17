@@ -13,6 +13,8 @@ class AvailableTool(BaseModel):
     """A concrete tool selected as relevant for the current request."""
 
     name: str
+    title: str = ""
+    category: str = ""
     description: str = ""
 
 

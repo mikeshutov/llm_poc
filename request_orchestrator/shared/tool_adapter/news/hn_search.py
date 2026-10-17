@@ -82,19 +82,10 @@ class HnSearchArgs(BaseModel):
     description="""
 Search Hacker News stories and discussions via the Algolia API.
 
-Required fields:
-- query (string)
 
-Optional fields:
-- sort_by: 'relevance' (default) or 'date'
 
 Returns story titles, URLs, authors, points, comment counts, and timestamps.
 
-Example valid call:
-{
-  "query": "AI agents",
-  "sort_by": "date"
-}
 """,
 )
 def hn_search(query: str, sort_by: str = "relevance") -> ToolResult:

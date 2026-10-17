@@ -142,6 +142,7 @@ class ConversationModelConfig(BaseModel):
             "gpt-5.6-sol": ModelPricing(input_price_per_million_tokens=Decimal("4.00"), cached_input_price_per_million_tokens=Decimal("0.40"), output_price_per_million_tokens=Decimal("20.00")),
             "gpt-5.6-terra": ModelPricing(input_price_per_million_tokens=Decimal("2.00"), cached_input_price_per_million_tokens=Decimal("0.20"), output_price_per_million_tokens=Decimal("12.00")),
             "gpt-5.6-luna": ModelPricing(input_price_per_million_tokens=Decimal("0.20"), cached_input_price_per_million_tokens=Decimal("0.02"), output_price_per_million_tokens=Decimal("1.20")),
+            "gpt-6-luna": ModelPricing(input_price_per_million_tokens=Decimal("0.10"), cached_input_price_per_million_tokens=Decimal("0.01"), output_price_per_million_tokens=Decimal("0.50")),
             "o3": ModelPricing(input_price_per_million_tokens=Decimal("2.00"), output_price_per_million_tokens=Decimal("8.00")),
             "o3-pro": ModelPricing(input_price_per_million_tokens=Decimal("20.00"), output_price_per_million_tokens=Decimal("80.00")),
             "o3-mini": ModelPricing(input_price_per_million_tokens=Decimal("1.10"), output_price_per_million_tokens=Decimal("4.40")),

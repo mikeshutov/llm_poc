@@ -106,10 +106,6 @@ Examples:
 - 'good dumbbells for sale online' -> 'dumbbells'
 - 'vegan protein powder' -> 'vegan protein powder'
 
-Example valid call:
-{
-  "query_text": "dumbbells"
-}
 """,
 )
 def find_products_web(

@@ -77,15 +77,9 @@ def _tool_result(result: BookSearchResult) -> ToolResult:
     description="""
 Search the Open Library catalog for books by a title, author, subject, or keyword.
 
-Required fields:
-- query (string)
 
 Returns a list of books with title, authors, first publish year, edition count, and subjects.
 
-Example valid call:
-{
-  "query": "tolkien lord of the rings"
-}
 """,
 )
 def search_books(query: str) -> ToolResult:

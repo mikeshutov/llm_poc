@@ -97,15 +97,9 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
     description="""
 Search for meal recipes by name or keyword using TheMealDB.
 
-Required fields:
-- query (string)
 
 Returns meal name, category, cuisine area, ingredients with measures, and cooking instructions.
 
-Example valid call:
-{
-  "query": "pasta"
-}
 """,
 )
 def search_meals(query: str) -> ToolResult:

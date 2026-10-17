@@ -61,7 +61,7 @@ def invoke_planner(
             agent=agent_scope,
             stage=PLANNER_STAGE,
             agent_profile=agent_state.agent_profile,
-        ) == OPENAI_PROVIDER and model_name.startswith("gpt-5")
+        ) == OPENAI_PROVIDER and model_name.startswith(("gpt-5", "gpt-6"))
         else {}
     )
     llm = llm.bind_tools(build_tools(tools), **bind_kwargs)
@@ -105,7 +105,19 @@ def invoke_planner(
     for index, call in enumerate(tool_calls):
         name = call.get("name", "")
         args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
-        parameters = args.get("parameters", {}) if isinstance(args.get("parameters", {}), dict) else {}
+        if "parameters" in args:
+            tool_arguments = args.get("parameters", {})
+            if not isinstance(tool_arguments, dict):
+                tool_arguments = {}
+        else:
+            # Some providers may return the underlying tool arguments even
+            # though the bound tool exposes the orchestration envelope. Keep
+            # those arguments instead of silently executing the tool with {}.
+            tool_arguments = {
+                key: value
+                for key, value in args.items()
+                if key not in {"hypothesis", "metadata", "evaluation_fields"}
+            }
         hypothesis = str(args.get("hypothesis", ""))
         evaluation_fields = [
             field.strip()
@@ -126,7 +138,7 @@ def invoke_planner(
             hypothesis=hypothesis,
             metadata=metadata,
             tool=name,
-            args=parameters,
+            args=tool_arguments,
         ))
     return PlanningResult(steps=steps), llm_call
 

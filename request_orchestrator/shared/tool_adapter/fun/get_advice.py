@@ -51,12 +51,7 @@ def _tool_result(result: AdviceSlip | list[AdviceSlip]) -> ToolResult:
     description="""
 Get a random piece of advice, or search for advice on a specific topic.
 
-Optional fields:
-- query (string): keyword to find relevant advice. Omit for a random slip.
 
-Example valid calls:
-{}
-{"query": "money"}
 """,
 )
 def get_advice(query: str | None = None) -> ToolResult:

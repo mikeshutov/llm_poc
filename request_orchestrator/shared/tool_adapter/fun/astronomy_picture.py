@@ -55,13 +55,7 @@ def _tool_result(result: AstronomyPicture) -> ToolResult:
     description="""
 Get NASA's Astronomy Picture of the Day (APOD) with title, explanation, and image URL.
 
-Optional fields:
-- date (string): date in YYYY-MM-DD format. Defaults to today's picture.
 
-Example valid calls:
-{}
-{"date": "2024-01-15"}
-{"date": "2023-07-04"}
 """,
 )
 def get_astronomy_picture(date: str | None = None) -> ToolResult:

@@ -70,10 +70,6 @@ def _tool_result(result: StockPrice) -> ToolResult:
     description="""
 Get the current stock price and basic market data for a given ticker symbol.
 
-Example valid calls:
-{"ticker": "AAPL"}
-{"ticker": "TSLA"}
-{"ticker": "MSFT"}
 """,
 )
 def get_stock_price(ticker: str) -> ToolResult:

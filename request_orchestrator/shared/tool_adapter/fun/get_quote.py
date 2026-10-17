@@ -57,13 +57,7 @@ def _tool_result(result: Quote | list[Quote]) -> ToolResult:
     description="""
 Get a random inspirational quote, or search for quotes on a specific topic or by a keyword.
 
-Optional fields:
-- query (string): keyword or topic to search for. Omit for a random quote.
 
-Example valid calls:
-{}
-{"query": "wisdom"}
-{"query": "courage"}
 """,
 )
 def get_quote(query: str | None = None) -> ToolResult:

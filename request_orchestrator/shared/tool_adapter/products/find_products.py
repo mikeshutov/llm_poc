@@ -104,12 +104,7 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
     description="""
 Search the internal product catalog.
 
-Required fields:
-- query_text (string)
-- a short core product phrase and nothing more
 
-Optional fields:
-- product_filters (object): category, style, color, price_min, price_max, gender
 
 Important:
 - Pass a single object with named fields.
@@ -123,10 +118,6 @@ Examples:
 - 'good dumbbells for sale online' -> 'dumbbells'
 - 'vegan protein powder' -> 'vegan protein powder'
 
-Example valid call:
-{
-  "query_text": "dumbbells"
-}
 """,
 )
 def find_products(

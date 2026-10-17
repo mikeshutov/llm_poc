@@ -6,6 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from tool.cache.policy import ToolCachePolicy
+from tool.discovery_metadata import get_tool_discovery_metadata
 from tool.retry.policy import RetryPolicy
 
 DEFAULT_RESULT_FIELDS = (
@@ -34,7 +35,7 @@ class Tool:
     rate_limit_key: str | None = None
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
     rate_limit_policy: RateLimitPolicy | None = None
-    version: int = 1
+    version: int = 2
     cache_policy: ToolCachePolicy | None = None
 
     @property
@@ -48,6 +49,14 @@ class Tool:
         if not fields:
             return description
         return f"{description}\nReturns entities with fields: {', '.join(fields)}".strip()
+
+    @property
+    def discovery_metadata(self):
+        return get_tool_discovery_metadata(self.name)
+
+    @property
+    def embedding_text(self) -> str:
+        return self.discovery_metadata.embedding_text(self.name)
 
     @property
     def available_result_fields(self) -> tuple[str, ...]:

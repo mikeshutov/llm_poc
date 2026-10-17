@@ -41,12 +41,6 @@ class CalculateArgs(BaseModel):
 Evaluate a mathematical expression and return the result.
 Supports arithmetic operators (+, -, *, /, **, %) and math functions (sqrt, sin, cos, tan, log, log10, pi, e, abs, ceil, floor, round).
 
-Example valid calls:
-{"expression": "2 + 2"}
-{"expression": "sqrt(144)"}
-{"expression": "sin(pi / 2)"}
-{"expression": "log(100, 10)"}
-{"expression": "(15 * 8) / 3 + 7"}
 """,
 )
 def calculate(expression: str) -> ToolResult:

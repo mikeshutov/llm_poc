@@ -70,15 +70,7 @@ Look up official public holidays for a country in a specific year.
 
 Use this when you need a holiday calendar, statutory holiday dates, or to check whether a date falls on a public holiday.
 
-Required fields:
-- year (integer)
-- country_code (2-letter ISO country code)
 
-Example valid call:
-{
-  "year": 2026,
-  "country_code": "CA"
-}
 """,
 )
 def public_holidays_lookup(year: int, country_code: str) -> ToolResult:

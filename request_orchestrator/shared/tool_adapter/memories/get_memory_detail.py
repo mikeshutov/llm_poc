@@ -52,11 +52,7 @@ class MemoryDetailEvidenceMetadata(BaseModel):
 Retrieve the full detail for a previously found roundtrip memory by roundtrip_id.
 Use after search_roundtrip_memories when you need the exact prior exchange, including the original user prompt and generated response.
 
-Required fields:
-- roundtrip_id (string): The roundtrip_id returned from search_roundtrip_memories.
 
-Example valid calls:
-{"roundtrip_id": "3f2a1b4c-..."}
 """,
 )
 def get_memory_detail(roundtrip_id: str) -> ToolResult:

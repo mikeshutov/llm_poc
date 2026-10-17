@@ -21,6 +21,7 @@ class RegisteredTool(BaseModel):
     rate_limit_policy: RateLimitPolicy | None = None
     is_active: bool = True
     metadata: dict[str, Any] = Field(default_factory=dict)
+    embedding_text: str = Field(default="", exclude=True, repr=False)
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

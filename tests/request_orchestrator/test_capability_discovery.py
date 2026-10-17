@@ -15,8 +15,9 @@ def test_capability_discovery_uses_persisted_tool_embeddings(monkeypatch) -> Non
 
     monkeypatch.setattr(discover_module, "embed_text", fake_embed)
     class FakeToolRepository:
-        def list_relevant(self, *, query_embedding):
+        def list_relevant(self, *, query_embedding, limit):
             assert query_embedding == [1.0, 0.0]
+            assert limit == discover_module.RETRIEVAL_K
             return [SimpleNamespace(name="search_meals", description="Search meal recipes.")]
 
     monkeypatch.setattr(discover_module, "get_tool_registry_repo", lambda: FakeToolRepository())

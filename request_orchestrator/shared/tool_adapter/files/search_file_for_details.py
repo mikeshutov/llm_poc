@@ -47,12 +47,7 @@ def _tool_result(result: list[dict]) -> ToolResult:
 Search within a specific uploaded file for content relevant to a query. Returns the most relevant chunks in document order.
 Use search_files first to find relevant files and get their file_id, then use this tool to retrieve specific content.
 
-Required fields:
-- file_id (string): The UUID of the file to search within, obtained from search_files.
-- query (string): Natural language description of what you are looking for within the file.
 
-Example valid calls:
-{"file_id": "3f2a1b4c-...", "query": "work experience at Acme Corp"}
 """,
 )
 def search_file_for_details(file_id: str, query: str) -> ToolResult:

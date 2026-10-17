@@ -69,13 +69,7 @@ Look up information about one or more countries by name.
 
 Returns details including capital, region, population, currencies, languages, and flag emoji.
 
-Required fields:
-- country_name (string): full or partial country name to search
 
-Example valid calls:
-{"country_name": "Germany"}
-{"country_name": "united states"}
-{"country_name": "japan"}
 """,
 )
 def country_lookup(country_name: str) -> ToolResult:

@@ -77,15 +77,9 @@ def _tool_result(result: CocktailSearchResult) -> ToolResult:
     description="""
 Search for cocktail recipes by name or keyword using TheCocktailDB.
 
-Required fields:
-- query (string)
 
 Returns cocktail name, category, alcoholic classification, glass type, ingredients with measures, and instructions.
 
-Example valid call:
-{
-  "query": "margarita"
-}
 """,
 )
 def search_cocktails(query: str) -> ToolResult:

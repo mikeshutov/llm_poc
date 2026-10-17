@@ -58,8 +58,6 @@ Get the approximate geographic location of the caller based on their IP address.
 
 Returns country, region, city, timezone, latitude, and longitude.
 
-Example valid call:
-{}
 """,
 )
 def get_caller_location() -> ToolResult:

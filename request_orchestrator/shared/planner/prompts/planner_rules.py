@@ -10,6 +10,8 @@ BASE_PLANNER_RULES = [
     "You may use already-available tool results from previous work when deciding what to do next.",
     "Prefer the smallest useful set of tool calls.",
     "If there are no tools to use to fulfill the request, return no tool calls.",
+    "For every tool call, place the executable tool arguments inside the parameters object.",
+    "Do not place executable tool arguments such as file_id or query at the top level of the tool call.",
     "Tool Call Hypotheses:",
     "For each tool call, generate a hypothesis describing what the tool result is expected to establish.",
     "Express the hypothesis as a factual, testable statement, not an action, instruction, goal, or justification.",

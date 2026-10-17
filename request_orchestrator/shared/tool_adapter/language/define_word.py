@@ -62,13 +62,7 @@ def _tool_result(result: list[DictionaryEntry]) -> ToolResult:
     description="""
 Look up the definition of an English word, including meanings, parts of speech, examples, synonyms, and antonyms.
 
-Required fields:
-- word (string)
 
-Example valid call:
-{
-  "word": "serendipity"
-}
 """,
 )
 def define_word(word: str) -> ToolResult:
