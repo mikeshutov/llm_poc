@@ -48,9 +48,9 @@ def invoke_planner(
     )
     context = _compile_tools_rules_from_state(agent_state)
     native_candidates = context.tools
-    native_llm = llm.bind_tools(build_tools(native_candidates))
+    llm = llm.bind_tools(build_tools(native_candidates))
     started_at = perf_counter()
-    response = native_llm.invoke(prompt_text)
+    response = llm.invoke(prompt_text)
     latency_ms = int((perf_counter() - started_at) * 1000)
     llm_call = record_llm_call(
         raw_response=response,
