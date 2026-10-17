@@ -13,10 +13,13 @@ CREATE TABLE tool_calls (
   error_message TEXT NULL,
   duration_ms INTEGER NULL,
   goal TEXT NULL,
+  hypothesis TEXT NOT NULL DEFAULT '',
+  call_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   summary TEXT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  CONSTRAINT uq_tool_calls_plan_step UNIQUE (roundtrip_id, plan_step_id)
+  CONSTRAINT uq_tool_calls_plan_step UNIQUE (roundtrip_id, plan_step_id),
+  CONSTRAINT tool_calls_call_metadata_object CHECK (jsonb_typeof(call_metadata) = 'object')
 );
 
 CREATE INDEX idx_tool_calls_roundtrip_id ON tool_calls(roundtrip_id);

@@ -55,7 +55,8 @@ class Plan(BaseModel):
 
 
 class PlanningResult(BaseModel):
-    steps: list[PlanStep]
+    steps: list[PlanStep] = Field(default_factory=list)
+    tool_calls: list[Any] = Field(default_factory=list)
     status: PlanningResultStatus = PlanningResultStatus.READY
     reason: str = ""
     needs_replan: bool = False

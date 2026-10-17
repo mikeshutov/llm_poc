@@ -10,6 +10,24 @@ from request_orchestrator.models.agent_state import AgentState
 
 
 def run_execution_result_validator(state: AgentState) -> AgentState:
+    if state.node_states.planner.tool_calls:
+        plan = state.node_states.planner.plan
+        results = [
+            result for result in state.gather_tool_results()
+            if plan and result.plan_id == plan.db_id
+        ]
+        if results and any(result.evidence for result in results):
+            status = ResultStatus.PARTIAL_SUCCESS
+        elif results:
+            status = ResultStatus.FAILED
+        else:
+            status = ResultStatus.NO_NEW_WORK
+        state.result = state.result.copy(result_status=status)
+        if status is ResultStatus.FAILED:
+            state.node_states.planner.no_result_attempts += 1
+        else:
+            state.node_states.planner.no_result_attempts = 0
+        return state
     plan = state.node_states.planner.plan
     if plan is None:
         state.result = state.result.copy(result_status=ResultStatus.FAILED)
@@ -34,8 +52,8 @@ def run_execution_result_validator(state: AgentState) -> AgentState:
 
 def execution_result_router(state: AgentState) -> str:
     if state.result.result_status is ResultStatus.NO_NEW_WORK:
+        rejected_call_count = len(state.node_states.planner.tool_calls)
         plan = state.node_states.planner.plan
-        rejected_call_count = len(plan.steps) if plan is not None else 0
         create_conversation_event(
             conversation_id=state.execution_context.conversation_id,
             roundtrip_id=state.execution_context.roundtrip_id,

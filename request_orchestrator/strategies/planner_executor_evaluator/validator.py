@@ -6,6 +6,8 @@ from request_orchestrator.models.agent_state import AgentState
 
 def validator(state: AgentState) -> str:
     planner_state = state.node_states.planner
+    if planner_state.tool_calls:
+        return EXECUTE_TOOLS_EDGE
     if planner_state.plan is None:
         return SYNTHESIZE_EDGE
     plan = planner_state.plan

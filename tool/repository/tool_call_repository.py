@@ -82,6 +82,61 @@ class ToolCallRepository:
             self._append_evidence_views(cur, roundtrip_id, tool_call_id, evidence or [])
             return tool_call_id
 
+    def append_native_tool_call(
+        self,
+        roundtrip_id: UUID,
+        request: dict[str, Any],
+        *,
+        plan_id: UUID | None = None,
+        input_payload: Any | None = None,
+        output_payload: Any | None = None,
+        evidence: list[EvidenceView] | None = None,
+        status: str | None = None,
+        error_message: str | None = None,
+        duration_ms: int | None = None,
+    ) -> UUID:
+        args = request.get("args", {}) if isinstance(request.get("args", {}), dict) else {}
+        parameters = args.get("parameters", {}) if isinstance(args.get("parameters", {}), dict) else {}
+        sanitized_input_payload = self._sanitize_for_storage(parameters if input_payload is None else input_payload)
+        output = self._sanitize_for_storage(output_payload) if output_payload is not None else None
+        tool_name = str(request.get("name", ""))
+        request_hash = build_signature({"tool_name": tool_name, "input": sanitized_input_payload})
+        hypothesis = str(args.get("hypothesis", ""))
+        metadata = args.get("metadata", {}) if isinstance(args.get("metadata", {}), dict) else {}
+        resolved_status = status or ("completed" if output is not None else "pending")
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO tool_calls (
+                    roundtrip_id, plan_id, step_index, tool_name, request_hash, status,
+                    input_payload, output_payload, error_message, duration_ms,
+                    goal, hypothesis, call_metadata
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    roundtrip_id,
+                    plan_id,
+                    0,
+                    tool_name,
+                    request_hash,
+                    resolved_status,
+                    Jsonb(sanitized_input_payload),
+                    Jsonb(output) if output is not None else None,
+                    error_message,
+                    duration_ms,
+                    None,
+                    hypothesis,
+                    Jsonb(self._sanitize_for_storage(metadata)),
+                ),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            tool_call_id = row["id"]
+            self._append_evidence_views(cur, roundtrip_id, tool_call_id, evidence or [])
+            return tool_call_id
+
     def has_request_hash(self, roundtrip_id: UUID, request_hash: str) -> bool:
         with self._conn.cursor() as cur:
             cur.execute(
@@ -243,8 +298,11 @@ class ToolCallRepository:
                 result.model_copy(
                     update={
                         "tool_call_id": tool_call.id,
+                        "plan_id": tool_call.plan_id,
                         "plan_step_id": tool_call.plan_step_id,
                         "tool_name": tool_call.tool_name,
+                        "hypothesis": tool_call.hypothesis,
+                        "call_metadata": tool_call.call_metadata,
                         "evidence": evidence_by_tool_call_id.get(tool_call.id, []),
                     }
                 )
@@ -274,10 +332,12 @@ class ToolCallRepository:
                             error_message,
                             duration_ms,
                             goal,
+                            hypothesis,
+                            call_metadata,
                             summary,
                             created_at
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id
                         """,
                         (
@@ -293,6 +353,8 @@ class ToolCallRepository:
                             tool_call.error_message,
                             tool_call.duration_ms,
                             tool_call.goal,
+                            tool_call.hypothesis,
+                            Jsonb(self._sanitize_for_storage(tool_call.call_metadata)),
                             tool_call.summary,
                             tool_call.created_at,
                         ),

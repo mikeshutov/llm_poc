@@ -9,7 +9,6 @@ from request_orchestrator.shared.evidence import (
 )
 from request_orchestrator.shared.planner.models.compiled_planner_context import CompiledPlannerContext
 from request_orchestrator.shared.planner.prompts.planner_rules import build_planner_rules
-from request_orchestrator.shared.planner.prompts.planner_schema_prompt import PLANNER_SCHEMA
 
 
 ATTRIBUTE_TYPE_MINIMAL_DESCRIPTION = 'Typed user-attribute key such as `food.likes`, `projects.goals`, or `technology.skills`.'
@@ -22,16 +21,6 @@ MISSING_INFORMATION_REPLAN_RULE = (
     "as the goal, use existing evidence as context, and plan only tool calls that directly "
     "resolve those gaps."
 )
-TOP_LEVEL_PLANNER_SCHEMA = """
-Return exactly one JSON object with a `steps` array. Each step must include a hypothesis
-describing what the step is expected to establish or produce. Each step must specify
-exactly one execution target: `tool` for a concrete tool call or `agent` for a
-delegated subtask. Use only discovered tool and agent names.
-Each step must include `id`, `plan`, and `hypothesis`; tool steps also include `args`.
-Do not return categories or attribute categories.
-"""
-
-
 def _is_profile_management_agent(state: AgentState) -> bool:
     return state.agent_profile.name == PROFILE_MANAGEMENT_AGENT_NAME
 
@@ -125,16 +114,14 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         capabilities = state.inputs.discovered_capabilities
         prompt = AgentPrompt(
             instruction=(
-                "You are the top-level planner. Create executable steps for the request. "
-                "Use a direct tool when appropriate, or delegate a self-contained subtask to an "
-                "available agent. Do not invent capabilities."
+                "You are the top-level planner. Use direct tools or delegate self-contained tasks. "
+                "Do not invent capabilities."
             ),
             user_profile=state.execution_context.user_profile,
             conversation_context=state.execution_context.conversation_context,
             task=state.inputs.task,
             available_agents=[] if capabilities is None else capabilities.agents,
             available_tools=[] if capabilities is None else capabilities.tools,
-            schema=TOP_LEVEL_PLANNER_SCHEMA,
         )
         for section in (
             PromptSectionKeys.USER_PROFILE,
@@ -142,7 +129,6 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
             PromptSectionKeys.AVAILABLE_AGENTS,
             PromptSectionKeys.AVAILABLE_TOOLS,
             PromptSectionKeys.TASK,
-            PromptSectionKeys.SCHEMA,
         ):
             prompt.include_section(section)
         return prompt
@@ -181,7 +167,6 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
         rules=compiled_rules,
         evidence=evidence_steps,
         missing_information=state.node_states.evaluator.missing_information,
-        schema=PLANNER_SCHEMA,
     )
     prompt.include_section(
         PromptSectionKeys.USER_PROFILE,
@@ -195,6 +180,5 @@ def build_planner_prompt(state: AgentState) -> AgentPrompt:
     prompt.include_section(PromptSectionKeys.RULES)
     prompt.include_section(PromptSectionKeys.EVIDENCE)
     prompt.include_section(PromptSectionKeys.MISSING_INFORMATION)
-    prompt.include_section(PromptSectionKeys.SCHEMA)
     prompt.include_section(PromptSectionKeys.TASK)
     return prompt

@@ -14,14 +14,15 @@ def router(state: AgentState) -> str:
     if planner_state.plan_count >= state.max_turns:
         return SYNTHESIZE_EDGE
 
-    current_result_step_ids = {
-        step.db_id for step in planner_state.plan.steps
-    } if planner_state.plan is not None else set()
-    current_results = [
-        tool_result
-        for tool_result in state.gather_tool_results()
-        if tool_result.plan_step_id in current_result_step_ids
-    ]
+    if planner_state.tool_calls:
+        current_plan_id = planner_state.plan.db_id if planner_state.plan else None
+        current_results = [
+            tool_result
+            for tool_result in state.gather_tool_results()
+            if tool_result.plan_id == current_plan_id
+        ]
+    else:
+        current_results = []
     if current_results:
         # The evaluator owns replanning for this strategy. Do not let a planner
         # flag bypass it, or repeated tool calls can starve evaluation.

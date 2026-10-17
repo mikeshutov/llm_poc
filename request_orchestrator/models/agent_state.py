@@ -72,6 +72,18 @@ class AgentState:
         self.node_states.planner.needs_replan = needs_replan
         self.node_states.planner.plan_count += 1
 
+    def begin_tool_calls(
+        self,
+        tool_calls: list[Any],
+        *,
+        plan: Plan | None = None,
+        needs_replan: bool = False,
+    ) -> None:
+        self.node_states.planner.tool_calls = tool_calls
+        self.node_states.planner.needs_replan = needs_replan
+        self.node_states.planner.plan = plan
+        self.node_states.planner.plan_count += 1
+
     @property
     def max_turns(self) -> int:
         return self.agent_profile.max_turns
