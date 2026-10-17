@@ -211,17 +211,12 @@ def capability_discovery(
         query_embedding = None
 
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="capability-discovery") as executor:
-        tool_future = (
-            executor.submit(_discover_persisted_tools, query_embedding)
-            if query_embedding is not None
-            else None
-        )
         agent_future = executor.submit(_rank_candidates, query, query_embedding, agent_candidates)
-        if tool_future is None:
+        if query_embedding is None:
             tool_matches = []
         else:
             try:
-                tool_matches = tool_future.result()
+                tool_matches = _discover_persisted_tools(query_embedding)
             except Exception:
                 logger.warning("Persisted tool capability lookup failed; using unranked tool fallback", exc_info=True)
                 tool_matches = []
