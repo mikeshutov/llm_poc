@@ -156,7 +156,10 @@ def _record_step_result(
         output = output.model_copy(
             update={
                 "tool_name": step.tool,
+                "plan_step_id": step.db_id,
                 "iteration": iteration_number,
+                "hypothesis": step.hypothesis,
+                "call_metadata": step.metadata,
             }
         )
     payload = {
@@ -343,6 +346,11 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
             )
         else:
             agent_state.direct_tool_results.append(
-                output.model_copy(update={"tool_name": step.tool})
+                output.model_copy(update={
+                    "tool_name": step.tool,
+                    "plan_step_id": step.db_id,
+                    "hypothesis": step.hypothesis,
+                    "call_metadata": step.metadata,
+                })
             )
     return agent_state

@@ -173,6 +173,8 @@ class ToolResult(BaseModel):
     plan_step_id: UUID | None = None
     tool_name: str = ""
     iteration: int | None = None
+    hypothesis: str = ""
+    call_metadata: dict[str, Any] = Field(default_factory=dict)
     result: Any = None
     tool_metadata: ToolMetadata = Field(default_factory=ToolMetadata)
     evidence: list[EvidenceView] = Field(default_factory=list)

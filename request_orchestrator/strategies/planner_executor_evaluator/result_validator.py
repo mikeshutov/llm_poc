@@ -35,7 +35,7 @@ def run_execution_result_validator(state: AgentState) -> AgentState:
 def execution_result_router(state: AgentState) -> str:
     if state.result.result_status is ResultStatus.NO_NEW_WORK:
         plan = state.node_states.planner.plan
-        rejected_call_count = len(plan.steps) if plan is not None else 0
+        rejected_call_count = len(plan.steps) if plan else 0
         create_conversation_event(
             conversation_id=state.execution_context.conversation_id,
             roundtrip_id=state.execution_context.roundtrip_id,

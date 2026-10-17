@@ -31,7 +31,7 @@ from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE, EVALUATION_STATUS_TERMINAL
 from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.evaluator.evaluator import run_evaluator
-from request_orchestrator.shared.planner.planner import REQUIRED_CAPABILITY_UNAVAILABLE_REASON, run_planner
+from request_orchestrator.shared.planner.planner import run_planner
 from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context
 from request_orchestrator.shared.synthesis.synthesis import run_synthesis
 from reranker.models import Candidate
@@ -71,8 +71,9 @@ def _latest_event_payload(
 
 
 class FakeLangChainResponse:
-    def __init__(self, content: str, model_name: str = 'gpt-5.6-luna') -> None:
+    def __init__(self, content: str, model_name: str = 'gpt-5.6-luna', tool_calls: list[dict] | None = None) -> None:
         self.content = content
+        self.tool_calls = tool_calls or []
         self.usage_metadata = {
             'input_tokens': 100,
             'output_tokens': 20,
@@ -81,12 +82,16 @@ class FakeLangChainResponse:
 
 
 class FakeInvokeLLM:
-    def __init__(self, content: str, model_name: str = 'gpt-5.6-luna') -> None:
+    def __init__(self, content: str, model_name: str = 'gpt-5.6-luna', tool_calls: list[dict] | None = None) -> None:
         self.content = content
         self.model_name = model_name
+        self.tool_calls = tool_calls or []
+
+    def bind_tools(self, tools, **kwargs):
+        return self
 
     def invoke(self, prompt: str):
-        return FakeLangChainResponse(self.content, self.model_name)
+        return FakeLangChainResponse(self.content, self.model_name, self.tool_calls)
 
 
 class FakeOpenAIClient:
@@ -170,7 +175,18 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM('{"steps": [], "needs_replan": false}'),
+        llm=FakeInvokeLLM(
+            'native response',
+            tool_calls=[{
+                'id': 'call-1',
+                'name': 'generic_web_search',
+                'args': {
+                    'parameters': {'query_text': 'boots'},
+                    'hypothesis': 'Find matching boots.',
+                    'metadata': {'source': 'test'},
+                },
+            }],
+        ),
         agent_profile=TOP_LEVEL_PROFILE,
     )
     profile_state = AgentState.new(
@@ -197,10 +213,10 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
     assert [call['agent'] for call in repo.llm_calls] == ['main_agent', 'profile_agent']
     assert all(call['stage'] == 'planner' for call in repo.llm_calls)
     assert PromptSectionKeys.AVAILABLE_TOOLS in repo.llm_calls[0]['metadata']['input_object']['sections_raw']
-    payload = _latest_event_payload(repo, event_type='plan', agent_name='main_agent')
-    assert len(payload['data']['llm_usage']) == 1
-    assert payload['data']['llm_usage'][0]['total_tokens'] == 120
-    assert isinstance(payload['data']['llm_usage'][0]['latency_ms'], int)
+    assert repo.llm_calls[0]['metadata']['output_object']['tool_calls'][0]['id'] == 'call-1'
+    assert main_state.node_states.planner.plan.steps[0].args == {'query_text': 'boots'}
+    assert main_state.node_states.planner.plan.steps[0].hypothesis == 'Find matching boots.'
+    assert main_state.node_states.planner.plan.steps[0].metadata == {'source': 'test'}
 
 
 def test_agent_log_persists_conversation_event_immediately() -> None:
@@ -237,7 +253,7 @@ def test_agent_log_persists_conversation_event_immediately() -> None:
                     'kind': 'planner',
                     'node_name': 'plan',
                     'iteration': 1,
-                    'data': {'step_plans': ['Find boots']},
+                    'data': {'steps': []},
                 },
             )
 
@@ -254,7 +270,7 @@ def test_agent_log_persists_conversation_event_immediately() -> None:
     assert event['payload']['node_name'] == 'plan'
 
 
-def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_returned() -> None:
+def test_run_planner_completes_when_no_native_tool_calls_are_returned() -> None:
     repo = RecordingRepo()
     state = AgentState.new(
         task='Find me boots.',
@@ -263,7 +279,7 @@ def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_retu
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM('{"steps": [], "status": "blocked", "reason": "required capability unavailable.", "needs_replan": false}'),
+        llm=FakeInvokeLLM('no tool calls'),
         agent_profile=TOP_LEVEL_PROFILE,
     )
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
@@ -280,11 +296,6 @@ def test_run_planner_marks_blocked_when_tools_are_required_but_no_steps_are_retu
     assert state.node_states.evaluator.evaluation_status == EVALUATION_STATUS_TERMINAL
     assert state.node_states.planner.plan is not None
     assert state.node_states.planner.plan.steps == []
-    payload = _latest_event_payload(repo, event_type='plan', agent_name='main_agent')
-    assert payload['status'] == 'blocked'
-    assert payload['data']['planner_status'] == 'blocked'
-    assert payload['data']['planner_reason'] == REQUIRED_CAPABILITY_UNAVAILABLE_REASON
-    assert payload['data']['needs_replan'] is False
 
 
 def test_run_synthesis_records_llm_usage_after_tool_results() -> None:

@@ -29,12 +29,13 @@ class JobOrchestrator:
             task=prompt.strip(),
             execution_context=execution_context,
         )
-        planner_prompt = build_planner_prompt(state)
+        planner_prompt, tools = build_planner_prompt(state)
 
         try:
             planning_result, _ = invoke_planner(
                 state,
                 planner_prompt.build(),
+                tools=tools,
                 prompt_input_object=planner_prompt.to_log_input_object(),
             )
         except Exception as exc:

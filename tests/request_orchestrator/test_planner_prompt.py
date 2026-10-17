@@ -56,7 +56,7 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
         )
     ]
 
-    prompt = build_planner_prompt(state)
+    prompt, _ = build_planner_prompt(state)
     evidence_section = prompt.to_log_input_object()["sections_raw"][PromptSectionKeys.EVIDENCE]
 
     assert evidence_section[0]["type"] == "web_search_results"
@@ -70,7 +70,7 @@ def test_planner_prompt_explains_an_empty_execution_retry() -> None:
     state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     state.node_states.planner.no_result_attempts = 1
 
-    prompt = build_planner_prompt(state)
+    prompt, _ = build_planner_prompt(state)
 
     assert "The previous plan execution produced no results." in prompt.build()
 
@@ -79,7 +79,7 @@ def test_planner_prompt_includes_evaluator_missing_information() -> None:
     state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     state.node_states.evaluator.missing_information = ["Current Canadian pricing", "Shipping availability"]
 
-    prompt = build_planner_prompt(state)
+    prompt, _ = build_planner_prompt(state)
 
     assert prompt.sections_raw[PromptSectionKeys.MISSING_INFORMATION] == [
         "Current Canadian pricing",
@@ -91,6 +91,6 @@ def test_planner_prompt_includes_evaluator_missing_information() -> None:
 def test_planner_prompt_omits_missing_information_guidance_without_evaluator_feedback() -> None:
     state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
 
-    prompt = build_planner_prompt(state)
+    prompt, _ = build_planner_prompt(state)
 
     assert "The evaluator identified unresolved missing_information below." not in prompt.build()
