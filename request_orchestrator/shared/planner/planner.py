@@ -94,9 +94,24 @@ def invoke_planner(
             "tool_calls": getattr(response, "tool_calls", None),
         },
     )
-    return PlanningResult(
-        tool_calls=getattr(response, "tool_calls", None) or [],
-    ), llm_call
+    tool_calls = getattr(response, "tool_calls", None) or []
+    steps = []
+    for index, call in enumerate(tool_calls):
+        name = call.get("name", "")
+        args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
+        parameters = args.get("parameters", {}) if isinstance(args.get("parameters", {}), dict) else {}
+        hypothesis = str(args.get("hypothesis", ""))
+        is_delegation = name == "delegate_agent"
+        steps.append(PlanStep(
+            id=str(call.get("id") or f"E{index + 1}"),
+            plan=str(parameters.get("task", hypothesis)) if is_delegation else hypothesis,
+            hypothesis=hypothesis,
+            metadata=args.get("metadata", {}) if isinstance(args.get("metadata", {}), dict) else {},
+            tool="" if is_delegation else name,
+            agent=str(parameters.get("agent_name", "")) if is_delegation else "",
+            args=parameters,
+        ))
+    return PlanningResult(steps=steps), llm_call
 
 
 @traceable(name="Planner Node")
@@ -120,22 +135,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         agent_state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
         return agent_state
 
-    tool_calls = planning_result.tool_calls
-    steps = []
-    for index, call in enumerate(tool_calls):
-        name = call.get("name", "")
-        args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
-        parameters = args.get("parameters", {}) if isinstance(args.get("parameters", {}), dict) else {}
-        hypothesis = str(args.get("hypothesis", ""))
-        is_delegation = name == "delegate_agent"
-        steps.append(PlanStep(
-            id=str(call.get("id") or f"E{index + 1}"),
-            plan=hypothesis,
-            hypothesis=hypothesis,
-            tool="" if is_delegation else name,
-            agent=str(parameters.get("agent_name", "")) if is_delegation else "",
-            args=parameters,
-        ))
+    steps = planning_result.steps
     plan = Plan(steps=steps, db_id=uuid4())
     if agent_state.execution_context.roundtrip_id:
         plan.db_id = PlanRepository().save_interactive_plan(
@@ -143,20 +143,19 @@ def run_planner(agent_state: AgentState) -> AgentState:
             plan,
         )
     planner_state = agent_state.node_states.planner
-    planner_state.tool_calls = tool_calls
     planner_state.plan = plan
     planner_state.needs_replan = False
     planner_state.plan_count += 1
 
-    if not tool_calls:
+    if not steps:
         agent_state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
 
     payload = {
         "agent_name": agent_state.agent_profile.name,
         "kind": PLAN_KIND,
-        "status": "ready" if tool_calls else "completed",
+        "status": "ready" if steps else "completed",
         "data": sanitize_for_json_storage({
-            "tool_calls": tool_calls,
+            "steps": steps,
             "llm_usage": llm_calls,
         }),
     }

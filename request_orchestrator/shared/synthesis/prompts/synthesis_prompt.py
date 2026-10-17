@@ -28,14 +28,13 @@ def _has_profile_information(state: AgentState | MainState) -> bool:
 
 
 def build_synthesis_prompt(evidence: list[EvidenceStep], state: AgentState | MainState) -> AgentPrompt:
-    instruction = (
-        DEFAULT_SYNTHESIS_INSTRUCTION
-        if isinstance(state, MainState)
-        else state.agent_profile.synthesis_instruction
-    )
     tool_categories = [] if isinstance(state, MainState) else list(state.inputs.tool_category_names)
     prompt = AgentPrompt(
-        instruction=instruction,
+        instruction=(
+            DEFAULT_SYNTHESIS_INSTRUCTION
+            if isinstance(state, MainState)
+            else state.agent_profile.synthesis_instruction
+        ),
         conversation_context=_build_synthesis_context(state),
         user_profile=state.execution_context.user_profile,
         rules=build_synthesis_rules(

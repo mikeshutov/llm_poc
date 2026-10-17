@@ -30,6 +30,7 @@ class PlanStep(BaseModel):
     step_index: int = 0                       
     plan: str
     hypothesis: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
     tool: str = ""
     agent: str = ""
     args: dict[str, Any] = Field(default_factory=dict)
@@ -56,7 +57,6 @@ class Plan(BaseModel):
 
 class PlanningResult(BaseModel):
     steps: list[PlanStep] = Field(default_factory=list)
-    tool_calls: list[Any] = Field(default_factory=list)
     status: PlanningResultStatus = PlanningResultStatus.READY
     reason: str = ""
     needs_replan: bool = False

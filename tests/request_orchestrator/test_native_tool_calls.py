@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from request_orchestrator.models.plan import PlanningResult
+from request_orchestrator.models.plan import PlanStep, PlanningResult
 from request_orchestrator.shared.planner.tool_wrapper import build_tools, wrap_tool
 
 
@@ -40,15 +40,14 @@ def test_native_tool_collection_includes_delegation_action() -> None:
 
 def test_native_tool_call_keeps_provider_metadata_separate_from_parameters() -> None:
     result = PlanningResult(
-        tool_calls=[{
-            "name": "lookup",
-            "args": {
-                "parameters": {"query": "boots"},
-                "hypothesis": "Find matching boots.",
-                "metadata": {"experiment": "native"},
-            },
-            "id": "call-1",
-        }],
+        steps=[PlanStep(
+            id="call-1",
+            plan="Find matching boots.",
+            hypothesis="Find matching boots.",
+            tool="lookup",
+            args={"query": "boots"},
+            metadata={"experiment": "native"},
+        )],
     )
-    assert result.tool_calls[0]["args"]["parameters"] == {"query": "boots"}
-    assert result.tool_calls[0]["args"]["metadata"] == {"experiment": "native"}
+    assert result.steps[0].args == {"query": "boots"}
+    assert result.steps[0].metadata == {"experiment": "native"}
