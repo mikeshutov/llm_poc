@@ -31,11 +31,11 @@ def test_native_tool_schema_wraps_parameters_and_metadata() -> None:
     }) == {"query": "boots", "limit": 2}
 
 
-def test_native_tool_collection_includes_delegation_action() -> None:
-    tools = build_tools([lookup], ["profile_management"])
+def test_native_tool_collection_wraps_only_discovered_tools() -> None:
+    tools = build_tools([lookup])
 
-    assert [candidate.name for candidate in tools] == ["lookup", "delegate_agent"]
-    assert "parameters" in tools[-1].args_schema.model_fields
+    assert [candidate.name for candidate in tools] == ["lookup"]
+    assert "parameters" in tools[0].args_schema.model_fields
 
 
 def test_native_tool_call_becomes_plan_step() -> None:

@@ -48,12 +48,7 @@ def invoke_planner(
     )
     context = _compile_tools_rules_from_state(agent_state)
     native_candidates = context.tools
-    agent_names = (
-        []
-        if agent_state.available_agent_states is None
-        else list(agent_state.available_agent_states.keys())
-    )
-    native_llm = llm.bind_tools(build_tools(native_candidates, agent_names))
+    native_llm = llm.bind_tools(build_tools(native_candidates))
     started_at = perf_counter()
     response = native_llm.invoke(prompt_text)
     latency_ms = int((perf_counter() - started_at) * 1000)
@@ -92,14 +87,12 @@ def invoke_planner(
         args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
         parameters = args.get("parameters", {}) if isinstance(args.get("parameters", {}), dict) else {}
         hypothesis = str(args.get("hypothesis", ""))
-        is_delegation = name == "delegate_agent"
         steps.append(PlanStep(
             id=str(call.get("id") or f"E{index + 1}"),
-            plan=str(parameters.get("task", hypothesis)) if is_delegation else hypothesis,
+            plan=hypothesis,
             hypothesis=hypothesis,
             metadata=args.get("metadata", {}) if isinstance(args.get("metadata", {}), dict) else {},
-            tool="" if is_delegation else name,
-            agent=str(parameters.get("agent_name", "")) if is_delegation else "",
+            tool=name,
             args=parameters,
         ))
     return PlanningResult(steps=steps), llm_call
@@ -126,8 +119,7 @@ def run_planner(agent_state: AgentState) -> AgentState:
         agent_state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
         return agent_state
 
-    steps = planning_result.steps
-    plan = Plan(steps=steps)
+    plan = Plan(steps=planning_result.steps)
     if agent_state.execution_context.roundtrip_id:
         plan.db_id = PlanRepository().save_interactive_plan(
             agent_state.execution_context.roundtrip_id,
@@ -138,15 +130,15 @@ def run_planner(agent_state: AgentState) -> AgentState:
     planner_state.needs_replan = False
     planner_state.plan_count += 1
 
-    if not steps:
+    if not plan.steps:
         agent_state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
 
     payload = {
         "agent_name": agent_state.agent_profile.name,
         "kind": PLAN_KIND,
-        "status": "ready" if steps else "completed",
+        "status": "ready" if plan.steps else "completed",
         "data": sanitize_for_json_storage({
-            "steps": steps,
+            "steps": plan.steps,
             "llm_usage": llm_calls,
         }),
     }

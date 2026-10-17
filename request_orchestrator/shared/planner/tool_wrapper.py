@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from langchain_core.tools import BaseTool, StructuredTool, tool
+from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field, create_model
 
 
@@ -37,30 +37,5 @@ def wrap_tool(original: BaseTool) -> StructuredTool:
     )
 
 
-class DelegationParameters(BaseModel):
-    agent_name: str = Field(..., min_length=1)
-    task: str = Field(..., min_length=1)
-
-
-def build_delegation_tool(agent_names: Iterable[str]) -> StructuredTool:
-    names = ", ".join(sorted(set(agent_names)))
-    envelope_schema = _envelope_schema("delegate_agent", DelegationParameters)
-
-    @tool("delegate_agent", args_schema=envelope_schema)
-    def delegate_agent(
-        parameters: dict[str, Any],
-        hypothesis: str,
-        metadata: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Delegate a self-contained task to another agent."""
-        return {"parameters": parameters, "hypothesis": hypothesis, "metadata": metadata or {}}
-
-    delegate_agent.description = (
-        "Delegate a self-contained task to an available agent. "
-        f"Available agents: {names or 'none'}."
-    )
-    return delegate_agent
-
-
-def build_tools(tools: Iterable[BaseTool], agent_names: Iterable[str] = ()) -> list[BaseTool]:
-    return [*(wrap_tool(candidate) for candidate in tools), build_delegation_tool(agent_names)]
+def build_tools(tools: Iterable[BaseTool]) -> list[BaseTool]:
+    return [wrap_tool(candidate) for candidate in tools]
