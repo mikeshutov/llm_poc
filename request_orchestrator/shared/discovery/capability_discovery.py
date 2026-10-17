@@ -165,15 +165,6 @@ def _discover_persisted_tools(query_embedding: list[float]) -> list[tuple[float,
     ]
 
 
-def _rank_tools_lexically(
-    query: str,
-    candidates: list[tuple[str, str, AvailableTool]],
-) -> list[tuple[float, AvailableTool]]:
-    ranked = _bm25_rank(query, candidates)
-    values = {candidate_id: value for candidate_id, _, value in candidates}
-    return [(score, values[candidate_id]) for score, _, candidate_id in ranked[:TOP_K]]
-
-
 def _build_agent_candidates(main_state: MainState) -> list[tuple[str, str, AvailableAgent]]:
     candidates: list[tuple[str, str, AvailableAgent]] = []
     for agent_state in main_state.agent_states.values():
@@ -220,16 +211,20 @@ def capability_discovery(
         query_embedding = None
 
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="capability-discovery") as executor:
-        if query_embedding is None:
-            tool_future = executor.submit(_rank_candidates, query, None, tool_candidates)
-        else:
-            tool_future = executor.submit(_discover_persisted_tools, query_embedding)
+        tool_future = (
+            executor.submit(_discover_persisted_tools, query_embedding)
+            if query_embedding is not None
+            else None
+        )
         agent_future = executor.submit(_rank_candidates, query, query_embedding, agent_candidates)
-        try:
-            tool_matches = tool_future.result()
-        except Exception:
-            logger.warning("Persisted tool capability lookup failed; using lexical fallback", exc_info=True)
-            tool_matches = _rank_tools_lexically(query, tool_candidates)
+        if tool_future is None:
+            tool_matches = []
+        else:
+            try:
+                tool_matches = tool_future.result()
+            except Exception:
+                logger.warning("Persisted tool capability lookup failed; using unranked tool fallback", exc_info=True)
+                tool_matches = []
         agent_matches = agent_future.result()
 
     # Preserve a useful discovery result for a query with no lexical or
