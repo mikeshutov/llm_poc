@@ -21,6 +21,8 @@ EvidenceViewMode: TypeAlias = Literal["compact", "evaluator"]
 
 class EvidenceStep(BaseModel):
     type: str
+    hypothesis: str = ""
+    evaluation_fields: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     evidence: list[EvidenceView] = Field(default_factory=list)
     no_results: bool = False
@@ -224,6 +226,7 @@ class AgentPrompt:
                 prune_empty_prompt_values(
                     {
                         "type": step.type,
+                        "evaluation_fields": list(step.evaluation_fields),
                         "metadata": dict(step.metadata),
                         "no_results": step.no_results,
                         "evidence": [

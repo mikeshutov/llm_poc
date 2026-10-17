@@ -17,6 +17,7 @@ class RateLimitPolicy:
 class Tool:
     fn: Any
     result_type: str = "generic"
+    result_fields: tuple[str, ...] = ()
     rate_limit_key: str | None = None
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
     rate_limit_policy: RateLimitPolicy | None = None
@@ -29,7 +30,11 @@ class Tool:
 
     @property
     def description(self) -> str:
-        return getattr(self.fn, "description", "")
+        description = getattr(self.fn, "description", "")
+        if not self.result_fields:
+            return description
+        fields = ", ".join(self.result_fields)
+        return f"{description}\nReturns entities with fields: {fields}".strip()
 
     @property
     def args_schema(self) -> Any:

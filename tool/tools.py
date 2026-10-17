@@ -135,7 +135,15 @@ CALENDAR_TOOLS = [Tool(public_holidays_lookup, result_type=TOOL_RESULT_TYPE_CALE
 LOCATION_TOOLS = [Tool(get_caller_location, result_type=TOOL_RESULT_TYPE_LOCATION)]
 BOOKS_TOOLS = [Tool(search_books, result_type=TOOL_RESULT_TYPE_BOOK_RESULTS, cache_policy=ToolCachePolicy(3600))]
 LANGUAGE_TOOLS = [Tool(define_word, result_type=TOOL_RESULT_TYPE_DEFINITION, cache_policy=ToolCachePolicy(86400))]
-FOOD_TOOLS = [Tool(search_meals, result_type=TOOL_RESULT_TYPE_MEAL_RESULTS, cache_policy=ToolCachePolicy(3600)), Tool(search_cocktails, result_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS, cache_policy=ToolCachePolicy(3600))]
+FOOD_TOOLS = [
+    Tool(
+        search_meals,
+        result_type=TOOL_RESULT_TYPE_MEAL_RESULTS,
+        result_fields=("category", "area", "tags", "ingredients", "instructions", "url"),
+        cache_policy=ToolCachePolicy(3600),
+    ),
+    Tool(search_cocktails, result_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS, cache_policy=ToolCachePolicy(3600)),
+]
 FUN_TOOLS = [Tool(get_advice, result_type=TOOL_RESULT_TYPE_ADVICE, cache_policy=ToolCachePolicy(86400)), Tool(get_quote, result_type=TOOL_RESULT_TYPE_QUOTE, cache_policy=ToolCachePolicy(86400)), Tool(get_astronomy_picture, result_type=TOOL_RESULT_TYPE_ASTRONOMY_PICTURE, cache_policy=ToolCachePolicy(3600))]
 MATH_TOOLS = [Tool(calculate, result_type=TOOL_RESULT_TYPE_CALCULATION, cache_policy=ToolCachePolicy(86400))]
 GAMES_TOOLS = [

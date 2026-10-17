@@ -83,6 +83,8 @@ def build_evidence_steps_from_tool_results(
         if existing_step is None:
             evidence_step = EvidenceStep(
                 type=step_type,
+                hypothesis=tool_result.hypothesis,
+                evaluation_fields=_evaluation_fields(tool_result),
                 metadata=step_metadata,
                 evidence=step_evidence,
                 no_results=no_results,
@@ -91,6 +93,13 @@ def build_evidence_steps_from_tool_results(
             evidence_steps.append(evidence_step)
             continue
         existing_step.metadata = _merge_step_metadata(existing_step.metadata, step_metadata)
+        if tool_result.hypothesis and tool_result.hypothesis not in existing_step.hypothesis:
+            existing_step.hypothesis = "; ".join(
+                value for value in (existing_step.hypothesis, tool_result.hypothesis) if value
+            )
+        for field_name in _evaluation_fields(tool_result):
+            if field_name not in existing_step.evaluation_fields:
+                existing_step.evaluation_fields.append(field_name)
         existing_step.evidence.extend(step_evidence)
         existing_step.no_results = not existing_step.evidence and (
             existing_step.no_results or no_results
@@ -117,11 +126,20 @@ def filter_evidence_steps(
         filtered_steps.append(
             EvidenceStep(
                 type=step.type,
+                hypothesis=step.hypothesis,
+                evaluation_fields=list(step.evaluation_fields),
                 metadata=dict(step.metadata),
                 evidence=matching_evidence,
             )
         )
     return filtered_steps
+
+
+def _evaluation_fields(tool_result: ToolResult) -> list[str]:
+    fields = tool_result.call_metadata.get("evaluation_fields", [])
+    if not isinstance(fields, list):
+        return []
+    return [field.strip() for field in fields if isinstance(field, str) and field.strip()]
 
 
 def _rehydrate_tool_result_records(

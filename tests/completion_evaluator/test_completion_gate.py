@@ -6,7 +6,7 @@ from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
 from request_orchestrator.models.agent_prompt import EvidenceStep
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evidence import EvidenceView
-from request_orchestrator.shared.evaluator.completion_gate import try_completion_evaluation
+from request_orchestrator.shared.evaluator.completion_gate import _build_premise, try_completion_evaluation
 from serviceclients.completion_evaluator.models import CompletionEvaluatorResult
 
 
@@ -45,6 +45,51 @@ def test_completion_gate_returns_satisfied_for_high_confidence_entailment() -> N
 
     assert result is True
     assert client.calls
+
+
+def test_completion_gate_uses_compact_named_records_and_tool_hypothesis() -> None:
+    evidence = EvidenceView(
+        id=uuid4(),
+        title="Chicken soup",
+        summary="A warm soup recipe.",
+        llm_metadata={"servings": 4, "diet": "vegetarian"},
+    )
+    steps = [
+        EvidenceStep(
+            type="meal_results",
+            hypothesis="Find a vegetarian soup recipe.",
+            evidence=[evidence],
+        )
+    ]
+    client = FakeCompletionEvaluatorClient(
+        CompletionEvaluatorResult(contradiction=0.02, neutral=0.03, entailment=0.95)
+    )
+
+    assert _build_premise(steps) == (
+        "Chicken soup with summary, servings, diet"
+    )
+    assert try_completion_evaluation(_state(), steps, client=client) is True
+    assert client.calls[0][1] == "Find a vegetarian soup recipe."
+
+
+def test_completion_gate_includes_values_only_for_evaluation_fields() -> None:
+    evidence = EvidenceView(
+        id=uuid4(),
+        title="Kenyan Beef Curry",
+        summary="A spicy curry.",
+        llm_metadata={"area": "Kenyan", "category": "Beef", "ingredients": ["beef", "onion"]},
+    )
+    steps = [
+        EvidenceStep(
+            type="meal_results",
+            evaluation_fields=["ingredients"],
+            evidence=[evidence],
+        )
+    ]
+
+    assert _build_premise(steps) == (
+        'Kenyan Beef Curry with summary, area, category, ingredients=["beef", "onion"]'
+    )
 
 
 def test_completion_gate_returns_none_for_uncertain_result() -> None:

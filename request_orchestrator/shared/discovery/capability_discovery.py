@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from typing import Any
@@ -14,6 +15,7 @@ from request_orchestrator.shared.discovery.models import (
     AvailableTool,
     CapabilityDiscoveryResult,
 )
+from tool.repository.repo_factory import get_tool_registry_repo
 from tool.tools import TOOL_CATEGORIES
 
 MAX_DISCOVERED_CAPABILITIES = 5
@@ -32,6 +34,7 @@ RRF_K = max(1, int(os.getenv("CAPABILITY_DISCOVERY_RRF_K", "60")))
 BM25_K1 = float(os.getenv("CAPABILITY_DISCOVERY_BM25_K1", "1.2"))
 BM25_B = float(os.getenv("CAPABILITY_DISCOVERY_BM25_B", "0.75"))
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+logger = logging.getLogger(__name__)
 
 
 def _similarity(left: list[float], right: list[float]) -> float:
@@ -152,6 +155,25 @@ def _build_tool_candidates() -> list[tuple[str, str, AvailableTool]]:
     return candidates
 
 
+def _discover_persisted_tools(query_embedding: list[float]) -> list[tuple[float, AvailableTool]]:
+    registered_tools = get_tool_registry_repo().list_relevant(
+        query_embedding=query_embedding,
+    )
+    return [
+        (0.0, AvailableTool(name=tool.name, description=tool.description))
+        for tool in registered_tools[:TOP_K]
+    ]
+
+
+def _rank_tools_lexically(
+    query: str,
+    candidates: list[tuple[str, str, AvailableTool]],
+) -> list[tuple[float, AvailableTool]]:
+    ranked = _bm25_rank(query, candidates)
+    values = {candidate_id: value for candidate_id, _, value in candidates}
+    return [(score, values[candidate_id]) for score, _, candidate_id in ranked[:TOP_K]]
+
+
 def _build_agent_candidates(main_state: MainState) -> list[tuple[str, str, AvailableAgent]]:
     candidates: list[tuple[str, str, AvailableAgent]] = []
     for agent_state in main_state.agent_states.values():
@@ -198,9 +220,16 @@ def capability_discovery(
         query_embedding = None
 
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="capability-discovery") as executor:
-        tool_future = executor.submit(_rank_candidates, query, query_embedding, tool_candidates)
+        if query_embedding is None:
+            tool_future = executor.submit(_rank_candidates, query, None, tool_candidates)
+        else:
+            tool_future = executor.submit(_discover_persisted_tools, query_embedding)
         agent_future = executor.submit(_rank_candidates, query, query_embedding, agent_candidates)
-        tool_matches = tool_future.result()
+        try:
+            tool_matches = tool_future.result()
+        except Exception:
+            logger.warning("Persisted tool capability lookup failed; using lexical fallback", exc_info=True)
+            tool_matches = _rank_tools_lexically(query, tool_candidates)
         agent_matches = agent_future.result()
 
     # Preserve a useful discovery result for a query with no lexical or

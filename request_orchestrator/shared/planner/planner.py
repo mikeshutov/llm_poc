@@ -103,11 +103,19 @@ def invoke_planner(
         args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
         parameters = args.get("parameters", {}) if isinstance(args.get("parameters", {}), dict) else {}
         hypothesis = str(args.get("hypothesis", ""))
+        evaluation_fields = [
+            field.strip()
+            for field in args.get("evaluation_fields", [])
+            if isinstance(field, str) and field.strip() and field.strip().lower() != "name"
+        ] if isinstance(args.get("evaluation_fields", []), list) else []
+        metadata = args.get("metadata", {}) if isinstance(args.get("metadata", {}), dict) else {}
+        if evaluation_fields:
+            metadata = {**metadata, "evaluation_fields": evaluation_fields}
         steps.append(PlanStep(
             id=str(call.get("id") or f"E{index + 1}"),
             plan=hypothesis,
             hypothesis=hypothesis,
-            metadata=args.get("metadata", {}) if isinstance(args.get("metadata", {}), dict) else {},
+            metadata=metadata,
             tool=name,
             args=parameters,
         ))

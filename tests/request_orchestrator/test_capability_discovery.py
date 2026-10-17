@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.shared.discovery.capability_discovery import capability_discovery
@@ -8,11 +9,17 @@ from request_orchestrator.shared.discovery.capability_discovery import capabilit
 discover_module = importlib.import_module("request_orchestrator.shared.discovery.capability_discovery")
 
 
-def test_capability_discovery_ranks_tools_by_embedding(monkeypatch) -> None:
+def test_capability_discovery_uses_persisted_tool_embeddings(monkeypatch) -> None:
     def fake_embed(text: str) -> list[float]:
         return [1.0, 0.0] if any(term in text.lower() for term in ("food", "meal")) else [0.0, 1.0]
 
     monkeypatch.setattr(discover_module, "embed_text", fake_embed)
+    class FakeToolRepository:
+        def list_relevant(self, *, query_embedding):
+            assert query_embedding == [1.0, 0.0]
+            return [SimpleNamespace(name="search_meals", description="Search meal recipes.")]
+
+    monkeypatch.setattr(discover_module, "get_tool_registry_repo", lambda: FakeToolRepository())
     state = MainState.new(task="food recommendations", agent_profiles=[])
 
     result = capability_discovery(state)

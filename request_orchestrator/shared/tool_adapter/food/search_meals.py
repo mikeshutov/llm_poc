@@ -27,6 +27,7 @@ class MealSearchMetadata(BaseModel):
     area: str | None = None
     tags: list[str] = Field(default_factory=list)
     ingredients: list["MealIngredientMetadata"] = Field(default_factory=list)
+    instructions: str | None = None
 
 
 class MealIngredientMetadata(BaseModel):
@@ -49,6 +50,7 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             category=meal.category,
             area=meal.area,
             tags=[tag.strip() for tag in (meal.tags or "").split(",") if tag.strip()],
+            instructions=meal.instructions,
             ingredients=[
                 MealIngredientMetadata.model_validate(ingredient.model_dump())
                 for ingredient in meal.ingredients
