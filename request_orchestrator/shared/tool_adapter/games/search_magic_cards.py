@@ -187,33 +187,8 @@ def _build_search_query(query: str, commander_color_identity: str) -> str:
     description="""
 Search Scryfall for Magic: The Gathering cards by name or advanced Scryfall query syntax.
 
-Required fields:
-- query (string)
 
-Optional fields:
-- page (integer, 1-based)
-- commander_color_identity (string, optional)
-- include_pricing (boolean, optional)
 
-Example valid calls:
-{
-  "query": "Black Lotus",
-  "page": 1
-}
-{
-  "query": "format:commander o:draw type:creature",
-  "page": 1
-}
-{
-  "query": "type:instant (o:land or o:graveyard)",
-  "commander_color_identity": "abzan",
-  "page": 2
-}
-{
-  "query": "Black Lotus",
-  "include_pricing": true,
-  "page": 1
-}
 """,
 )
 def search_magic_cards(

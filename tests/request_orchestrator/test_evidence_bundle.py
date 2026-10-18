@@ -581,6 +581,7 @@ def test_build_evidence_bundle_uses_meal_entry_description_instead_of_wrapper_me
         "category": None,
         "area": None,
         "tags": None,
+        "instructions": "Bake the tart shells, fill with butter tart filling, and bake until set.",
         "ingredients": [
             {"name": "Butter", "measure": "1/2 cup"},
             {"name": "Sugar", "measure": "1 cup"},

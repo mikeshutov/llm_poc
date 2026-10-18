@@ -74,23 +74,10 @@ def _tool_result(result: ExchangeRatesSeries) -> ToolResult:
     description="""
 Look up a time series of exchange rates across a date range from Frankfurter.
 
-Required fields:
-- start_date (YYYY-MM-DD string)
 
-Optional fields:
-- end_date (YYYY-MM-DD string)
-- base (3-letter ISO currency code)
-- symbols (list of 3-letter ISO currency codes)
 
 Use this when the user needs exchange-rate changes over time, not just a single-day snapshot.
 
-Example valid call:
-{
-  "start_date": "2026-01-01",
-  "end_date": "2026-01-07",
-  "base": "EUR",
-  "symbols": ["USD", "CAD"]
-}
 """,
 )
 def exchange_rates_time_series(

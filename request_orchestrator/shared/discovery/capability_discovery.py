@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from typing import Any
@@ -14,6 +15,7 @@ from request_orchestrator.shared.discovery.models import (
     AvailableTool,
     CapabilityDiscoveryResult,
 )
+from tool.repository.repo_factory import get_tool_registry_repo
 from tool.tools import TOOL_CATEGORIES
 
 MAX_DISCOVERED_CAPABILITIES = 5
@@ -25,13 +27,13 @@ TOP_K = min(
     MAX_DISCOVERED_CAPABILITIES,
     max(1, int(os.getenv("CAPABILITY_DISCOVERY_TOP_K", str(MAX_DISCOVERED_CAPABILITIES)))),
 )
-MIN_SIMILARITY = float(os.getenv("CAPABILITY_DISCOVERY_MIN_SIMILARITY", "0.35"))
 SEMANTIC_WEIGHT = float(os.getenv("CAPABILITY_DISCOVERY_SEMANTIC_WEIGHT", "1.0"))
 BM25_WEIGHT = float(os.getenv("CAPABILITY_DISCOVERY_BM25_WEIGHT", "0.7"))
 RRF_K = max(1, int(os.getenv("CAPABILITY_DISCOVERY_RRF_K", "60")))
 BM25_K1 = float(os.getenv("CAPABILITY_DISCOVERY_BM25_K1", "1.2"))
 BM25_B = float(os.getenv("CAPABILITY_DISCOVERY_BM25_B", "0.75"))
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+logger = logging.getLogger(__name__)
 
 
 def _similarity(left: list[float], right: list[float]) -> float:
@@ -98,8 +100,7 @@ def _semantic_rank(
             query_embedding,
             list(_cached_embed_text(searchable_text, id(embed_text))),
         )
-        if score >= MIN_SIMILARITY:
-            ranked.append((score, index, candidate_id))
+        ranked.append((score, index, candidate_id))
     ranked.sort(key=lambda item: (-item[0], item[1]))
     return ranked[:RETRIEVAL_K]
 
@@ -119,13 +120,12 @@ def _rrf_rank(
     return sorted(scores, key=lambda candidate_id: (-scores[candidate_id], original_order[candidate_id]))
 
 
-def _rank_candidates(
+def _rerank_candidates(
     query: str,
-    query_embedding: list[float] | None,
     candidates: list[tuple[str, str, Any]],
+    semantic_rank: list[tuple[float, int, str]],
 ) -> list[tuple[float, Any]]:
     lexical_rank = _bm25_rank(query, candidates)
-    semantic_rank = _semantic_rank(query_embedding, candidates) if query_embedding is not None else []
     ranked_ids = _rrf_rank(
         [candidate_id for candidate_id, _, _ in candidates],
         [(SEMANTIC_WEIGHT, semantic_rank), (BM25_WEIGHT, lexical_rank)],
@@ -134,12 +134,23 @@ def _rank_candidates(
     return [(0.0, values[candidate_id]) for candidate_id in ranked_ids[:TOP_K]]
 
 
+def _rank_candidates(
+    query: str,
+    query_embedding: list[float] | None,
+    candidates: list[tuple[str, str, Any]],
+) -> list[tuple[float, Any]]:
+    semantic_rank = _semantic_rank(query_embedding, candidates) if query_embedding is not None else []
+    return _rerank_candidates(query, candidates, semantic_rank)
+
+
 def _build_tool_candidates() -> list[tuple[str, str, AvailableTool]]:
     candidates: list[tuple[str, str, AvailableTool]] = []
     for category in TOOL_CATEGORIES.values():
         for tool in sorted(category.tools, key=lambda candidate: candidate.name):
             available_tool = AvailableTool(
                 name=tool.name,
+                title=tool.discovery_metadata.title,
+                category=tool.discovery_metadata.category,
                 description=tool.description,
             )
             candidates.append(
@@ -150,6 +161,51 @@ def _build_tool_candidates() -> list[tuple[str, str, AvailableTool]]:
                 )
             )
     return candidates
+
+
+def _discover_persisted_tools(
+    query: str,
+    query_embedding: list[float] | None,
+) -> list[tuple[float, AvailableTool]]:
+    if query_embedding is None:
+        return []
+    registered_tools = get_tool_registry_repo().list_relevant(
+        query_embedding=query_embedding,
+        limit=RETRIEVAL_K,
+    )
+    candidates: list[tuple[str, str, AvailableTool]] = []
+    for tool in registered_tools:
+        metadata = getattr(tool, "metadata", {}) or {}
+        title = metadata.get("title", "")
+        category = metadata.get("category", "")
+        scope_terms = metadata.get("scope_terms", [])
+        if not isinstance(scope_terms, list | tuple):
+            scope_terms = []
+        searchable_text = " ".join(
+            part
+            for part in (tool.name, title, category, tool.description, *scope_terms)
+            if isinstance(part, str) and part
+        )
+        candidates.append(
+            (
+                tool.name,
+                searchable_text,
+                AvailableTool(
+                    name=tool.name,
+                    title=title,
+                    category=category,
+                    description=tool.description,
+                ),
+            )
+        )
+
+    # The vector query supplies the semantic ordering; BM25 adds exact-term
+    # precision within that candidate set before the final TOP_K cutoff.
+    semantic_rank = [
+        (0.0, index, candidate_id)
+        for index, (candidate_id, _, _) in enumerate(candidates)
+    ]
+    return _rerank_candidates(query, candidates, semantic_rank)
 
 
 def _build_agent_candidates(main_state: MainState) -> list[tuple[str, str, AvailableAgent]]:
@@ -198,9 +254,13 @@ def capability_discovery(
         query_embedding = None
 
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="capability-discovery") as executor:
-        tool_future = executor.submit(_rank_candidates, query, query_embedding, tool_candidates)
+        tool_future = executor.submit(_discover_persisted_tools, query, query_embedding)
         agent_future = executor.submit(_rank_candidates, query, query_embedding, agent_candidates)
-        tool_matches = tool_future.result()
+        try:
+            tool_matches = tool_future.result()
+        except Exception:
+            logger.warning("Persisted tool capability lookup failed; using unranked tool fallback", exc_info=True)
+            tool_matches = []
         agent_matches = agent_future.result()
 
     # Preserve a useful discovery result for a query with no lexical or

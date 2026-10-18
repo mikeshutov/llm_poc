@@ -2,6 +2,7 @@ from request_orchestrator.agent_runner.models.agent_profile import PROFILE_MANAG
 import json
 
 from langchain_core.tools import BaseTool
+
 from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.evidence import (
@@ -53,6 +54,10 @@ def _format_minimal_tool_schema(tool) -> str:
         if optional_fields:
             lines.append('  Optional fields:')
             lines.extend(f"  {line}" for line in optional_fields)
+
+    result_fields = tuple(getattr(tool, "available_result_fields", ()) or ())
+    if result_fields:
+        lines.append(f"  Result fields: {', '.join(result_fields)}")
 
     return "\n".join(lines)
 
@@ -108,7 +113,10 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     if _is_profile_management_agent(state):
         compiled_tools = "\n".join(_format_minimal_tool_schema(tool) for tool in deduped_tools.values())
     else:
-        compiled_tools = "\n".join(f"- {t.name}: {t.description}".strip() for t in deduped_tools.values())
+        compiled_tools = "\n".join(
+            f"- {t.name}: {t.description}".strip()
+            for t in deduped_tools.values()
+        )
     return CompiledPlannerContext(tools=list(deduped_tools.values()), compiled_tools=compiled_tools, rules=rules)
 def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]]:
     context = _compile_tools_rules_from_state(state)
@@ -124,12 +132,14 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
             task=state.inputs.task,
             available_agents=[] if capabilities is None else capabilities.agents,
             available_tools=[] if capabilities is None else capabilities.tools,
+            rules=build_planner_rules(context.rules),
         )
         for section in (
             PromptSectionKeys.USER_PROFILE,
             PromptSectionKeys.CONVERSATION_CONTEXT,
             PromptSectionKeys.AVAILABLE_AGENTS,
             PromptSectionKeys.AVAILABLE_TOOLS,
+            PromptSectionKeys.RULES,
             PromptSectionKeys.TASK,
         ):
             prompt.include_section(section)

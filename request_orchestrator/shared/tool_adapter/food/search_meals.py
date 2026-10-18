@@ -27,11 +27,21 @@ class MealSearchMetadata(BaseModel):
     area: str | None = None
     tags: list[str] = Field(default_factory=list)
     ingredients: list["MealIngredientMetadata"] = Field(default_factory=list)
+    instructions: str | None = None
 
 
 class MealIngredientMetadata(BaseModel):
     name: str = ""
     measure: str | None = None
+
+
+class MealEvaluationFields(BaseModel):
+    category: str | None = None
+    area: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    ingredients: list[MealIngredientMetadata] = Field(default_factory=list)
+    instructions: str | None = None
+    url: str | None = None
 
 
 def _tool_result(result: MealSearchResult) -> ToolResult:
@@ -49,6 +59,7 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             category=meal.category,
             area=meal.area,
             tags=[tag.strip() for tag in (meal.tags or "").split(",") if tag.strip()],
+            instructions=meal.instructions,
             ingredients=[
                 MealIngredientMetadata.model_validate(ingredient.model_dump())
                 for ingredient in meal.ingredients
@@ -86,15 +97,9 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
     description="""
 Search for meal recipes by name or keyword using TheMealDB.
 
-Required fields:
-- query (string)
 
 Returns meal name, category, cuisine area, ingredients with measures, and cooking instructions.
 
-Example valid call:
-{
-  "query": "pasta"
-}
 """,
 )
 def search_meals(query: str) -> ToolResult:

@@ -135,7 +135,14 @@ CALENDAR_TOOLS = [Tool(public_holidays_lookup, result_type=TOOL_RESULT_TYPE_CALE
 LOCATION_TOOLS = [Tool(get_caller_location, result_type=TOOL_RESULT_TYPE_LOCATION)]
 BOOKS_TOOLS = [Tool(search_books, result_type=TOOL_RESULT_TYPE_BOOK_RESULTS, cache_policy=ToolCachePolicy(3600))]
 LANGUAGE_TOOLS = [Tool(define_word, result_type=TOOL_RESULT_TYPE_DEFINITION, cache_policy=ToolCachePolicy(86400))]
-FOOD_TOOLS = [Tool(search_meals, result_type=TOOL_RESULT_TYPE_MEAL_RESULTS, cache_policy=ToolCachePolicy(3600)), Tool(search_cocktails, result_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS, cache_policy=ToolCachePolicy(3600))]
+FOOD_TOOLS = [
+    Tool(
+        search_meals,
+        result_type=TOOL_RESULT_TYPE_MEAL_RESULTS,
+        cache_policy=ToolCachePolicy(3600),
+    ),
+    Tool(search_cocktails, result_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS, cache_policy=ToolCachePolicy(3600)),
+]
 FUN_TOOLS = [Tool(get_advice, result_type=TOOL_RESULT_TYPE_ADVICE, cache_policy=ToolCachePolicy(86400)), Tool(get_quote, result_type=TOOL_RESULT_TYPE_QUOTE, cache_policy=ToolCachePolicy(86400)), Tool(get_astronomy_picture, result_type=TOOL_RESULT_TYPE_ASTRONOMY_PICTURE, cache_policy=ToolCachePolicy(3600))]
 MATH_TOOLS = [Tool(calculate, result_type=TOOL_RESULT_TYPE_CALCULATION, cache_policy=ToolCachePolicy(86400))]
 GAMES_TOOLS = [
@@ -250,12 +257,6 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     "files": ToolCategory(
         tools=FILE_TOOLS,
         description="To be utilized for any searches involving files. Search and retrieve content from uploaded files. To be used when files are in the context either with a name or ID.",
-        rules=[
-            "When a file_id is present in the context, always call get_file_by_id first before using file content as input to any other tool. Never infer or guess file content from the file name alone.",
-            "Use search_files to discover files and obtain their file_id when no file_id is in context.",
-            "Use get_file_by_id with a known file_id to retrieve a preview of the file contents.",
-            "Use search_file_for_details with the file_id and a specific query to retrieve deeper details from a file.",
-        ],
         result_rules=[
             "If a file_id is already known in the evidence or context, treat it as the authoritative file reference rather than implying a new file discovery step.",
             "When a file_id is known, prefer conclusions grounded in get_file_by_id or search_file_for_details results over vague file-name inference.",

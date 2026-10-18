@@ -57,14 +57,7 @@ Get the current date and time for a given timezone.
 
 Returns the local datetime, UTC offset, day of week, and timezone abbreviation.
 
-Required fields:
-- timezone (string): IANA timezone identifier
 
-Example valid calls:
-{"timezone": "Europe/London"}
-{"timezone": "America/New_York"}
-{"timezone": "Asia/Tokyo"}
-{"timezone": "Australia/Sydney"}
 """,
 )
 def get_world_time(timezone: str) -> ToolResult:

@@ -79,15 +79,9 @@ class CurrentWeatherResult(BaseModel):
     description="""
 Get the current weather conditions for a location.
 
-Required fields:
-- location (string)
 
 Returns current temperature, wind speed, wind direction, weather code, and whether it is daytime.
 
-Example valid call:
-{
-  "location": "Toronto"
-}
 """,
 )
 def get_current_weather(location: str) -> ToolResult:

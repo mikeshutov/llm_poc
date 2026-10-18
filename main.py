@@ -8,6 +8,7 @@ import streamlit as st
 
 from request_orchestrator.service import run_request_orchestrator_for_query
 from request_orchestrator.agents.seeder import seed_system_agents
+from tool.seeder import seed_tools
 from common.config import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from conversation.constants import SOURCE_STREAMLIT
 from conversation.models.conversation_models import ConversationMetadata
@@ -38,6 +39,14 @@ def seed_agents_on_startup() -> tuple[str, ...]:
 
 
 seed_agents_on_startup()
+
+
+@st.cache_resource(show_spinner=False)
+def seed_tools_on_startup() -> tuple[str, ...]:
+    return tuple(tool.name for tool in seed_tools())
+
+
+seed_tools_on_startup()
 
 st.markdown(
     """<style>

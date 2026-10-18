@@ -124,19 +124,8 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
     description=f"""
 Run a general web or news search. `suggestion_search` is treated the same as `web_search`.
 
-Required fields:
-- query_text (string)
 
-Optional fields:
-- search_type ({" | ".join(t.value for t in SearchType)})
-- country (string)
-- params (object)
 
-Example valid call:
-{{
-  "query_text": "best summer jackets",
-  "search_type": "web_search"
-}}
 """,
 )
 def generic_web_search(

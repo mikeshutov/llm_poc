@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
+import json
 
 from serviceclients.completion_evaluator import CompletionEvaluatorClient, CompletionEvaluatorResult
 from request_orchestrator.models.agent_prompt import EvidenceStep
@@ -20,15 +20,26 @@ COMPLETION_EVALUATOR_MAX_EVIDENCE_CHARS = max(
 
 
 def _build_premise(evidence_steps: list[EvidenceStep]) -> str:
-    records = [
-        {
-            "type": step.type,
-            "no_results": step.no_results,
-            "evidence": [evidence.to_evaluator_view() for evidence in step.evidence],
-        }
-        for step in evidence_steps
-    ]
-    return json.dumps(records, ensure_ascii=True, default=str)[:COMPLETION_EVALUATOR_MAX_EVIDENCE_CHARS]
+    records: list[str] = []
+    for step in evidence_steps:
+        for evidence in step.evidence:
+            fields = evidence.to_candidate().fields
+            name = evidence.title.strip() or evidence.item_id.strip() or str(evidence.id)
+            available_fields = [
+                key
+                for key, value in fields.items()
+                if key != "title" and value not in (None, "", [], {})
+            ]
+            field_parts = []
+            evaluation_fields = set(step.evaluation_fields)
+            for key in available_fields:
+                value = fields.get(key)
+                if key in evaluation_fields:
+                    field_parts.append(f"{key}={json.dumps(value, ensure_ascii=True, default=str)}")
+                else:
+                    field_parts.append(key)
+            records.append(f"{name} with {', '.join(field_parts)}" if field_parts else name)
+    return "\n".join(records)[:COMPLETION_EVALUATOR_MAX_EVIDENCE_CHARS]
 
 
 def try_completion_evaluation(
@@ -43,7 +54,8 @@ def try_completion_evaluation(
 
     resolved_client = client or CompletionEvaluatorClient()
     premise = _build_premise(evidence_steps)
-    hypothesis = (
+    hypotheses = [step.hypothesis.strip() for step in evidence_steps if step.hypothesis.strip()]
+    hypothesis = "; ".join(dict.fromkeys(hypotheses)) or (
         "The provided evidence is sufficient to answer the user's request: "
         + state.inputs.task.strip()
     )

@@ -75,13 +75,7 @@ def _tool_result(result: list[CoinMarket]) -> ToolResult:
     description="""
 Get top cryptocurrencies by market cap from CoinGecko, including current price, 24h change, volume, and market cap.
 
-Optional fields:
-- vs_currency: target currency (default 'usd')
-- per_page: number of results (default 20, max 100)
 
-Example valid calls:
-{}
-{"vs_currency": "eur", "per_page": 10}
 """,
 )
 def get_crypto_markets(vs_currency: str = "usd", per_page: int = 20) -> ToolResult:

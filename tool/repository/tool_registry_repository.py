@@ -12,9 +12,6 @@ from db.connection import get_connection
 from llm.clients.embeddings import embed_text
 from tool.models import RegisteredTool
 
-MIN_TOOL_SIMILARITY = 0.35
-
-
 class ToolRegistryRepository:
     def __init__(self, conn: psycopg.Connection | None = None):
         self._conn = conn or get_connection()
@@ -44,7 +41,8 @@ class ToolRegistryRepository:
         return [RegisteredTool(**self._normalize_row(row)) for row in rows]
 
     def upsert(self, definition: RegisteredTool) -> RegisteredTool:
-        tool_embedding = embed_text(definition.description) if definition.description else None
+        embedding_source = definition.embedding_text or f"{definition.name}\n{definition.description}"
+        tool_embedding = embed_text(embedding_source) if embedding_source else None
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -91,7 +89,10 @@ class ToolRegistryRepository:
         *,
         query_embedding: list[float],
         is_active: bool = True,
+        limit: int = 20,
     ) -> list[RegisteredTool]:
+        # Return a broad vector candidate set; capability discovery performs
+        # the final lexical/semantic reranking and top-k cutoff.
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -101,11 +102,11 @@ class ToolRegistryRepository:
                 FROM tools
                 WHERE is_active = %s
                   AND tool_embedding IS NOT NULL
-                  AND tool_embedding <=> (%s)::vector <= 1 - %s
                 ORDER BY tool_embedding <=> (%s)::vector ASC,
                          name ASC, created_at ASC
+                LIMIT %s
                 """,
-                (is_active, query_embedding, MIN_TOOL_SIMILARITY, query_embedding),
+                (is_active, query_embedding, max(1, limit)),
             )
             rows = cur.fetchall()
         return [RegisteredTool(**self._normalize_row(row)) for row in rows]

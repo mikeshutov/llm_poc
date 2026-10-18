@@ -56,11 +56,7 @@ def _tool_result(result: GetFileByIdResult) -> ToolResult:
 Retrieve file metadata and a preview of its contents by file_id. Returns name, type, upload date, and the first chunk of content.
 Use when a file_id is already known from context or a previous tool call.
 
-Required fields:
-- file_id (string): The UUID of the file to retrieve.
 
-Example valid calls:
-{"file_id": "3f2a1b4c-..."}
 """,
 )
 def get_file_by_id(file_id: str) -> ToolResult:

@@ -57,13 +57,7 @@ class ResolveCityLocationArgs(BaseModel):
     description="""
 Resolve a city into normalized location metadata for weather-aware shopping decisions.
 
-Required fields:
-- city (string)
 
-Example valid call:
-{
-  "city": "Toronto"
-}
 """,
 )
 def resolve_city_location(city: str) -> ToolResult:

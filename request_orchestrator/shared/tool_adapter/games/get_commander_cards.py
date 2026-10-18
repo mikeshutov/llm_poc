@@ -170,11 +170,7 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
     description="""
 Get reranked EDHREC card recommendations for a Magic: The Gathering commander.
 
-Required fields:
-- commander_name (string)
 
-Optional fields:
-- limit (integer, 1-12)
 """,
 )
 def get_commander_cards(commander_name: str, limit: int = 6) -> ToolResult:

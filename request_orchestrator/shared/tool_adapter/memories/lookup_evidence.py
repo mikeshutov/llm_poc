@@ -27,8 +27,6 @@ class EvidenceLookupResult(BaseModel):
     description="""
 Retrieve full evidence records for provided evidence_ids.
 
-Required fields:
-- evidence_ids (array of strings): One or more evidence IDs for which full context is needed.
 
 """,
 )

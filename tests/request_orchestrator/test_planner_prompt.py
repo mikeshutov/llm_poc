@@ -75,6 +75,15 @@ def test_planner_prompt_explains_an_empty_execution_retry() -> None:
     assert "The previous plan execution produced no results." in prompt.build()
 
 
+def test_top_level_planner_prompt_includes_shared_rules() -> None:
+    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
+
+    prompt, _ = build_planner_prompt(state)
+
+    assert "Tool Call Hypotheses:" in prompt.build()
+    assert "The hypothesis must be independently verifiable" in prompt.build()
+
+
 def test_planner_prompt_includes_evaluator_missing_information() -> None:
     state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     state.node_states.evaluator.missing_information = ["Current Canadian pricing", "Shipping availability"]

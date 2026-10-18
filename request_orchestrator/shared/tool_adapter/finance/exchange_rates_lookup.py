@@ -66,20 +66,11 @@ Look up currency exchange rates from Frankfurter.
 
 Use this for the latest available rates or for a specific historical date.
 
-Optional fields:
-- base (3-letter ISO currency code)
-- symbols (list of 3-letter ISO currency codes)
-- date (YYYY-MM-DD string)
 
 Important:
 - If date is omitted, this returns the latest available rates.
 - Use ISO currency codes such as EUR, USD, CAD, GBP.
 
-Example valid call:
-{
-  "base": "USD",
-  "symbols": ["CAD", "EUR"]
-}
 """,
 )
 def exchange_rates_lookup(

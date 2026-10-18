@@ -5,14 +5,23 @@ from typing import Any, Iterable
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field, create_model
 
-
 def _envelope_schema(name: str, parameter_schema: type[BaseModel] | None) -> type[BaseModel]:
     parameter_type: Any = parameter_schema or dict[str, Any]
     return create_model(
         f"{name.title().replace('_', '')}CallArgs",
-        parameters=(parameter_type, Field(...)),
-        hypothesis=(str, Field(..., min_length=1, description="What this call is expected to establish or produce.")),
+        parameters=(
+            parameter_type,
+            Field(
+                ...,
+                description=(
+                    "The executable arguments for the underlying tool. "
+                    "Put fields such as query, file_id, and file_type inside this object."
+                ),
+            ),
+        ),
+        hypothesis=(str, Field(..., min_length=1, description="A factual, testable statement about what the returned data is expected to establish.")),
         metadata=(dict[str, Any], Field(default_factory=dict, description="Additional call metadata for orchestration.")),
+        evaluation_fields=(list[str], Field(default_factory=list, description="Result fields relevant to evaluating the user's request.")),
     )
 
 
@@ -24,6 +33,7 @@ def wrap_tool(original: BaseTool) -> StructuredTool:
         parameters: dict[str, Any] | BaseModel | None = None,
         hypothesis: str = "",
         metadata: dict[str, Any] | None = None,
+        evaluation_fields: list[str] | None = None,
     ) -> Any:
         if isinstance(parameters, BaseModel):
             parameters = parameters.model_dump()

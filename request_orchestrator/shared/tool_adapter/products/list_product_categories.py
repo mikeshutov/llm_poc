@@ -39,13 +39,7 @@ def _tool_result(result: list[str]) -> ToolResult:
     description="""
 Return available product categories from the internal catalog.
 
-Optional fields:
-- limit (integer)
 
-Example valid call:
-{
-  "limit": 200
-}
 """,
 )
 def list_product_categories(limit: int = 200) -> ToolResult:

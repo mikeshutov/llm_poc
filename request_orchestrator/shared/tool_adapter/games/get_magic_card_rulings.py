@@ -115,20 +115,8 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
     description="""
 Get official Scryfall card rulings for a Magic: The Gathering card by name.
 
-Required fields:
-- card_name (string)
 
-Optional fields:
-- fuzzy (boolean)
 
-Example valid calls:
-{
-  "card_name": "Humility"
-}
-{
-  "card_name": "Black Lotus",
-  "fuzzy": false
-}
 """,
 )
 def get_magic_card_rulings(card_name: str, fuzzy: bool = True) -> ToolResult:

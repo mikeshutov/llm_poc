@@ -74,19 +74,9 @@ class HistoricalMonthWeatherArgs(BaseModel):
     description="""
 Get historical weather data for a specific city, year, and month. This is useful for context on the usual weather in a city.
 
-Required fields:
-- city (string)
-- year (integer)
-- month (integer 1-12)
 
 Do NOT combine year and month into the city field.
 
-Example valid call:
-{
-  "city": "Toronto",
-  "year": 2024,
-  "month": 2
-}
 """,
 )
 def get_historical_month_weather(city: str, year: int, month: int) -> ToolResult:

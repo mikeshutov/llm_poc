@@ -97,19 +97,8 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
     description="""
 Search English Wikipedia and return matching pages plus a short summary of the top result.
 
-Required fields:
-- query (string)
 
-Optional fields:
-- limit (integer)
-- summary_sentences (integer)
 
-Example valid call:
-{
-  "query": "Toronto weather",
-  "limit": 5,
-  "summary_sentences": 2
-}
 """,
 )
 def wikipedia_search(

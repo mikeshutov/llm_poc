@@ -63,13 +63,7 @@ def _tool_result(result: NewsSearchResponse) -> ToolResult:
     description="""
 Search for current news results using Brave News Search. Does not provide full articles only overviews.
 
-Required fields:
-- q (string)
 
-Example valid call:
-{
-  "q": "Toronto news"
-}
 """,
 )
 def news_search(q: str) -> ToolResult:

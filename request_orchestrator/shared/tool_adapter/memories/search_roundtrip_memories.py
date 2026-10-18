@@ -38,10 +38,6 @@ Search prior roundtrip summaries by semantic similarity within specific conversa
 
 Use search_memories first to identify relevant conversation_ids, then use this tool to find the specific historical exchanges most related to the topic.
 
-Required fields:
-- query (string): Natural-language description of the specific topic, mention, or exchange to find.
-- conversation_ids (array of strings): One or more conversation IDs returned from search_memories.
-- limit (integer, optional): Maximum number of matching roundtrips to return. Defaults to {DEFAULT_MEMORY_RESULT_LIMIT}.
 """,
 )
 def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: int = DEFAULT_MEMORY_RESULT_LIMIT) -> ToolResult:

@@ -107,12 +107,7 @@ def _tool_result(result: CommanderDetailsResult) -> ToolResult:
     description="""
 Look up EDHREC commander details for a Magic: The Gathering commander.
 
-Required fields:
-- commander_name (string)
 
-Optional fields:
-- theme_limit (integer, 1-12)
-- combo_limit (integer, 0-10)
 """,
 )
 def get_commander_details(commander_name: str, theme_limit: int = 5, combo_limit: int = 3) -> ToolResult:
