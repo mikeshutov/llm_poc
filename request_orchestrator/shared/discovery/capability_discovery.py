@@ -27,7 +27,6 @@ TOP_K = min(
     MAX_DISCOVERED_CAPABILITIES,
     max(1, int(os.getenv("CAPABILITY_DISCOVERY_TOP_K", str(MAX_DISCOVERED_CAPABILITIES)))),
 )
-MIN_SIMILARITY = float(os.getenv("CAPABILITY_DISCOVERY_MIN_SIMILARITY", "0.25"))
 SEMANTIC_WEIGHT = float(os.getenv("CAPABILITY_DISCOVERY_SEMANTIC_WEIGHT", "1.0"))
 BM25_WEIGHT = float(os.getenv("CAPABILITY_DISCOVERY_BM25_WEIGHT", "0.7"))
 RRF_K = max(1, int(os.getenv("CAPABILITY_DISCOVERY_RRF_K", "60")))
@@ -101,8 +100,7 @@ def _semantic_rank(
             query_embedding,
             list(_cached_embed_text(searchable_text, id(embed_text))),
         )
-        if score >= MIN_SIMILARITY:
-            ranked.append((score, index, candidate_id))
+        ranked.append((score, index, candidate_id))
     ranked.sort(key=lambda item: (-item[0], item[1]))
     return ranked[:RETRIEVAL_K]
 
