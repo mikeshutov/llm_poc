@@ -85,18 +85,18 @@ class AgentState:
 
     def gather_tool_results(self) -> list[ToolResult]:
         gathered = list(self.direct_tool_results)
-        from tool.repository.tool_call_repository import ToolCallRepository
+        from tool.repository.message_repository import MessageToolRepository
         if self.result.tool_call_ids:
-            gathered.extend(ToolCallRepository().get_tool_results(self.result.tool_call_ids))
+            gathered.extend(MessageToolRepository().get_tool_results(self.result.tool_call_ids))
         for agent_state in self.delegated_agent_states.values():
             gathered.extend(agent_state.gather_tool_results())
         return gathered
 
     def gather_tool_calls(self):
         gathered = []
-        from tool.repository.tool_call_repository import ToolCallRepository
+        from tool.repository.message_repository import MessageToolRepository
         if self.result.tool_call_ids:
-            gathered.extend(ToolCallRepository().get_tool_calls(self.result.tool_call_ids))
+            gathered.extend(MessageToolRepository().get_tool_calls(self.result.tool_call_ids))
         for agent_state in self.delegated_agent_states.values():
             gathered.extend(agent_state.gather_tool_calls())
         return gathered

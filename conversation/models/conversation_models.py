@@ -1,21 +1,21 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from enum import StrEnum
 
 from llm.conversation_model_config import ConversationModelConfig
 from personalization.tone.models import TonePreferences
-from request_orchestrator.models.orchestrator_payload import EvidenceProducedByTool, OrchestratorPayload
-from request_orchestrator.models.relevant_evidence import RelevantEvidenceByTool
 
 
 class ConversationSummaryResponse(BaseModel):
     conversation_summary: str = ""
-    tool_summary: str = ""
 
-    @field_validator("conversation_summary", "tool_summary", mode="before")
+    @field_validator("conversation_summary", mode="before")
     @classmethod
     def coerce_list_to_str(cls, v):
         if isinstance(v, list):
@@ -23,34 +23,13 @@ class ConversationSummaryResponse(BaseModel):
         return v
 
 
-class ToolSummaryContext(BaseModel):
-    used_tools: list[str] = Field(default_factory=list)
-    evidence_produced: EvidenceProducedByTool = Field(default_factory=EvidenceProducedByTool.empty)
-    freshness: str = ""
-
-
-class RecentRoundtrip(BaseModel):
-    message_index: int
-    user_prompt: str = ""
-    roundtrip_summary: str = ""
-    assistant_follow_up: str = ""
-    used_evidence_ids: list[str] = Field(default_factory=list)
-    relevant_evidence: RelevantEvidenceByTool = Field(default_factory=RelevantEvidenceByTool.empty)
-
-
-class RecentRoundtripToolSummary(BaseModel):
-    message_index: int
-    tool_summary: ToolSummaryContext
-
-
 class ConversationContext(BaseModel):
     conversation_summary: str = ""
     latest_conversation_summary: str = ""
-    tool_summary: str = ""
-    recent_roundtrips: list[RecentRoundtrip] = Field(default_factory=list)
-    recent_roundtrip_tool_summaries: list[RecentRoundtripToolSummary] = Field(default_factory=list)
-    previous_user_request: str = ""
-    latest_assistant_follow_up: str = ""
+    # The ordered persistence message type is retained so callers can move
+    # between repository, context, and replay views without adapters. Internal
+    # tool messages are filtered by the prompt or rendering layer as needed.
+    messages: list[ConversationMessage] = Field(default_factory=list)
 
 
 class ConversationMetadata(BaseModel):
@@ -60,6 +39,61 @@ class ConversationMetadata(BaseModel):
     source_conversation_id: UUID | None = None
     source_roundtrip_id: UUID | None = None
     source_message_index: int | None = None
+
+
+class ConversationMessageKind(StrEnum):
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL_CALL = "tool_call"
+    TOOL_RESULT = "tool_result"
+
+
+class ConversationMessageVisibility(StrEnum):
+    VISIBLE = "visible"
+    INTERNAL = "internal"
+
+
+@dataclass(frozen=True)
+class NodeLog:
+    id: UUID
+    scope_type: str
+    scope_id: UUID
+    sequence: int
+    node_name: str
+    stage: str
+    event_type: str
+    level: str
+    message: str
+    payload: dict[str, Any]
+    duration_ms: int | None
+    correlation_id: UUID | None
+    created_at: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "payload", dict(self.payload) if isinstance(self.payload, dict) else {})
+
+
+@dataclass(frozen=True)
+class ConversationMessage:
+    id: UUID
+    roundtrip_id: UUID
+    sequence: int
+    kind: str
+    visibility: str
+    role: str
+    content: str
+    payload: dict[str, Any]
+    metadata: dict[str, Any]
+    parent_message_id: UUID | None
+    created_at: str
+    embedding: list[float] | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "payload", dict(self.payload) if isinstance(self.payload, dict) else {})
+        object.__setattr__(self, "metadata", dict(self.metadata) if isinstance(self.metadata, dict) else {})
+
+
+ConversationContext.model_rebuild()
 
 
 @dataclass(frozen=False)
@@ -83,38 +117,14 @@ class ConversationRoundtrip:
     id: UUID
     conversation_id: UUID
     message_index: int
-    user_prompt: str
-    generated_response: str
-    roundtrip_summary: Optional[str]
-    roundtrip_summary_embedding: Optional[list[float]]
-    response_payload: OrchestratorPayload
-    parsed_query: dict[str, Any]
-    created_at: str
+    roundtrip_summary: Optional[str] = None
+    roundtrip_summary_embedding: Optional[list[float]] = None
+    created_at: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
-    model: Optional[str] = None
-    feedback_id: Optional[UUID] = None
-    assistant_follow_up: str = ""
-    relevant_evidence: RelevantEvidenceByTool = field(default_factory=RelevantEvidenceByTool.empty)
+    status: str = "pending"
 
     def __post_init__(self) -> None:
-        self.response_payload = OrchestratorPayload.model_validate(self.response_payload)
-        self.parsed_query = dict(self.parsed_query) if isinstance(self.parsed_query, dict) else {}
         self.metadata = dict(self.metadata) if isinstance(self.metadata, dict) else {}
-        self.relevant_evidence = RelevantEvidenceByTool.model_validate(self.relevant_evidence)
-
-
-@dataclass(frozen=False)
-class ConversationEvent:
-    id: int
-    conversation_id: UUID
-    roundtrip_id: Optional[UUID]
-    event_type: str
-    source: str
-    agent_name: str
-    node_name: str
-    iteration: Optional[int]
-    payload: dict[str, Any]
-    created_at: str
 
 
 @dataclass(frozen=False)
@@ -129,21 +139,10 @@ class RoundtripFeedback:
 
 
 @dataclass(frozen=False)
-class RoundtripPrompt:
-    id: UUID
-    roundtrip_id: UUID
-    agent: str
-    prompt_step: str
-    prompt: str
-    created_at: str
-
-
-@dataclass(frozen=False)
 class ConversationSummary:
     id: UUID
     conversation_id: UUID
     summary: str
-    tool_summary: str
     message_index_cutoff: int
     created_at: str
 
@@ -154,6 +153,8 @@ class ConversationMemory:
     summary: str
     last_used_date: str
     relevance_score: float
+    matched_roundtrip_id: UUID | None = None
+    matched_message_id: UUID | None = None
 
 
 @dataclass(frozen=False)
@@ -161,11 +162,11 @@ class RoundtripMemory:
     conversation_id: UUID
     roundtrip_id: UUID
     message_index: int
-    user_prompt: str
-    generated_response: str
     roundtrip_summary: str
     created_at: str
     relevance_score: float
+    messages: list[ConversationMessage] = field(default_factory=list)
+    matched_message_id: UUID | None = None
 
 
 @dataclass(frozen=False)

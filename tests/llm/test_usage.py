@@ -8,13 +8,21 @@ from uuid import uuid4
 import pytest
 
 from llm.usage import build_llm_usage_payload, extract_llm_usage, record_llm_call, serialize_llm_call_record
+from common.data import bounded_json_value
+
+
+def test_bounded_json_value_limits_large_nested_payloads() -> None:
+    value = bounded_json_value({"items": [{"text": "x" * 100_000} for _ in range(1000)]}, max_bytes=2_000)
+
+    assert len(str(value).encode("utf-8")) <= 2_000
+    assert value.get("_truncated") is True
 
 
 class FakeRepo:
     def __init__(self) -> None:
         self.calls: list[dict] = []
 
-    def create_llm_call(self, **kwargs):
+    def record_llm_usage(self, **kwargs):
         self.calls.append(kwargs)
         return kwargs
 
@@ -153,7 +161,7 @@ def test_record_llm_call_raises_when_model_has_no_pricing() -> None:
             )
 
 
-def test_record_llm_call_persists_input_and_output_objects() -> None:
+def test_record_llm_call_persists_compact_input_and_output_metadata() -> None:
     fake_repo = FakeRepo()
 
     with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
@@ -172,8 +180,10 @@ def test_record_llm_call_persists_input_and_output_objects() -> None:
         )
 
     stored = fake_repo.calls[0]
-    assert stored['metadata']['input_object'] == {'prompt': 'hello', 'items': [1, 2]}
-    assert stored['metadata']['output_object'] == {'raw_content': '{}'}
+    assert 'input_object' not in stored['metadata']
+    assert 'output_object' not in stored['metadata']
+    assert stored['metadata']['input']['bytes'] > 0
+    assert stored['metadata']['output']['preview'] == '{}'
     assert stored['metadata']['kind'] == 'test'
 
 
@@ -197,7 +207,7 @@ def test_record_llm_call_persists_latency_ms_in_metadata() -> None:
     assert stored['metadata']['latency_ms'] == 321
 
 
-def test_serialize_llm_call_record_promotes_input_and_output_objects() -> None:
+def test_serialize_llm_call_record_omits_full_input_and_output_objects() -> None:
     serialized = serialize_llm_call_record(
         {
             'agent': 'main_agent',
@@ -222,8 +232,8 @@ def test_serialize_llm_call_record_promotes_input_and_output_objects() -> None:
         }
     )
 
-    assert serialized['input_object'] == {'prompt': 'hello'}
-    assert serialized['output_object'] == {'raw_content': '{}'}
+    assert 'input_object' not in serialized
+    assert 'output_object' not in serialized
     assert serialized['latency_ms'] == 321
     assert serialized['metadata'] == {'kind': 'test'}
 

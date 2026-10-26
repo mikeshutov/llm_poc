@@ -1,39 +1,28 @@
 from __future__ import annotations
 
-import logging
 from time import perf_counter
 
 from langsmith import traceable
 from langchain_core.tools import BaseTool
 
 from common.data import sanitize_for_json_storage
-from common.logging import create_conversation_event, log_roundtrip_prompt
+from common.logging import compact_trace_inputs, compact_trace_outputs, record_node_log
 from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.constants import NodeName
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_TERMINAL
 from request_orchestrator.models.plan import PlanningResult
 from request_orchestrator.models.plan import Plan, PlanStep
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
 from llm.conversation_model_config import OPENAI_PROVIDER
-from request_orchestrator.constants import PLANNER_PROMPT_KIND
 from llm.conversation_model_config import PLANNER_STAGE
-from llm.usage import record_llm_call, serialize_llm_call_record
+from llm.usage import record_llm_call
 from rendering.debug import PLAN_KIND
 from request_orchestrator.shared.planner.tool_wrapper import build_tools
-from tool.repository.plan_repository import PlanRepository
-
-logger = logging.getLogger(__name__)
-
-
-def _serialize_llm_call_for_log(llm_call) -> dict | None:
-    if llm_call is None:
-        return None
-    return serialize_llm_call_record(llm_call)
-
 
 def invoke_planner(
     agent_state: AgentState,
-    prompt_text: str,
+    prompt_messages: list[dict[str, str]],
     *,
     tools: list[BaseTool],
     prompt_input_object: dict[str, object],
@@ -66,7 +55,7 @@ def invoke_planner(
     )
     llm = llm.bind_tools(build_tools(tools), **bind_kwargs)
     started_at = perf_counter()
-    response = llm.invoke(prompt_text)
+    response = llm.invoke(prompt_messages)
     latency_ms = int((perf_counter() - started_at) * 1000)
     llm_call = record_llm_call(
         raw_response=response,
@@ -87,6 +76,7 @@ def invoke_planner(
         user_id=execution_context.user_profile.user_id,
         agent=agent_scope,
         stage=PLANNER_STAGE,
+        node_name=NodeName.PLANNER,
         callsite="shared_planner.run_planner",
         latency_ms=latency_ms,
         owner_agent_name=agent_state.agent_profile.name,
@@ -116,7 +106,7 @@ def invoke_planner(
             tool_arguments = {
                 key: value
                 for key, value in args.items()
-                if key not in {"hypothesis", "metadata", "evaluation_fields"}
+                if key not in {"hypothesis", "evaluation_fields"}
             }
         hypothesis = str(args.get("hypothesis", ""))
         evaluation_fields = [
@@ -129,7 +119,7 @@ def invoke_planner(
                 and field.strip() in available_fields_by_tool.get(name, set())
             )
         ] if isinstance(args.get("evaluation_fields", []), list) else []
-        metadata = args.get("metadata", {}) if isinstance(args.get("metadata", {}), dict) else {}
+        metadata: dict[str, object] = {}
         if evaluation_fields:
             metadata = {**metadata, "evaluation_fields": evaluation_fields}
         steps.append(PlanStep(
@@ -143,34 +133,33 @@ def invoke_planner(
     return PlanningResult(steps=steps), llm_call
 
 
-@traceable(name="Planner Node")
+@traceable(name="Planner Node", process_inputs=compact_trace_inputs, process_outputs=compact_trace_outputs)
 def run_planner(agent_state: AgentState) -> AgentState:
     prompt, tools = build_planner_prompt(state=agent_state)
-    prompt_text = prompt.build()
-    prompt_input_object = prompt.to_log_input_object()
-    llm_calls: list[dict[str, object]] = []
+    prompt_messages = prompt.build_messages()
+    prompt_input_object = {"messages": prompt_messages}
     planning_result: PlanningResult
     try:
         planning_result, llm_call = invoke_planner(
             agent_state,
-            prompt_text,
+            prompt_messages,
             tools=tools,
             prompt_input_object=prompt_input_object,
         )
-        serialized = _serialize_llm_call_for_log(llm_call)
-        if serialized is not None:
-            llm_calls.append(serialized)
     except Exception as e:
-        logger.exception("Native planner invocation failed: %s", e)
+        record_node_log(
+            roundtrip_id=agent_state.execution_context.roundtrip_id,
+            node_name=NodeName.PLANNER,
+            stage="invoke",
+            event_type="planner",
+            level="error",
+            message="Planner invocation failed",
+            payload={"error": str(e)},
+        )
         agent_state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
         return agent_state
 
     plan = Plan(steps=planning_result.steps)
-    if agent_state.execution_context.roundtrip_id:
-        plan.db_id = PlanRepository().save_interactive_plan(
-            agent_state.execution_context.roundtrip_id,
-            plan,
-        )
     planner_state = agent_state.node_states.planner
     planner_state.plan = plan
     planner_state.needs_replan = False
@@ -179,33 +168,35 @@ def run_planner(agent_state: AgentState) -> AgentState:
     if not plan.steps:
         agent_state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
 
+    compact_steps = [
+        {
+            "id": step.id,
+            "tool": step.tool,
+            "agent": step.agent,
+            "hypothesis_preview": step.hypothesis[:500],
+            "argument_keys": sorted(step.args),
+            "evaluation_fields": list(getattr(step, "evaluation_fields", [])),
+        }
+        for step in plan.steps
+    ]
     payload = {
         "agent_name": agent_state.agent_profile.name,
         "kind": PLAN_KIND,
         "status": "ready" if plan.steps else "completed",
         "data": sanitize_for_json_storage({
-            "steps": plan.steps,
-            "llm_usage": llm_calls,
+            "steps": compact_steps,
         }),
     }
-    create_conversation_event(
+    record_node_log(
         conversation_id=agent_state.execution_context.conversation_id,
         roundtrip_id=agent_state.execution_context.roundtrip_id,
         event_type=PLAN_KIND,
         source=agent_state.agent_profile.name,
         agent_name=agent_state.agent_profile.name,
+        node_name=NodeName.PLANNER,
         agent_version=agent_state.agent_profile.version,
         payload=payload,
     )
-
-    if agent_state.execution_context.roundtrip_id:
-        log_roundtrip_prompt(
-            roundtrip_id=agent_state.execution_context.roundtrip_id,
-            agent=agent_state.agent_profile.name,
-            agent_version=agent_state.agent_profile.version,
-            prompt_step=PLANNER_PROMPT_KIND,
-            prompt=prompt_text,
-        )
 
     return agent_state
 

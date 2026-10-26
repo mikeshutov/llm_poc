@@ -7,7 +7,7 @@ from typing import Any
 import streamlit as st
 
 from common.config import CONTENT_KEY, FILES_DIR, IMAGE_MIME_PREFIX, ROLE_ASSISTANT, ROLE_DEBUG, ROLE_KEY
-from common.logging import fetch_agent_logs_for_roundtrip, fetch_llm_call_payloads_for_roundtrip
+from common.logging import fetch_trace_messages_for_roundtrip, fetch_llm_trace_for_roundtrip
 from llm.usage import build_llm_usage_payload
 from rendering.cards import (
     render_cards,
@@ -161,24 +161,8 @@ def _format_roundtrip_duration(payload: dict | None) -> str | None:
     return None
 
 
-def _render_roundtrip_llm_usage(llm_usage: dict | None) -> None:
-    if not isinstance(llm_usage, dict):
-        return
-    summary = llm_usage.get("summary") if isinstance(llm_usage.get("summary"), dict) else {}
-    calls = llm_usage.get("calls") if isinstance(llm_usage.get("calls"), list) else []
-    if not summary and not calls:
-        return
-
-    title = f"LLM Usage ({llm_usage.get('retrieved_call_count', len(calls))} calls)"
-    with st.expander(title):
-        if summary:
-            st.json(summary, expanded=False)
-        if calls:
-            st.json(calls, expanded=False)
-
-
 def fetch_llm_usage_for_roundtrip(roundtrip_id: str | None) -> dict[str, Any] | None:
-    llm_calls = fetch_llm_call_payloads_for_roundtrip(roundtrip_id)
+    llm_calls = fetch_llm_trace_for_roundtrip(roundtrip_id)
     if not llm_calls:
         return None
     return build_llm_usage_payload(llm_calls)
@@ -432,8 +416,6 @@ def render_assistant_content(
     result_blocks = get_renderable_result_blocks(content, payload)
     has_next_question = isinstance(next_question, str) and bool(next_question)
     all_block_cards: list[EvidenceCard] = []
-    llm_usage = fetch_llm_usage_for_roundtrip(roundtrip_id)
-
     for block in result_blocks:
         all_block_cards.extend(_render_result_block(block, evidence_by_id))
 
@@ -464,8 +446,7 @@ def render_assistant_content(
     if has_next_question:
         st.markdown(next_question)
 
-    _render_roundtrip_llm_usage(llm_usage)
-    render_agent_logs(fetch_agent_logs_for_roundtrip(roundtrip_id))
+    render_agent_logs(fetch_trace_messages_for_roundtrip(roundtrip_id))
 
 
 def _render_file_preview(attached_file: dict) -> None:

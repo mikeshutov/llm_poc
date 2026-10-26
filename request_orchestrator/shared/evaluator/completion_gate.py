@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import logging
 import os
 import json
+from time import perf_counter
 
+from common.logging import record_node_log
+from request_orchestrator.constants import NodeName
 from serviceclients.completion_evaluator import CompletionEvaluatorClient, CompletionEvaluatorResult
 from request_orchestrator.models.agent_prompt import EvidenceStep
 from request_orchestrator.models.agent_state import AgentState
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 COMPLETION_EVALUATOR_ENTAILMENT_THRESHOLD = float(
     os.getenv("COMPLETION_EVALUATOR_ENTAILMENT_THRESHOLD", "0.85")
@@ -59,23 +58,53 @@ def try_completion_evaluation(
         "The provided evidence is sufficient to answer the user's request: "
         + state.inputs.task.strip()
     )
-    logger.warning(
-        "Completion evaluation payload: premise=%s hypothesis=%s",
-        premise,
-        hypothesis,
+    started_at = perf_counter()
+    record_node_log(
+        node_name=NodeName.COMPLETION_EVALUATOR,
+        stage="evaluate",
+        event_type="completion_evaluation",
+        message="Completion evaluation started",
+        roundtrip_id=state.execution_context.roundtrip_id,
+        payload={
+            "evidence_step_count": len(evidence_steps),
+            "evidence_count": sum(len(step.evidence) for step in evidence_steps),
+            "premise_preview": premise[:2_000],
+            "premise_length": len(premise),
+            "hypothesis_preview": hypothesis[:2_000],
+            "hypothesis_length": len(hypothesis),
+        },
     )
-    result: CompletionEvaluatorResult = resolved_client.evaluate(
-        premise,
-        hypothesis,
-    )
+    try:
+        result: CompletionEvaluatorResult = resolved_client.evaluate(
+            premise,
+            hypothesis,
+        )
+    except Exception as exc:
+        record_node_log(
+            node_name=NodeName.COMPLETION_EVALUATOR,
+            stage="evaluate",
+            event_type="completion_evaluation",
+            level="error",
+            message="Completion evaluation failed",
+            roundtrip_id=state.execution_context.roundtrip_id,
+            payload={"error": str(exc)},
+            duration_ms=int((perf_counter() - started_at) * 1000),
+        )
+        raise
     satisfied = result.entailment >= COMPLETION_EVALUATOR_ENTAILMENT_THRESHOLD
-    logger.warning(
-        "Completion evaluation scores: contradiction=%.4f neutral=%.4f entailment=%.4f "
-        "threshold=%.4f fast_path=%s",
-        result.contradiction,
-        result.neutral,
-        result.entailment,
-        COMPLETION_EVALUATOR_ENTAILMENT_THRESHOLD,
-        satisfied,
+    record_node_log(
+        node_name=NodeName.COMPLETION_EVALUATOR,
+        stage="evaluate",
+        event_type="completion_evaluation",
+        message="Completion evaluation completed",
+        roundtrip_id=state.execution_context.roundtrip_id,
+        payload={
+            "contradiction": result.contradiction,
+            "neutral": result.neutral,
+            "entailment": result.entailment,
+            "threshold": COMPLETION_EVALUATOR_ENTAILMENT_THRESHOLD,
+            "satisfied": satisfied,
+        },
+        duration_ms=int((perf_counter() - started_at) * 1000),
     )
     return satisfied

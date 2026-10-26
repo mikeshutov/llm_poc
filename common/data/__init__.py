@@ -5,6 +5,7 @@ from common.data.parsing import (
     strip_code_fences,
 )
 from common.data.serialization import (
+    bounded_json_value,
     is_meaningful_prompt_value,
     prune_empty_prompt_values,
     sanitize_for_json_storage,
@@ -17,5 +18,6 @@ __all__ = [
     "prune_empty_prompt_values",
     "repair_common_json_issues",
     "sanitize_for_json_storage",
+    "bounded_json_value",
     "strip_code_fences",
 ]

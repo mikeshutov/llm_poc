@@ -44,7 +44,7 @@ def test_orchestrator_payload_derives_tool_summary_from_evidence() -> None:
 
     fake_repo = SimpleNamespace(get_tool_results=lambda tool_call_ids: tool_results)
 
-    with patch("tool.repository.tool_call_repository.ToolCallRepository", return_value=fake_repo):
+    with patch("tool.repository.message_repository.MessageToolRepository", return_value=fake_repo):
         payload, _ = OrchestratorResult(
             agent_result=AgentResult(tool_call_ids=[tool_call_id]),
             result_blocks=[
@@ -99,7 +99,7 @@ def test_orchestrator_result_groups_relevant_evidence_by_tool() -> None:
     ]
     fake_repo = SimpleNamespace(get_tool_results=lambda tool_call_ids: tool_results)
 
-    with patch("tool.repository.tool_call_repository.ToolCallRepository", return_value=fake_repo):
+    with patch("tool.repository.message_repository.MessageToolRepository", return_value=fake_repo):
         _, relevant_evidence = OrchestratorResult(
             agent_result=AgentResult(
                 tool_call_ids=[tool_call_id],
@@ -156,7 +156,7 @@ def test_excluded_tool_evidence_is_not_persisted() -> None:
     ]
     fake_repo = SimpleNamespace(get_tool_results=lambda tool_call_ids: tool_results)
 
-    with patch("tool.repository.tool_call_repository.ToolCallRepository", return_value=fake_repo):
+    with patch("tool.repository.message_repository.MessageToolRepository", return_value=fake_repo):
         payload, relevant_evidence = OrchestratorResult(
             agent_result=AgentResult(
                 tool_call_ids=[lookup_tool_call_id, product_tool_call_id],

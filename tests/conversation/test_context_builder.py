@@ -1,233 +1,46 @@
-from __future__ import annotations
-
 from uuid import uuid4
 from unittest.mock import patch
 
 from conversation.context_builder import build_roundtrip_context
-from conversation.models.conversation_models import Conversation, ConversationRoundtrip, ConversationSummary
+from conversation.models.conversation_models import Conversation, ConversationMessage, ConversationRoundtrip, ConversationSummary
 
 
 class FakeConversationRepository:
-    def __init__(self) -> None:
-        self.list_roundtrips_calls: list[dict[str, object]] = []
+    def __init__(self):
+        self.roundtrip = ConversationRoundtrip(uuid4(), uuid4(), 1, "summary", None, "2026-01-01", {}, "completed")
+        self.messages = [
+            ConversationMessage(uuid4(), self.roundtrip.id, 0, "user", "visible", "user", "Find boots.", {}, {}, None, ""),
+            ConversationMessage(uuid4(), self.roundtrip.id, 1, "assistant", "visible", "assistant", "Here are boots.", {"next_question": "What size?"}, {"stage": "synthesis"}, None, ""),
+        ]
 
     def get_conversation(self, conversation_id):
-        return Conversation(
-            id=conversation_id,
-            user_id='user-1',
-            title='Test',
-            created_at='2026-08-05T00:00:00Z',
-            metadata={},
-            tone_state={},
-            summary='top level summary',
-            summary_embedding=None,
-        )
+        return Conversation(conversation_id, "user-1", "Test", "", {}, {}, "", None)
 
     def get_latest_summary(self, conversation_id):
-        return ConversationSummary(
-            id=uuid4(),
-            conversation_id=conversation_id,
-            summary='latest batch summary',
-            tool_summary='latest tool summary',
-            message_index_cutoff=5,
-            created_at='2026-08-05T00:00:00Z',
-        )
+        return ConversationSummary(uuid4(), conversation_id, "", 0, "")
 
-    def list_roundtrips(self, conversation_id, limit=50, after_message_index=None, newest_first=False):
-        self.list_roundtrips_calls.append(
-            {
-                'conversation_id': conversation_id,
-                'limit': limit,
-                'after_message_index': after_message_index,
-                'newest_first': newest_first,
-            }
-        )
-        return [
-            ConversationRoundtrip(
-                id=uuid4(),
-                conversation_id=conversation_id,
-                message_index=6,
-                user_prompt='user six',
-                generated_response='assistant six',
-                roundtrip_summary='summary six',
-                roundtrip_summary_embedding=None,
-                response_payload={"used_evidence_ids": ["evidence-six", " ", "evidence-seven"]},
-                parsed_query={},
-                created_at='2026-08-05T00:00:00Z',
-                model=None,
-                feedback_id=None,
-                relevant_evidence={"search_products": [uuid4()]},
-            ),
-            ConversationRoundtrip(
-                id=uuid4(),
-                conversation_id=conversation_id,
-                message_index=7,
-                user_prompt='user seven',
-                generated_response='assistant seven',
-                roundtrip_summary='summary seven',
-                roundtrip_summary_embedding=None,
-                response_payload={},
-                parsed_query={},
-                created_at='2026-08-05T00:00:00Z',
-                model=None,
-                feedback_id=None,
-            ),
-            ConversationRoundtrip(
-                id=uuid4(),
-                conversation_id=conversation_id,
-                message_index=8,
-                user_prompt='user eight',
-                generated_response='assistant eight',
-                roundtrip_summary='summary eight',
-                roundtrip_summary_embedding=None,
-                response_payload={},
-                parsed_query={},
-                created_at='2026-08-05T00:00:00Z',
-                model=None,
-                feedback_id=None,
-                assistant_follow_up='Would you like more options?',
-            ),
-        ]
+    def list_roundtrips(self, *args, **kwargs):
+        return [self.roundtrip]
 
-    def get_latest_completed_roundtrip(self, conversation_id):
-        return ConversationRoundtrip(
-            id=uuid4(),
-            conversation_id=conversation_id,
-            message_index=8,
-            user_prompt='user eight',
-            generated_response='assistant eight',
-            roundtrip_summary='summary eight',
-            roundtrip_summary_embedding=None,
-            response_payload={},
-            parsed_query={},
-            created_at='2026-08-05T00:00:00Z',
-            model=None,
-            assistant_follow_up='Would you like more options?',
-        )
+    def list_messages(self, roundtrip_id, include_internal=True):
+        return self.messages
+
+def test_context_uses_ordered_visible_messages() -> None:
+    repository = FakeConversationRepository()
+    with patch("conversation.context_builder.get_conversation_repo", return_value=repository):
+        context = build_roundtrip_context(str(repository.roundtrip.conversation_id))
+
+    assert [message.content for message in context.messages] == ["Find boots.", "Here are boots."]
+    assert context.conversation_summary == ""
 
 
-def test_build_roundtrip_context_requests_latest_unsummarized_roundtrips() -> None:
-    fake_repo = FakeConversationRepository()
-    conversation_id = str(uuid4())
+def test_context_projects_out_internal_trace_messages() -> None:
+    repository = FakeConversationRepository()
+    repository.messages.insert(1, ConversationMessage(
+        uuid4(), repository.roundtrip.id, 1, "assistant", "internal", "assistant",
+        "full prompt should not be context", {"sections_raw": {"large": "x" * 10000}}, {}, None, "",
+    ))
+    with patch("conversation.context_builder.get_conversation_repo", return_value=repository):
+        context = build_roundtrip_context(str(repository.roundtrip.conversation_id))
 
-    with patch('conversation.context_builder.get_conversation_repo', return_value=fake_repo):
-        context = build_roundtrip_context(conversation_id, limit=3)
-
-    assert fake_repo.list_roundtrips_calls == [
-        {
-            'conversation_id': fake_repo.list_roundtrips_calls[0]['conversation_id'],
-            'limit': 3,
-            'after_message_index': 5,
-            'newest_first': True,
-        }
-    ]
-    assert [roundtrip.message_index for roundtrip in context.recent_roundtrips] == [6, 7, 8]
-    assert [roundtrip.user_prompt for roundtrip in context.recent_roundtrips] == ['user six', 'user seven', 'user eight']
-    assert context.recent_roundtrips[0].used_evidence_ids == ['evidence-six', 'evidence-seven']
-    assert list(context.recent_roundtrips[0].relevant_evidence.root) == ['search_products']
-    assert context.recent_roundtrips[1].used_evidence_ids == []
-    assert context.recent_roundtrips[-1].assistant_follow_up == 'Would you like more options?'
-    assert context.previous_user_request == 'user eight'
-    assert context.latest_assistant_follow_up == 'Would you like more options?'
-
-
-def test_build_roundtrip_context_uses_completed_roundtrips_from_repository() -> None:
-    fake_repo = FakeConversationRepository()
-    conversation_id = str(uuid4())
-
-    def list_completed_roundtrips(conversation_id, limit=50, after_message_index=None, newest_first=False):
-        fake_repo.list_roundtrips_calls.append(
-            {
-                'conversation_id': conversation_id,
-                'limit': limit,
-                'after_message_index': after_message_index,
-                'newest_first': newest_first,
-            }
-        )
-        return [
-            ConversationRoundtrip(
-                id=uuid4(),
-                conversation_id=conversation_id,
-                message_index=6,
-                user_prompt='user six',
-                generated_response='assistant six',
-                roundtrip_summary='summary six',
-                roundtrip_summary_embedding=None,
-                response_payload={},
-                parsed_query={},
-                created_at='2026-08-05T00:00:00Z',
-                    model=None,
-                    feedback_id=None,
-                ),
-            ConversationRoundtrip(
-                id=uuid4(),
-                conversation_id=conversation_id,
-                message_index=8,
-                user_prompt='user eight',
-                generated_response='assistant eight',
-                roundtrip_summary='summary eight',
-                roundtrip_summary_embedding=None,
-                response_payload={},
-                parsed_query={},
-                created_at='2026-08-05T00:00:00Z',
-                model=None,
-                feedback_id=None,
-            ),
-        ]
-
-    fake_repo.list_roundtrips = list_completed_roundtrips
-
-    with patch('conversation.context_builder.get_conversation_repo', return_value=fake_repo):
-        context = build_roundtrip_context(conversation_id, limit=3)
-
-    assert [roundtrip.message_index for roundtrip in context.recent_roundtrips] == [6, 8]
-    assert [roundtrip.user_prompt for roundtrip in context.recent_roundtrips] == ['user six', 'user eight']
-
-
-
-def test_build_conversation_context_json_prunes_empty_fields() -> None:
-    from conversation.models.conversation_models import ConversationContext, RecentRoundtrip
-    from conversation.utils import build_conversation_context_json
-
-    context = ConversationContext(
-        conversation_summary='',
-        latest_conversation_summary='',
-        tool_summary='',
-        recent_roundtrips=[
-            RecentRoundtrip(
-                message_index=1,
-                user_prompt='hello',
-                roundtrip_summary='',
-                assistant_follow_up='Would you like another option?',
-            )
-        ],
-        recent_roundtrip_tool_summaries=[],
-    )
-
-    rendered = build_conversation_context_json(context)
-
-    assert 'latest_conversation_summary' not in rendered
-    assert 'tool_summary' not in rendered
-    assert 'roundtrip_summary' not in rendered
-    assert 'hello' in rendered
-    assert 'Would you like another option?' in rendered
-
-
-def test_build_conversation_context_json_serializes_relevant_evidence_uuids() -> None:
-    from conversation.models.conversation_models import ConversationContext, RecentRoundtrip
-    from conversation.utils import build_conversation_context_json
-
-    evidence_id = uuid4()
-    rendered = build_conversation_context_json(
-        ConversationContext(
-            recent_roundtrips=[
-                RecentRoundtrip(
-                    message_index=1,
-                    user_prompt="Find products.",
-                    relevant_evidence={"find_products": [evidence_id]},
-                )
-            ]
-        )
-    )
-
-    assert str(evidence_id) in rendered
+    assert all(message.visibility == "visible" for message in context.messages)

@@ -11,6 +11,7 @@ from request_orchestrator.models.orchestrator_payload import (
 )
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
 from request_orchestrator.models.relevant_evidence import RelevantEvidenceByTool
+from common.data import bounded_json_value
 from request_orchestrator.shared.evidence import build_evidence_bundle_from_tool_results
 from tool.constants import EVIDENCE_PERSISTENCE_EXCLUDED_TOOL_NAMES
 
@@ -36,6 +37,22 @@ def _normalize_evidence_ids(
 
 def _is_evidence_excluded_from_persistence(evidence: EvidenceView) -> bool:
     return evidence.tool_name.strip() in EVIDENCE_PERSISTENCE_EXCLUDED_TOOL_NAMES
+
+
+def _project_evidence_for_persistence(evidence: EvidenceView) -> EvidenceView:
+    data = evidence.model_dump(mode="json", exclude={"raw_payload"})
+    projected = bounded_json_value(data, max_bytes=12_000)
+    if isinstance(projected, dict) and projected.get("_truncated"):
+        return EvidenceView(
+            id=evidence.id,
+            tool_call_id=evidence.tool_call_id,
+            hash=evidence.hash,
+            item_id=evidence.item_id,
+            tool_name=evidence.tool_name,
+            title=evidence.title[:2_000],
+            summary=evidence.summary[:4_000],
+        )
+    return EvidenceView.model_validate(projected)
 
 
 @dataclass(frozen=True)
@@ -100,12 +117,12 @@ class OrchestratorResult:
         )
 
     def to_persistence_models(self) -> tuple[OrchestratorPayload, RelevantEvidenceByTool]:
-        from tool.repository.tool_call_repository import ToolCallRepository
+        from tool.repository.message_repository import MessageToolRepository
 
-        tool_results = ToolCallRepository().get_tool_results(self.agent_result.tool_call_ids)
+        tool_results = MessageToolRepository().get_tool_results(self.agent_result.tool_call_ids)
         evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
         evidence_by_id = {
-            evidence_id: evidence
+            evidence_id: _project_evidence_for_persistence(evidence)
             for evidence_id, evidence in evidence_bundle.evidence_by_id.items()
             if not _is_evidence_excluded_from_persistence(evidence)
         }

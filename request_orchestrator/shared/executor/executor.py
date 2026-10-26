@@ -10,9 +10,10 @@ from uuid import UUID
 from langsmith import traceable
 from pydantic import ValidationError
 
-from common.data import sanitize_for_json_storage
+from common.data import bounded_json_value
 from common.signatures import build_signature
-from common.logging import create_conversation_event
+from common.logging import compact_trace_inputs, compact_trace_outputs, record_node_log
+from request_orchestrator.constants import NodeName
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
 from request_orchestrator.models.evidence import ToolResult
@@ -20,8 +21,7 @@ from request_orchestrator.models.plan import Plan
 from request_orchestrator.models.plan import PlanStep
 from request_orchestrator.shared.runtime_context import bind_agent_context, bind_runtime_context
 from tool.registry import call_tool
-from tool.repository.tool_call_repository import ToolCallRepository
-from rendering.debug import TOOL_CALL_KIND
+from tool.repository.message_repository import MessageToolRepository
 
 
 @dataclass(frozen=True)
@@ -104,6 +104,7 @@ def _execute_step(
         args=args,
         output=output,
         error_text=error_text,
+        rejection_reason=rejection_reason,
         latency_ms=latency_ms,
     )
 
@@ -145,7 +146,7 @@ def _record_step_result(
     agent_state: AgentState,
     *,
     plan: Plan | None,
-    tool_repo: ToolCallRepository | None,
+    tool_repo: MessageToolRepository | None,
     iteration_number: int,
     execution_result: StepExecutionResult,
 ) -> None:
@@ -162,31 +163,27 @@ def _record_step_result(
                 "call_metadata": step.metadata,
             }
         )
-    payload = {
-        "agent_name": agent_state.agent_profile.name,
-        "kind": TOOL_CALL_KIND,
-        "tool_name": step.tool,
-        "iteration": iteration_number,
-        "request": sanitize_for_json_storage(execution_result.args),
-        "response": sanitize_for_json_storage(output),
-        "data": sanitize_for_json_storage({
-            "step_plan": step.plan,
-            "step_hypothesis": step.hypothesis,
-            "latency_ms": execution_result.latency_ms,
-        }),
-    }
-    if execution_result.error_text:
-        payload["error"] = execution_result.error_text
-    create_conversation_event(
-        conversation_id=execution_context.conversation_id,
+    evidence_count = len(output.evidence) if isinstance(output, ToolResult) else 0
+    status = "rejected" if execution_result.rejection_reason else ("error" if execution_result.error_text else "completed")
+    record_node_log(
         roundtrip_id=execution_context.roundtrip_id,
-        event_type=TOOL_CALL_KIND,
-        source=agent_state.agent_profile.name,
-        agent_name=agent_state.agent_profile.name,
-        agent_version=agent_state.agent_profile.version,
-        node_name="tool_call",
-        iteration=iteration_number,
-        payload=payload,
+        node_name=NodeName.EXECUTOR,
+        stage="tool_call",
+        event_type="tool_execution",
+        level="error" if status == "error" else ("warning" if status == "rejected" else "info"),
+        message=f"Tool execution {status}",
+        payload={
+            "tool_name": step.tool,
+            "step_id": step.id,
+            "plan_step_id": step.db_id,
+            "status": status,
+            "argument_keys": sorted(execution_result.args),
+            "argument_preview": bounded_json_value(execution_result.args, max_bytes=4_000),
+            "evidence_count": evidence_count,
+            "error": execution_result.error_text[:2_000],
+            "rejection_reason": execution_result.rejection_reason[:2_000],
+        },
+        duration_ms=execution_result.latency_ms,
     )
     if tool_repo and execution_context.roundtrip_id:
         tool_call_id = tool_repo.append_tool_call(
@@ -203,7 +200,7 @@ def _record_step_result(
         agent_state.result = agent_state.result.with_recorded_tool_call(tool_call_id)
 
 
-@traceable(name="Executor Node")
+@traceable(name="Executor Node", process_inputs=compact_trace_inputs, process_outputs=compact_trace_outputs)
 def run_executor(agent_state: AgentState) -> AgentState:
     planner_state = agent_state.node_states.planner
     plan = planner_state.plan
@@ -211,9 +208,17 @@ def run_executor(agent_state: AgentState) -> AgentState:
         return agent_state
     if agent_state.available_agent_states is not None:
         return _run_top_level_executor(agent_state)
-    tool_repo = ToolCallRepository() if isinstance(agent_state.execution_context.roundtrip_id, UUID) else None
+    tool_repo = MessageToolRepository() if isinstance(agent_state.execution_context.roundtrip_id, UUID) else None
     allowed_tool_names = set(agent_state.agent_profile.tool_names)
     iteration_number = planner_state.plan_count
+    record_node_log(
+        roundtrip_id=agent_state.execution_context.roundtrip_id,
+        node_name=NodeName.EXECUTOR,
+        stage="start",
+        event_type="executor",
+        message="Executor started",
+        payload={"plan_step_count": len(plan.steps), "iteration": iteration_number},
+    )
 
     with bind_runtime_context(
         conversation_id=agent_state.execution_context.conversation_id,
@@ -285,7 +290,7 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
     plan = agent_state.node_states.planner.plan
     if plan is None:
         return agent_state
-    tool_repo = ToolCallRepository() if isinstance(agent_state.execution_context.roundtrip_id, UUID) else None
+    tool_repo = MessageToolRepository() if isinstance(agent_state.execution_context.roundtrip_id, UUID) else None
     iteration_number = agent_state.node_states.planner.plan_count
     for step in plan.steps:
         if step.agent:
@@ -294,6 +299,15 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
                 "task": step.plan,
             })
             if request_signature in agent_state.executed_request_signatures:
+                record_node_log(
+                    roundtrip_id=agent_state.execution_context.roundtrip_id,
+                    node_name=NodeName.EXECUTOR,
+                    stage="deduplication",
+                    event_type="tool_execution",
+                    level="warning",
+                    message="Delegated request skipped as duplicate",
+                    payload={"agent": step.agent, "step_id": step.id, "status": "duplicate"},
+                )
                 continue
             agent_state.executed_request_signatures.append(request_signature)
             delegated = agent_state.available_agent_states.get(step.agent)
@@ -313,6 +327,15 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
             "input": resolved_args,
         })
         if request_signature in agent_state.executed_request_signatures:
+            record_node_log(
+                roundtrip_id=agent_state.execution_context.roundtrip_id,
+                node_name=NodeName.EXECUTOR,
+                stage="deduplication",
+                event_type="tool_execution",
+                level="warning",
+                message="Tool request skipped as duplicate",
+                payload={"tool_name": step.tool, "step_id": step.id, "status": "duplicate"},
+            )
             continue
         if (
             tool_repo is not None
@@ -320,6 +343,15 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
             and tool_repo.has_request_hash(agent_state.execution_context.roundtrip_id, request_signature)
         ):
             agent_state.executed_request_signatures.append(request_signature)
+            record_node_log(
+                roundtrip_id=agent_state.execution_context.roundtrip_id,
+                node_name=NodeName.EXECUTOR,
+                stage="deduplication",
+                event_type="tool_execution",
+                level="warning",
+                message="Tool request skipped because it was already persisted",
+                payload={"tool_name": step.tool, "step_id": step.id, "status": "duplicate"},
+            )
             continue
         agent_state.executed_request_signatures.append(request_signature)
         execution_result = execute_step(

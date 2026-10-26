@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.shared.discovery.attribute_discovery import attribute_discovery
 
@@ -23,8 +21,7 @@ def test_attribute_discovery_sends_context_and_all_available_attributes() -> Non
 
     result = attribute_discovery(state, client=client)
 
-    context = json.loads(client.context)
-    assert context["task"] == "Find a dinner recipe"
+    assert client.context == "Current user request:\nFind a dinner recipe"
     assert client.attributes
     assert "food.likes" in client.attributes
     assert len(client.attributes) == 36

@@ -26,7 +26,8 @@ class MemorySearchMetadata(BaseModel):
     TOOL_NAME_SEARCH_MEMORIES,
     args_schema=SearchMemoriesArgs,
     description=f"""
-Search prior conversation memories by semantic similarity over conversation summaries.
+Search prior conversation memories by semantic similarity over roundtrip summaries.
+Results are grouped by conversation; use search_roundtrip_memories to retrieve the full matching exchanges.
 
 
 Returns up to {DEFAULT_MEMORY_RESULT_LIMIT} relevant conversation memories for the current user.
@@ -34,11 +35,28 @@ Returns up to {DEFAULT_MEMORY_RESULT_LIMIT} relevant conversation memories for t
 )
 def search_memories(query: str) -> ToolResult:
     query_embedding = embed_text(query)
-    memories = get_conversation_repo().search_conversation_memories(
+    repo = get_conversation_repo()
+    roundtrip_matches = repo.search_roundtrip_memories(
         query_embedding=query_embedding,
         limit=DEFAULT_MEMORY_RESULT_LIMIT,
         user_id=get_current_user_id(),
     )
+    best_by_conversation: dict[str, ConversationMemory] = {}
+    for match in roundtrip_matches:
+        conversation_id = str(match.conversation_id)
+        conversation = repo.get_conversation(match.conversation_id)
+        candidate = ConversationMemory(
+            conversation_id=match.conversation_id,
+            summary=(conversation.summary if conversation else "") or match.roundtrip_summary,
+            last_used_date=str(conversation.created_at if conversation else match.created_at),
+            relevance_score=match.relevance_score,
+            matched_roundtrip_id=match.roundtrip_id,
+            matched_message_id=match.matched_message_id,
+        )
+        previous = best_by_conversation.get(conversation_id)
+        if previous is None or candidate.relevance_score < previous.relevance_score:
+            best_by_conversation[conversation_id] = candidate
+    memories = list(best_by_conversation.values())[:DEFAULT_MEMORY_RESULT_LIMIT]
     evidence: list[EvidenceView] = []
     for memory in memories:
         metadata = MemorySearchMetadata(

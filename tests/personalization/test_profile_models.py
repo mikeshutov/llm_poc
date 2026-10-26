@@ -435,7 +435,7 @@ def test_agent_prompt_exposes_prompt_text_sections_and_token_count() -> None:
 
     prompt_text = prompt.build()
     prompt_token_count = prompt.prompt_token_count()
-    sections_raw = prompt.to_log_input_object()["sections_raw"]
+    sections_raw = prompt.sections_raw
 
     assert prompt_text
     assert prompt_token_count > 0

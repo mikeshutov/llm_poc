@@ -10,6 +10,7 @@ from request_orchestrator.agent_runner.models.agent_profile import (
     AgentProfile,
 )
 from request_orchestrator.strategies.planner_executor_evaluator.graph import PlannerExecutorEvaluatorStratagy
+from request_orchestrator.strategies.react.graph import ReactStratagy
 from request_orchestrator.shared.main_router import router
 
 
@@ -17,6 +18,7 @@ class AgentRegistry:
     def __init__(self) -> None:
         self._strategies = {
             AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR: PlannerExecutorEvaluatorStratagy(router),
+            AgentExecutionStrategy.REACT: ReactStratagy(),
         }
 
     def get(self, agent_profile: AgentProfile) -> Callable:

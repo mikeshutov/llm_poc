@@ -1,14 +1,21 @@
-from common.logging.conversation_event_logger import create_conversation_event, log_roundtrip_prompt
-from common.logging.conversation_event_view import (
-    fetch_agent_logs_for_roundtrip,
-    fetch_llm_call_payloads_for_roundtrip,
-    normalize_conversation_event,
+from common.logging.message_trace_logger import (
+    compact_trace_inputs,
+    compact_trace_outputs,
+    record_node_log,
+    record_node_failure,
+    record_node_success,
+)
+from common.logging.message_trace_view import (
+    fetch_llm_trace_for_roundtrip,
+    fetch_trace_messages_for_roundtrip,
 )
 
 __all__ = [
-    "create_conversation_event",
-    "log_roundtrip_prompt",
-    "fetch_agent_logs_for_roundtrip",
-    "fetch_llm_call_payloads_for_roundtrip",
-    "normalize_conversation_event",
+    "compact_trace_inputs",
+    "compact_trace_outputs",
+    "record_node_log",
+    "record_node_failure",
+    "record_node_success",
+    "fetch_trace_messages_for_roundtrip",
+    "fetch_llm_trace_for_roundtrip",
 ]

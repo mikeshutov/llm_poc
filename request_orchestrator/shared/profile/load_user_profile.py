@@ -4,14 +4,15 @@ from dataclasses import asdict
 from langsmith import traceable
 
 from personalization.profile.service import hydrate_user_profile_core, load_user_profile_attributes
-from common.logging import create_conversation_event
+from common.logging import compact_trace_inputs, compact_trace_outputs, record_node_log
 from request_orchestrator.models.main_state import MainState
+from request_orchestrator.constants import NodeName
 from rendering.debug import PROFILE_LOAD_KIND
 
 ORCHESTRATOR_AGENT_NAME = "request_orchestrator"
 
 
-@traceable(name="Load User Profile Node")
+@traceable(name="Load User Profile Node", process_inputs=compact_trace_inputs, process_outputs=compact_trace_outputs)
 def load_user_profile(
     main_state: MainState,
     *,
@@ -26,12 +27,13 @@ def load_user_profile(
     )
 
     loaded_attributes = user_profile.user_attributes.attributes
-    create_conversation_event(
+    record_node_log(
         conversation_id=main_state.execution_context.conversation_id,
         roundtrip_id=main_state.execution_context.roundtrip_id,
         event_type=PROFILE_LOAD_KIND,
         source=ORCHESTRATOR_AGENT_NAME,
         agent_name=ORCHESTRATOR_AGENT_NAME,
+        node_name=NodeName.LOAD_USER_PROFILE,
         payload={
             "agent_name": ORCHESTRATOR_AGENT_NAME,
             "kind": PROFILE_LOAD_KIND,

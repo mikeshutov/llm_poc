@@ -17,12 +17,12 @@ That gives the graph one shared runtime picture of the turn without forcing ever
 `build_roundtrip_context(...)` currently builds `ConversationContext` from four layers:
 1. `conversation.summary` as the top-level conversation summary.
 2. The latest stored batch summary as `latest_conversation_summary`.
-3. Recent roundtrips after the latest summary cutoff, each with `user_prompt` and `roundtrip_summary`.
+3. Recent roundtrips after the latest summary cutoff, derived from ordered user and assistant messages plus `roundtrip_summary`.
 4. Recent roundtrip tool summaries after the latest summary cutoff.
 
 Important detail:
 1. The current user prompt is not embedded into stored conversation context.
-2. We create the roundtrip row early, but context assembly only includes roundtrips that already have a `user_prompt` or `roundtrip_summary`.
+2. We create the roundtrip row early, but context assembly only includes roundtrips that already have a user message or `roundtrip_summary`.
 3. The live user request is passed separately as `state.task`.
 
 ## Profile Hydration Layer

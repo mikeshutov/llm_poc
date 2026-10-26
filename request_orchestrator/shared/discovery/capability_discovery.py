@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import os
 import re
-import logging
+from time import perf_counter
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from typing import Any
@@ -17,6 +17,8 @@ from request_orchestrator.shared.discovery.models import (
 )
 from tool.repository.repo_factory import get_tool_registry_repo
 from tool.tools import TOOL_CATEGORIES
+from common.logging import record_node_log
+from request_orchestrator.constants import NodeName
 
 MAX_DISCOVERED_CAPABILITIES = 5
 RETRIEVAL_K = max(
@@ -33,7 +35,6 @@ RRF_K = max(1, int(os.getenv("CAPABILITY_DISCOVERY_RRF_K", "60")))
 BM25_K1 = float(os.getenv("CAPABILITY_DISCOVERY_BM25_K1", "1.2"))
 BM25_B = float(os.getenv("CAPABILITY_DISCOVERY_BM25_B", "0.75"))
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
-logger = logging.getLogger(__name__)
 
 
 def _similarity(left: list[float], right: list[float]) -> float:
@@ -242,24 +243,47 @@ def capability_discovery(
     """
     from request_orchestrator.shared.agents.agent_selection_query import build_agent_selection_query
 
-    query = build_agent_selection_query(
+    query = main_state.discovery_query or build_agent_selection_query(
         current_user_request=main_state.task,
         conversation_context=main_state.execution_context.conversation_context,
     )
     tool_candidates = _build_tool_candidates()
     agent_candidates = _build_agent_candidates(main_state) if include_agents else []
-    try:
-        query_embedding: list[float] | None = embed_text(query)
-    except Exception:
-        query_embedding = None
+    query_embedding = main_state.discovery_query_embedding
+    embedding_reused = query_embedding is not None
+    embedding_started_at = perf_counter()
+    if query_embedding is None:
+        try:
+            query_embedding = embed_text(query)
+            main_state.discovery_query_embedding = query_embedding
+        except Exception as exc:
+            query_embedding = None
+            record_node_log(
+                node_name=NodeName.CAPABILITY_DISCOVERY,
+                stage="embedding",
+                event_type="capability_discovery",
+                level="warning",
+                message="Capability discovery embedding failed",
+                roundtrip_id=main_state.execution_context.roundtrip_id,
+                payload={"query": query, "error": str(exc)},
+                duration_ms=int((perf_counter() - embedding_started_at) * 1000),
+            )
 
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="capability-discovery") as executor:
         tool_future = executor.submit(_discover_persisted_tools, query, query_embedding)
         agent_future = executor.submit(_rank_candidates, query, query_embedding, agent_candidates)
         try:
             tool_matches = tool_future.result()
-        except Exception:
-            logger.warning("Persisted tool capability lookup failed; using unranked tool fallback", exc_info=True)
+        except Exception as exc:
+            record_node_log(
+                node_name=NodeName.CAPABILITY_DISCOVERY,
+                stage="tool_lookup",
+                event_type="capability_discovery",
+                level="warning",
+                message="Persisted tool capability lookup failed; using fallback",
+                roundtrip_id=main_state.execution_context.roundtrip_id,
+                payload={"query": query, "error": str(exc), "fallback": True},
+            )
             tool_matches = []
         agent_matches = agent_future.result()
 
@@ -270,7 +294,24 @@ def capability_discovery(
     if not agent_matches:
         agent_matches = [(0.0, value) for _, _, value in agent_candidates[:TOP_K]]
 
-    return CapabilityDiscoveryResult(
+    result = CapabilityDiscoveryResult(
         agents=[value for _, value in agent_matches],
         tools=[value for _, value in tool_matches],
     )
+    record_node_log(
+        node_name=NodeName.CAPABILITY_DISCOVERY,
+        stage="enrich_state",
+        event_type="capability_discovery",
+        message="Capability discovery completed",
+        roundtrip_id=main_state.execution_context.roundtrip_id,
+        payload={
+            "query": query,
+            "embedding_reused": embedding_reused,
+            "discovered_tools": [tool.name for tool in result.tools],
+            "discovered_agents": [agent.agent for agent in result.agents],
+            "tool_count": len(result.tools),
+            "agent_count": len(result.agents),
+        },
+        duration_ms=int((perf_counter() - embedding_started_at) * 1000),
+    )
+    return result

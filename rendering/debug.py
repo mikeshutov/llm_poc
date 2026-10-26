@@ -1,7 +1,6 @@
 import streamlit as st
 from pydantic import BaseModel, Field
 
-from common.config import CONTENT_KEY, ROLE_DEBUG, ROLE_KEY
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 
 
@@ -13,12 +12,6 @@ SYNTHESIS_KIND = "synthesis"
 EXECUTION_RESULT_KIND = "execution_result"
 LLM_CALL_KIND = "llm_call"
 RERANKER_CALL_KIND = "reranker_call"
-ORCHESTRATOR_AGENT_NAME = "request_orchestrator"
-DEFAULT_AGENT_LOG_ORDER = [
-    ORCHESTRATOR_AGENT_NAME,
-    "profile_management",
-    "main_agent",
-]
 
 
 class ProfileLoadLogPayload(BaseModel):
@@ -94,9 +87,11 @@ class LlmCallLogPayload(BaseModel):
 class RerankerCallLogPayload(BaseModel):
     title: str = "Reranker"
     model: str = ""
-    query: str = ""
-    candidates: list[dict] = Field(default_factory=list)
-    results: list[dict] = Field(default_factory=list)
+    query_preview: str = ""
+    query_length: int = 0
+    candidate_ids: list[str] = Field(default_factory=list)
+    result_ids: list[str] = Field(default_factory=list)
+    scores: list[dict] = Field(default_factory=list)
     candidate_count: int = 0
     limit: int | None = None
     evidence_lengths: list[int] = Field(default_factory=list)
@@ -115,21 +110,6 @@ def debug_render_message(content, content_title: str) -> None:
                 st.code(str(content), language="text")
 
 
-def emit_debug_message(content, content_title: str) -> None:
-    try:
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
-        st.session_state.messages.append(
-            {
-                ROLE_KEY: ROLE_DEBUG,
-                CONTENT_KEY: content,
-                "title": content_title,
-            }
-        )
-        debug_render_message(content, content_title)
-    except Exception:
-        pass
-
 def _build_profile_load_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
     return ProfileLoadLogPayload(
@@ -143,11 +123,14 @@ def _build_profile_load_payload(entry: dict) -> dict:
 
 def _build_plan_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
+    compact_steps = data.get("steps") or []
     return PlanLogPayload(
         status=entry.get("status") or data.get("planner_status") or "",
         reason=data.get("planner_reason") or "",
-        step_plans=data.get("step_plans") or [],
-        step_hypotheses=data.get("step_hypotheses") or [],
+        step_plans=data.get("step_plans") or [step.get("tool", "") for step in compact_steps],
+        step_hypotheses=data.get("step_hypotheses") or [
+            step.get("hypothesis_preview", "") for step in compact_steps
+        ],
     ).model_dump()
 
 
@@ -155,7 +138,7 @@ def _build_synthesis_payload(entry: dict) -> dict:
     data = entry.get("data") or {}
     return SynthesisLogPayload(
         answer_preview=data.get("answer_preview") or [],
-        next_question=data.get("next_question") or "",
+        next_question=data.get("next_question") or data.get("next_question_preview") or "",
         relevant_evidence_ids=data.get("relevant_evidence_ids") or [],
     ).model_dump()
 
@@ -243,63 +226,30 @@ def _build_log_payload(entry: dict) -> tuple[str, dict]:
     return title, payload
 
 
-def _ordered_agent_log_sections(agent_logs: dict[str, list[dict]] | None) -> list[tuple[str, list[dict]]]:
-    if not agent_logs:
-        return []
-
-    ordered_names: list[str] = []
-    for agent_name in DEFAULT_AGENT_LOG_ORDER:
-        entries = agent_logs.get(agent_name)
-        if entries:
-            ordered_names.append(agent_name)
-
-    remaining_names = sorted(
-        agent_name
-        for agent_name, entries in agent_logs.items()
-        if entries and agent_name not in ordered_names
-    )
-    ordered_names.extend(remaining_names)
-    return [(agent_name, agent_logs[agent_name]) for agent_name in ordered_names]
-
-
 def _render_log_entries(entries: list[dict]) -> None:
     for index, entry in enumerate(entries):
         title, payload = _build_log_payload(entry)
-        st.markdown(f"**{title}**")
+        sequence = entry.get("sequence")
+        stage = entry.get("stage") or ""
+        level = entry.get("level") or "info"
+        context = " | ".join(
+            part for part in [
+                f"#{sequence}" if sequence is not None else "",
+                entry.get("node_name") or "",
+                stage,
+                level,
+            ] if part
+        )
+        st.markdown(f"**{title}**" + (f" · {context}" if context else ""))
         st.json(payload, expanded=False)
         if index < len(entries) - 1:
             st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
 
 
-def _split_orchestrator_entries_for_agents(entries: list[dict]) -> tuple[list[dict], list[dict]]:
-    for index, entry in enumerate(entries):
-        if entry.get("kind") == SYNTHESIS_KIND:
-            return entries[:index], entries[index:]
-    return entries, []
-
-
 def render_agent_logs(agent_logs: dict[str, list[dict]] | None) -> None:
-    ordered_sections = _ordered_agent_log_sections(agent_logs)
-    if not ordered_sections:
+    if not agent_logs:
         return
-
-    top_level_name, top_level_entries = ordered_sections[0]
-    if top_level_name == ORCHESTRATOR_AGENT_NAME:
-        with st.expander(f"{top_level_name} log"):
-            before_agent_sections, after_agent_sections = _split_orchestrator_entries_for_agents(top_level_entries)
-            if before_agent_sections:
-                _render_log_entries(before_agent_sections)
-            for agent_name, entries in ordered_sections[1:]:
-                if not entries:
-                    continue
-                with st.expander(f"{agent_name} log"):
-                    _render_log_entries(entries)
-            if after_agent_sections:
-                _render_log_entries(after_agent_sections)
-        return
-
-    for agent_name, entries in ordered_sections:
-        if not entries:
-            continue
-        with st.expander(f"{agent_name} log"):
-            _render_log_entries(entries)
+    entries = [entry for grouped in agent_logs.values() for entry in grouped]
+    entries.sort(key=lambda entry: (entry.get("sequence", 0), entry.get("node_name", "")))
+    with st.expander(f"Roundtrip log ({len(entries)} entries)"):
+        _render_log_entries(entries)

@@ -4,7 +4,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from llm.usage import LlmCallRecord, serialize_llm_call_record
 
 
 class EvaluatorEventData(BaseModel):
@@ -12,7 +11,6 @@ class EvaluatorEventData(BaseModel):
     relevant_evidence: list[str] = Field(default_factory=list)
     missing_information: list[str] = Field(default_factory=list)
     parse_error: str | None = None
-    llm_usage: dict[str, Any] | None = None
 
 
 class EvaluatorEventPayload(BaseModel):
@@ -30,7 +28,6 @@ class EvaluatorEventPayload(BaseModel):
         status: str,
         relevant_evidence: list[str],
         missing_information: list[str],
-        llm_call: LlmCallRecord | None,
     ) -> "EvaluatorEventPayload":
         return cls(
             agent_name=agent_name,
@@ -40,7 +37,6 @@ class EvaluatorEventPayload(BaseModel):
                 status=status,
                 relevant_evidence=list(relevant_evidence),
                 missing_information=list(missing_information),
-                llm_usage=None if llm_call is None else serialize_llm_call_record(llm_call),
             ),
         )
 
@@ -52,7 +48,6 @@ class EvaluatorEventPayload(BaseModel):
         kind: str,
         status: str,
         parse_error: str,
-        llm_call: LlmCallRecord | None,
     ) -> "EvaluatorEventPayload":
         return cls(
             agent_name=agent_name,
@@ -63,6 +58,5 @@ class EvaluatorEventPayload(BaseModel):
                 relevant_evidence=[],
                 missing_information=[],
                 parse_error=parse_error,
-                llm_usage=None if llm_call is None else serialize_llm_call_record(llm_call),
             ),
         )

@@ -36,41 +36,27 @@ class EvidenceRepository:
         if not parsed_ids:
             return {}
 
+        evidence_by_id: dict[str, EvidenceView] = {}
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT evidence_views.*
-                FROM evidence_views
-                WHERE evidence_views.id = ANY(%s)
-                  AND (CAST(%s AS text) IS NULL OR evidence_views.user_id = %s)
+                SELECT cm.payload
+                FROM conversation_message cm
+                JOIN conversation_roundtrip rt ON rt.id = cm.roundtrip_id
+                JOIN conversation c ON c.id = rt.conversation_id
+                WHERE cm.kind = 'tool_result'
+                  AND (CAST(%s AS text) IS NULL OR c.user_id = %s)
                 """,
-                (parsed_ids, user_id, user_id),
+                (user_id, user_id),
             )
             rows = cur.fetchall()
-
-        evidence_by_id: dict[str, EvidenceView] = {}
         for row in rows:
-            evidence_id = row.get("id")
-            if not isinstance(evidence_id, UUID):
-                continue
-            normalized_id = str(evidence_id)
-            if normalized_id in evidence_by_id:
-                continue
-            evidence_by_id[normalized_id] = EvidenceView(
-                id=evidence_id,
-                tool_call_id=row["tool_call_id"],
-                item_id=row["item_id"],
-                tool_name=row["tool_name"],
-                title=row["title"],
-                summary=row["summary"],
-                urls=[EvidenceUrl.model_validate(url) for url in row["urls"]],
-                image_url=row["image_url"],
-                published_at=row["published_at"],
-                source=row["source"],
-                entity_type=row["entity_type"],
-                location_name=row["location_name"],
-                hash=row["hash"],
-                llm_metadata=row["llm_metadata"],
-                raw_payload=row["raw_payload"],
-            )
+            payload = row.get("payload") if isinstance(row, dict) else None
+            for raw in payload.get("evidence", []) if isinstance(payload, dict) else []:
+                    try:
+                        evidence = EvidenceView.model_validate(raw)
+                    except Exception:
+                        continue
+                    if evidence.id in parsed_ids and str(evidence.id) not in evidence_by_id:
+                        evidence_by_id[str(evidence.id)] = evidence
         return evidence_by_id
