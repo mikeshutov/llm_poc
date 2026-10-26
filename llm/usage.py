@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import hashlib
+import json
 from typing import Any, Iterable
 from uuid import UUID
 
-from common.data import sanitize_for_json_storage
-from common.logging import create_conversation_event
+from common.data import bounded_json_value, sanitize_for_json_storage
 from conversation.models.conversation_models import LlmCallRecord, LlmUsage
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.conversation_model_config import ConversationModelConfig
 from request_orchestrator.shared.runtime_context import get_current_agent_name
+from request_orchestrator.constants import NodeName
 
 ONE_MILLION = Decimal("1000000")
 
@@ -52,11 +54,21 @@ def _decimal_to_str(value: Decimal | int | float | str) -> str:
     return rendered.rstrip('0').rstrip('.') if '.' in rendered else rendered
 
 
-def _normalize_llm_trace_object(value: Any) -> Any:
-    normalized = sanitize_for_json_storage(value)
-    if isinstance(normalized, str) and len(normalized) > 4000:
-        return normalized[:4000] + "..."
-    return normalized
+def _trace_object_summary(value: Any) -> dict[str, Any]:
+    normalized = bounded_json_value(value, max_bytes=32_000)
+    rendered = json.dumps(normalized, ensure_ascii=True, sort_keys=True, default=str)
+    summary: dict[str, Any] = {
+        "hash": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
+        "bytes": len(rendered.encode("utf-8")),
+    }
+    if isinstance(normalized, dict):
+        messages = normalized.get("messages")
+        if isinstance(messages, list):
+            summary["message_count"] = len(messages)
+        evidence = normalized.get("evidence")
+        if isinstance(evidence, list):
+            summary["evidence_count"] = len(evidence)
+    return summary
 
 
 def _normalize_latency_ms(value: Any) -> int | None:
@@ -75,13 +87,17 @@ def _build_llm_call_metadata(
 ) -> dict[str, Any]:
     payload = {} if metadata is None else dict(metadata)
     if input_object is not None:
-        payload["input_object"] = _normalize_llm_trace_object(input_object)
+        payload["input"] = _trace_object_summary(input_object)
     if output_object is not None:
-        payload["output_object"] = _normalize_llm_trace_object(output_object)
+        output_summary = _trace_object_summary(output_object)
+        raw_content = output_object.get("raw_content") if isinstance(output_object, dict) else None
+        if isinstance(raw_content, str):
+            output_summary["preview"] = raw_content[:1000]
+        payload["output"] = output_summary
     normalized_latency_ms = _normalize_latency_ms(latency_ms)
     if normalized_latency_ms is not None:
         payload["latency_ms"] = normalized_latency_ms
-    return sanitize_for_json_storage(payload)
+    return bounded_json_value(payload, max_bytes=16_000)
 
 
 def _usage_from_openai_response(raw_response: Any) -> LlmUsage | None:
@@ -167,16 +183,8 @@ def _resolve_response_model_name(raw_response: Any, fallback_model_name: str | N
 def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[str, Any]:
     if isinstance(record, dict):
         metadata = dict(record.get("metadata") or {})
-        input_object = record.get("input_object")
-        if input_object is None:
-            input_object = metadata.pop("input_object", None)
-        else:
-            metadata.pop("input_object", None)
-        output_object = record.get("output_object")
-        if output_object is None:
-            output_object = metadata.pop("output_object", None)
-        else:
-            metadata.pop("output_object", None)
+        metadata.pop("input_object", None)
+        metadata.pop("output_object", None)
         latency_ms = _normalize_latency_ms(record.get("latency_ms"))
         if latency_ms is None:
             latency_ms = _normalize_latency_ms(metadata.pop("latency_ms", None))
@@ -204,14 +212,12 @@ def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[st
             "computed_output_cost": str(record.get("computed_output_cost")),
             "computed_total_cost": str(record.get("computed_total_cost")),
             "latency_ms": latency_ms,
-            "input_object": input_object,
-            "output_object": output_object,
             "metadata": metadata,
         }
 
     metadata = dict(record.metadata or {})
-    input_object = metadata.pop("input_object", None)
-    output_object = metadata.pop("output_object", None)
+    metadata.pop("input_object", None)
+    metadata.pop("output_object", None)
     latency_ms = _normalize_latency_ms(metadata.pop("latency_ms", None))
     owner_agent_name = metadata.pop("owner_agent_name", None)
     return {
@@ -231,8 +237,6 @@ def serialize_llm_call_record(record: LlmCallRecord | dict[str, Any]) -> dict[st
         "computed_output_cost": _decimal_to_str(record.computed_output_cost),
         "computed_total_cost": _decimal_to_str(record.computed_total_cost),
         "latency_ms": latency_ms,
-        "input_object": input_object,
-        "output_object": output_object,
         "metadata": metadata,
     }
 
@@ -275,6 +279,7 @@ def record_llm_call(
     callsite: str,
     agent: str | None = None,
     stage: str | None = None,
+    node_name: NodeName | str | None = None,
     metadata: dict[str, Any] | None = None,
     input_object: Any = None,
     output_object: Any = None,
@@ -308,19 +313,17 @@ def record_llm_call(
     total_cost = input_cost + output_cost
 
     repo = get_conversation_repo()
-    if not hasattr(repo, "create_llm_call"):
-        return None
-
     resolved_owner_agent_name = (owner_agent_name or get_current_agent_name() or "").strip() or None
     metadata_with_owner = {} if metadata is None else dict(metadata)
     if resolved_owner_agent_name:
         metadata_with_owner["owner_agent_name"] = resolved_owner_agent_name
 
-    record = repo.create_llm_call(
+    record = repo.record_llm_usage(
         conversation_id=_parse_uuid(conversation_id),
         roundtrip_id=_parse_uuid(roundtrip_id),
         user_id=user_id,
         agent=agent,
+        node_name=node_name.value if hasattr(node_name, "value") else node_name,
         stage=stage,
         callsite=callsite,
         model=resolved_model_name,
@@ -339,13 +342,5 @@ def record_llm_call(
             output_object=output_object,
             latency_ms=latency_ms,
         ),
-    )
-    serialized_record = serialize_llm_call_record(record)
-    create_conversation_event(
-        event_type="llm_call",
-        source=callsite,
-        agent_name=resolved_owner_agent_name or agent or "",
-        node_name=stage or "",
-        payload=serialized_record,
     )
     return record

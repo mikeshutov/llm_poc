@@ -65,6 +65,49 @@ def run_migrations() -> None:
         conn.commit()
 
         applied_versions = get_applied_versions(conn)
+        baseline_path = MIGRATIONS_DIR / "000_initial_schema.sql"
+        baseline_needs_replay = baseline_path.exists() and baseline_path.name not in applied_versions
+        if baseline_path.exists() and baseline_path.name in applied_versions:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_name = 'conversation'
+                          AND column_name = 'summary'
+                    ) AND to_regclass('conversation_message') IS NOT NULL
+                    """
+                )
+                baseline_needs_replay = not cur.fetchone()[0]
+                if not baseline_needs_replay and "004_user_attribute_values_array.sql" not in applied_versions:
+                    cur.execute(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM information_schema.columns
+                            WHERE table_name = 'user_attributes'
+                              AND column_name = 'attribute_text'
+                        )
+                        """
+                    )
+                    baseline_needs_replay = not cur.fetchone()[0]
+                if not baseline_needs_replay and "023_agents.sql" not in applied_versions:
+                    cur.execute("SELECT to_regclass('agent_model_config')")
+                    baseline_needs_replay = cur.fetchone()[0] is not None
+                if not baseline_needs_replay and "028_conversation_messages.sql" not in applied_versions:
+                    cur.execute("SELECT to_regclass('conversation_message')")
+                    baseline_needs_replay = cur.fetchone()[0] is not None
+        if baseline_needs_replay:
+            # The 000 baseline is intentionally destructive. If it is being
+            # introduced into a database with an older migration ledger, the
+            # reset must be followed by a complete replay; otherwise later
+            # migrations such as the conversation summary columns are skipped
+            # because their old ledger entries still exist.
+            with conn.cursor() as cur:
+                cur.execute(f"DELETE FROM {MIGRATION_TABLE}")
+            conn.commit()
+            applied_versions = set()
         pending = [path for path in migration_paths if path.name not in applied_versions]
 
         if not pending:

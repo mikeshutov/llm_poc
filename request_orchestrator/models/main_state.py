@@ -22,6 +22,8 @@ class MainState:
     agent_profiles: list[AgentProfile] = field(default_factory=list)
     discovered_capabilities: CapabilityDiscoveryResult | None = None
     discovered_attribute_types: list[str] = field(default_factory=list)
+    discovery_query: str = ""
+    discovery_query_embedding: list[float] | None = None
     evaluation_status: EvaluationStatus = EVALUATION_STATUS_RETRYABLE
     missing_information: list[str] = field(default_factory=list)
     relevant_evidence_ids: list[UUID] = field(default_factory=list)

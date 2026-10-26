@@ -7,7 +7,8 @@ from time import monotonic, sleep
 from typing import Any
 
 from common.http import HttpClientError
-from rendering.debug import emit_debug_message
+from common.logging import record_node_log
+from request_orchestrator.constants import NodeName
 from tool.tools import tools
 from tool.cache.repository import InvalidCachePayloadError, ToolCacheRepository
 from request_orchestrator.shared.runtime_context import get_current_user_id
@@ -24,6 +25,17 @@ class UnknownToolError(ToolRegistryError):
 
 class DisallowedToolError(ToolRegistryError):
     pass
+
+
+def _record_tool_registry_log(message: str, payload: dict[str, Any], *, level: str = "info", stage: str = "") -> None:
+    record_node_log(
+        node_name=NodeName.EXECUTOR,
+        stage=stage or "registry",
+        event_type="tool_registry",
+        level=level,
+        message=message,
+        payload=payload,
+    )
 
 
 @dataclass
@@ -109,28 +121,29 @@ class ToolRegistry:
                     user_id=cache_user_id,
                 )
                 if cached_output is not None:
-                    emit_debug_message(
-                        content={"tool": name},
-                        content_title="Tool Cache Hit",
-                    )
+                    _record_tool_registry_log("Tool cache hit", {"tool": name}, stage="cache")
                     return cached_output
             except InvalidCachePayloadError as exc:
-                emit_debug_message(
-                    content={
+                _record_tool_registry_log(
+                    "Tool cache payload invalid",
+                    {
                         "tool": name,
                         "error_type": type(exc).__name__,
                         "error": str(exc),
                     },
-                    content_title="Tool Cache Payload Invalid",
+                    level="warning",
+                    stage="cache",
                 )
             except Exception as exc:
-                emit_debug_message(
-                    content={
+                _record_tool_registry_log(
+                    "Tool cache lookup failed",
+                    {
                         "tool": name,
                         "error_type": type(exc).__name__,
                         "error": str(exc),
                     },
-                    content_title="Tool Cache Lookup Failed",
+                    level="warning",
+                    stage="cache",
                 )
                 cache_repository = None
         retry_policy = getattr(tool, "retry_policy", None)
@@ -150,13 +163,15 @@ class ToolRegistry:
                                 user_id=cache_user_id,
                             )
                         except Exception as exc:
-                            emit_debug_message(
-                                content={
+                            _record_tool_registry_log(
+                                "Tool cache store failed",
+                                {
                                     "tool": name,
                                     "error_type": type(exc).__name__,
                                     "error": str(exc),
                                 },
-                                content_title="Tool Cache Store Failed",
+                                level="warning",
+                                stage="cache",
                             )
                     return output
                 except Exception as exc:
@@ -167,14 +182,16 @@ class ToolRegistry:
                     if backoff_seconds > 0:
                         sleep(backoff_seconds)
         except Exception as exc:
-            emit_debug_message(
-                content={
+            _record_tool_registry_log(
+                "Tool invocation failed",
+                {
                     "tool": name,
                     "tool_input": tool_input,
                     "error_type": type(exc).__name__,
                     "error": str(exc),
                 },
-                content_title="Exception Occurred",
+                level="error",
+                stage="invoke",
             )
             raise
 

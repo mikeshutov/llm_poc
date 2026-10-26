@@ -14,7 +14,7 @@ from conversation.constants import SOURCE_STREAMLIT
 from conversation.models.conversation_models import ConversationMetadata
 from conversation.models.replay_models import PreparedReplayConversation
 from conversation.repository.repo_factory import get_conversation_repo
-from conversation.replay import execute_replay, prepare_replay
+from conversation.replay import execute_replay, prepare_replay, replay_target_completed
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from rendering.feedback import FEEDBACK_TARGET_KEY, clear_feedback_state, render_feedback_dialog
 from rendering.replay import clear_replay_state, pop_replay_target
@@ -210,7 +210,9 @@ if pending_replay and pending_replay.get("conversation_id") == st.session_state.
         st.session_state.loaded_cid = None
         st.session_state.messages = []
         render_messages(conversation_repository, st.session_state.conversation_id, render_message)
-        run_live_turn(replay_context.user_prompt)
+        prepared_replay = PreparedReplayConversation.model_validate(pending_replay)
+        if not replay_target_completed(prepared_replay):
+            run_live_turn(replay_context.user_prompt)
     st.rerun()
 
 with st.sidebar:

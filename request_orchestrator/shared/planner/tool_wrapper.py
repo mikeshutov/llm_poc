@@ -13,14 +13,10 @@ def _envelope_schema(name: str, parameter_schema: type[BaseModel] | None) -> typ
             parameter_type,
             Field(
                 ...,
-                description=(
-                    "The executable arguments for the underlying tool. "
-                    "Put fields such as query, file_id, and file_type inside this object."
-                ),
+                description="Executable arguments for the underlying tool.",
             ),
         ),
         hypothesis=(str, Field(..., min_length=1, description="A factual, testable statement about what the returned data is expected to establish.")),
-        metadata=(dict[str, Any], Field(default_factory=dict, description="Additional call metadata for orchestration.")),
         evaluation_fields=(list[str], Field(default_factory=list, description="Result fields relevant to evaluating the user's request.")),
     )
 
@@ -32,7 +28,6 @@ def wrap_tool(original: BaseTool) -> StructuredTool:
     def invoke_envelope(
         parameters: dict[str, Any] | BaseModel | None = None,
         hypothesis: str = "",
-        metadata: dict[str, Any] | None = None,
         evaluation_fields: list[str] | None = None,
     ) -> Any:
         if isinstance(parameters, BaseModel):

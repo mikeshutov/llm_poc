@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from langgraph.graph import END, StateGraph
 from langsmith import traceable
+from common.logging import compact_trace_inputs, compact_trace_outputs
 
 from request_orchestrator.constants import (
     ENRICH_STATE_EDGE,
@@ -57,6 +58,6 @@ class OrchestratorGraph:
 _ORCHESTRATOR = OrchestratorGraph()
 
 
-@traceable(name="request_orchestrator")
+@traceable(name="request_orchestrator", process_inputs=compact_trace_inputs, process_outputs=compact_trace_outputs)
 def run_agent(main_state: MainState) -> OrchestratorResult:
     return _ORCHESTRATOR.run(main_state)

@@ -18,7 +18,7 @@ class StaticBackend:
         return self.results
 
 
-@patch("reranker.service.create_conversation_event")
+@patch("reranker.service.record_node_log")
 def test_reranker_records_debug_event(
     create_event: Mock,
 ) -> None:
@@ -32,10 +32,12 @@ def test_reranker_records_debug_event(
 
     payload = create_event.call_args.kwargs["payload"]
     assert create_event.call_args.kwargs["event_type"] == "reranker_call"
-    assert payload["query"] == "query: hiking boots"
+    assert create_event.call_args.kwargs["node_name"].value == "reranker"
+    assert payload["query_preview"] == "query: hiking boots"
     assert payload["candidate_count"] == 2
-    assert payload["candidates"][0]["fields"]["title"] == "Trail boots"
-    assert payload["results"] == [{"id": "1", "score": 0.9}]
+    assert payload["candidate_ids"] == ["1", "2"]
+    assert payload["result_ids"] == ["1"]
+    assert payload["scores"] == [{"id": "1", "score": 0.9}]
     assert payload["limit"] == 1
 
 

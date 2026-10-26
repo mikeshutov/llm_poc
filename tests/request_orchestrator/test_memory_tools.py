@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 from uuid import uuid4
 
-from conversation.models.conversation_models import ConversationRoundtrip
+from conversation.models.conversation_models import ConversationMessage, ConversationRoundtrip
 from request_orchestrator.shared.runtime_context import bind_runtime_context
 from request_orchestrator.shared.tool_adapter.memories.get_memory_detail import get_memory_detail
 
@@ -15,27 +15,24 @@ def test_get_memory_detail_returns_typed_result() -> None:
                 id=uuid4(),
                 conversation_id=uuid4(),
                 message_index=7,
-                user_prompt="What did we decide about returns?",
-                generated_response="We said we would offer 30-day returns.",
                 roundtrip_summary="The conversation decided on a 30-day return policy.",
                 roundtrip_summary_embedding=None,
-                    response_payload={
-                        "result": [
-                            {
-                                "content": "We said we would offer 30-day returns.",
-                                "evidence_ids": [],
-                            }
-                        ]
-                    },
-                parsed_query={"topic": "returns"},
                 created_at="2026-08-01T12:00:00+00:00",
-                model="gpt-5.6-terra",
+                metadata={"model": "gpt-5.6-terra"},
+                status="completed",
             )
+            self.messages = [
+                ConversationMessage(uuid4(), self.roundtrip.id, 0, "user", "visible", "user", "What did we decide about returns?", {}, {}, None, ""),
+                ConversationMessage(uuid4(), self.roundtrip.id, 1, "assistant", "visible", "assistant", "We said we would offer 30-day returns.", {}, {"stage": "synthesis", "model": "gpt-5.6-terra"}, None, ""),
+            ]
 
         def get_roundtrip_for_user(self, roundtrip_id, user_id: str | None):
             assert str(roundtrip_id) == str(self.roundtrip.id)
             assert user_id == "user-123"
             return self.roundtrip
+
+        def list_messages(self, roundtrip_id, include_internal=True):
+            return self.messages
 
     module = importlib.import_module(
         "request_orchestrator.shared.tool_adapter.memories.get_memory_detail"
@@ -57,7 +54,6 @@ def test_get_memory_detail_returns_typed_result() -> None:
     assert result.result.memory_type == "roundtrip"
     assert result.result.roundtrip_id == str(fake_repo.roundtrip.id)
     assert result.result.summary == "The conversation decided on a 30-day return policy."
-    assert fake_repo.roundtrip.parsed_query == {"topic": "returns"}
     assert result.evidence[0].item_id == str(fake_repo.roundtrip.id)
     assert result.evidence[0].title == "Memory detail for message 7"
     assert result.evidence[0].summary == "The conversation decided on a 30-day return policy."

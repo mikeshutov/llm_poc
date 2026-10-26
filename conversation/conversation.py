@@ -1,5 +1,3 @@
-from uuid import UUID
-
 from llm.clients.llm_client import get_llm_client
 from conversation.prompts.title_prompt import SYSTEM_PROMPT
 from conversation.prompts.summary_prompt import build_prompt as build_summary_prompt
@@ -7,8 +5,7 @@ from conversation.models.conversation_models import ConversationRoundtrip, Conve
 from common.config import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from common.data import strip_code_fences
 from conversation.utils import flatten_conversation_entries
-from tool.repository.models import ToolCall
-from tool.formatting import build_roundtrip_messages
+from conversation.repository.repo_factory import get_conversation_repo
 
 
 def generate_conversation_title(prompt: str) -> str:
@@ -23,17 +20,22 @@ def generate_conversation_title(prompt: str) -> str:
 
 def generate_conversation_summary(
     roundtrips: list[ConversationRoundtrip],
-    tool_call_map: dict[UUID, list[ToolCall]] | None = None,
     previous_summary: str | None = None,
 ) -> ConversationSummaryResponse:
+    repository = get_conversation_repo()
+    entries = []
+    for roundtrip in roundtrips:
+        entries.extend(
+            {ROLE_KEY: message.role, CONTENT_KEY: message.content}
+            for message in repository.list_messages(roundtrip.id, include_internal=False)
+            if message.role in {"user", "assistant"} and message.content.strip()
+        )
     result = get_llm_client().call_with_tools(
         build_summary_prompt(previous_summary),
         [
             {
                 ROLE_KEY: ROLE_USER,
-                CONTENT_KEY: flatten_conversation_entries(
-                    build_roundtrip_messages(roundtrips, tool_call_map)
-                ),
+                CONTENT_KEY: flatten_conversation_entries(entries),
             }
         ],
         tools=[],

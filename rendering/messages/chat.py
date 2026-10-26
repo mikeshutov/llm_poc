@@ -11,6 +11,7 @@ from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo
 from conversation.summary_service import rebuild_conversation_summaries
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
+from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
 from rendering.feedback import render_feedback_controls
 from rendering.rendering import (
     _format_roundtrip_duration,
@@ -47,21 +48,28 @@ def ensure_messages_loaded(conversation_repository, conversation_id: str, limit:
         )
         st.session_state.messages = []
         for rt in roundtrips:
-            ts = rt.created_at if hasattr(rt, "created_at") else None
-            st.session_state.messages.append({ROLE_KEY: ROLE_USER, CONTENT_KEY: rt.user_prompt, "timestamp": ts, "roundtrip_id": str(rt.id)})
-            payload = serialize_roundtrip_payload(rt.response_payload)
-            st.session_state.messages.append(
-                {
-                    ROLE_KEY: ROLE_ASSISTANT,
-                    CONTENT_KEY: rt.generated_response,
-                    "payload": payload,
-                    "assistant_follow_up": rt.assistant_follow_up,
-                    "timestamp": ts,
-                    "roundtrip_id": str(rt.id),
-                    "model": rt.model,
-                    "feedback_id": str(rt.feedback_id) if rt.feedback_id is not None else None,
-                }
-            )
+            ts = rt.created_at
+            feedback = conversation_repository.get_roundtrip_feedback(rt.id)
+            visible_messages = conversation_repository.list_messages(rt.id, include_internal=False)
+            for message in visible_messages:
+                if message.kind not in {"user", "assistant"}:
+                    continue
+                payload = (
+                    serialize_roundtrip_payload(OrchestratorPayload.model_validate(message.payload))
+                    if message.metadata.get("stage") == "synthesis" else None
+                )
+                st.session_state.messages.append(
+                    {
+                        ROLE_KEY: ROLE_USER if message.kind == "user" else ROLE_ASSISTANT,
+                        CONTENT_KEY: message.content,
+                        **({"payload": payload} if payload is not None else {}),
+                        "assistant_follow_up": payload.get("next_question", "") if payload is not None else "",
+                        "timestamp": message.created_at or ts,
+                        "roundtrip_id": str(rt.id),
+                        "model": message.metadata.get("model"),
+                        "feedback_id": str(feedback.id) if feedback is not None else None,
+                    }
+                )
         st.session_state.loaded_cid = conversation_id
 
 
@@ -92,7 +100,8 @@ def append_assistant_response(
     conversation_repository = get_conversation_repo()
 
     payload = _build_answer_payload(answer)
-    rendered_response = str(answer.raw_response or roundtrip.generated_response or "")
+    rendered_response = str(answer.raw_response or "")
+    model = str(roundtrip.metadata.get("model", ""))
 
     now = datetime.now(timezone.utc)
     duration = _format_roundtrip_duration(payload)
@@ -104,7 +113,7 @@ def append_assistant_response(
         "assistant_follow_up": answer.next_question,
         "timestamp": now,
         "roundtrip_id": str(roundtrip.id),
-        "model": roundtrip.model,
+        "model": model,
         "feedback_id": None,
     }
     st.session_state.messages.append(assistant_message)
@@ -117,7 +126,7 @@ def append_assistant_response(
         )
         render_feedback_controls(
             roundtrip_id=roundtrip.id,
-            model=roundtrip.model,
+            model=model,
             sources_payload=payload,
             feedback_id=None,
             timestamp=footer_timestamp,

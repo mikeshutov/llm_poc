@@ -12,7 +12,6 @@ from request_orchestrator.models.main_state import MainState
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.orchestrator import run_agent
 from request_orchestrator.shared.runtime_context import bind_runtime_context
-from tool.summarize_tool_call import summarize_tool_calls
 from conversation.context_builder import build_roundtrip_context
 from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo
@@ -83,7 +82,7 @@ def run_request_orchestrator_for_query(
 
     roundtrip_latency_ms = int((perf_counter() - started_at) * 1000)
     orchestrator_result = orchestrator_result.with_roundtrip_latency(roundtrip_latency_ms)
-    payload, relevant_evidence = orchestrator_result.to_persistence_models()
+    payload, _ = orchestrator_result.to_persistence_models()
     roundtrip_summary = orchestrator_result.roundtrip_summary
 
     roundtrip_summary_embedding = embed_text(roundtrip_summary) if roundtrip_summary else None
@@ -93,9 +92,5 @@ def run_request_orchestrator_for_query(
         payload,
         roundtrip_summary=roundtrip_summary,
         roundtrip_summary_embedding=roundtrip_summary_embedding,
-        assistant_follow_up=orchestrator_result.next_question,
-        relevant_evidence=relevant_evidence,
     )
-    #TODO: enable this once we improve summarization.
-    #threading.Thread(target=summarize_tool_calls, args=(roundtrip.id,), daemon=True).start()
     return orchestrator_result, roundtrip

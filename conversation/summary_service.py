@@ -6,7 +6,6 @@ from conversation.conversation import generate_conversation_summary
 from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.clients.embeddings import embed_text
-from tool.repository.tool_call_repository import ToolCallRepository
 
 
 def _update_top_level_conversation_summary(
@@ -14,7 +13,6 @@ def _update_top_level_conversation_summary(
     *,
     previous_summary: str,
     unsummarized_roundtrips: list[ConversationRoundtrip],
-    tool_calls_by_roundtrip,
 ) -> None:
     if not previous_summary and not unsummarized_roundtrips:
         return
@@ -23,7 +21,6 @@ def _update_top_level_conversation_summary(
     if unsummarized_roundtrips:
         top_level_summary = generate_conversation_summary(
             unsummarized_roundtrips,
-            tool_call_map=tool_calls_by_roundtrip,
             previous_summary=previous_summary or None,
         )
         summary_text = top_level_summary.conversation_summary.strip()
@@ -53,11 +50,8 @@ def _update_batched_conversation_summaries(conversation_id: str, summary_batch_s
             return
 
         batch_roundtrips = unsummarized_roundtrips[:summary_batch_size]
-        roundtrip_ids = [rt.id for rt in batch_roundtrips]
-        tool_calls_by_roundtrip = ToolCallRepository().get_tool_calls_by_roundtrips(roundtrip_ids)
         batch_summary = generate_conversation_summary(
             batch_roundtrips,
-            tool_call_map=tool_calls_by_roundtrip,
             previous_summary=previous_batch_summary,
         )
         last_cutoff = batch_roundtrips[-1].message_index
@@ -66,7 +60,6 @@ def _update_batched_conversation_summaries(conversation_id: str, summary_batch_s
             UUID(conversation_id),
             batch_summary.conversation_summary,
             message_index_cutoff=last_cutoff,
-            tool_summary=batch_summary.tool_summary,
         )
 
 
@@ -89,11 +82,8 @@ def rebuild_conversation_summaries(
         limit=summary_trigger_size,
         after_message_index=last_cutoff,
     )
-    roundtrip_ids = [rt.id for rt in unsummarized_roundtrips]
-    tool_calls_by_roundtrip = ToolCallRepository().get_tool_calls_by_roundtrips(roundtrip_ids)
     _update_top_level_conversation_summary(
         conversation_id,
         previous_summary="" if latest_summary is None else latest_summary.summary,
         unsummarized_roundtrips=unsummarized_roundtrips,
-        tool_calls_by_roundtrip=tool_calls_by_roundtrip,
     )

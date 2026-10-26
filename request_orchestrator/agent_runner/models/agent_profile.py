@@ -24,10 +24,13 @@ class AgentKind(StrEnum):
 
 class AgentExecutionStrategy(StrEnum):
     PLANNER_EXECUTOR_EVALUATOR = "planner_executor_evaluator"
+    REACT = "react"
 
     def required_model_stages(self) -> tuple[str, ...]:
         if self == AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR:
             return (PLANNER_STAGE, EVALUATOR_STAGE)
+        if self == AgentExecutionStrategy.REACT:
+            return (PLANNER_STAGE,)
         raise KeyError(f"Unsupported agent execution strategy: {self}")
 
 

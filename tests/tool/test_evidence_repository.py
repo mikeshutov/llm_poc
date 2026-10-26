@@ -51,7 +51,7 @@ def test_get_by_ids_reads_canonical_evidence_views() -> None:
         "llm_metadata": {"price": 25.0},
         "raw_payload": {"internal_id": "product-1"},
     }
-    cursor = FakeCursor(fetchall_rows=[row])
+    cursor = FakeCursor(fetchall_rows=[{"payload": {"evidence": [row]}}])
     repository = EvidenceRepository(conn=FakeConnection(cursor))
 
     evidence_by_id = repository.get_by_ids(
@@ -59,11 +59,11 @@ def test_get_by_ids_reads_canonical_evidence_views() -> None:
         user_id="user-1",
     )
 
-    assert "FROM evidence_views" in cursor.executed[0][0]
+    assert "FROM conversation_message" in cursor.executed[0][0]
     assert "jsonb_each" not in cursor.executed[0][0]
-    assert "JOIN conversation" not in cursor.executed[0][0]
-    assert "evidence_views.user_id" in cursor.executed[0][0]
-    assert cursor.executed[0][1] == ([evidence_id], "user-1", "user-1")
+    assert "JOIN conversation_roundtrip" in cursor.executed[0][0]
+    assert "c.user_id" in cursor.executed[0][0]
+    assert cursor.executed[0][1] == ("user-1", "user-1")
     assert evidence_by_id == {
         str(evidence_id): EvidenceView(
             id=evidence_id,

@@ -122,12 +122,7 @@ COHERE_API_KEY=...
 docker compose up -d
 ```
 
-2. Run DB setup (extensions + schemas + migrations)
-```text
-python scripts/setup_db.py
-```
-
-If you already have a local database from an older clone and just need to move it forward, run:
+2. Run database migrations (initial schema + incremental migrations)
 ```text
 python scripts/migrate_db.py
 ```

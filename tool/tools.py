@@ -237,7 +237,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "Use search_memories first to locate the most relevant conversations for a topic or prior discussion.",
             "Use search_roundtrip_memories after search_memories when you need specific historical mentions or exchanges inside those conversations.",
             "Use get_memory_detail after search_roundtrip_memories when you need the exact prior prompt, response, or structured payload for one memory hit.",
-            "Use lookup_evidence with an array of evidence IDs from recent_roundtrips when you need the full records behind prior cited evidence.",
+            "Use lookup_evidence with an array of evidence IDs from prior conversation messages when you need the full records behind prior cited evidence.",
             "When the user asks what was previously said, decided, suggested, or discussed about a topic, prefer the two-step memories flow over guessing from current context.",
         ],
     ),

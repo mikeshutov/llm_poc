@@ -17,7 +17,7 @@ from conversation.models.conversation_models import ConversationContext
 from integrations.brave.models import NewsResult
 from llm.clients.llm_client import LlmClient
 from personalization.profile.models import UserProfile
-from common.logging import create_conversation_event
+from common.logging import record_node_log
 from request_orchestrator.strategies.main_request_strategy import TOP_LEVEL_PROFILE
 from request_orchestrator.agents.profile_management.profile import build_profile_management_profile
 from request_orchestrator.agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
@@ -42,14 +42,42 @@ class RecordingRepo:
     def __init__(self) -> None:
         self.llm_calls: list[dict] = []
         self.conversation_events: list[dict] = []
+        self.messages: list[dict] = []
 
-    def create_llm_call(self, **kwargs):
+    def record_llm_usage(self, **kwargs):
         self.llm_calls.append(kwargs)
         return kwargs
 
-    def create_conversation_event(self, **kwargs):
-        self.conversation_events.append(kwargs)
-        return kwargs
+    def append_node_log(self, scope_type, scope_id, **kwargs):
+        payload = kwargs.get("payload") or {}
+        node_name = kwargs.get("node_name") or payload.get("agent_name") or payload.get("source", "")
+        self.conversation_events.append({
+            "scope_type": scope_type,
+            "scope_id": scope_id,
+            "roundtrip_id": scope_id if scope_type == "roundtrip" else None,
+            "event_type": kwargs.get("event_type"),
+            "source": node_name,
+            "agent_name": node_name,
+            "node_name": node_name,
+            "payload": payload,
+        })
+        return type("RecordedLog", (), {"id": uuid4()})()
+
+    def append_message(self, roundtrip_id, **kwargs):
+        message = {"roundtrip_id": roundtrip_id, **kwargs}
+        self.messages.append(message)
+        payload = kwargs.get("payload") or {}
+        if payload.get("kind"):
+            self.conversation_events.append({
+                "roundtrip_id": roundtrip_id,
+                "event_type": payload["kind"],
+                "source": payload.get("source", ""),
+                "agent_name": payload.get("agent_name", ""),
+                "node_name": payload.get("node_name", ""),
+                "iteration": payload.get("iteration"),
+                "payload": payload,
+            })
+        return type("RecordedMessage", (), {"id": uuid4()})()
 
     def create_roundtrip_prompt(self, *args, **kwargs):
         return None
@@ -64,7 +92,7 @@ def _latest_event_payload(
     for event in reversed(repo.conversation_events):
         if event.get('event_type') != event_type:
             continue
-        if event.get('agent_name') != agent_name:
+        if event.get('node_name') != agent_name:
             continue
         return event['payload']
     raise AssertionError(f'No event found for type={event_type} agent={agent_name}')
@@ -200,7 +228,7 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
         agent_profile=PROFILE_MANAGEMENT_PROFILE,
     )
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
-        'common.logging.conversation_event_logger.get_conversation_repo',
+        'common.logging.message_trace_logger.get_conversation_repo',
         return_value=repo,
     ), patch(
         'llm.chat_models.build_chat_model',
@@ -212,11 +240,13 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
 
     assert [call['agent'] for call in repo.llm_calls] == ['main_agent', 'profile_agent']
     assert all(call['stage'] == 'planner' for call in repo.llm_calls)
-    assert PromptSectionKeys.AVAILABLE_TOOLS in repo.llm_calls[0]['metadata']['input_object']['sections_raw']
-    assert repo.llm_calls[0]['metadata']['output_object']['tool_calls'][0]['id'] == 'call-1'
+    assert 'input_object' not in repo.llm_calls[0]['metadata']
+    assert repo.llm_calls[0]['metadata']['input']['message_count'] > 0
+    assert 'output_object' not in repo.llm_calls[0]['metadata']
+    assert repo.llm_calls[0]['metadata']['output']['bytes'] > 0
     assert main_state.node_states.planner.plan.steps[0].args == {'query_text': 'boots'}
     assert main_state.node_states.planner.plan.steps[0].hypothesis == 'Find matching boots.'
-    assert main_state.node_states.planner.plan.steps[0].metadata == {'source': 'test'}
+    assert main_state.node_states.planner.plan.steps[0].metadata == {}
 
 
 def test_agent_log_persists_conversation_event_immediately() -> None:
@@ -234,13 +264,13 @@ def test_agent_log_persists_conversation_event_immediately() -> None:
         agent_profile=TOP_LEVEL_PROFILE,
     )
 
-    with patch('common.logging.conversation_event_logger.get_conversation_repo', return_value=repo):
+    with patch('common.logging.message_trace_logger.get_conversation_repo', return_value=repo):
         with bind_runtime_context(
             conversation_id=str(conversation_id),
             conversation_model_config=None,
             roundtrip_id=str(roundtrip_id),
         ):
-            create_conversation_event(
+            record_node_log(
                 conversation_id=state.execution_context.conversation_id,
                 roundtrip_id=state.execution_context.roundtrip_id,
                 event_type='planner',
@@ -257,17 +287,12 @@ def test_agent_log_persists_conversation_event_immediately() -> None:
                 },
             )
 
-    assert len(repo.conversation_events) == 1
-    event = repo.conversation_events[0]
-    assert event['conversation_id'] == conversation_id
+    assert len(repo.messages) == 0
+    event = repo.conversation_events[-1]
     assert event['roundtrip_id'] == roundtrip_id
     assert event['event_type'] == 'planner'
-    assert event['source'] == 'main_agent'
-    assert event['agent_name'] == 'main_agent'
     assert event['node_name'] == 'plan'
-    assert event['iteration'] == 1
-    assert event['payload']['kind'] == 'planner'
-    assert event['payload']['node_name'] == 'plan'
+    assert event['payload']['data']['steps'] == []
 
 
 def test_run_planner_completes_when_no_native_tool_calls_are_returned() -> None:
@@ -283,7 +308,7 @@ def test_run_planner_completes_when_no_native_tool_calls_are_returned() -> None:
         agent_profile=TOP_LEVEL_PROFILE,
     )
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
-        'common.logging.conversation_event_logger.get_conversation_repo',
+        'common.logging.message_trace_logger.get_conversation_repo',
         return_value=repo,
     ), patch(
         'llm.chat_models.build_chat_model',
@@ -312,7 +337,7 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
     )
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
-        'common.logging.conversation_event_logger.get_conversation_repo',
+        'common.logging.message_trace_logger.get_conversation_repo',
         return_value=repo,
     ), patch(
         'llm.chat_models.build_chat_model',
@@ -324,11 +349,10 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
     assert len(repo.llm_calls) == 1
     assert repo.llm_calls[0]['stage'] == 'synthesis'
     assert repo.llm_calls[0]['model'] == 'gpt-5.6-terra'
-    assert repo.llm_calls[0]['metadata']['input_object']['prompt_token_count'] > 0
-    assert PromptSectionKeys.TASK in repo.llm_calls[0]['metadata']['input_object']['sections_raw']
-    payload = _latest_event_payload(repo, event_type='synthesis', agent_name='request_orchestrator')
-    assert payload['data']['llm_usage']['model'] == 'gpt-5.6-terra'
-    assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
+    assert repo.llm_calls[0]['metadata']['input']['message_count'] > 0
+    assert 'input_object' not in repo.llm_calls[0]['metadata']
+    payload = _latest_event_payload(repo, event_type='synthesis', agent_name='synthesize')
+    assert 'llm_usage' not in payload['data']
 
 
 def test_reranker_does_not_record_llm_usage_when_it_runs() -> None:
@@ -419,7 +443,7 @@ def test_run_evaluator_records_llm_usage_and_preserves_missing_information_for_r
     )
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
-        'common.logging.conversation_event_logger.get_conversation_repo',
+        'common.logging.message_trace_logger.get_conversation_repo',
         return_value=repo,
     ), patch(
         'llm.chat_models.build_chat_model',
@@ -432,16 +456,16 @@ def test_run_evaluator_records_llm_usage_and_preserves_missing_information_for_r
     assert repo.llm_calls[0]['agent'] == 'shared'
     assert repo.llm_calls[0]['stage'] == 'evaluator'
     assert repo.llm_calls[0]['model'] == 'gpt-5.6-terra'
-    assert PromptSectionKeys.EVIDENCE in repo.llm_calls[0]['metadata']['input_object']['sections_raw']
+    assert 'input_object' not in repo.llm_calls[0]['metadata']
+    assert repo.llm_calls[0]['metadata']['input']['message_count'] > 0
     assert state.node_states.evaluator.evaluation_status == EVALUATION_STATUS_RETRYABLE
     assert state.inputs.task == 'Find current pricing for shortlisted products.'
     assert state.node_states.evaluator.missing_information == [
         'Need current pricing for the top two products',
         'Need shipping availability in Canada',
     ]
-    payload = _latest_event_payload(repo, event_type='evaluator', agent_name='main_agent')
-    assert payload['data']['llm_usage']['model'] == 'gpt-5.6-terra'
-    assert isinstance(payload['data']['llm_usage']['latency_ms'], int)
+    payload = _latest_event_payload(repo, event_type='evaluator', agent_name='evaluator')
+    assert 'llm_usage' not in payload['data']
     assert payload['data']['relevant_evidence'] == ['25a4bcc1-2b18-5a36-940c-29c535bae654']
     assert payload['data']['missing_information'] == [
         'Need current pricing for the top two products',
@@ -484,7 +508,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
         llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["e5cf297f-8f55-55a7-b1b2-7fb389482919"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary"}', 'gpt-5.6-terra'),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
-    main_agent_state = state.agent_states['main_agent']
+    main_agent_state = state.agent_states['request_orchestrator']
     _set_agent_tool_results(
         main_agent_state,
         plan=Plan.model_validate({
@@ -522,7 +546,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
     )
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
-        'common.logging.conversation_event_logger.get_conversation_repo',
+        'common.logging.message_trace_logger.get_conversation_repo',
         return_value=repo,
     ), patch(
         'llm.chat_models.build_chat_model',
@@ -534,7 +558,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
     prompt_text = str(captured_prompt['text'])
     assert '"evidence_id": "e5cf297f-8f55-55a7-b1b2-7fb389482919"' in prompt_text
     assert '"evidence_id": "c8271821-2d4c-51a1-bc00-1f4932d052d7"' not in prompt_text
-    payload = _latest_event_payload(repo, event_type='synthesis', agent_name='request_orchestrator')
+    payload = _latest_event_payload(repo, event_type='synthesis', agent_name='synthesize')
     assert payload['data']['relevant_evidence_ids'] == ['e5cf297f-8f55-55a7-b1b2-7fb389482919']
 
 
@@ -556,7 +580,7 @@ def test_run_synthesis_uses_all_fed_evidence_when_citations_are_missing() -> Non
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
     _set_agent_tool_results(
-        state.agent_states['main_agent'],
+        state.agent_states['request_orchestrator'],
         plan=Plan.model_validate({
             'steps': [{'id': 'E1', 'plan': 'Search', 'tool': 'generic_web_search', 'args': {}}]
         }),
@@ -572,7 +596,7 @@ def test_run_synthesis_uses_all_fed_evidence_when_citations_are_missing() -> Non
     )
 
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
-        'common.logging.conversation_event_logger.get_conversation_repo',
+        'common.logging.message_trace_logger.get_conversation_repo',
         return_value=repo,
     ), patch(
         'llm.chat_models.build_chat_model',

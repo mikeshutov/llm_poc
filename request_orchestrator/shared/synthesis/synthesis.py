@@ -5,11 +5,11 @@ from uuid import UUID
 from langsmith import traceable
 
 from common.data import repair_common_json_issues, strip_code_fences
-from common.logging import create_conversation_event, log_roundtrip_prompt
+from common.logging import compact_trace_inputs, compact_trace_outputs, record_node_log
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, SYNTHESIS_STAGE
-from llm.usage import record_llm_call, serialize_llm_call_record
-from request_orchestrator.constants import SYNTHESIS_PROMPT_KIND
+from llm.usage import record_llm_call
 from request_orchestrator.models.main_state import MainState
+from request_orchestrator.constants import NodeName
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
 from request_orchestrator.models.synthesized_result import SynthesisResult
 from request_orchestrator.shared.evidence import (
@@ -69,7 +69,7 @@ def _build_result_blocks(synthesis_result: SynthesisResult, evidence_steps) -> t
     )
 
 
-@traceable(name="Synthesis Node")
+@traceable(name="Synthesis Node", process_inputs=compact_trace_inputs, process_outputs=compact_trace_outputs)
 def run_synthesis(state: MainState) -> MainState:
     execution_context = state.execution_context
     tool_results = state.gather_tool_results()
@@ -84,7 +84,7 @@ def run_synthesis(state: MainState) -> MainState:
         evidence_steps = all_evidence_steps
 
     prompt = build_synthesis_prompt(evidence=evidence_steps, state=state)
-    prompt_text = prompt.build()
+    prompt_messages = prompt.build_messages()
     llm = build_llm_for_stage(
         execution_context=execution_context,
         llm=state.llm,
@@ -92,7 +92,7 @@ def run_synthesis(state: MainState) -> MainState:
         stage=SYNTHESIS_STAGE,
     )
     started_at = perf_counter()
-    response = llm.invoke(prompt_text)
+    response = llm.invoke(prompt_messages)
     latency_ms = int((perf_counter() - started_at) * 1000)
     llm_call = record_llm_call(
         raw_response=response,
@@ -107,10 +107,11 @@ def run_synthesis(state: MainState) -> MainState:
         user_id=execution_context.user_profile.user_id,
         agent=MAIN_AGENT_MODEL_SCOPE,
         stage=SYNTHESIS_STAGE,
+        node_name=NodeName.SYNTHESIS,
         callsite="shared_synthesis.run_synthesis",
         latency_ms=latency_ms,
         owner_agent_name=_resolve_agent_name(state),
-        input_object=prompt.to_log_input_object(),
+        input_object={"messages": prompt_messages},
         output_object={
             "raw_content": response.content,
         },
@@ -130,17 +131,18 @@ def run_synthesis(state: MainState) -> MainState:
     result_blocks, used_evidence_ids = _build_result_blocks(synthesis_result, evidence_steps)
 
     log_data = {
-        "answer_preview": [block.content for block in result_blocks[:3]],
-        "next_question": synthesis_result.next_question,
+        "answer_preview": [str(block.content)[:1_000] for block in result_blocks[:3]],
+        "next_question_preview": synthesis_result.next_question[:1_000],
+        "summary_preview": synthesis_result.roundtrip_summary[:1_000],
         "relevant_evidence_ids": used_evidence_ids,
-        "llm_usage": None if llm_call is None else serialize_llm_call_record(llm_call),
     }
-    create_conversation_event(
+    record_node_log(
         conversation_id=execution_context.conversation_id,
         roundtrip_id=execution_context.roundtrip_id,
         event_type=SYNTHESIS_KIND,
         source=_resolve_agent_name(state),
         agent_name=_resolve_agent_name(state),
+        node_name=NodeName.SYNTHESIS,
         payload={
             "agent_name": _resolve_agent_name(state),
             "kind": SYNTHESIS_KIND,
@@ -163,14 +165,6 @@ def run_synthesis(state: MainState) -> MainState:
         roundtrip_summary=synthesis_result.roundtrip_summary.strip(),
         roundtrip_latency_ms=state.result.roundtrip_latency_ms,
     )
-
-    if execution_context.roundtrip_id:
-        log_roundtrip_prompt(
-            roundtrip_id=execution_context.roundtrip_id,
-            agent=_resolve_agent_name(state),
-            prompt_step=SYNTHESIS_PROMPT_KIND,
-            prompt=prompt_text,
-        )
 
     return state
 

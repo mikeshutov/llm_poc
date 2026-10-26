@@ -3,36 +3,14 @@ from __future__ import annotations
 from time import perf_counter
 from typing import Any
 
-from common.data import sanitize_for_json_storage
-from common.logging import create_conversation_event
+from common.logging import record_node_log
 from personalization.profile.models import UserProfile
 from serviceclients.reranker import RerankerBackend, RerankerClient
 from reranker.constants import DEFAULT_TOP_K, RERANKER_EVENT_TYPE, RERANKER_MODEL_NAME
 from reranker.models import Candidate, RerankerScore
 from reranker.query import build_reranker_query
-from request_orchestrator.shared.runtime_context import get_current_agent_name
-
-
-def _candidate_log_payload(
-    candidates: list[Candidate],
-    backend: RerankerBackend,
-) -> tuple[list[dict[str, Any]], list[int]]:
-    if isinstance(backend, RerankerClient):
-        prepared = backend.prepare_candidates(candidates)
-        payload = [candidate.model_dump(mode="json") for candidate in prepared]
-        return payload, [len(candidate.text) for candidate in prepared]
-
-    payload = [
-        {
-            "id": candidate.id,
-            "fields": sanitize_for_json_storage(candidate.fields),
-        }
-        for candidate in candidates
-    ]
-    return (
-        payload,
-        [len(str(candidate.fields)) for candidate in candidates],
-    )
+from request_orchestrator.constants import NodeName
+from request_orchestrator.shared.runtime_context import get_current_roundtrip_id
 
 
 def _record_reranker_event(
@@ -46,22 +24,20 @@ def _record_reranker_event(
     batch_size: int | None,
     error: str = "",
 ) -> None:
-    candidate_payload, evidence_lengths = _candidate_log_payload(candidates, backend)
-    create_conversation_event(
+    record_node_log(
+        roundtrip_id=get_current_roundtrip_id(),
+        node_name=NodeName.RERANKER,
         event_type=RERANKER_EVENT_TYPE,
-        source="reranker",
-        agent_name=get_current_agent_name() or "",
-        node_name="reranker",
         payload={
             "kind": RERANKER_EVENT_TYPE,
-            "title": "Reranker",
             "model": RERANKER_MODEL_NAME,
-            "query": query,
-            "candidates": candidate_payload,
-            "results": [score.model_dump(mode="json") for score in (results or [])],
+            "query_preview": query[:2_000],
+            "query_length": len(query),
+            "candidate_ids": [candidate.id for candidate in candidates[:100]],
+            "result_ids": [score.id for score in (results or [])[:100]],
+            "scores": [score.model_dump(mode="json") for score in (results or [])[:100]],
             "candidate_count": len(candidates),
             "limit": limit,
-            "evidence_lengths": evidence_lengths,
             "batch_size": batch_size,
             "latency_ms": latency_ms,
             "error": error,

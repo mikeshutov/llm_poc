@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 from llm.conversation_model_config import ConversationModelConfig
 from conversation.repository.repo_factory import get_conversation_repo
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
-from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
 from request_orchestrator.shared.runtime_context import get_current_user_id
 from tool.constants import TOOL_NAME_GET_MEMORY_DETAIL
 from tool.constants import TOOL_RESULT_TYPE_MEMORY_DETAIL
@@ -27,13 +26,11 @@ class GetMemoryDetailResult(BaseModel):
     conversation_id: str = ""
     roundtrip_id: str = ""
     message_index: int = 0
-    user_prompt: str = ""
-    generated_response: str = ""
     roundtrip_summary: str = ""
     created_at: str = ""
     model: str = ""
-    response_payload: OrchestratorPayload = Field(default_factory=OrchestratorPayload)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    messages: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class MemoryDetailEvidenceMetadata(BaseModel):
@@ -65,7 +62,8 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
             evidence=[],
         )
 
-    roundtrip = get_conversation_repo().get_roundtrip_for_user(
+    repo = get_conversation_repo()
+    roundtrip = repo.get_roundtrip_for_user(
         parsed_id,
         user_id=get_current_user_id(),
     )
@@ -77,7 +75,11 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         )
 
     roundtrip_summary = (roundtrip.roundtrip_summary or "").strip()
-    generated_response = (roundtrip.generated_response or "").strip()
+    messages = repo.list_messages(roundtrip.id, include_internal=True)
+    user_message = next((message for message in messages if message.kind == "user"), None)
+    synthesis = next((message for message in reversed(messages)
+                      if message.metadata.get("stage") == "synthesis"), None)
+    generated_response = synthesis.content.strip() if synthesis else ""
     result = GetMemoryDetailResult(
         memory_type="roundtrip",
         title=f"Memory detail for message {roundtrip.message_index}",
@@ -85,13 +87,24 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         conversation_id=str(roundtrip.conversation_id),
         roundtrip_id=str(roundtrip.id),
         message_index=roundtrip.message_index,
-        user_prompt=roundtrip.user_prompt,
-        generated_response=roundtrip.generated_response,
         roundtrip_summary=roundtrip.roundtrip_summary or "",
         created_at=str(roundtrip.created_at),
-        model=roundtrip.model or "",
-        response_payload=roundtrip.response_payload,
+        model=str(synthesis.metadata.get("model", "")) if synthesis else "",
         metadata=roundtrip.metadata,
+        messages=[
+            {
+                "id": str(message.id),
+                "sequence": message.sequence,
+                "kind": message.kind,
+                "visibility": message.visibility,
+                "role": message.role,
+                "content": message.content,
+                "payload": message.payload,
+                "metadata": message.metadata,
+                "created_at": str(message.created_at),
+            }
+            for message in repo.list_messages(roundtrip.id, include_internal=True)
+        ],
     )
     metadata = MemoryDetailEvidenceMetadata(
         resolved_model_config=_resolved_model_config(result.metadata),

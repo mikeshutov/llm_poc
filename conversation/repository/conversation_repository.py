@@ -11,27 +11,208 @@ from psycopg.types.json import Jsonb
 
 from conversation.models.conversation_models import (
     Conversation,
+    ConversationMessage,
     ConversationMetadata,
-    ConversationEvent,
     ConversationMemory,
     ConversationRoundtrip,
     LlmCallRecord,
     ConversationSummary,
+    ConversationMessageKind,
+    ConversationMessageVisibility,
+    NodeLog,
     RoundtripFeedback,
     RoundtripMemory,
-    RoundtripPrompt,
 )
+from common.data import bounded_json_value
 from db.connection import get_connection
 from llm.repository.conversation_model_config_repository import ConversationModelConfigRepository
 from personalization.tone.models import TonePreferences
+from request_orchestrator.constants import NodeName
 from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
-from request_orchestrator.models.relevant_evidence import RelevantEvidenceByTool
 
 
 class ConversationRepository:
     def __init__(self, conn: psycopg.Connection | None = None):
         self._conn = conn or get_connection()
         register_vector(self._conn)
+
+    def append_message(
+        self,
+        roundtrip_id: UUID,
+        *,
+        kind: ConversationMessageKind | str,
+        role: str,
+        content: str = "",
+        visibility: ConversationMessageVisibility | str = ConversationMessageVisibility.VISIBLE,
+        payload: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        parent_message_id: UUID | None = None,
+    ) -> ConversationMessage:
+        message_embedding = None
+        embedding_text = (content or "").strip()
+        if embedding_text and str(visibility) == "visible" and str(kind) in {"user", "assistant", "synthesis"}:
+            try:
+                from llm.clients.embeddings import embed_text
+                message_embedding = embed_text(embedding_text)
+            except Exception:
+                message_embedding = None
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute("SELECT id FROM conversation_roundtrip WHERE id = %s FOR UPDATE", (roundtrip_id,))
+            cur.execute(
+                """
+                INSERT INTO conversation_message (
+                    roundtrip_id, sequence, kind, visibility, role, content,
+                    payload, metadata, parent_message_id, embedding
+                )
+                SELECT %s, COALESCE(MAX(sequence), -1) + 1, %s, %s, %s, %s, %s, %s, %s, (%s)::vector
+                FROM conversation_message
+                WHERE roundtrip_id = %s
+                RETURNING id, roundtrip_id, sequence, kind, visibility, role,
+                          content, payload, metadata, parent_message_id, created_at, embedding
+                """,
+                (
+                    roundtrip_id,
+                    kind.value if isinstance(kind, ConversationMessageKind) else str(kind),
+                    visibility.value if isinstance(visibility, ConversationMessageVisibility) else str(visibility),
+                    role,
+                    content or "",
+                    Jsonb(bounded_json_value(payload or {}, max_bytes=256_000)),
+                    Jsonb(bounded_json_value(metadata or {}, max_bytes=16_000)),
+                    parent_message_id,
+                    message_embedding,
+                    roundtrip_id,
+                ),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            return ConversationMessage(**row)
+
+    def append_node_log(
+        self,
+        scope_type: str,
+        scope_id: UUID,
+        *,
+        node_name: NodeName | str,
+        stage: str = "",
+        event_type: str,
+        level: str = "info",
+        message: str = "",
+        payload: dict[str, Any] | None = None,
+        duration_ms: int | None = None,
+        correlation_id: UUID | None = None,
+    ) -> NodeLog:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                (f"{scope_type}:{scope_id}",),
+            )
+            cur.execute(
+                """
+                INSERT INTO node_log (
+                    scope_type, scope_id, sequence, node_name, stage, event_type, level,
+                    message, payload, duration_ms, correlation_id
+                )
+                SELECT %s, %s, COALESCE(MAX(sequence), -1) + 1, %s, %s, %s, %s,
+                       %s, %s, %s, %s
+                FROM node_log
+                WHERE scope_type = %s AND scope_id = %s
+                RETURNING id, scope_type, scope_id, sequence, node_name, stage, event_type,
+                          level, message, payload, duration_ms, correlation_id, created_at
+                """,
+                (
+                    scope_type,
+                    scope_id,
+                    node_name.value if hasattr(node_name, "value") else str(node_name),
+                    stage,
+                    event_type,
+                    level,
+                    message[:2_000],
+                    Jsonb(bounded_json_value(payload or {}, max_bytes=64_000)),
+                    duration_ms,
+                    correlation_id,
+                    scope_type,
+                    scope_id,
+                ),
+            )
+            row = cur.fetchone()
+            assert row is not None
+            return NodeLog(**row)
+
+    def list_node_logs(
+        self,
+        scope_type: str,
+        scope_id: UUID,
+        *,
+        node_name: NodeName | str | None = None,
+        stage: str | None = None,
+        event_type: str | None = None,
+        level: str | None = None,
+    ) -> list[NodeLog]:
+        filters = ["scope_type = %s", "scope_id = %s"]
+        if node_name is not None and hasattr(node_name, "value"):
+            node_name = node_name.value
+        params: list[Any] = [scope_type, scope_id]
+        for column, value in (("node_name", node_name), ("stage", stage), ("event_type", event_type), ("level", level)):
+            if value:
+                filters.append(f"{column} = %s")
+                params.append(value)
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                f"""
+                SELECT id, scope_type, scope_id, sequence, node_name, stage, event_type,
+                       level, message, payload, duration_ms, correlation_id, created_at
+                FROM node_log
+                WHERE {' AND '.join(filters)}
+                ORDER BY sequence ASC
+                """,
+                params,
+            )
+            return [NodeLog(**row) for row in cur.fetchall()]
+
+    def list_messages(
+        self,
+        roundtrip_id: UUID,
+        *,
+        include_internal: bool = True,
+    ) -> list[ConversationMessage]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            query = """
+                SELECT id, roundtrip_id, sequence, kind, visibility, role,
+                       content, payload, metadata, parent_message_id, created_at, embedding
+                FROM conversation_message
+                WHERE roundtrip_id = %s
+            """
+            params: list[Any] = [roundtrip_id]
+            if not include_internal:
+                query += " AND visibility = 'visible'"
+            query += " ORDER BY sequence ASC"
+            cur.execute(query, params)
+            return [ConversationMessage(**row) for row in cur.fetchall()]
+
+    def list_messages_for_conversation(
+        self,
+        conversation_id: UUID,
+        *,
+        include_internal: bool = True,
+    ) -> list[ConversationMessage]:
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            visibility_clause = "" if include_internal else " AND cm.visibility = 'visible'"
+            cur.execute(
+                f"""
+                SELECT cm.id, cm.roundtrip_id, cm.sequence, cm.kind, cm.visibility,
+                       cm.role, cm.content, cm.payload, cm.metadata,
+                       cm.parent_message_id, cm.created_at, cm.embedding
+                FROM conversation_message cm
+                JOIN conversation_roundtrip rt ON rt.id = cm.roundtrip_id
+                WHERE rt.conversation_id = %s{visibility_clause}
+                ORDER BY rt.message_index ASC, cm.sequence ASC
+                """,
+                (conversation_id,),
+            )
+            return [ConversationMessage(**row) for row in cur.fetchall()]
+
+    def _hydrate_roundtrip(self, row: dict[str, Any]) -> ConversationRoundtrip:
+        return ConversationRoundtrip(**row)
 
     def create_conversation(
         self,
@@ -72,25 +253,30 @@ class ConversationRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO conversation_roundtrip (conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, model, metadata)
-                SELECT %s, COALESCE(MAX(message_index), -1) + 1, %s, '', %s, (%s)::vector, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, %s, %s
+                INSERT INTO conversation_roundtrip (conversation_id, message_index, status, roundtrip_summary, roundtrip_summary_embedding, metadata)
+                SELECT %s, COALESCE(MAX(message_index), -1) + 1, 'pending', %s, (%s)::vector, %s
                 FROM conversation_roundtrip
                 WHERE conversation_id = %s
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata, model, assistant_follow_up
+                RETURNING id, conversation_id, message_index, status, roundtrip_summary, roundtrip_summary_embedding, created_at, metadata
                 """,
                 (
                     conversation_id,
-                    user_prompt,
                     roundtrip_summary,
                     roundtrip_summary_embedding,
-                    model,
-                    Jsonb(metadata or {}),
+                    Jsonb({**(metadata or {}), **({"model": model} if model else {})}),
                     conversation_id,
                 ),
             )
             row = cur.fetchone()
             assert row is not None
-            return ConversationRoundtrip(**row)
+            roundtrip = ConversationRoundtrip(**row)
+        self.append_message(
+            roundtrip.id,
+            kind=ConversationMessageKind.USER,
+            role="user",
+            content=user_prompt,
+        )
+        return roundtrip
 
     def update_roundtrip(
         self,
@@ -99,365 +285,38 @@ class ConversationRepository:
         payload: OrchestratorPayload,
         roundtrip_summary: Optional[str] = None,
         roundtrip_summary_embedding: Optional[list[float]] = None,
-        assistant_follow_up: str | None = None,
-        relevant_evidence: RelevantEvidenceByTool | None = None,
     ) -> ConversationRoundtrip:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
                 UPDATE conversation_roundtrip
-                SET generated_response = %s,
+                SET status = 'completed',
                     roundtrip_summary = COALESCE(%s, roundtrip_summary),
                     roundtrip_summary_embedding = COALESCE((%s)::vector, roundtrip_summary_embedding),
-                    assistant_follow_up = COALESCE(%s, assistant_follow_up),
-                    response_payload = %s,
-                    relevant_evidence = %s,
                     updated_at = now()
                 WHERE id = %s
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata, model, assistant_follow_up
+                RETURNING id, conversation_id, message_index, status, roundtrip_summary, roundtrip_summary_embedding, created_at, metadata
                 """,
                 (
-                    response,
                     roundtrip_summary,
                     roundtrip_summary_embedding,
-                    assistant_follow_up,
-                    Jsonb(payload.model_dump(mode="json", exclude_none=True)),
-                    Jsonb((relevant_evidence or RelevantEvidenceByTool.empty()).model_dump(mode="json")),
                     roundtrip_id,
                 ),
             )
             row = cur.fetchone()
             assert row is not None
-            return ConversationRoundtrip(**row)
-
-    def append_roundtrip(
-        self,
-        conversation_id: UUID,
-        user_prompt: str,
-        generated_response: str,
-        response_payload: OrchestratorPayload | None = None,
-        metadata: dict[str, Any] | None = None,
-        model: Optional[str] = None,
-        roundtrip_summary: Optional[str] = None,
-        roundtrip_summary_embedding: Optional[list[float]] = None,
-    ) -> ConversationRoundtrip:
-        response_payload = response_payload or OrchestratorPayload()
-        assistant_follow_up = response_payload.next_question.strip()
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                INSERT INTO conversation_roundtrip (conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, assistant_follow_up, response_payload, relevant_evidence, parsed_query, model, metadata)
-                SELECT
-                    %s,
-                    COALESCE(MAX(message_index), -1) + 1,
-                    %s,
-                    %s,
-                    %s,
-                    (%s)::vector,
-                    %s,
-                    %s,
-                    %s,
-                    %s,
-                    %s
-                FROM conversation_roundtrip
-                WHERE conversation_id = %s
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata, model, assistant_follow_up
-                """,
-                (
-                    conversation_id,
-                    user_prompt,
-                    generated_response,
-                    roundtrip_summary,
-                    roundtrip_summary_embedding,
-                    assistant_follow_up,
-                    Jsonb(response_payload.model_dump(mode="json", exclude_none=True)),
-                    Jsonb(RelevantEvidenceByTool.empty().model_dump(mode="json")),
-                    Jsonb({}),
-                    model,
-                    Jsonb(metadata or {}),
-                    conversation_id,
-                ),
-            )
-            row = cur.fetchone()
-            assert row is not None
-
-            cur.execute(
-                """
-                UPDATE conversation
-                SET updated_at = now()
-                WHERE id = %s;
-                """,
-                (conversation_id,),
-            )
-            return ConversationRoundtrip(**row)
-
-    def create_roundtrip_prompt(
-        self,
-        roundtrip_id: UUID,
-        agent: str,
-        prompt_step: str,
-        prompt: str,
-    ) -> RoundtripPrompt:
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                INSERT INTO roundtrip_prompts (roundtrip_id, agent, prompt_step, prompt)
-                VALUES (%s, %s, %s, %s)
-                RETURNING id, roundtrip_id, agent, prompt_step, prompt, created_at
-                """,
-                (roundtrip_id, agent, prompt_step, prompt),
-            )
-            row = cur.fetchone()
-            assert row is not None
-            return RoundtripPrompt(**row)
-
-    def create_conversation_event(
-        self,
-        *,
-        conversation_id: UUID,
-        roundtrip_id: UUID | None,
-        event_type: str,
-        source: str,
-        agent_name: str = "",
-        node_name: str = "",
-        iteration: int | None = None,
-        payload: Optional[dict[str, Any]] = None,
-    ) -> ConversationEvent:
-        payload = payload or {}
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                INSERT INTO conversation_event (
-                    conversation_id,
-                    roundtrip_id,
-                    event_type,
-                    source,
-                    agent_name,
-                    node_name,
-                    iteration,
-                    payload
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING
-                    id,
-                    conversation_id,
-                    roundtrip_id,
-                    event_type,
-                    source,
-                    agent_name,
-                    node_name,
-                    iteration,
-                    payload,
-                    created_at
-                """,
-                (
-                    conversation_id,
-                    roundtrip_id,
-                    event_type,
-                    source,
-                    agent_name,
-                    node_name,
-                    iteration,
-                    Jsonb(payload),
-                ),
-            )
-            row = cur.fetchone()
-            assert row is not None
-            return ConversationEvent(**row)
-
-    def list_conversation_events_for_roundtrip(self, roundtrip_id: UUID) -> list[ConversationEvent]:
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT
-                    id,
-                    conversation_id,
-                    roundtrip_id,
-                    event_type,
-                    source,
-                    agent_name,
-                    node_name,
-                    iteration,
-                    payload,
-                    created_at
-                FROM conversation_event
-                WHERE roundtrip_id = %s
-                ORDER BY id ASC
-                """,
-                (roundtrip_id,),
-            )
-            rows = cur.fetchall()
-            return [ConversationEvent(**row) for row in rows]
-
-    def create_llm_call(
-        self,
-        *,
-        conversation_id: UUID | None,
-        roundtrip_id: UUID | None,
-        user_id: str | None,
-        agent: str | None,
-        stage: str | None,
-        callsite: str,
-        model: str,
-        input_tokens: int,
-        output_tokens: int,
-        total_tokens: int,
-        cached_input_tokens: int,
-        input_price_per_million_tokens: Decimal,
-        output_price_per_million_tokens: Decimal,
-        computed_input_cost: Decimal,
-        computed_output_cost: Decimal,
-        computed_total_cost: Decimal,
-        metadata: Optional[dict[str, Any]] = None,
-    ) -> LlmCallRecord:
-        metadata = metadata or {}
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                INSERT INTO llm_call (
-                    conversation_id,
-                    roundtrip_id,
-                    user_id,
-                    agent,
-                    stage,
-                    callsite,
-                    model,
-                    input_tokens,
-                    output_tokens,
-                    total_tokens,
-                    cached_input_tokens,
-                    input_price_per_million_tokens,
-                    output_price_per_million_tokens,
-                    computed_input_cost,
-                    computed_output_cost,
-                    computed_total_cost,
-                    metadata
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING
-                    id,
-                    conversation_id,
-                    roundtrip_id,
-                    user_id,
-                    agent,
-                    stage,
-                    callsite,
-                    model,
-                    input_tokens,
-                    output_tokens,
-                    total_tokens,
-                    cached_input_tokens,
-                    input_price_per_million_tokens,
-                    output_price_per_million_tokens,
-                    computed_input_cost,
-                    computed_output_cost,
-                    computed_total_cost,
-                    metadata,
-                    created_at,
-                    updated_at
-                """,
-                (
-                    conversation_id,
-                    roundtrip_id,
-                    user_id,
-                    agent,
-                    stage,
-                    callsite,
-                    model,
-                    input_tokens,
-                    output_tokens,
-                    total_tokens,
-                    cached_input_tokens,
-                    input_price_per_million_tokens,
-                    output_price_per_million_tokens,
-                    computed_input_cost,
-                    computed_output_cost,
-                    computed_total_cost,
-                    Jsonb(metadata),
-                ),
-            )
-            row = cur.fetchone()
-            assert row is not None
-            return LlmCallRecord(
-                id=row['id'],
-                conversation_id=row['conversation_id'],
-                roundtrip_id=row['roundtrip_id'],
-                user_id=row.get('user_id'),
-                agent=row['agent'],
-                stage=row['stage'],
-                callsite=row['callsite'],
-                model=row['model'],
-                input_tokens=row['input_tokens'],
-                output_tokens=row['output_tokens'],
-                total_tokens=row['total_tokens'],
-                cached_input_tokens=row.get('cached_input_tokens', 0),
-                input_price_per_million_tokens=row['input_price_per_million_tokens'],
-                output_price_per_million_tokens=row['output_price_per_million_tokens'],
-                computed_input_cost=row['computed_input_cost'],
-                computed_output_cost=row['computed_output_cost'],
-                computed_total_cost=row['computed_total_cost'],
-                metadata=row['metadata'],
-                created_at=str(row['created_at']),
-                updated_at=str(row['updated_at']),
-            )
-
-    def list_llm_calls_for_roundtrip(self, roundtrip_id: UUID) -> list[LlmCallRecord]:
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT
-                    id,
-                    conversation_id,
-                    roundtrip_id,
-                    user_id,
-                    agent,
-                    stage,
-                    callsite,
-                    model,
-                    input_tokens,
-                    output_tokens,
-                    total_tokens,
-                    cached_input_tokens,
-                    input_price_per_million_tokens,
-                    output_price_per_million_tokens,
-                    computed_input_cost,
-                    computed_output_cost,
-                    computed_total_cost,
-                    metadata,
-                    created_at,
-                    updated_at
-                FROM llm_call
-                WHERE roundtrip_id = %s
-                ORDER BY created_at ASC
-                """,
-                (roundtrip_id,),
-            )
-            rows = cur.fetchall()
-            return [
-                LlmCallRecord(
-                    id=row['id'],
-                    conversation_id=row['conversation_id'],
-                    roundtrip_id=row['roundtrip_id'],
-                    user_id=row.get('user_id'),
-                    agent=row['agent'],
-                    stage=row['stage'],
-                    callsite=row['callsite'],
-                    model=row['model'],
-                    input_tokens=row['input_tokens'],
-                    output_tokens=row['output_tokens'],
-                    total_tokens=row['total_tokens'],
-                    cached_input_tokens=row.get('cached_input_tokens', 0),
-                    input_price_per_million_tokens=row['input_price_per_million_tokens'],
-                    output_price_per_million_tokens=row['output_price_per_million_tokens'],
-                    computed_input_cost=row['computed_input_cost'],
-                    computed_output_cost=row['computed_output_cost'],
-                    computed_total_cost=row['computed_total_cost'],
-                    metadata=row['metadata'],
-                    created_at=str(row['created_at']),
-                    updated_at=str(row['updated_at']),
-                )
-                for row in rows
-            ]
+            roundtrip = ConversationRoundtrip(**row)
+        synthesis_payload = payload.model_dump(mode="json", exclude_none=True)
+        model = (roundtrip.metadata or {}).get("model")
+        self.append_message(
+            roundtrip_id,
+            kind=ConversationMessageKind.ASSISTANT,
+            role="assistant",
+            content=response,
+            payload=synthesis_payload,
+            metadata={"model": model, "stage": "synthesis"} if model else {"stage": "synthesis"},
+        )
+        return roundtrip
 
     def get_roundtrip_feedback(self, roundtrip_id: UUID) -> Optional[RoundtripFeedback]:
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -504,16 +363,15 @@ class ConversationRepository:
         conversation_id: UUID,
         summary: str,
         message_index_cutoff: int,
-        tool_summary: str = "",
     ) -> ConversationSummary:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                INSERT INTO conversation_summary (conversation_id, summary, tool_summary, message_index_cutoff)
-                VALUES (%s, %s, %s, %s)
-                RETURNING id, conversation_id, summary, tool_summary, message_index_cutoff, created_at
+                INSERT INTO conversation_summary (conversation_id, summary, message_index_cutoff)
+                VALUES (%s, %s, %s)
+                RETURNING id, conversation_id, summary, message_index_cutoff, created_at
                 """,
-                (conversation_id, summary, tool_summary, message_index_cutoff),
+                (conversation_id, summary, message_index_cutoff),
             )
             row = cur.fetchone()
             assert row is not None
@@ -544,7 +402,7 @@ class ConversationRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT id, conversation_id, summary, tool_summary, message_index_cutoff, created_at
+                SELECT id, conversation_id, summary, message_index_cutoff, created_at
                 FROM conversation_summary
                 WHERE conversation_id = %s
                 """,
@@ -561,26 +419,18 @@ class ConversationRepository:
                     rt.id,
                     rt.conversation_id,
                     rt.message_index,
-                    rt.user_prompt,
-                    rt.generated_response,
+                    rt.status,
                     rt.roundtrip_summary,
                     rt.roundtrip_summary_embedding,
-                    rt.assistant_follow_up,
-                    rt.response_payload,
-                    rt.relevant_evidence,
-                    rt.parsed_query,
                     rt.created_at,
-                    rt.metadata,
-                    rt.model,
-                    fb.id AS feedback_id
+                    rt.metadata
                 FROM conversation_roundtrip rt
-                LEFT JOIN roundtrip_feedback fb ON fb.roundtrip_id = rt.id
                 WHERE rt.id = %s
                 """,
                 (roundtrip_id,),
             )
             row = cur.fetchone()
-            return ConversationRoundtrip(**row) if row else None
+            return self._hydrate_roundtrip(row) if row else None
 
     def get_roundtrip_for_user(self, roundtrip_id: UUID, user_id: str | None) -> Optional[ConversationRoundtrip]:
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -590,58 +440,20 @@ class ConversationRepository:
                     rt.id,
                     rt.conversation_id,
                     rt.message_index,
-                    rt.user_prompt,
-                    rt.generated_response,
+                    rt.status,
                     rt.roundtrip_summary,
                     rt.roundtrip_summary_embedding,
-                    rt.assistant_follow_up,
-                    rt.response_payload,
-                    rt.relevant_evidence,
-                    rt.parsed_query,
                     rt.created_at,
-                    rt.metadata,
-                    rt.model,
-                    fb.id AS feedback_id
+                    rt.metadata
                 FROM conversation_roundtrip rt
                 JOIN conversation c ON c.id = rt.conversation_id
-                LEFT JOIN roundtrip_feedback fb ON fb.roundtrip_id = rt.id
                 WHERE rt.id = %s
                   AND (CAST(%s AS text) IS NULL OR c.user_id = %s)
                 """,
                 (roundtrip_id, user_id, user_id),
             )
             row = cur.fetchone()
-            return ConversationRoundtrip(**row) if row else None
-
-    def get_latest_completed_roundtrip(self, conversation_id: UUID) -> Optional[ConversationRoundtrip]:
-        with self._conn.cursor(row_factory=dict_row) as cur:
-            cur.execute(
-                """
-                SELECT
-                    id,
-                    conversation_id,
-                    message_index,
-                    user_prompt,
-                    generated_response,
-                    roundtrip_summary,
-                    roundtrip_summary_embedding,
-                    assistant_follow_up,
-                    response_payload,
-                    relevant_evidence,
-                    parsed_query,
-                    created_at,
-                    metadata,
-                    model
-                FROM conversation_roundtrip
-                WHERE conversation_id = %s
-                  AND BTRIM(COALESCE(generated_response, '')) <> ''
-                ORDER BY message_index DESC
-                LIMIT 1
-                """,
-                (conversation_id,),
-            )
-            row = cur.fetchone()
-            return ConversationRoundtrip(**row) if row else None
+            return self._hydrate_roundtrip(row) if row else None
 
     def get_conversation(self, conversation_id: UUID) -> Optional[Conversation]:
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -672,22 +484,14 @@ class ConversationRepository:
                         rt.id,
                         rt.conversation_id,
                         rt.message_index,
-                        rt.user_prompt,
-                        rt.generated_response,
+                        rt.status,
                         rt.roundtrip_summary,
                         rt.roundtrip_summary_embedding,
-                        rt.assistant_follow_up,
-                        rt.response_payload,
-                        rt.relevant_evidence,
-                        rt.parsed_query,
                         rt.created_at,
-                        rt.metadata,
-                        rt.model,
-                        fb.id AS feedback_id
+                        rt.metadata
                     FROM conversation_roundtrip rt
-                    LEFT JOIN roundtrip_feedback fb ON fb.roundtrip_id = rt.id
                     WHERE rt.conversation_id = %s
-                      AND BTRIM(COALESCE(rt.generated_response, '')) <> ''
+                      AND rt.status = 'completed'
                     ORDER BY rt.message_index {order_direction}
                     LIMIT %s
                     """,
@@ -700,30 +504,22 @@ class ConversationRepository:
                         rt.id,
                         rt.conversation_id,
                         rt.message_index,
-                        rt.user_prompt,
-                        rt.generated_response,
+                        rt.status,
                         rt.roundtrip_summary,
                         rt.roundtrip_summary_embedding,
-                        rt.assistant_follow_up,
-                        rt.response_payload,
-                        rt.relevant_evidence,
-                        rt.parsed_query,
                         rt.created_at,
-                        rt.metadata,
-                        rt.model,
-                        fb.id AS feedback_id
+                        rt.metadata
                     FROM conversation_roundtrip rt
-                    LEFT JOIN roundtrip_feedback fb ON fb.roundtrip_id = rt.id
                     WHERE rt.conversation_id = %s
                       AND rt.message_index > %s
-                      AND BTRIM(COALESCE(rt.generated_response, '')) <> ''
+                      AND rt.status = 'completed'
                     ORDER BY rt.message_index {order_direction}
                     LIMIT %s
                     """,
                     (conversation_id, after_message_index, limit),
                 )
             rows = cur.fetchall()
-            roundtrips = [ConversationRoundtrip(**r) for r in rows]
+            roundtrips = [self._hydrate_roundtrip(r) for r in rows]
             if newest_first:
                 roundtrips.reverse()
             return roundtrips
@@ -740,34 +536,27 @@ class ConversationRepository:
                     rt.id,
                     rt.conversation_id,
                     rt.message_index,
-                    rt.user_prompt,
-                    rt.generated_response,
+                    rt.status,
                     rt.roundtrip_summary,
                     rt.roundtrip_summary_embedding,
-                    rt.assistant_follow_up,
-                    rt.response_payload,
-                    rt.relevant_evidence,
-                    rt.parsed_query,
                     rt.created_at,
-                    rt.metadata,
-                    rt.model,
-                    fb.id AS feedback_id
+                    rt.metadata
                 FROM conversation_roundtrip rt
-                LEFT JOIN roundtrip_feedback fb ON fb.roundtrip_id = rt.id
                 WHERE rt.conversation_id = %s
                   AND rt.message_index <= %s
+                  AND rt.status = 'completed'
                 ORDER BY rt.message_index ASC
                 """,
                 (conversation_id, message_index),
             )
             rows = cur.fetchall()
-            return [ConversationRoundtrip(**r) for r in rows]
+            return [self._hydrate_roundtrip(r) for r in rows]
 
     def get_latest_summary(self, conversation_id: UUID) -> Optional[ConversationSummary]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT id, conversation_id, summary, tool_summary, message_index_cutoff, created_at
+                SELECT id, conversation_id, summary, message_index_cutoff, created_at
                 FROM conversation_summary
                 WHERE conversation_id = %s
                 ORDER BY created_at DESC
@@ -817,42 +606,59 @@ class ConversationRepository:
                 INSERT INTO conversation_roundtrip (
                     conversation_id,
                     message_index,
-                    user_prompt,
-                    generated_response,
+                    status,
                     roundtrip_summary,
                     roundtrip_summary_embedding,
-                    assistant_follow_up,
-                    response_payload,
-                    relevant_evidence,
-                    parsed_query,
                     created_at,
                     updated_at,
-                    model,
                     metadata
                 )
-                VALUES (%s, %s, %s, %s, %s, (%s)::vector, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, conversation_id, message_index, user_prompt, generated_response, roundtrip_summary, roundtrip_summary_embedding, response_payload, relevant_evidence, parsed_query, created_at, metadata, model, assistant_follow_up
+                VALUES (%s, %s, 'completed', %s, (%s)::vector, %s, %s, %s)
+                RETURNING id, conversation_id, message_index, status, roundtrip_summary, roundtrip_summary_embedding, created_at, metadata
                 """,
                 (
                     conversation_id,
                     source_roundtrip.message_index,
-                    source_roundtrip.user_prompt,
-                    source_roundtrip.generated_response,
                     source_roundtrip.roundtrip_summary,
                     source_roundtrip.roundtrip_summary_embedding,
-                    source_roundtrip.assistant_follow_up,
-                    Jsonb(source_roundtrip.response_payload.model_dump(mode="json", exclude_none=True)),
-                    Jsonb(source_roundtrip.relevant_evidence.model_dump(mode="json")),
-                    Jsonb({}),
                     source_roundtrip.created_at,
                     source_roundtrip.created_at,
-                    source_roundtrip.model,
                     Jsonb(source_roundtrip.metadata),
                 ),
             )
             row = cur.fetchone()
             assert row is not None
-            return ConversationRoundtrip(**row)
+            copied = ConversationRoundtrip(**row)
+        message_id_map: dict[UUID, UUID] = {}
+        for message in self.list_messages(source_roundtrip.id):
+            copied_message = self.append_message(
+                copied.id,
+                kind=message.kind,
+                role=message.role,
+                content=message.content,
+                visibility=message.visibility,
+                payload=message.payload,
+                metadata=message.metadata,
+                parent_message_id=(
+                    message_id_map.get(message.parent_message_id)
+                    if message.parent_message_id is not None
+                    else None
+                ),
+            )
+            message_id_map[message.id] = copied_message.id
+        return self._hydrate_roundtrip({**row, "id": copied.id})
+
+    def delete_roundtrip(self, roundtrip_id: UUID) -> None:
+        """Delete a roundtrip and its persisted message/runtime children."""
+        with self._conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM node_log WHERE scope_type = 'roundtrip' AND scope_id = %s",
+                (roundtrip_id,),
+            )
+            cur.execute(
+                "DELETE FROM conversation_roundtrip WHERE id = %s",
+                (roundtrip_id,),
+            )
 
     def search_conversation_memories(
         self,
@@ -891,50 +697,120 @@ class ConversationRepository:
     def search_roundtrip_memories(
         self,
         query_embedding: Sequence[float],
-        conversation_ids: Sequence[UUID],
+        conversation_ids: Sequence[UUID] | None = None,
         limit: int = 5,
         user_id: str | None = None,
     ) -> list[RoundtripMemory]:
-        if not conversation_ids:
-            return []
-
         with self._conn.cursor(row_factory=dict_row) as cur:
+            filters = [
+                "(CAST(%s AS text) IS NULL OR c.user_id = %s)",
+                "rt.roundtrip_summary_embedding IS NOT NULL",
+                "BTRIM(COALESCE(rt.roundtrip_summary, '')) <> ''",
+            ]
+            params: list[Any] = [user_id, user_id]
+            if conversation_ids:
+                filters.insert(0, "rt.conversation_id = ANY(%s)")
+                params.insert(0, list(conversation_ids))
+            params.extend([list(query_embedding), max(1, limit)])
             cur.execute(
-                """
+                f"""
                 SELECT
                     rt.conversation_id,
                     rt.id AS roundtrip_id,
                     rt.message_index,
-                    rt.user_prompt,
-                    rt.generated_response,
                     rt.roundtrip_summary,
                     rt.created_at,
                     (rt.roundtrip_summary_embedding <-> (%s)::vector) AS relevance_score
                 FROM conversation_roundtrip rt
                 JOIN conversation c ON c.id = rt.conversation_id
-                WHERE rt.conversation_id = ANY(%s)
-                  AND (CAST(%s AS text) IS NULL OR c.user_id = %s)
-                  AND rt.roundtrip_summary_embedding IS NOT NULL
-                  AND BTRIM(COALESCE(rt.roundtrip_summary, '')) <> ''
+                WHERE {' AND '.join(filters)}
                 ORDER BY rt.roundtrip_summary_embedding <-> (%s)::vector ASC
                 LIMIT %s
                 """,
-                (list(query_embedding), list(conversation_ids), user_id, user_id, list(query_embedding), limit),
+                [list(query_embedding), *params[:-2], list(query_embedding), params[-1]],
             )
             rows = cur.fetchall()
-            return [
-                RoundtripMemory(
+            memories = []
+            for row in rows:
+                memories.append(RoundtripMemory(
                     conversation_id=row['conversation_id'],
                     roundtrip_id=row['roundtrip_id'],
                     message_index=row['message_index'],
-                    user_prompt=row['user_prompt'],
-                    generated_response=row['generated_response'],
                     roundtrip_summary=row['roundtrip_summary'],
                     created_at=str(row['created_at']),
                     relevance_score=float(row['relevance_score']),
-                )
-                for row in rows
+                    messages=self.list_messages(row["roundtrip_id"], include_internal=True),
+                ))
+            return memories
+
+    def search_message_memories(
+        self,
+        query_embedding: Sequence[float],
+        conversation_ids: Sequence[UUID] | None = None,
+        limit: int = 5,
+        user_id: str | None = None,
+    ) -> list[RoundtripMemory]:
+        """Search individual message embeddings, then return complete roundtrips."""
+        with self._conn.cursor(row_factory=dict_row) as cur:
+            filters = [
+                "cm.embedding IS NOT NULL",
+                "(CAST(%s AS text) IS NULL OR c.user_id = %s)",
             ]
+            params: list[Any] = [user_id, user_id]
+            if conversation_ids:
+                filters.append("rt.conversation_id = ANY(%s)")
+                params.append(list(conversation_ids))
+            params.extend([list(query_embedding), max(1, limit)])
+            cur.execute(
+                f"""
+                SELECT matched_message_id, roundtrip_id, conversation_id,
+                       message_index, roundtrip_summary, created_at, relevance_score
+                FROM (
+                    SELECT
+                        cm.id AS matched_message_id,
+                        cm.roundtrip_id,
+                        rt.conversation_id,
+                        rt.message_index,
+                        rt.roundtrip_summary,
+                        rt.created_at,
+                        (cm.embedding <-> (%s)::vector) AS relevance_score,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY cm.roundtrip_id
+                            ORDER BY cm.embedding <-> (%s)::vector ASC
+                        ) AS message_rank
+                    FROM conversation_message cm
+                    JOIN conversation_roundtrip rt ON rt.id = cm.roundtrip_id
+                    JOIN conversation c ON c.id = rt.conversation_id
+                    WHERE {' AND '.join(filters)}
+                ) ranked_messages
+                WHERE message_rank = 1
+                ORDER BY relevance_score ASC
+                LIMIT %s
+                """,
+                [list(query_embedding), list(query_embedding), *params[:-2], params[-1]],
+            )
+            rows = cur.fetchall()
+
+        results: list[RoundtripMemory] = []
+        for row in rows:
+            roundtrip = self._hydrate_roundtrip({
+                "id": row["roundtrip_id"],
+                "conversation_id": row["conversation_id"],
+                "message_index": row["message_index"],
+                "roundtrip_summary": row["roundtrip_summary"],
+                "created_at": row["created_at"],
+            })
+            results.append(RoundtripMemory(
+                conversation_id=roundtrip.conversation_id,
+                roundtrip_id=roundtrip.id,
+                message_index=roundtrip.message_index,
+                roundtrip_summary=roundtrip.roundtrip_summary or "",
+                created_at=str(roundtrip.created_at),
+                relevance_score=float(row["relevance_score"]),
+                messages=self.list_messages(roundtrip.id, include_internal=True),
+                matched_message_id=row["matched_message_id"],
+            ))
+        return results
 
     def delete_conversation(self, conversation_id: str, user_id: str) -> bool:
         with self._conn.cursor(row_factory=dict_row) as cur:
@@ -985,3 +861,47 @@ class ConversationRepository:
                 (title, conversation_id),
             )
             return cur.rowcount > 0
+
+    def record_llm_usage(self, **kwargs) -> LlmCallRecord:
+        metadata = dict(kwargs.get("metadata") or {})
+        payload = {
+            "kind": "llm_call",
+            "model_scope": kwargs.get("agent") or "",
+            "agent": kwargs.get("agent"),
+            "stage": kwargs.get("stage"),
+            "callsite": kwargs.get("callsite", ""),
+            "model": kwargs.get("model", ""),
+            "input_tokens": kwargs.get("input_tokens", 0),
+            "output_tokens": kwargs.get("output_tokens", 0),
+            "total_tokens": kwargs.get("total_tokens", 0),
+            "cached_input_tokens": kwargs.get("cached_input_tokens", 0),
+            "computed_input_cost": str(kwargs.get("computed_input_cost", 0)),
+            "computed_output_cost": str(kwargs.get("computed_output_cost", 0)),
+            "computed_total_cost": str(kwargs.get("computed_total_cost", 0)),
+            "metadata": metadata,
+        }
+        roundtrip_id = kwargs.get("roundtrip_id")
+        if roundtrip_id:
+            self.append_node_log(
+                "roundtrip",
+                roundtrip_id,
+            node_name=kwargs.get("node_name") or kwargs.get("stage") or kwargs.get("agent") or "llm",
+                stage=kwargs.get("stage") or "",
+                event_type="llm_call",
+                message="LLM call completed",
+                payload=payload,
+                duration_ms=metadata.get("latency_ms"),
+            )
+        return LlmCallRecord(
+            id=UUID(int=0), conversation_id=kwargs.get("conversation_id"), roundtrip_id=roundtrip_id,
+            user_id=kwargs.get("user_id"), agent=kwargs.get("agent"), stage=kwargs.get("stage"),
+            callsite=kwargs.get("callsite", ""), model=kwargs.get("model", ""),
+            input_tokens=kwargs.get("input_tokens", 0), output_tokens=kwargs.get("output_tokens", 0),
+            total_tokens=kwargs.get("total_tokens", 0), cached_input_tokens=kwargs.get("cached_input_tokens", 0),
+            input_price_per_million_tokens=kwargs.get("input_price_per_million_tokens", Decimal(0)),
+            output_price_per_million_tokens=kwargs.get("output_price_per_million_tokens", Decimal(0)),
+            computed_input_cost=kwargs.get("computed_input_cost", Decimal(0)),
+            computed_output_cost=kwargs.get("computed_output_cost", Decimal(0)),
+            computed_total_cost=kwargs.get("computed_total_cost", Decimal(0)), metadata=metadata,
+            created_at="", updated_at="",
+        )

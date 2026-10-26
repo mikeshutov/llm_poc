@@ -12,8 +12,7 @@ def _build_synthesis_context(state: AgentState | MainState) -> ConversationConte
     return ConversationContext(
         conversation_summary=conversation_context.conversation_summary,
         latest_conversation_summary=conversation_context.latest_conversation_summary,
-        tool_summary=conversation_context.tool_summary,
-        latest_assistant_follow_up=conversation_context.latest_assistant_follow_up,
+        messages=list(conversation_context.messages),
     )
 
 

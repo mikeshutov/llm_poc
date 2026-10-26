@@ -1,4 +1,6 @@
-from conversation.models.conversation_models import ConversationContext
+from uuid import uuid4
+
+from conversation.models.conversation_models import ConversationContext, ConversationMessage
 from request_orchestrator.shared.agents.agent_selection_query import build_agent_selection_query
 
 
@@ -6,8 +8,16 @@ def test_build_agent_selection_query_includes_turn_continuity() -> None:
     query = build_agent_selection_query(
         current_user_request="Find a less expensive option.",
         conversation_context=ConversationContext(
-            previous_user_request="Find me a hiking backpack.",
-            latest_assistant_follow_up="What budget should I use?",
+            messages=[
+                ConversationMessage(
+                    uuid4(), uuid4(), 0, "user", "visible", "user",
+                    "Find me a hiking backpack.", {}, {}, None, "",
+                ),
+                ConversationMessage(
+                    uuid4(), uuid4(), 1, "synthesis", "visible", "assistant",
+                    "Here are some options.", {"next_question": "What budget should I use?"}, {}, None, "",
+                ),
+            ],
         ),
     )
 

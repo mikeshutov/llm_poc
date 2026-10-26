@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import json
-import logging
+from time import perf_counter
 
 from serviceclients.attribute_classifier import AttributeClassifierClient, AttributeClassifierUnavailableError
-from conversation.utils import build_conversation_context_json
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
+from request_orchestrator.shared.agents.agent_selection_query import build_agent_selection_query
 from request_orchestrator.models.main_state import MainState
+from common.logging import record_node_log
+from request_orchestrator.constants import NodeName
 
-logger = logging.getLogger(__name__)
 MAX_DISCOVERED_ATTRIBUTE_TYPES = 10
 
 
@@ -18,25 +18,43 @@ def attribute_discovery(
     client: AttributeClassifierClient | None = None,
 ) -> list[str]:
     """Select the stored user-attribute types relevant to the current request."""
-    context = json.dumps(
-        {
-            "task": main_state.task,
-            "conversation_context": json.loads(
-                build_conversation_context_json(main_state.execution_context.conversation_context)
-            ),
-        },
-        ensure_ascii=True,
+    context = main_state.discovery_query or build_agent_selection_query(
+        current_user_request=main_state.task,
+        conversation_context=main_state.execution_context.conversation_context,
     )
     classifier = client or AttributeClassifierClient()
+    started_at = perf_counter()
     try:
         discovered = classifier.relevant_attributes(context, list(ATTRIBUTE_TYPE_VALUES))
     except AttributeClassifierUnavailableError:
-        logger.warning("Attribute classifier service unavailable; continuing without discovered attributes")
+        record_node_log(
+            node_name=NodeName.ATTRIBUTE_DISCOVERY,
+            stage="enrich_state",
+            event_type="attribute_discovery",
+            roundtrip_id=main_state.execution_context.roundtrip_id,
+            level="warning",
+            message="Attribute classifier unavailable",
+            payload={"query": context, "discovered_attribute_types": []},
+            duration_ms=int((perf_counter() - started_at) * 1000),
+        )
         return []
-
     available = set(ATTRIBUTE_TYPE_VALUES)
-    return [
+    result = [
         attribute
         for attribute in discovered
         if isinstance(attribute, str) and attribute in available
     ][:MAX_DISCOVERED_ATTRIBUTE_TYPES]
+    record_node_log(
+        node_name=NodeName.ATTRIBUTE_DISCOVERY,
+        stage="enrich_state",
+        event_type="attribute_discovery",
+        roundtrip_id=main_state.execution_context.roundtrip_id,
+        message="Attribute discovery completed",
+        payload={
+            "query": context,
+            "attribute_types_considered": list(ATTRIBUTE_TYPE_VALUES),
+            "discovered_attribute_types": result,
+        },
+        duration_ms=int((perf_counter() - started_at) * 1000),
+    )
+    return result

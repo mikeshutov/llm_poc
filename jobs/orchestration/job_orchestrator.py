@@ -30,13 +30,14 @@ class JobOrchestrator:
             execution_context=execution_context,
         )
         planner_prompt, tools = build_planner_prompt(state)
+        planner_messages = planner_prompt.build_messages()
 
         try:
             planning_result, _ = invoke_planner(
                 state,
-                planner_prompt.build(),
+                planner_messages,
                 tools=tools,
-                prompt_input_object=planner_prompt.to_log_input_object(),
+                prompt_input_object={"messages": planner_messages},
             )
         except Exception as exc:
             return None, f"plan generation failed: {exc}"

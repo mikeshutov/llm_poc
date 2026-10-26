@@ -124,20 +124,18 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
         capabilities = state.inputs.discovered_capabilities
         prompt = AgentPrompt(
             instruction=(
-                "You are the top-level planner. Use direct tools or delegate self-contained tasks. "
+                "You are the top-level planner. Use the available tools to complete the task. "
                 "Do not invent capabilities."
             ),
             user_profile=state.execution_context.user_profile,
             conversation_context=state.execution_context.conversation_context,
             task=state.inputs.task,
-            available_agents=[] if capabilities is None else capabilities.agents,
             available_tools=[] if capabilities is None else capabilities.tools,
             rules=build_planner_rules(context.rules),
         )
         for section in (
             PromptSectionKeys.USER_PROFILE,
             PromptSectionKeys.CONVERSATION_CONTEXT,
-            PromptSectionKeys.AVAILABLE_AGENTS,
             PromptSectionKeys.AVAILABLE_TOOLS,
             PromptSectionKeys.RULES,
             PromptSectionKeys.TASK,

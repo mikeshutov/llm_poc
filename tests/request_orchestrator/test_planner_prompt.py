@@ -57,7 +57,7 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
     ]
 
     prompt, _ = build_planner_prompt(state)
-    evidence_section = prompt.to_log_input_object()["sections_raw"][PromptSectionKeys.EVIDENCE]
+    evidence_section = prompt.sections_raw[PromptSectionKeys.EVIDENCE]
 
     assert evidence_section[0]["type"] == "web_search_results"
     assert evidence_section[0]["evidence"][0]["title"] == "Example Result"
@@ -80,8 +80,7 @@ def test_top_level_planner_prompt_includes_shared_rules() -> None:
 
     prompt, _ = build_planner_prompt(state)
 
-    assert "Tool Call Hypotheses:" in prompt.build()
-    assert "The hypothesis must be independently verifiable" in prompt.build()
+    assert "Each tool call must include an affirmative, factual, testable hypothesis" in prompt.build()
 
 
 def test_planner_prompt_includes_evaluator_missing_information() -> None:

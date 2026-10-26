@@ -11,6 +11,13 @@ from request_orchestrator.models.plan import Plan, PlanKind, PlanStatus
 
 
 class PlanRepository:
+    """Persistence used by scheduled jobs for durable plan snapshots.
+
+    Interactive roundtrip plans remain runtime state and are recorded in node
+    messages/logs. Jobs still require this repository because their plan is a
+    durable job-owned artifact.
+    """
+
     def __init__(self, conn: psycopg.Connection | None = None):
         self._conn = conn or get_connection()
 
@@ -25,7 +32,6 @@ class PlanRepository:
         prompt_hash: str | None = None,
         plan_kind: PlanKind = PlanKind.INTERACTIVE,
     ) -> UUID:
-        """Store one plan snapshot for either an interactive roundtrip or a job."""
         if (roundtrip_id is None) == (job_id is None):
             raise ValueError("exactly one of roundtrip_id or job_id is required")
         if not isinstance(plan_kind, PlanKind):
@@ -35,7 +41,6 @@ class PlanRepository:
         if job_id is not None and not user_id:
             raise ValueError("user_id is required for job plans")
 
-        steps_payload = [step.model_dump(mode="json") for step in plan.steps]
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -50,7 +55,7 @@ class PlanRepository:
                     roundtrip_id,
                     user_id,
                     job_id,
-                    Jsonb(steps_payload),
+                    Jsonb([step.model_dump(mode="json") for step in plan.steps]),
                     plan.current_step_index,
                     plan.status.value,
                     version,
@@ -61,14 +66,9 @@ class PlanRepository:
             return cur.fetchone()["id"]
 
     def save_interactive_plan(self, roundtrip_id: UUID, plan: Plan) -> UUID:
-        return self.save_plan(
-            plan=plan,
-            roundtrip_id=roundtrip_id,
-            plan_kind=PlanKind.INTERACTIVE,
-        )
+        return self.save_plan(plan=plan, roundtrip_id=roundtrip_id, plan_kind=PlanKind.INTERACTIVE)
 
     def get_current_job_plan(self, *, job_id: UUID, user_id: str) -> Plan | None:
-        """Load the current plan after verifying job ownership."""
         if not user_id.strip():
             raise ValueError("user_id is required")
         with self._conn.cursor(row_factory=dict_row) as cur:

@@ -25,7 +25,6 @@ class RoundtripMemoryMetadata(BaseModel):
     conversation_id: str
     roundtrip_id: str
     message_index: int
-    user_prompt: str | None = None
     created_at: str | None = None
     relevance_score: float | None = None
 
@@ -34,7 +33,8 @@ class RoundtripMemoryMetadata(BaseModel):
     TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES,
     args_schema=SearchRoundtripMemoriesArgs,
     description=f"""
-Search prior roundtrip summaries by semantic similarity within specific conversations.
+Search roundtrip summaries by semantic similarity within specific conversations.
+Each returned match includes the complete ordered roundtrip message stream.
 
 Use search_memories first to identify relevant conversation_ids, then use this tool to find the specific historical exchanges most related to the topic.
 
@@ -52,7 +52,10 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
         return ToolResult(result=[], evidence=[])
 
     query_embedding = embed_text(query)
-    memories = get_conversation_repo().search_roundtrip_memories(
+    # Rank individual messages, then hydrate each winning parent roundtrip so
+    # callers receive the complete ordered exchange rather than one isolated
+    # matching message.
+    memories = get_conversation_repo().search_message_memories(
         query_embedding=query_embedding,
         conversation_ids=parsed_ids,
         limit=limit,
@@ -64,7 +67,6 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
             conversation_id=str(memory.conversation_id),
             roundtrip_id=str(memory.roundtrip_id),
             message_index=memory.message_index,
-            user_prompt=memory.user_prompt,
             created_at=memory.created_at,
             relevance_score=memory.relevance_score,
         )
@@ -72,7 +74,7 @@ def search_roundtrip_memories(query: str, conversation_ids: list[str], limit: in
             item_id=str(memory.roundtrip_id),
             tool_name=TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES,
             title=f"Memory from message {memory.message_index}",
-            summary=(memory.roundtrip_summary or memory.generated_response or "").strip(),
+            summary=(memory.roundtrip_summary or "Retrieved prior conversation memory.").strip(),
             published_at=memory.created_at,
             source=TOOL_NAME_SEARCH_ROUNDTRIP_MEMORIES,
             entity_type=TOOL_RESULT_TYPE_MEMORY_RESULTS,

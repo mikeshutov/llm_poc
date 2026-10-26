@@ -25,6 +25,7 @@ def run_main_request_strategy(main_state: MainState) -> MainState:
         llm=main_state.llm,
     )
     execution_state.inputs.discovered_capabilities = main_state.discovered_capabilities
+    execution_state.inputs.discovered_attribute_types = list(main_state.discovered_attribute_types)
     execution_state.available_agent_states = main_state.agent_states
     execution_state = TOP_LEVEL_STRATEGY.run(
         execution_state,

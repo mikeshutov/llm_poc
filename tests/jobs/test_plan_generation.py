@@ -17,7 +17,7 @@ def test_job_orchestrator_returns_generated_plan(monkeypatch) -> None:
     monkeypatch.setattr(
         job_orchestrator,
         "build_planner_prompt",
-        lambda state: SimpleNamespace(build=lambda: "prompt", to_log_input_object=lambda: {}),
+        lambda state: (SimpleNamespace(build_messages=lambda: [{"role": "user", "content": "prompt"}]), []),
     )
     monkeypatch.setattr(
         job_orchestrator,
@@ -44,7 +44,7 @@ def test_job_orchestrator_returns_error_for_empty_plan(monkeypatch) -> None:
     monkeypatch.setattr(
         job_orchestrator,
         "build_planner_prompt",
-        lambda state: SimpleNamespace(build=lambda: "prompt", to_log_input_object=lambda: {}),
+        lambda state: (SimpleNamespace(build_messages=lambda: [{"role": "user", "content": "prompt"}]), []),
     )
     monkeypatch.setattr(
         job_orchestrator,

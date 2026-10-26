@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from langgraph.graph import END
 
-from common.logging import create_conversation_event
+from common.logging import record_node_log
 from rendering.debug import EXECUTION_RESULT_KIND
-from request_orchestrator.constants import EVALUATE_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
+from request_orchestrator.constants import EVALUATE_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE, NodeName
 from request_orchestrator.models.agent_result import ResultStatus
 from request_orchestrator.models.agent_state import AgentState
 
@@ -36,14 +36,14 @@ def execution_result_router(state: AgentState) -> str:
     if state.result.result_status is ResultStatus.NO_NEW_WORK:
         plan = state.node_states.planner.plan
         rejected_call_count = len(plan.steps) if plan else 0
-        create_conversation_event(
+        record_node_log(
             conversation_id=state.execution_context.conversation_id,
             roundtrip_id=state.execution_context.roundtrip_id,
             event_type=EXECUTION_RESULT_KIND,
             source=state.agent_profile.name,
             agent_name=state.agent_profile.name,
             agent_version=state.agent_profile.version,
-            node_name="execution_result_validator",
+            node_name=NodeName.VALIDATE_EXECUTION_RESULT,
             payload={"agent_name": state.agent_profile.name, "kind": EXECUTION_RESULT_KIND, "data": {
                 "title": "Execution Stopped Early",
                 "status": ResultStatus.NO_NEW_WORK,

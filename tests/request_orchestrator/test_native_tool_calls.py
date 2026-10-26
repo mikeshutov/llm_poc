@@ -21,17 +21,16 @@ def lookup(query: str, limit: int = 5) -> dict:
     return {"query": query, "limit": limit}
 
 
-def test_native_tool_schema_wraps_parameters_and_metadata() -> None:
+def test_native_tool_schema_wraps_parameters_and_evaluation_fields() -> None:
     native = wrap_tool(lookup)
 
     schema = native.args_schema.model_json_schema()
-    assert set(schema["properties"]) == {"parameters", "hypothesis", "metadata", "evaluation_fields"}
+    assert set(schema["properties"]) == {"parameters", "hypothesis", "evaluation_fields"}
     assert set(schema["required"]) == {"parameters", "hypothesis"}
-    assert "executable arguments" in schema["properties"]["parameters"]["description"]
+    assert schema["properties"]["parameters"]["description"] == "Executable arguments for the underlying tool."
     assert native.invoke({
         "parameters": {"query": "boots", "limit": 2},
         "hypothesis": "Find matching boots.",
-        "metadata": {"source": "test"},
     }) == {"query": "boots", "limit": 2}
 
 
