@@ -78,6 +78,8 @@ class CurrentWeatherResult(BaseModel):
     args_schema=GetCurrentWeatherArgs,
     description="""
 Get the current weather conditions for a location.
+Use this tool whenever the user asks about the weather, temperature, forecast conditions, or whether it is raining/sunny/cold in a location.
+Do not answer current-weather questions from conversation summaries or previously retrieved weather results.
 
 
 Returns current temperature, wind speed, wind direction, weather code, and whether it is daytime.

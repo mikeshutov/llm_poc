@@ -11,7 +11,7 @@ from llm.usage import record_llm_call
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.constants import NodeName
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
-from request_orchestrator.models.synthesized_result import SynthesisResult
+from request_orchestrator.models.synthesized_result import SynthesisResult, SynthesisResultBlock
 from request_orchestrator.shared.evidence import (
     build_evidence_bundle_from_tool_results,
     build_evidence_steps_from_tool_results,
@@ -121,12 +121,26 @@ def run_synthesis(state: MainState) -> MainState:
     try:
         synthesis_result = SynthesisResult.model_validate_json(raw)
     except Exception as e:
-        state.result = state.result.copy(
-            answer=[f"Synthesis produced invalid JSON result: {e}\nRaw:\n{raw}"],
-            next_question="",
-            roundtrip_summary="",
+        record_node_log(
+            conversation_id=execution_context.conversation_id,
+            roundtrip_id=execution_context.roundtrip_id,
+            node_name=NodeName.SYNTHESIS,
+            stage="parse",
+            event_type="synthesis_parse_failure",
+            level="error",
+            message="Synthesis returned non-JSON output; using bounded text fallback",
+            payload={
+                "error": str(e),
+                "raw_preview": raw[:2_000],
+                "raw_length": len(raw),
+            },
+            duration_ms=latency_ms,
         )
-        return state
+        fallback_text = raw.strip() or "I was unable to produce a response."
+        synthesis_result = SynthesisResult(
+            result=[SynthesisResultBlock(content=fallback_text)],
+            roundtrip_summary=fallback_text[:1_000],
+        )
 
     result_blocks, used_evidence_ids = _build_result_blocks(synthesis_result, evidence_steps)
 

@@ -178,7 +178,12 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     ),
     "weather": ToolCategory(
         tools=WEATHER_TOOLS,
-        description="Look up current or historical weather conditions for a city.",
+        description="Retrieve current or historical weather conditions for a specified location.",
+        rules=[
+            "Use get_current_weather for current weather, temperature, or conditions requests.",
+            "Use historical weather tools only when the user specifies a past month or historical period.",
+            "Do not answer current-weather requests from conversation summaries or older weather results.",
+        ],
     ),
     "finance": ToolCategory(
         tools=FINANCE_TOOLS,
@@ -190,8 +195,13 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     ),
     "web_search": ToolCategory(
         tools=WEB_SEARCH_TOOLS,
-        description="Search the web or news using Brave for general information about any topic.",
-        rules=["Use at most ONE web search tool call in the entire plan."],
+        description="Search the web or current news using Brave for information that requires fresh external results.",
+        rules=[
+            "Use news_search for current, recent, latest, breaking, or location-based news requests.",
+            "Use generic_web_search for non-news web information or broader web research.",
+            "Use a live search for fresh information; do not rely on conversation summaries or older search results unless the user explicitly asks about them.",
+            "Use at most ONE web search tool call in the entire plan.",
+        ],
     ),
     "knowledge": ToolCategory(
         tools=KNOWLEDGE_TOOLS,

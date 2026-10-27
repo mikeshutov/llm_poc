@@ -295,6 +295,28 @@ def test_agent_log_persists_conversation_event_immediately() -> None:
     assert event['payload']['data']['steps'] == []
 
 
+def test_agent_log_preserves_metadata_next_to_structured_data() -> None:
+    repo = RecordingRepo()
+    roundtrip_id = uuid4()
+
+    with patch('common.logging.message_trace_logger.get_conversation_repo', return_value=repo):
+        record_node_log(
+            roundtrip_id=roundtrip_id,
+            event_type='plan',
+            node_name='planner',
+            payload={
+                'kind': 'plan',
+                'status': 'ready',
+                'data': {'steps': [{'tool': 'search'}]},
+            },
+        )
+
+    payload = repo.conversation_events[-1]['payload']['data']
+    assert payload['kind'] == 'plan'
+    assert payload['status'] == 'ready'
+    assert payload['steps'] == [{'tool': 'search'}]
+
+
 def test_run_planner_completes_when_no_native_tool_calls_are_returned() -> None:
     repo = RecordingRepo()
     state = AgentState.new(

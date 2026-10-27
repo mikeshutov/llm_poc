@@ -10,6 +10,7 @@ from rendering.rendering import (
     render_assistant_content,
     serialize_roundtrip_payload,
 )
+from rendering.debug import _build_llm_call_payload
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView
 from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
 from request_orchestrator.models.synthesized_result import SynthesisResultBlock
@@ -19,6 +20,21 @@ from tool.constants import TOOL_RESULT_TYPE_FILE_DETAILS
 from tool.constants import TOOL_RESULT_TYPE_RULES
 from tool.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
 from tool.constants import TOOL_RESULT_TYPE_WEATHER
+
+
+def test_debug_llm_payload_reads_compact_input_and_output_metadata() -> None:
+    payload = _build_llm_call_payload(
+        {
+            "model": "test-model",
+            "metadata": {
+                "input": {"hash": "input-hash", "message_count": 2},
+                "output": {"hash": "output-hash", "preview": "ok"},
+            },
+        }
+    )
+
+    assert payload["input_object"] == {"hash": "input-hash", "message_count": 2}
+    assert payload["output_object"] == {"hash": "output-hash", "preview": "ok"}
 
 
 def test_serialize_roundtrip_payload_preserves_persisted_evidence() -> None:

@@ -42,6 +42,7 @@ def fetch_trace_messages_for_roundtrip(
         payload.setdefault("stage", log.stage)
         payload.setdefault("level", log.level)
         payload.setdefault("sequence", log.sequence)
+        payload.setdefault("message", log.message)
         grouped.setdefault(agent_name, []).append(payload)
     return grouped
 

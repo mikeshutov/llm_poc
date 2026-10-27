@@ -193,8 +193,17 @@ def _build_llm_call_payload(entry: dict) -> dict:
         computed_output_cost=str(entry.get("computed_output_cost") or ""),
         computed_total_cost=str(entry.get("computed_total_cost") or ""),
         latency_ms=entry.get("latency_ms"),
-        input_object=entry.get("input_object", metadata.get("input_object")),
-        output_object=entry.get("output_object", metadata.get("output_object")),
+        # Compact LLM diagnostics store these as `metadata.input` and
+        # `metadata.output`. Keep the old keys as a fallback for historical
+        # node logs created before the compact format.
+        input_object=entry.get(
+            "input_object",
+            entry.get("input", metadata.get("input", metadata.get("input_object"))),
+        ),
+        output_object=entry.get(
+            "output_object",
+            entry.get("output", metadata.get("output", metadata.get("output_object"))),
+        ),
         metadata=metadata,
     ).model_dump()
 
@@ -222,13 +231,19 @@ def _build_log_payload(entry: dict) -> tuple[str, dict]:
         payload = dict(entry)
         payload.setdefault("title", entry.get("title", "Log Entry"))
 
-    title = str(payload.get("title") or entry.get("title") or "Log Entry")
+    title = str(
+        payload.get("title")
+        or entry.get("title")
+        or entry.get("message")
+        or "Log Entry"
+    )
     return title, payload
 
 
 def _render_log_entries(entries: list[dict]) -> None:
     for index, entry in enumerate(entries):
         title, payload = _build_log_payload(entry)
+        message = str(entry.get("message") or "").strip()
         sequence = entry.get("sequence")
         stage = entry.get("stage") or ""
         level = entry.get("level") or "info"
@@ -240,6 +255,8 @@ def _render_log_entries(entries: list[dict]) -> None:
                 level,
             ] if part
         )
+        if message:
+            context = f"{context} - {message}" if context else message
         st.markdown(f"**{title}**" + (f" · {context}" if context else ""))
         st.json(payload, expanded=False)
         if index < len(entries) - 1:
