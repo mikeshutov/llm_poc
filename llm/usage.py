@@ -60,6 +60,16 @@ def _trace_object_summary(value: Any) -> dict[str, Any]:
     summary: dict[str, Any] = {
         "hash": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
         "bytes": len(rendered.encode("utf-8")),
+        # Keep a human-readable diagnostic projection without persisting the
+        # complete prompt/tool payload. The hash remains useful for identity;
+        # this bounded preview makes the call inspectable in the debug UI.
+        "preview": bounded_json_value(
+            normalized,
+            max_bytes=8_000,
+            max_depth=6,
+            max_items=40,
+            max_string=1_500,
+        ),
     }
     if isinstance(normalized, dict):
         messages = normalized.get("messages")

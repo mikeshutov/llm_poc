@@ -53,11 +53,23 @@ def record_node_log(
         return
     try:
         resolved_payload = bounded_json_value({} if payload is None else dict(payload))
-        trace_data = (
-            resolved_payload.get("data", resolved_payload)
-            if isinstance(resolved_payload, dict)
-            else resolved_payload
-        )
+        if isinstance(resolved_payload, dict):
+            nested_data = resolved_payload.get("data")
+            if isinstance(nested_data, dict):
+                # Producers may put diagnostic metadata (kind, status, agent,
+                # etc.) beside a structured `data` object. Preserve both at
+                # the persistence boundary so renderers do not lose fields
+                # merely because the payload was wrapped.
+                trace_data = {
+                    key: value
+                    for key, value in resolved_payload.items()
+                    if key != "data"
+                }
+                trace_data.update(nested_data)
+            else:
+                trace_data = resolved_payload
+        else:
+            trace_data = resolved_payload
         repository = get_conversation_repo()
         repository.append_node_log(
             "roundtrip",

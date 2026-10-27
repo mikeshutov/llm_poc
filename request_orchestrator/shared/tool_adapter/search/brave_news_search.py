@@ -61,7 +61,9 @@ def _tool_result(result: NewsSearchResponse) -> ToolResult:
     TOOL_NAME_NEWS_SEARCH,
     args_schema=NewsSearchArgs,
     description="""
-Search for current news results using Brave News Search. Does not provide full articles only overviews.
+Search for current or recent news results for a topic, event, organization, or location using Brave News Search.
+Use this tool whenever the user asks what is happening, what is interesting, or what the latest/recent news is.
+Do not answer current-news questions from conversation summaries or older tool results; this tool provides fresh article overviews, not full articles.
 
 
 """,

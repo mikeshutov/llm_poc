@@ -40,6 +40,11 @@ def _tool_result_has_no_results(tool_result: ToolResult) -> bool:
 
 
 def build_evidence_bundle_from_tool_results(tool_results: list[ToolResult]) -> EvidenceBundle:
+    # Streamlit may reload the evidence model module independently from this
+    # module. Rebuild the Pydantic schema and canonicalize each item below so
+    # structurally valid EvidenceView instances from the previous module
+    # generation are accepted as the current model type.
+    EvidenceBundle.model_rebuild(force=True)
     evidence_by_id: dict[str, EvidenceView] = {}
     evidence_views_by_tool_call_id: dict[UUID, list[EvidenceView]] = {}
 
@@ -164,7 +169,7 @@ def _rehydrate_evidence_item(
     tool_call_id: UUID | None,
     tool_name: str,
 ) -> EvidenceView:
-    merged = evidence.model_copy(deep=True)
+    merged = EvidenceView.model_validate(evidence.model_dump(mode="json"))
     merged.tool_call_id = tool_call_id
     if not merged.tool_name:
         merged.tool_name = tool_name

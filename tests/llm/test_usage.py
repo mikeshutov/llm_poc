@@ -183,6 +183,7 @@ def test_record_llm_call_persists_compact_input_and_output_metadata() -> None:
     assert 'input_object' not in stored['metadata']
     assert 'output_object' not in stored['metadata']
     assert stored['metadata']['input']['bytes'] > 0
+    assert stored['metadata']['input']['preview'] == {'prompt': 'hello', 'items': [1, 2]}
     assert stored['metadata']['output']['preview'] == '{}'
     assert stored['metadata']['kind'] == 'test'
 
