@@ -19,6 +19,12 @@ EVIDENCE_VIEW_COMPACT = "compact"
 EVIDENCE_VIEW_EVALUATOR = "evaluator"
 EvidenceViewMode: TypeAlias = Literal["compact", "evaluator"]
 
+MESSAGE_TYPES_BY_ROLE = {
+    ROLE_USER: HumanMessage,
+    ROLE_ASSISTANT: AIMessage,
+    ROLE_TOOL: ToolMessage,
+}
+
 
 class EvidenceStep(BaseModel):
     type: str
@@ -395,14 +401,9 @@ class AgentPrompt:
                     # the useful context to retain.
                     continue
             elif role in {ROLE_USER, ROLE_ASSISTANT, ROLE_TOOL} and isinstance(content, str) and content.strip():
-                message_type = {
-                    ROLE_USER: HumanMessage,
-                    ROLE_ASSISTANT: AIMessage,
-                    ROLE_TOOL: ToolMessage,
-                }[role]
                 if role == ROLE_TOOL:
                     continue
-                messages.append(message_type(content=content))
+                messages.append(MESSAGE_TYPES_BY_ROLE[role](content=content))
 
         for orphan_key in orphan_result_messages:
             # Preserve valid tool-message sequencing even when a bounded
