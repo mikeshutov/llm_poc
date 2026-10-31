@@ -13,8 +13,8 @@ from common.config import CHUNK_ENCODING, FILES_DIR
 from assets.models import FileAsset
 from assets.files.models import FileContentResult, FileListResult, FileOperationResult
 from assets.models import AssetOrigin
-from assets.files.repository.file_chunk_repository import FileChunkRepository
-from assets.files.repository.file_repository import FileRepository
+from assets.repository.asset_chunk_repository import AssetChunkRepository
+from assets.repository.asset_repository import AssetRepository
 from agent_runtime.context import get_current_conversation_id, get_current_user_id
 from retrieval.evidence import ToolResult
 from capabilities.registry.constants import (
@@ -91,9 +91,9 @@ def _chunks(content: str) -> list[str]:
 
 
 def _index(file_id: UUID, content: str) -> None:
-    chunks = FileChunkRepository()
+    chunks = AssetChunkRepository()
     chunks.delete_chunks(file_id)
-    chunks.save_content(file_id, "file", _chunks(content))
+    chunks.replace_content(file_id, "file", _chunks(content))
 
 
 def _file_result(file: FileAsset, message: str) -> ToolResult:
@@ -108,10 +108,10 @@ def file_create(file_name: str, content: str = "") -> ToolResult:
             raise ValueError(f"A file already exists at '{file_name}'.")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
-        file = FileRepository().create_file(
-            _stored_path(target),
-            target.name,
-            mimetypes.guess_type(target.name)[0] or "text/plain",
+        file = AssetRepository().create_file(
+            name=target.name,
+            storage_path=_stored_path(target),
+            mime_type=mimetypes.guess_type(target.name)[0] or "text/plain",
             user_id=get_current_user_id(),
             origin=AssetOrigin.GENERATED,
             conversation_id=(
@@ -128,7 +128,7 @@ def file_create(file_name: str, content: str = "") -> ToolResult:
 
 @tool(TOOL_NAME_FILE_READ, args_schema=FileReadArgs, description="Retrieve the complete UTF-8 text content of a managed file when full content is needed.")
 def file_read(file_id: str, max_chars: int = _MAX_READ_CHARS) -> ToolResult:
-    row = FileRepository().get_file_by_id(_parse_id(file_id), user_id=get_current_user_id())
+    row = AssetRepository().get_file(_parse_id(file_id), user_id=get_current_user_id())
     if not row:
         raise ValueError(f"No file found with id '{file_id}'.")
     file = row
@@ -141,7 +141,7 @@ def file_read(file_id: str, max_chars: int = _MAX_READ_CHARS) -> ToolResult:
 
 @tool(TOOL_NAME_FILE_EDIT, args_schema=FileEditArgs, description="Apply an exact targeted text replacement to a managed UTF-8 file.")
 def file_edit(file_id: str, find: str, replace: str = "", replace_all: bool = False) -> ToolResult:
-    row = FileRepository().get_file_by_id(_parse_id(file_id), user_id=get_current_user_id())
+    row = AssetRepository().get_file(_parse_id(file_id), user_id=get_current_user_id())
     if not row:
         raise ValueError(f"No file found with id '{file_id}'.")
     file = row
@@ -164,7 +164,7 @@ def file_edit(file_id: str, find: str, replace: str = "", replace_all: bool = Fa
 @tool(TOOL_NAME_FILE_DELETE, args_schema=FileIdArgs, description="Delete a managed file and its indexed content.")
 def file_delete(file_id: str) -> ToolResult:
     parsed_id = _parse_id(file_id)
-    row = FileRepository().get_file_by_id(parsed_id, user_id=get_current_user_id())
+    row = AssetRepository().get_file(parsed_id, user_id=get_current_user_id())
     if not row:
         raise ValueError(f"No file found with id '{file_id}'.")
     file = row
@@ -174,21 +174,22 @@ def file_delete(file_id: str) -> ToolResult:
             path.unlink()
     except OSError as exc:
         raise ValueError(f"Unable to delete file '{file.name}'.") from exc
-    deleted = FileRepository().delete_file(parsed_id, user_id=get_current_user_id())
-    if deleted is None:
+    repository = AssetRepository()
+    deleted = repository.delete_file(parsed_id, user_id=get_current_user_id())
+    if not deleted:
         raise ValueError(f"No file found with id '{file_id}'.")
-    return _file_result(deleted, "File deleted.")
+    return _file_result(row, "File deleted.")
 
 
 @tool(TOOL_NAME_FILE_LIST, args_schema=FileListArgs, description="List managed files visible to the current user.")
 def file_list(query: str | None = None) -> ToolResult:
-    return ToolResult(result=FileListResult(files=FileRepository().list_files(user_id=get_current_user_id(), query=query)))
+    return ToolResult(result=FileListResult(files=AssetRepository().list_files(user_id=get_current_user_id(), query=query)))
 
 
 @tool(TOOL_NAME_FILE_MOVE, args_schema=FileMoveArgs, description="Rename or relocate a managed file within the managed files directory.")
 def file_move(file_id: str, destination: str) -> ToolResult:
     parsed_id = _parse_id(file_id)
-    row = FileRepository().get_file_by_id(parsed_id, user_id=get_current_user_id())
+    row = AssetRepository().get_file(parsed_id, user_id=get_current_user_id())
     if not row:
         raise ValueError(f"No file found with id '{file_id}'.")
     file = row
@@ -201,12 +202,13 @@ def file_move(file_id: str, destination: str) -> ToolResult:
         source.rename(target)
     except OSError as exc:
         raise ValueError(f"Unable to move file '{file.name}'.") from exc
-    updated = FileRepository().update_file_path(
+    repository = AssetRepository()
+    updated = repository.update_file_path(
         parsed_id,
-        _stored_path(target),
-        target.name,
+        storage_path=_stored_path(target),
+        name=target.name,
         user_id=get_current_user_id(),
     )
-    if updated is None:
+    if not updated:
         raise ValueError(f"Unable to update metadata for file '{file.name}'.")
-    return _file_result(updated, "File moved.")
+    return _file_result(repository.get_file(parsed_id, user_id=get_current_user_id()), "File moved.")

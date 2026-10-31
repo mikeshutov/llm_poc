@@ -10,7 +10,7 @@ from agent_runtime.models.plan import Plan, PlanStep
 from agent_runtime.strategies.react.graph import ReactStrategy
 from agent_runtime.strategies.single_pass.graph import DirectReturnStrategy
 from agent_runtime.strategies.react.decision import DecisionResult
-from agent_runtime.strategies.react.decision import DecisionStatus
+from agent_runtime.models.decision import DecisionStatus
 
 
 def _state(max_turns: int = 3) -> AgentState:

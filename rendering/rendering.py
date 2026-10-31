@@ -27,8 +27,8 @@ from capabilities.registry.constants import TOOL_NAME_STRUCTURED_FACTS_LOOKUP
 from capabilities.registry.constants import TOOL_NAME_WIKIPEDIA_SEARCH
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CARD_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_FILE
-from capabilities.registry.constants import TOOL_RESULT_TYPE_FILE_DETAILS
-from capabilities.registry.constants import TOOL_RESULT_TYPE_FILE_RESULTS
+from capabilities.registry.constants import TOOL_RESULT_TYPE_ASSET_DETAILS
+from capabilities.registry.constants import TOOL_RESULT_TYPE_ASSET_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_RULES
 from capabilities.registry.constants import TOOL_RESULT_TYPE_WEATHER
@@ -59,15 +59,15 @@ CARD_LAYOUTS_BY_EVIDENCE_TYPE: dict[str, dict[str, int]] = {
 
 INLINE_EVIDENCE_TYPES: set[str] = {
     TOOL_RESULT_TYPE_FILE,
-    TOOL_RESULT_TYPE_FILE_DETAILS,
-    TOOL_RESULT_TYPE_FILE_RESULTS,
+    TOOL_RESULT_TYPE_ASSET_DETAILS,
+    TOOL_RESULT_TYPE_ASSET_RESULTS,
     TOOL_RESULT_TYPE_WEATHER,
 }
 
 FILE_EVIDENCE_TYPES: set[str] = {
     TOOL_RESULT_TYPE_FILE,
-    TOOL_RESULT_TYPE_FILE_DETAILS,
-    TOOL_RESULT_TYPE_FILE_RESULTS,
+    TOOL_RESULT_TYPE_ASSET_DETAILS,
+    TOOL_RESULT_TYPE_ASSET_RESULTS,
 }
 
 INLINE_EVIDENCE_TOOL_NAMES: set[str] = {

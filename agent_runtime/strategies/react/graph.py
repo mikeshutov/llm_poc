@@ -6,11 +6,13 @@ from langgraph.graph import END, StateGraph
 
 from llm.conversation_model_config import PLANNER_STAGE
 from agent_runtime.constants import DISCOVER_AGENT_STATE_EDGE, EXECUTE_TOOLS_EDGE, NodeName
+from agent_runtime.models.agent_profile import AgentExecutionStrategy
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.execution.tool_executor import run_executor
 from agent_runtime.state_enrichment import discover_agent_state_node
-from agent_runtime.strategies.react.decision import DecisionStatus, run_decision
+from agent_runtime.models.decision import DecisionStatus, normalize_decision_status
+from agent_runtime.strategies.react.decision import run_decision
 from agent_runtime.strategies.react.prompt import build_react_decision_prompt
 
 
@@ -18,9 +20,7 @@ from agent_runtime.strategies.react.prompt import build_react_decision_prompt
 class ReactStrategy:
     @staticmethod
     def _record_decision_status(state: AgentState, status: str) -> None:
-        normalized = status.upper()
-        if normalized in {"DONE", "COMPLETE", "COMPLETED"}:
-            normalized = DecisionStatus.SATISFIED
+        normalized = normalize_decision_status(status)
         state.node_states.planner.decision_status = normalized
         if normalized == DecisionStatus.SATISFIED:
             state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
@@ -52,7 +52,10 @@ class ReactStrategy:
         return state
 
     def _reason(self, state: AgentState) -> AgentState:
-        return self._decide(state, callsite="react.reason")
+        return self._decide(
+            state,
+            callsite=f"{AgentExecutionStrategy.REACT.value}.{NodeName.REASONER.value}",
+        )
 
     def _route_after_decision(self, state: AgentState) -> str:
         plan = state.node_states.planner.plan

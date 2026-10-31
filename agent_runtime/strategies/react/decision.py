@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 import json
-from enum import StrEnum
 from time import perf_counter
 from typing import Any
 
@@ -19,6 +18,7 @@ from rendering.debug import PLAN_KIND
 from agent_runtime.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
+from agent_runtime.models.decision import DecisionStatus, normalize_decision_status
 from agent_runtime.models.plan import Plan
 from retrieval.evidence_store import (
     build_evidence_bundle_from_tool_results,
@@ -30,27 +30,12 @@ from agent_runtime.planning.tool_call_parser import parse_tool_calls_to_plan_ste
 from agent_runtime.planning.tool_wrapper import build_tools
 
 
-class DecisionStatus(StrEnum):
-    CONTINUE = "CONTINUE"
-    SATISFIED = "SATISFIED"
-    BLOCKED = "BLOCKED"
-
-
 @dataclass(frozen=True)
 class DecisionResult:
     plan: Plan
     status: DecisionStatus
     raw_content: str = ""
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
-
-
-def _normalize_status(value: Any) -> str:
-    normalized = str(value or "").strip().upper()
-    if normalized in {"DONE", "SATISFIED", "COMPLETE", "COMPLETED"}:
-        return DecisionStatus.SATISFIED
-    if normalized == DecisionStatus.BLOCKED:
-        return DecisionStatus.BLOCKED
-    return DecisionStatus.CONTINUE
 
 
 def _parse_decision_status(response: Any, has_tool_calls: bool) -> DecisionStatus:
@@ -60,7 +45,7 @@ def _parse_decision_status(response: Any, has_tool_calls: bool) -> DecisionStatu
             payload = json.loads(content)
             if isinstance(payload, dict):
                 if "status" in payload:
-                    return _normalize_status(payload.get("status"))
+                    return normalize_decision_status(payload.get("status"))
                 return DecisionStatus.CONTINUE if has_tool_calls else DecisionStatus.SATISFIED
         except (TypeError, ValueError):
             pass

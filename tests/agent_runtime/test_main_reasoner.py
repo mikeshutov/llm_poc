@@ -23,7 +23,8 @@ from agents.profile_management.profile import build_profile_management_profile
 from agent_runtime.models.main_state import MainState
 from agents.main.agent import MainReasonerStrategy
 from agents.main import agent as main_reasoner
-from agent_runtime.strategies.react.decision import DecisionResult, DecisionStatus
+from agent_runtime.models.decision import DecisionStatus
+from agent_runtime.strategies.react.decision import DecisionResult
 
 
 def test_main_reasoner_loops_until_final_structured_answer(monkeypatch) -> None:
@@ -132,5 +133,5 @@ def test_user_management_static_tool_runs_profile_agent(monkeypatch) -> None:
         reset_user_management_state(state_token)
 
     assert captured == ["Remember that I like spicy food."]
-    assert output["agent"] == "profile_management"
-    assert output["status"] == "pending"
+    assert output.agent == "profile_management"
+    assert output.status.value == "pending"

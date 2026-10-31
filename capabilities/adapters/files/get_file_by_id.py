@@ -5,8 +5,8 @@ from uuid import UUID
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from assets.files.repository.file_chunk_repository import FileChunkRepository
-from assets.files.repository.file_repository import FileRepository
+from assets.repository.asset_chunk_repository import AssetChunkRepository
+from assets.repository.asset_repository import AssetRepository
 from assets.files.urls import static_file_url
 from retrieval.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
 from agent_runtime.context import get_current_user_id
@@ -65,7 +65,7 @@ def get_file_by_id(file_id: str) -> ToolResult:
         parsed_id = UUID(file_id)
     except ValueError:
         return ToolResult.error(f"Invalid file_id '{file_id}'.")
-    file = FileRepository().get_file_by_id(parsed_id, user_id=get_current_user_id())
+    file = AssetRepository().get_file(parsed_id, user_id=get_current_user_id())
     if not file:
         return ToolResult.error(f"No file found with id '{file_id}'.")
     return _tool_result(
@@ -75,6 +75,6 @@ def get_file_by_id(file_id: str) -> ToolResult:
             file_path=file.storage_path,
             file_type=file.mime_type,
             uploaded_at=file.created_at.isoformat(),
-            first_chunk=FileChunkRepository().get_first_chunk(file.id, user_id=get_current_user_id()),
+            first_chunk=AssetChunkRepository().get_first(file.id, user_id=get_current_user_id()),
         )
     )

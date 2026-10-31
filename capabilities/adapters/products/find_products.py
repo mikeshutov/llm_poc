@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Literal
-
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
@@ -11,6 +9,7 @@ from products.models.product_search_results import ProductSearchResults
 from products.product_retrieval import find_products as catalog_find_products
 from products.product_retrieval import find_products_web as web_find_products
 from products.models.product_query import ProductQuery
+from products.models.product_source import ProductSearchSource
 from retrieval.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolMetadata, ToolResult
 from capabilities.registry.constants import TOOL_NAME_FIND_PRODUCTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_PRODUCT_RESULTS
@@ -26,7 +25,7 @@ class ProductFiltersArgs(BaseModel):
 
 
 class FindProductsArgs(BaseModel):
-    source: Literal["internal", "web", "both"] = Field(
+    source: ProductSearchSource = Field(
         ...,
         description="Product source to query: internal catalog, external web shopping, or both.",
     )
@@ -129,21 +128,21 @@ Examples:
 """,
 )
 def search_products(
-    source: Literal["internal", "web", "both"],
+    source: ProductSearchSource,
     query_text: str,
     product_filters: ProductFiltersArgs | None = None,
 ) -> ToolResult:
-    if source == "web" and product_filters is not None:
+    if source == ProductSearchSource.WEB and product_filters is not None:
         raise ValueError("product_filters can only be used with source='internal' or source='both'.")
 
     internal_results: list[ProductResult] = []
     external_results: list[ProductResult] = []
-    if source in {"internal", "both"}:
+    if source in {ProductSearchSource.INTERNAL, ProductSearchSource.BOTH}:
         internal_results = catalog_find_products(
             query_text=query_text,
             product_filters=ProductQuery(**product_filters.model_dump()) if product_filters else None,
         ).internal_results
-    if source in {"web", "both"}:
+    if source in {ProductSearchSource.WEB, ProductSearchSource.BOTH}:
         external_results = web_find_products(query_text=query_text).external_results
 
     return _tool_result(

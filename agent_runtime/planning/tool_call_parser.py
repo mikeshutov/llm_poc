@@ -6,7 +6,6 @@ from typing import Any
 from langchain_core.tools import BaseTool
 
 from agent_runtime.models.plan import PlanStep
-from agent_runtime.planning.tool_wrapper import canonical_tool_name
 
 
 def parse_tool_calls_to_plan_steps(
@@ -22,7 +21,7 @@ def parse_tool_calls_to_plan_steps(
     for index, call in enumerate(tool_calls):
         if not isinstance(call, dict):
             continue
-        name = canonical_tool_name(call.get("name", ""), tools)
+        name = str(call.get("name", ""))
         args = call.get("args", {})
         args = args if isinstance(args, dict) else {}
 

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
+
+from agent_runtime.models.agent_result import ExecutionStatus
+from capabilities.adapters.profile.result_models import UserManagementResult
 
 if TYPE_CHECKING:
     from agent_runtime.models.agent_state import AgentState
@@ -35,20 +38,20 @@ def reset_user_management_agent_state(token) -> None:
     _CURRENT_AGENT_STATE.reset(token)
 
 
-def _run_user_management(task: str) -> dict[str, Any]:
+def _run_user_management(task: str) -> UserManagementResult:
     from agent_runtime.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
     from agent_runtime.models.agent_inputs import AgentInputs
 
     main_state = _CURRENT_MAIN_STATE.get()
     current_agent_state = _CURRENT_AGENT_STATE.get()
     if main_state is None:
-        return {"error": "User management is unavailable outside an active request."}
+        return UserManagementResult(error="User management is unavailable outside an active request.")
 
     delegated = main_state.agent_states.get(PROFILE_MANAGEMENT_AGENT_NAME)
     if delegated is None and current_agent_state is not None and current_agent_state.available_agent_states:
         delegated = current_agent_state.available_agent_states.get(PROFILE_MANAGEMENT_AGENT_NAME)
     if delegated is None:
-        return {"error": "The profile-management agent is unavailable for this request."}
+        return UserManagementResult(error="The profile-management agent is unavailable for this request.")
 
     delegated.inputs = AgentInputs.new(
         task=task.strip(),
@@ -60,22 +63,21 @@ def _run_user_management(task: str) -> dict[str, Any]:
         runner = agent_registry.get(delegated.agent_profile)
         completed = runner(delegated)
     except Exception as exc:
-        return {
-            "agent": PROFILE_MANAGEMENT_AGENT_NAME,
-            "status": "error",
-            "error": str(exc),
-        }
+        return UserManagementResult(
+            agent=PROFILE_MANAGEMENT_AGENT_NAME,
+            status=ExecutionStatus.FAILED,
+            error=str(exc),
+        )
 
     tool_results = completed.gather_tool_results()
-    return {
-        "agent": PROFILE_MANAGEMENT_AGENT_NAME,
-        "status": completed.result.execution_status.value,
-        "answer_status": completed.result.answer_status.value,
-        "tool_names": completed.gather_used_tools(),
-        "tool_call_ids": [str(value) for value in completed.result.tool_call_ids],
-        "error": None,
-        "result_count": len(tool_results),
-    }
+    return UserManagementResult(
+        agent=PROFILE_MANAGEMENT_AGENT_NAME,
+        status=completed.result.execution_status,
+        answer_status=completed.result.answer_status,
+        tool_names=completed.gather_used_tools(),
+        tool_call_ids=[str(value) for value in completed.result.tool_call_ids],
+        result_count=len(tool_results),
+    )
 
 
 USER_MANAGEMENT_TOOL = StructuredTool.from_function(

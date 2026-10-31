@@ -12,7 +12,6 @@ from agent_runtime.models.agent_execution_context import AgentExecutionContext
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.orchestrator_result import OrchestratorResult
 from capabilities.discovery.models import CapabilityDiscoveryResult
-from agent_runtime.models.evaluation_result import EvaluationStatus, EVALUATION_STATUS_RETRYABLE
 from agent_runtime.models.plan import Plan
 
 @dataclass
@@ -24,7 +23,6 @@ class MainState:
     discovered_attribute_types: list[str] = field(default_factory=list)
     discovery_query: str = ""
     discovery_query_embedding: list[float] | None = None
-    evaluation_status: EvaluationStatus = EVALUATION_STATUS_RETRYABLE
     missing_information: list[str] = field(default_factory=list)
     relevant_evidence_ids: list[UUID] = field(default_factory=list)
     plan: Plan | None = None

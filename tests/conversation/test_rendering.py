@@ -16,7 +16,7 @@ from agent_runtime.models.orchestrator_payload import OrchestratorPayload
 from agent_runtime.models.synthesized_result import SynthesisResultBlock
 from capabilities.registry.constants import TOOL_NAME_GET_CURRENT_WEATHER
 from capabilities.registry.constants import TOOL_NAME_GENERIC_WEB_SEARCH
-from capabilities.registry.constants import TOOL_RESULT_TYPE_FILE_DETAILS
+from capabilities.registry.constants import TOOL_RESULT_TYPE_ASSET_DETAILS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_RULES
 from capabilities.registry.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_WEATHER
@@ -258,8 +258,8 @@ def test_render_result_block_renders_file_citations_as_inline_file_names(monkeyp
                 title="resume.pdf",
                 summary="Experience at Acme Corp.",
                 urls=[EvidenceUrl(url="app/static/files/resume.pdf", url_type=EvidenceUrlType.WEBSITE)],
-                source="search_file_for_details",
-                entity_type=TOOL_RESULT_TYPE_FILE_DETAILS,
+                source="asset_search_details",
+                entity_type=TOOL_RESULT_TYPE_ASSET_DETAILS,
             )
         },
     )

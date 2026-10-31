@@ -15,7 +15,7 @@ from retrieval.evidence_store import (
     filter_evidence_steps,
 )
 from agent_runtime.models.orchestrator_result import OrchestratorResult
-from agent_runtime.models.synthesized_result import SynthesisResult
+from agent_runtime.models.synthesized_result import SynthesisResult, SynthesisResultBlock
 from agent_runtime.synthesis.synthesis import _build_result_blocks
 from capabilities.discovery.discover_capabilities_tool import (
     CAPABILITY_DISCOVERY_TOOL,
@@ -76,7 +76,7 @@ def run_main_request_strategy(main_state: MainState) -> MainState:
     synthesis_result = execution_state.reasoner_result
     if synthesis_result is None:
         synthesis_result = SynthesisResult(
-            result=[{"content": "I couldn't complete that request.", "evidence_ids": []}],
+            result=[SynthesisResultBlock(content="I couldn't complete that request.")],
             next_question="Would you like me to try a different search or provide more details?",
             roundtrip_summary="The reasoner did not produce a final answer.",
         )

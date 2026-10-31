@@ -9,8 +9,8 @@ from capabilities.adapters.files import (
     file_move,
     file_read,
     get_file_by_id,
-    search_file_for_details,
-    search_files,
+    search_asset_details,
+    search_assets,
 )
 from capabilities.adapters.finance import (
     exchange_rates_lookup,
@@ -64,8 +64,8 @@ from capabilities.registry.constants import TOOL_RESULT_TYPE_CRYPTO_MARKET
 from capabilities.registry.constants import TOOL_RESULT_TYPE_DECKS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_DEFINITION
 from capabilities.registry.constants import TOOL_RESULT_TYPE_FILE
-from capabilities.registry.constants import TOOL_RESULT_TYPE_FILE_DETAILS
-from capabilities.registry.constants import TOOL_RESULT_TYPE_FILE_RESULTS
+from capabilities.registry.constants import TOOL_RESULT_TYPE_ASSET_DETAILS
+from capabilities.registry.constants import TOOL_RESULT_TYPE_ASSET_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_FINANCE
 from capabilities.registry.constants import TOOL_RESULT_TYPE_GENERIC
 from capabilities.registry.constants import TOOL_RESULT_TYPE_KNOWLEDGE
@@ -148,7 +148,7 @@ MEMORY_TOOLS = [
     Tool(lookup_evidence, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
     Tool(search_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
 ]
-FILE_TOOLS = [Tool(search_files, result_type=TOOL_RESULT_TYPE_FILE_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(search_file_for_details, result_type=TOOL_RESULT_TYPE_FILE_DETAILS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(get_file_by_id, result_type=TOOL_RESULT_TYPE_FILE, cache_policy=ToolCachePolicy(300, is_user_specific=True))]
+FILE_TOOLS = [Tool(search_assets, result_type=TOOL_RESULT_TYPE_ASSET_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(search_asset_details, result_type=TOOL_RESULT_TYPE_ASSET_DETAILS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(get_file_by_id, result_type=TOOL_RESULT_TYPE_FILE, cache_policy=ToolCachePolicy(300, is_user_specific=True))]
 FILE_MANAGEMENT_TOOLS = [
     Tool(file_create, result_type=TOOL_RESULT_TYPE_FILE),
     Tool(file_read, result_type=TOOL_RESULT_TYPE_FILE),
@@ -279,7 +279,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
         description="To be utilized for any searches involving files. Search and retrieve content from uploaded files. To be used when files are in the context either with a name or ID.",
         result_rules=[
             "If a file_id is already known in the evidence or context, treat it as the authoritative file reference rather than implying a new file discovery step.",
-            "When a file_id is known, prefer conclusions grounded in file_get or file_search_details results over vague file-name inference.",
+            "When an asset_id is known, prefer conclusions grounded in file_get or asset_search_details results over vague name inference.",
             "Summarize or extract relevant pieces unless a quote is more appropriate.",
             "When referencing file content, cite the file name.",
             "Cite the relevant file evidence IDs. The renderer displays cited file names inline; do not invent URLs, Markdown links, or file paths.",

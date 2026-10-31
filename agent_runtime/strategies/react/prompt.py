@@ -11,7 +11,9 @@ from agent_runtime.strategies.react.decision import build_decision_prompt
 REACT_DECISION_INSTRUCTION = (
     "You are an action-oriented decision agent. Reason over the user's goal and the "
     "observations already collected. Choose the next useful tool actions, or return "
-    "no actions when the goal is satisfied or no useful action remains."
+    "no actions when the goal is satisfied or no useful action remains. "
+    "When returning no tool calls, return a JSON object with status SATISFIED or BLOCKED. "
+    "A response with tool calls means CONTINUE."
 )
 
 
@@ -20,10 +22,6 @@ def build_react_decision_prompt(
 ) -> tuple[AgentPrompt, list[BaseTool]]:
     return build_decision_prompt(
         state,
-        instruction=(
-            REACT_DECISION_INSTRUCTION
-            + " When returning no tool calls, return a JSON object with status SATISFIED or BLOCKED. "
-            + "A response with tool calls means CONTINUE."
-        ),
+        instruction=REACT_DECISION_INSTRUCTION,
         rules="\n".join(f"- {rule}" for rule in REACT_DECISION_RULES),
     )

@@ -292,10 +292,6 @@ class AgentPrompt:
                     "status": payload.get("status", ""),
                     "error_message": payload.get("error_message"),
                     "duration_ms": payload.get("duration_ms"),
-                    # Every tool result must include the adapter's returned
-                    # value. Evidence is an additional normalized projection,
-                    # not a replacement for results from tools such as news,
-                    # weather, finance, and generic search.
                     "result": bounded_json_value(
                         payload.get("output_payload"), max_bytes=12_000
                     ),

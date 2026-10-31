@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from agent_runtime.constants import NodeName
+from agent_runtime.models.decision import DecisionStatus
 from agent_runtime.models.plan import Plan
 
 
@@ -13,4 +14,4 @@ class PlannerNodeState:
     needs_replan: bool = False
     plan_count: int = 0
     no_result_attempts: int = 0
-    decision_status: str = ""
+    decision_status: DecisionStatus = DecisionStatus.CONTINUE

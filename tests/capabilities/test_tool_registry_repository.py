@@ -48,10 +48,10 @@ def test_registered_tool_defaults_to_active_version_one() -> None:
 def test_registry_upsert_embeds_explicit_name_plus_discovery_text(monkeypatch) -> None:
     definition = RegisteredTool(
         id=uuid4(),
-        name="search_files",
+        name="asset_search",
         version=2,
         description="Detailed planner description with examples.",
-        embedding_text="search_files\nUploaded file discovery\nSearch uploaded files by semantic relevance.",
+        embedding_text="asset_search\nAsset discovery\nSearch assets by semantic relevance.",
     )
     captured: list[str] = []
 
@@ -111,16 +111,16 @@ def test_embedding_text_is_concise_and_distinguishes_products_from_files() -> No
 
     product_text = definitions["products_search"].embedding_text
     web_product_text = definitions["products_search"].embedding_text
-    file_text = definitions["file_search"].embedding_text
-    known_file_text = definitions["file_search_details"].embedding_text
+    file_text = definitions["asset_search"].embedding_text
+    known_file_text = definitions["asset_search_details"].embedding_text
 
     assert "products_search" in product_text
     assert "internal catalog" in product_text
     assert "products_search" in web_product_text
     assert "web shopping" in web_product_text
-    assert "file_search" in file_text
-    assert "uploaded files" in file_text
-    assert "file_search_details" in known_file_text
-    assert "known uploaded file" in known_file_text
+    assert "asset_search" in file_text
+    assert "assets" in file_text
+    assert "asset_search_details" in known_file_text
+    assert "known asset" in known_file_text
     assert "Example valid call" not in product_text
     assert "Required fields" not in product_text

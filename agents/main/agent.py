@@ -11,10 +11,11 @@ from common.data import bounded_json_value
 from common.logging import record_node_log
 from agent_runtime.constants import EXECUTE_TOOLS_EDGE, NodeName
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
+from agent_runtime.models.decision import DecisionStatus
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.synthesized_result import SynthesisResult, SynthesisResultBlock
 from agent_runtime.execution.tool_executor import run_executor
-from agent_runtime.strategies.react.decision import DecisionStatus, run_decision
+from agent_runtime.strategies.react.decision import run_decision
 from agents.main.prompts import build_reasoner_prompt
 
 
@@ -34,7 +35,7 @@ def run_reasoner(state: AgentState) -> AgentState:
     try:
         decision = run_decision(
             state,
-            callsite="main_reasoner.run_reasoner",
+            callsite=f"{NodeName.MAIN_REQUEST_STRATEGY.value}.{NodeName.REASONER.value}",
             prompt_builder=build_reasoner_prompt,
             message_history=state.reasoner_message_history,
             tool_choice=("required" if state.node_states.planner.plan_count == 0 else None),

@@ -11,8 +11,8 @@ from docx import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from common.config import CHUNK_ENCODING, FILES_DIR, IMAGE_MIME_PREFIX
-from assets.files.repository.file_chunk_repository import FileChunkRepository
-from assets.files.repository.file_repository import FileRepository
+from assets.repository.asset_chunk_repository import AssetChunkRepository
+from assets.repository.asset_repository import AssetRepository
 from llm.clients.llm_client import LlmClient
 
 SUPPORTED_TEXT_FILE_TYPES = ["pdf", "txt", "docx"]
@@ -63,13 +63,13 @@ def process_uploaded_file(
         ).split_text(raw_text)
 
     parsed_conversation_id = UUID(str(conversation_id)) if conversation_id else None
-    saved_file = FileRepository().create_file(
-        file_path,
-        file.name,
-        file.type,
+    saved_file = AssetRepository().create_file(
+        name=file.name,
+        storage_path=file_path,
+        mime_type=file.type,
         user_id=user_id,
         conversation_id=parsed_conversation_id,
     )
-    FileChunkRepository().save_content(saved_file.id, "file", chunks)
+    AssetChunkRepository().replace_content(saved_file.id, "file", chunks)
 
     return file.name, str(saved_file.id), chunks

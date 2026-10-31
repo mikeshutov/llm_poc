@@ -63,15 +63,6 @@ def _format_minimal_tool_schema(tool) -> str:
     return "\n".join(lines)
 
 
-def _group_tools_by_prefix(tools: list[object]) -> list[list[object]]:
-    groups: dict[str, list[object]] = {}
-    for tool in tools:
-        name = str(getattr(tool, "name", ""))
-        prefix = name.split(".", 1)[0] if "." in name else name
-        groups.setdefault(prefix, []).append(tool)
-    return list(groups.values())
-
-
 def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext:
     allowed_categories = state.agent_profile.tool_categories
     tools = []
@@ -134,16 +125,13 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
         if tool_rules:
             rules[getattr(tool, "name")] = list(tool_rules)
 
-    tool_groups = _group_tools_by_prefix(list(deduped_tools.values()))
+    compiled_tool_list = list(deduped_tools.values())
     if _is_profile_management_agent(state):
-        compiled_tools = "\n\n".join(
-            "\n".join(_format_minimal_tool_schema(tool) for tool in group)
-            for group in tool_groups
-        )
+        compiled_tools = "\n\n".join(_format_minimal_tool_schema(tool) for tool in compiled_tool_list)
     else:
         compiled_tools = "\n\n".join(
-            "\n".join(f"- {tool.name}: {tool.description}".strip() for tool in group)
-            for group in tool_groups
+            f"- {tool.name}: {tool.description}".strip()
+            for tool in compiled_tool_list
         )
     return CompiledPlannerContext(tools=list(deduped_tools.values()), compiled_tools=compiled_tools, rules=rules)
 def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]]:

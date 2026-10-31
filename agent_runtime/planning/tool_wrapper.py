@@ -6,11 +6,6 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field, create_model
 
 
-def canonical_tool_name(name: str, tools: Iterable[BaseTool]) -> str:
-    """Return a registered tool name unchanged."""
-    return name
-
-
 def _envelope_schema(name: str, parameter_schema: type[BaseModel] | None) -> type[BaseModel]:
     parameter_type: Any = parameter_schema or dict[str, Any]
     return create_model(

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from llm.conversation_model_config import PROFILE_AGENT_MODEL_SCOPE
 from personalization.profile.models import UserProfile
-from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_CATEGORIES, ATTRIBUTE_KINDS
 from agent_runtime.models.agent_profile import (
     AgentExecutionStrategy,
     AgentProfile,
@@ -20,9 +19,6 @@ from agents.profile_management.prompts import build_profile_management_rules
 
 def build_profile_management_profile(user_profile: UserProfile | None = None) -> AgentProfile:
     static_tools = [set_user_display_name, update_user_tone, upsert_user_attribute]
-    attribute_prefixes = ", ".join(ATTRIBUTE_CATEGORIES)
-    attribute_suffixes = ", ".join(ATTRIBUTE_KINDS)
-
     if user_profile is None or not (user_profile.first_name or '').strip():
         static_tools.append(set_user_first_name)
     if user_profile is None or not (user_profile.last_name or '').strip():
@@ -47,7 +43,7 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
             'Do not answer the user. '
             'If no profile mutation is needed, return no steps.'
         ),
-        planner_rules=build_profile_management_rules(attribute_prefixes, attribute_suffixes),
+        planner_rules=build_profile_management_rules(),
     )
 
 

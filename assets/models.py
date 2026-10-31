@@ -13,6 +13,11 @@ class AssetType(StrEnum):
     HTTP_PAGE = "http_page"
 
 
+class AssetContentType(StrEnum):
+    TEXT = "text"
+    IMAGE = "image"
+
+
 class AssetOrigin(StrEnum):
     UPLOADED = "uploaded"
     GENERATED = "generated"
@@ -64,6 +69,19 @@ class AssetChunk(BaseModel):
     chunk_index: int = Field(ge=0)
     content: str
     embedding: list[float]
+
+
+class AssetChunkResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: UUID
+    asset_type: str
+    asset_name: str
+    content: str
+    storage_path: str | None = None
+    mime_type: str | None = None
+    url: str | None = None
+    title: str | None = None
 
 
 class AssetReference(BaseModel):

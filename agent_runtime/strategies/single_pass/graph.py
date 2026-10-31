@@ -6,10 +6,12 @@ from langgraph.graph import END, StateGraph
 
 from llm.conversation_model_config import PLANNER_STAGE
 from agent_runtime.constants import EXECUTE_TOOLS_EDGE, NodeName
+from agent_runtime.models.agent_profile import AgentExecutionStrategy
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.execution.tool_executor import run_executor
-from agent_runtime.strategies.react.decision import DecisionStatus, run_decision
+from agent_runtime.models.decision import DecisionStatus, normalize_decision_status
+from agent_runtime.strategies.react.decision import run_decision
 from agent_runtime.strategies.react.prompt import build_react_decision_prompt
 
 
@@ -17,9 +19,7 @@ from agent_runtime.strategies.react.prompt import build_react_decision_prompt
 class DirectReturnStrategy:
     @staticmethod
     def _record_decision_status(state: AgentState, status: str) -> None:
-        normalized = status.upper()
-        if normalized in {"DONE", "COMPLETE", "COMPLETED"}:
-            normalized = DecisionStatus.SATISFIED
+        normalized = normalize_decision_status(status)
         state.node_states.planner.decision_status = normalized
         if normalized == DecisionStatus.SATISFIED:
             state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
@@ -36,7 +36,7 @@ class DirectReturnStrategy:
             result = run_decision(
                 state,
                 stage=PLANNER_STAGE,
-                callsite="direct_return.reasoner",
+                callsite=f"{AgentExecutionStrategy.DIRECT_RETURN.value}.{NodeName.REASONER.value}",
                 prompt_builder=build_react_decision_prompt,
             )
         except Exception:
@@ -93,7 +93,7 @@ class DirectReturnStrategy:
         builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
         builder.set_entry_point(NodeName.REASONER.value)
         builder.add_conditional_edges(
-            "reasoner",
+            NodeName.REASONER.value,
             self._route_after_reasoner,
             {EXECUTE_TOOLS_EDGE: EXECUTE_TOOLS_EDGE, END: END},
         )

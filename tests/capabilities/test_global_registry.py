@@ -99,7 +99,7 @@ def test_runtime_structured_tool_without_cache_policy_is_executable() -> None:
 
     result = registry.call_tool(USER_MANAGEMENT_TOOL.name, {"task": "Remember that I like tea."})
 
-    assert result["error"] == "User management is unavailable outside an active request."
+    assert result.error == "User management is unavailable outside an active request."
 
 
 def test_tool_registry_serializes_calls_for_shared_rate_limit_key() -> None:
