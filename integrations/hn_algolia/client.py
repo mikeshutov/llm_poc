@@ -5,7 +5,9 @@ from typing import Any, Literal
 
 from common.http import HttpClient, HttpClientError, DEFAULT_TTL
 from integrations.hn_algolia.models import HnSearchResult
-from request_orchestrator.shared.tool_adapter.news.constants import DEFAULT_HN_SEARCH_LIMIT
+
+
+DEFAULT_HN_SEARCH_LIMIT = 30
 
 
 class HnAlgoliaClientError(RuntimeError):

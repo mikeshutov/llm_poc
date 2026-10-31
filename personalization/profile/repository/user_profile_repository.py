@@ -6,6 +6,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from common.data import sanitize_for_json_storage
 from db.connection import get_connection
 from personalization.profile.models import UserProfile
 from personalization.tone.models import TonePreferences
@@ -65,7 +66,14 @@ class UserProfileRepository:
                     updated_at = now()
                 RETURNING user_id, first_name, last_name, display_name, email, metadata, created_at, updated_at
                 """,
-                (resolved_user_id, first_name, last_name, display_name, email, Jsonb(metadata or {})),
+                (
+                    resolved_user_id,
+                    first_name,
+                    last_name,
+                    display_name,
+                    email,
+                    Jsonb(sanitize_for_json_storage(metadata or {})),
+                ),
             )
             row = cur.fetchone()
             assert row is not None

@@ -3,12 +3,12 @@ Model selection in this repo is set up to allow you select a model per step and 
 
 ## Current Shape
 The system can use different models for different parts of the loop. Today the configured stages are:
-1. `main_agent.planner`
-2. `main_agent.synthesis`
+1. `main_agent.planner` — the configured model stage currently used by the main reasoner
+2. `main_agent.synthesis` — retained for shared synthesis-based strategies
 3. `profile_agent.planner`
 4. `shared.evaluator`
 
-That means planning, synthesis, and evaluation do not have to share the same model.
+The top-level orchestration role is now called the reasoner, but its model configuration still uses the existing `planner` stage name for persistence and UI compatibility. Profile management also continues to use the planner stage because it remains a planner-based user-agent strategy.
 
 ## Defaults
 The defaults currently live in `llm/conversation_model_config.py`.
@@ -18,7 +18,7 @@ The main pattern is:
 
 Current default variables include:
 1. `LLM_MODEL`
-2. `MAIN_AGENT_PLANNER_MODEL`
+2. `MAIN_AGENT_PLANNER_MODEL` — currently the main reasoner model
 3. `MAIN_AGENT_SYNTHESIS_MODEL`
 
 If stage-specific environment variables are not set, the config falls back to the default values defined in `ConversationModelConfig`.
@@ -38,12 +38,12 @@ This lets different conversations use different stage/model combinations without
 `AgentState` resolves the model for a stage through the conversation model config.
 
 In practice:
-1. Main planning asks for `main_agent.planner`.
-2. Synthesis asks for `main_agent.synthesis`.
+1. The main reasoner asks for the configured `main_agent.planner` stage.
+2. Shared synthesis-based strategies ask for `main_agent.synthesis`; the main reasoner returns the same result shape directly.
 3. Profile management planning asks for `profile_agent.planner`.
 4. Evaluator asks for `shared.evaluator`.
 
-This keeps model choice close to the purpose of the stage rather than treating the whole request as one uniform LLM call.
+This keeps model choice close to the purpose of each runtime stage without requiring a persisted configuration migration.
 
 ## Persistence And Metadata
 At the start of a roundtrip, the resolved conversation model config is attached to the pending roundtrip metadata.

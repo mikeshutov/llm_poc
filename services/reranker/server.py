@@ -8,6 +8,7 @@ from typing import Any
 
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from retrieval.reranker_models import RerankerRequest, RerankerRequestCandidate, RerankerScore
 
 DEFAULT_MODEL_NAME = "BAAI/bge-reranker-v2-m3"
 MODEL_NAME = os.getenv("RERANKER_MODEL", DEFAULT_MODEL_NAME)
@@ -24,14 +25,14 @@ model.to(DEVICE)
 model.eval()
 
 
-def score_pairs(query: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    scored: list[dict[str, Any]] = []
+def score_pairs(query: str, candidates: list[RerankerRequestCandidate]) -> list[RerankerScore]:
+    scored: list[tuple[RerankerScore, int]] = []
     with MODEL_LOCK, torch.inference_mode():
         for start in range(0, len(candidates), BATCH_SIZE):
             batch = candidates[start : start + BATCH_SIZE]
             inputs = tokenizer(
                 [query] * len(batch),
-                [str(item.get("text", "")) for item in batch],
+                [item.text for item in batch],
                 padding=True,
                 truncation=True,
                 max_length=MAX_LENGTH,
@@ -40,11 +41,11 @@ def score_pairs(query: str, candidates: list[dict[str, Any]]) -> list[dict[str, 
             inputs = {key: value.to(DEVICE) for key, value in inputs.items()}
             logits = model(**inputs).logits.reshape(-1).detach().float().cpu().tolist()
             scored.extend(
-                {"id": str(item["id"]), "score": float(score), "_index": start + offset}
+                (RerankerScore(id=item.id, score=float(score)), start + offset)
                 for offset, (item, score) in enumerate(zip(batch, logits))
             )
-    scored.sort(key=lambda item: (-item["score"], item["_index"]))
-    return [{"id": item["id"], "score": item["score"]} for item in scored]
+    scored.sort(key=lambda item: (-item[0].score, item[1]))
+    return [item[0] for item in scored]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -68,12 +69,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(length))
-            query = str(payload["query"])
-            candidates = payload["candidates"]
-            if not isinstance(candidates, list) or any("id" not in item for item in candidates):
-                raise ValueError("candidates must be a list containing ids")
-            self._send_response(200, {"results": score_pairs(query, candidates)})
+            request = RerankerRequest.model_validate_json(self.rfile.read(length))
+            self._send_response(
+                200,
+                {"results": [score.model_dump(mode="json") for score in score_pairs(request.query, request.candidates)]},
+            )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             self._send_response(400, {"error": str(exc)})
         except Exception as exc:  # pragma: no cover - protects the service boundary

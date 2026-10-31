@@ -10,8 +10,8 @@ from psycopg.rows import dict_row
 
 from db.connection import get_connection
 from jobs.models import Job, JobPlanStatus, JobRun, JobRunStatus, JobSchedule
-from request_orchestrator.models.plan import Plan
-from tool.repository.plan_repository import PlanRepository
+from agent_runtime.models.plan import Plan
+from capabilities.registry.repository.plan_repository import PlanRepository
 
 
 class JobRepository:

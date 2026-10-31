@@ -9,10 +9,8 @@ That gives us two different memory levels:
 1. A conversation-level memory that acts like a persistent high-level state for a conversation.
 2. A roundtrip-level memory that captures a specific exchange.
 
-## Tools
-This currently comes together through two tools:
-1. `search_memories` searches across past conversations using conversation summaries and returns a small set of relevant conversation memories.
-2. `search_roundtrip_memories` searches detailed roundtrips after a relevant conversation is identified and returns matching turn-level memories.
+## Tool
+`memory.search` supports both retrieval levels. Call it without `conversation_ids` to discover relevant conversations; pass the returned IDs to search detailed roundtrips within those conversations. Use `memory.detail` when the exact prompt, response, or structured payload is needed.
 
 ## Why It Exists
 The goal is to let the agent find relevant information from prior conversations on demand rather than injecting large amounts of historical data into every prompt.
@@ -20,7 +18,7 @@ The goal is to let the agent find relevant information from prior conversations 
 The pattern is:
 1. Summaries are converted into embeddings.
 2. Queries are embedded at runtime.
-3. Similarity search retrieves the most relevant memories.
+3. An unscoped search retrieves the most relevant conversations; a scoped search retrieves matching turn-level memories.
 4. Results are ordered by relevance and can include a score to help identify the best matches.
 
 This keeps memory retrieval closer to a retrieval problem than a giant prompt-history problem.

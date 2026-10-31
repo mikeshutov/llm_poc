@@ -8,6 +8,7 @@ from typing import Any
 
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from serviceclients.completion_evaluator.models import CompletionEvaluatorResult
 
 DEFAULT_MODEL_NAME = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"
 MODEL_NAME = os.getenv("COMPLETION_EVALUATOR_MODEL", DEFAULT_MODEL_NAME)
@@ -32,7 +33,7 @@ def _label_name(label: str) -> str:
     return "neutral"
 
 
-def evaluate_pair(premise: str, hypothesis: str) -> dict[str, Any]:
+def evaluate_pair(premise: str, hypothesis: str) -> CompletionEvaluatorResult:
     with MODEL_LOCK, torch.inference_mode():
         inputs = tokenizer(
             premise,
@@ -48,7 +49,7 @@ def evaluate_pair(premise: str, hypothesis: str) -> dict[str, Any]:
     for index, probability in enumerate(probabilities):
         label = _label_name(str(model.config.id2label.get(index, index)))
         scores[label] += float(probability)
-    return scores
+    return CompletionEvaluatorResult(**scores)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -75,7 +76,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length))
             premise = str(payload["premise"])
             hypothesis = str(payload["hypothesis"])
-            self._send_response(200, evaluate_pair(premise, hypothesis))
+            self._send_response(200, evaluate_pair(premise, hypothesis).model_dump(mode="json"))
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             self._send_response(400, {"error": str(exc)})
         except Exception as exc:  # pragma: no cover - protects the service boundary

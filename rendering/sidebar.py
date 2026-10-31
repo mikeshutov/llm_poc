@@ -18,13 +18,13 @@ from jobs.repository.repo_factory import get_job_repo
 from jobs.service import generate_job_plan
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
-from request_orchestrator.agent_runner.models.agent_profile import AgentExecutionStrategy
-from request_orchestrator.agents.models.agent import AgentModelConfig
-from request_orchestrator.agents.repository.repo_factory import get_agent_repo
+from agent_runtime.models.agent_profile import AgentExecutionStrategy
+from agents.models.agent import AgentModelConfig
+from agents.repository.repo_factory import get_agent_repo
 from rendering.feedback import clear_feedback_state
 from rendering.replay import clear_replay_state
 from rendering.sources import clear_sources_panel
-from tool.tools import TOOL_CATEGORIES
+from capabilities.registry.tools import TOOL_CATEGORIES
 
 MODEL_CONFIG_DIALOG_KEY = "conversation_model_config_dialog"
 PENDING_REPLAY_PREPARE_KEY = "pending_replay_prepare"
@@ -1056,7 +1056,7 @@ def render_sidebar(conversation_repository) -> None:
                         first_name=new_first_name.strip() or None,
                         last_name=new_last_name.strip() or None,
                         display_name=new_display_name.strip() or None,
-                        metadata=ConversationMetadata(sources=[SOURCE_STREAMLIT]),
+                        metadata={"sources": [SOURCE_STREAMLIT]},
                     )
                     st.session_state[USER_CREATE_FORM_KEY] = False
                     st.session_state.pop("new_user_first_name_input", None)

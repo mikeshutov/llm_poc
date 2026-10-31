@@ -10,7 +10,9 @@ from psycopg.rows import dict_row
 from common.data import normalize_string_list
 from db.connection import get_connection
 from personalization.user_attributes.models.user_attribute_models import UserAttribute, UserAttributeSearchResult
-from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
+from personalization.user_attributes.models.user_attribute_types import (
+    ATTRIBUTE_TYPE_VALUES,
+)
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 
 ATTRIBUTE_ORDER_FIELDS = {
@@ -42,11 +44,13 @@ class UserAttributeRepository:
 
         return normalized
 
-    def _validate_attribute_type(self, attribute_type: Optional[str]) -> None:
+    def _validate_attribute_type(self, attribute_type: Optional[str]) -> Optional[str]:
         if attribute_type is None:
-            return
-        if attribute_type not in ATTRIBUTE_TYPES:
+            return None
+        canonical = str(attribute_type).strip()
+        if canonical not in ATTRIBUTE_TYPES:
             raise ValueError(f"Unsupported attribute_type: {attribute_type}")
+        return canonical
 
     def _find_exact_attribute(
         self,
@@ -57,7 +61,7 @@ class UserAttributeRepository:
         group_key: Optional[str] = None,
         exclude_attribute_id: Optional[UUID] = None,
     ) -> Optional[UserAttribute]:
-        self._validate_attribute_type(attribute_type)
+        attribute_type = self._validate_attribute_type(attribute_type)
         normalized_value = normalize_string_list(value)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -108,7 +112,7 @@ class UserAttributeRepository:
         exclude_attribute_id: Optional[UUID] = None,
         distance_threshold: float = ATTRIBUTE_DUPLICATE_DISTANCE_THRESHOLD,
     ) -> Optional[UserAttributeSearchResult]:
-        self._validate_attribute_type(attribute_type)
+        attribute_type = self._validate_attribute_type(attribute_type)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -166,7 +170,7 @@ class UserAttributeRepository:
         confidence: Optional[float] = None,
         importance: Optional[float] = None,
     ) -> Optional[UserAttribute]:
-        self._validate_attribute_type(attribute_type)
+        attribute_type = self._validate_attribute_type(attribute_type)
         normalized_value = normalize_string_list(value) if value is not None else None
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -239,7 +243,7 @@ class UserAttributeRepository:
         confidence: Optional[float] = None,
         importance: Optional[float] = None,
     ) -> UserAttribute:
-        self._validate_attribute_type(attribute_type)
+        attribute_type = self._validate_attribute_type(attribute_type)
         normalized_value = normalize_string_list(value)
         if user_id is not None and user_id.strip():
             get_user_profile_repo().ensure_profile(user_id)
@@ -333,6 +337,74 @@ class UserAttributeRepository:
             assert row is not None
             return UserAttribute(**self._normalize_attribute_row(row))
 
+    def upsert_attribute(
+        self,
+        value: Sequence[str],
+        attribute_type: str,
+        user_id: Optional[str] = None,
+        attribute_embedding: Optional[list[float]] = None,
+        group_key: Optional[str] = None,
+        source: Optional[str] = "explicit",
+        confidence: Optional[float] = None,
+        importance: Optional[float] = None,
+    ) -> UserAttribute:
+        """Compose values into the user's canonical attribute bucket.
+
+        The agent does not need to know whether the bucket already exists.
+        Attributes with the same user, type, and group are merged into one
+        active record; duplicate active records are consolidated as well.
+        """
+        attribute_type = self._validate_attribute_type(attribute_type)
+        assert attribute_type is not None
+        normalized_value = normalize_string_list(value)
+        existing = [
+            attribute
+            for attribute in self.list_attributes(
+                limit=1000,
+                user_id=user_id,
+                is_active=True,
+                attribute_type=attribute_type,
+            )
+            if attribute.group_key == group_key
+        ]
+
+        if not existing:
+            return self.create_attribute(
+                value=normalized_value,
+                attribute_type=attribute_type,
+                user_id=user_id,
+                attribute_embedding=attribute_embedding,
+                group_key=group_key,
+                source=source or "explicit",
+                confidence=confidence,
+                importance=importance,
+            )
+
+        merged_values: list[str] = []
+        for attribute in existing:
+            for item in [*attribute.value, *normalized_value]:
+                if item not in merged_values:
+                    merged_values.append(item)
+
+        primary = existing[0]
+        updated = self._update_attribute_record(
+            primary.id,
+            user_id=user_id,
+            value=merged_values,
+            attribute_embedding=attribute_embedding,
+            attribute_type=attribute_type,
+            group_key=group_key,
+            source=source,
+            is_active=True,
+            confidence=confidence,
+            importance=importance,
+        )
+        assert updated is not None
+
+        for duplicate in existing[1:]:
+            self._deactivate_attribute(duplicate.id, user_id=user_id)
+        return updated
+
     def update_attribute(
         self,
         attribute_id: UUID,
@@ -346,7 +418,7 @@ class UserAttributeRepository:
         confidence: Optional[float] = None,
         importance: Optional[float] = None,
     ) -> Optional[UserAttribute]:
-        self._validate_attribute_type(attribute_type)
+        attribute_type = self._validate_attribute_type(attribute_type)
         normalized_value = normalize_string_list(value) if value is not None else None
         if normalized_value is not None:
             exact_match = self._find_exact_attribute(
@@ -446,7 +518,7 @@ class UserAttributeRepository:
         group_key: Optional[str] = None,
         source: Optional[str] = None,
     ) -> list[UserAttribute]:
-        self._validate_attribute_type(attribute_type)
+        attribute_type = self._validate_attribute_type(attribute_type)
         order_field = ATTRIBUTE_ORDER_FIELDS.get(order_by)
         if order_field is None:
             raise ValueError(f"Unsupported attribute order field: {order_by}")
@@ -505,7 +577,7 @@ class UserAttributeRepository:
         group_key: Optional[str] = None,
         source: Optional[str] = None,
     ) -> int:
-        self._validate_attribute_type(attribute_type)
+        attribute_type = self._validate_attribute_type(attribute_type)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -544,7 +616,7 @@ class UserAttributeRepository:
         group_key: Optional[str] = None,
         source: Optional[str] = None,
     ) -> list[UserAttributeSearchResult]:
-        self._validate_attribute_type(attribute_type)
+        attribute_type = self._validate_attribute_type(attribute_type)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """

@@ -51,7 +51,7 @@ def _record_embedding_log(
     # lazily so standalone scripts and startup-time model setup do not create
     # a logging dependency or fail when no roundtrip is active.
     from common.logging import record_node_log
-    from request_orchestrator.shared.runtime_context import get_current_roundtrip_id
+    from agent_runtime.context import get_current_roundtrip_id
 
     record_node_log(
         node_name=node_name,

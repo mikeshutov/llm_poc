@@ -1,0 +1,191 @@
+from __future__ import annotations
+
+from langchain_core.tools import tool
+from pydantic import BaseModel, Field
+
+from integrations.edhrec import EDHREC_CARD_URL_TEMPLATE, EdhrecCardView, EdhrecClient, EdhrecCommanderPage
+from integrations.scryfall import ScryfallCard, ScryfallClient, ScryfallClientError
+from retrieval.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
+from capabilities.adapters.games.candidate_mapper import rerank_edhrec_cards
+from capabilities.registry.constants import TOOL_NAME_GET_COMMANDER_CARDS
+from capabilities.registry.constants import TOOL_RESULT_TYPE_CARD_RESULTS
+
+_edhrec_client = EdhrecClient()
+_scryfall_client = ScryfallClient()
+
+
+class GetCommanderCardsArgs(BaseModel):
+    commander_name: str = Field(
+        ...,
+        description="Commander name to look up on EDHREC. Example: 'Uril, the Miststalker'.",
+    )
+    limit: int = Field(
+        default=6,
+        ge=1,
+        le=12,
+        description="Maximum number of EDHREC card recommendations to return after reranking.",
+    )
+
+
+class CommanderCardResult(BaseModel):
+    name: str
+    slug: str = ""
+    card_url: str = ""
+    section: str = ""
+    synergy: float | None = None
+    num_decks: int = 0
+    potential_decks: int = 0
+    trend_zscore: float | None = None
+
+
+class CommanderCardsResult(BaseModel):
+    query: str
+    commander_name: str
+    commander_slug: str
+    returned_count: int
+    cards: list[CommanderCardResult] = []
+
+
+class CommanderCardMetadata(BaseModel):
+    rarity: str | None = None
+    mana_cost: str | None = None
+    type_line: str | None = None
+    color_identity: list[str] = []
+    legal_formats: list[str] = []
+
+
+class CommanderCardReference(BaseModel):
+    cmc: float | None = None
+    oracle_text: str | None = None
+
+
+def _flatten_candidate_cards(page: EdhrecCommanderPage) -> list[tuple[str, EdhrecCardView]]:
+    flattened: list[tuple[str, EdhrecCardView]] = []
+    for cardlist in page.container.json_dict.cardlists:
+        section = cardlist.header.strip() or cardlist.tag.strip() or "EDHREC Cards"
+        for card in cardlist.cardviews:
+            if not card.name.strip():
+                continue
+            flattened.append((section, card))
+    return flattened
+
+
+def _card_result(section: str, card: EdhrecCardView) -> CommanderCardResult:
+    return CommanderCardResult(
+        name=card.name.strip(),
+        slug=(card.slug or "").strip(),
+        card_url=EDHREC_CARD_URL_TEMPLATE.format(path=card.url).strip() if card.url else "",
+        section=section,
+        synergy=card.synergy,
+        num_decks=card.num_decks,
+        potential_decks=card.potential_decks,
+        trend_zscore=card.trend_zscore,
+    )
+
+
+def _card_oracle_text(card: ScryfallCard) -> str:
+    if card.oracle_text:
+        return card.oracle_text.strip()
+    if not card.card_faces:
+        return ""
+    return " // ".join(face.oracle_text.strip() for face in card.card_faces if face.oracle_text and face.oracle_text.strip())
+
+
+def _legal_formats(card: ScryfallCard) -> list[str]:
+    return sorted(format_name for format_name, status in card.legalities.items() if status == "legal")
+
+
+def _scryfall_cards_by_name(cards: list[CommanderCardResult]) -> dict[str, ScryfallCard]:
+    try:
+        scryfall_cards = _scryfall_client.get_cards_by_names([card.name for card in cards])
+    except (ScryfallClientError, ValueError):
+        return {}
+    return {card.name.casefold(): card for card in scryfall_cards}
+
+
+def _card_summary(card: CommanderCardResult, scryfall_card: ScryfallCard | None) -> str:
+    if scryfall_card is not None:
+        parts = [
+            value
+            for value in (
+                scryfall_card.mana_cost,
+                scryfall_card.type_line,
+                _card_oracle_text(scryfall_card).replace("\n", " "),
+            )
+            if value and value.strip()
+        ]
+        if scryfall_card.set_name:
+            parts.append(f"Set: {scryfall_card.set_name}")
+        if parts:
+            return " | ".join(parts)
+    parts = [card.section] if card.section else []
+    if card.synergy is not None:
+        parts.append(f"Synergy {card.synergy:.3f}")
+    if card.num_decks:
+        parts.append(f"{card.num_decks} decks")
+    if card.potential_decks:
+        parts.append(f"{card.potential_decks} potential decks")
+    return " | ".join(parts) if parts else f"Commander card recommendation for {card.name}."
+
+
+def _tool_result(result: CommanderCardsResult) -> ToolResult:
+    evidence: list[EvidenceView] = []
+    scryfall_cards_by_name = _scryfall_cards_by_name(result.cards)
+    for card in result.cards:
+        scryfall_card = scryfall_cards_by_name.get(card.name.casefold())
+        metadata = CommanderCardMetadata(
+            rarity=scryfall_card.rarity if scryfall_card is not None else None,
+            mana_cost=scryfall_card.mana_cost if scryfall_card is not None else None,
+            type_line=scryfall_card.type_line if scryfall_card is not None else None,
+            color_identity=list(scryfall_card.color_identity or []) if scryfall_card is not None else [],
+            legal_formats=_legal_formats(scryfall_card) if scryfall_card is not None else [],
+        )
+        scryfall_url = scryfall_card.scryfall_uri.strip() if scryfall_card is not None else ""
+        edhrec_url = card.card_url.strip()
+        evidence_view = EvidenceView(
+            item_id=scryfall_card.id if scryfall_card is not None else card.slug or card.name,
+            tool_name=TOOL_NAME_GET_COMMANDER_CARDS,
+            title=card.name,
+            summary=_card_summary(card, scryfall_card),
+            urls=[
+                *([EvidenceUrl(url=scryfall_url, url_type=EvidenceUrlType.WEBSITE)] if scryfall_url else []),
+                *([EvidenceUrl(url=edhrec_url, url_type=EvidenceUrlType.WEBSITE)] if edhrec_url else []),
+            ],
+            image_url=scryfall_card.image_url() or "" if scryfall_card is not None else "",
+            source=TOOL_NAME_GET_COMMANDER_CARDS,
+            entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
+            llm_metadata=metadata.model_dump(exclude_none=True),
+            raw_payload=CommanderCardReference(
+                cmc=scryfall_card.cmc if scryfall_card is not None else None,
+                oracle_text=_card_oracle_text(scryfall_card) if scryfall_card is not None else None,
+            ),
+        )
+        evidence.append(evidence_view)
+    return ToolResult(result=result, evidence=evidence)
+
+
+@tool(
+    TOOL_NAME_GET_COMMANDER_CARDS,
+    args_schema=GetCommanderCardsArgs,
+    description="""
+Get reranked EDHREC card recommendations for a Magic: The Gathering commander.
+
+
+""",
+)
+def get_commander_cards(commander_name: str, limit: int = 6) -> ToolResult:
+    slug, page = _edhrec_client.get_commander_page(commander_name)
+    ranked_cards = rerank_edhrec_cards(
+        _flatten_candidate_cards(page),
+        goal=f"Most relevant EDHREC card recommendations for a {commander_name.strip()} commander deck.",
+        limit=limit,
+    )
+    return _tool_result(
+        CommanderCardsResult(
+            query=commander_name.strip(),
+            commander_name=page.container.title.replace(" (Commander)", "").strip() or commander_name.strip(),
+            commander_slug=slug,
+            returned_count=len(ranked_cards),
+            cards=[_card_result(section, card) for section, card in ranked_cards],
+        )
+    )

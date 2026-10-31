@@ -10,11 +10,13 @@ The repo uses a dedicated local `BAAI/bge-reranker-v2-m3` service to improve ord
 6. If the number of candidates is already at or below the configured top-k limit, the reranker call is skipped entirely.
 
 ## Important Details
-1. The top-k limit is standardized in `reranker/constants.py` and is currently `10`.
+1. The top-k limit is standardized in `retrieval/reranker_constants.py` and is currently `10`.
 2. Candidate evidence construction is handled through the generic evidence builder, while each mapper supplies its domain fields.
 3. URLs, images, retrieval metadata, and embeddings are excluded from semantic reranker input.
 4. Candidate evidence is deterministically constrained by `RERANKER_CANDIDATE_TOKEN_BUDGET`.
 5. Product web results currently use their URL as the id when no better external identifier is available yet.
+
+The public retrieval-facing implementation lives in `retrieval/reranker.py`; candidate-specific mappers remain with their capability adapters. The external model client remains under `serviceclients/reranker` and the HTTP service remains under `services/reranker`.
 
 TODO: replace the approximate application-side character budget with tokenizer-aware budgeting that reserves space for the query, reports truncation, and aligns exactly with `RERANKER_MAX_LENGTH`.
 

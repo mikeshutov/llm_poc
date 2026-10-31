@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from jobs.orchestration import JobOrchestrator
-from request_orchestrator.models.plan import Plan
+from agent_runtime.models.plan import Plan
 from jobs.repository.repo_factory import get_job_repo
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from files.file_processor import SUPPORTED_TEXT_FILE_TYPES, SUPPORTED_IMAGE_TYPES, UploadedFile, process_uploaded_file
+from assets.files.file_processor import SUPPORTED_TEXT_FILE_TYPES, SUPPORTED_IMAGE_TYPES, UploadedFile, process_uploaded_file
 
 
 # simple render/upload function just so we can easily upload more files.

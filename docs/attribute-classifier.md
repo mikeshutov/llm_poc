@@ -14,14 +14,14 @@ Compose mounts `services/attribute_classifier/training/trained_models` into the 
 
 `POST /classify` returns `relevant_attributes` in the same format as the input, plus `results` containing each candidate's score and boolean decision. The threshold defaults to `0.5` and can be changed with `ATTRIBUTE_CLASSIFIER_THRESHOLD`.
 
-The application-side `AttributeClassifierClient` is available in `attribute_classifier/client.py` and uses `ATTRIBUTE_CLASSIFIER_SERVICE_URL` (default `http://localhost:5434`).
+The application-side `AttributeClassifierClient` is available in `serviceclients/attribute_classifier/client.py` and uses `ATTRIBUTE_CLASSIFIER_SERVICE_URL` (default `http://localhost:5434`).
 
 ## Basic training
 
 Seed examples live in `services/attribute_classifier/training/training_data.jsonl` using this format:
 
 ```json
-{"text":"Recommend some RPGs I'd probably like","labels":["media.likes"]}
+{"text":"Recommend some RPGs I'd probably like","labels":["media.preference"]}
 ```
 
 Add more examples to that file, then install the training dependencies and run:

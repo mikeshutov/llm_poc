@@ -8,7 +8,7 @@ from typing import Any, Protocol
 import requests
 from pydantic import ValidationError
 
-from reranker.models import (
+from retrieval.reranker_models import (
     Candidate,
     RerankerRequest,
     RerankerRequestCandidate,

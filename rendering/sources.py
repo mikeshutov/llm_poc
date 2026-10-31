@@ -4,7 +4,7 @@ from typing import Any
 
 import streamlit as st
 
-from request_orchestrator.models.evidence import EvidenceView
+from retrieval.evidence import EvidenceView
 
 SOURCES_DIALOG_KEY = "sources_dialog"
 

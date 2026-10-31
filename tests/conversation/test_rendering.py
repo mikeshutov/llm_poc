@@ -11,15 +11,15 @@ from rendering.rendering import (
     serialize_roundtrip_payload,
 )
 from rendering.debug import _build_llm_call_payload
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView
-from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
-from request_orchestrator.models.synthesized_result import SynthesisResultBlock
-from tool.constants import TOOL_NAME_GET_CURRENT_WEATHER
-from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
-from tool.constants import TOOL_RESULT_TYPE_FILE_DETAILS
-from tool.constants import TOOL_RESULT_TYPE_RULES
-from tool.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
-from tool.constants import TOOL_RESULT_TYPE_WEATHER
+from retrieval.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView
+from agent_runtime.models.orchestrator_payload import OrchestratorPayload
+from agent_runtime.models.synthesized_result import SynthesisResultBlock
+from capabilities.registry.constants import TOOL_NAME_GET_CURRENT_WEATHER
+from capabilities.registry.constants import TOOL_NAME_GENERIC_WEB_SEARCH
+from capabilities.registry.constants import TOOL_RESULT_TYPE_ASSET_DETAILS
+from capabilities.registry.constants import TOOL_RESULT_TYPE_RULES
+from capabilities.registry.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
+from capabilities.registry.constants import TOOL_RESULT_TYPE_WEATHER
 
 
 def test_debug_llm_payload_reads_compact_input_and_output_metadata() -> None:
@@ -35,6 +35,7 @@ def test_debug_llm_payload_reads_compact_input_and_output_metadata() -> None:
 
     assert payload["input_object"] == {"hash": "input-hash", "message_count": 2}
     assert payload["output_object"] == {"hash": "output-hash", "preview": "ok"}
+    assert payload["metadata"] == {}
 
 
 def test_serialize_roundtrip_payload_preserves_persisted_evidence() -> None:
@@ -151,7 +152,7 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
 
 def test_render_assistant_content_renders_meal_recipe_cards(monkeypatch) -> None:
     rendered_meals: list[EvidenceView] = []
-    monkeypatch.setattr("rendering.rendering.st.html", lambda value: None)
+    monkeypatch.setattr("rendering.rendering.st.markdown", lambda value: None)
     monkeypatch.setattr("rendering.rendering.fetch_llm_usage_for_roundtrip", lambda value: None)
     monkeypatch.setattr("rendering.rendering.fetch_trace_messages_for_roundtrip", lambda value: {})
     monkeypatch.setattr("rendering.rendering.render_agent_logs", lambda value: None)
@@ -241,11 +242,11 @@ def test_build_inline_evidence_includes_generic_web_search_results_from_source_o
 
 
 def test_render_result_block_renders_file_citations_as_inline_file_names(monkeypatch) -> None:
-    calls: dict[str, list[object]] = {"html": [], "caption": []}
+    calls: dict[str, list[object]] = {"markdown": [], "caption": []}
 
     monkeypatch.setattr(
-        "rendering.rendering.st.html",
-        lambda value, **kwargs: calls["html"].append((value, kwargs)),
+        "rendering.rendering.st.markdown",
+        lambda value, **kwargs: calls["markdown"].append((value, kwargs)),
     )
     monkeypatch.setattr("rendering.rendering.st.caption", lambda value: calls["caption"].append(value))
 
@@ -257,25 +258,25 @@ def test_render_result_block_renders_file_citations_as_inline_file_names(monkeyp
                 title="resume.pdf",
                 summary="Experience at Acme Corp.",
                 urls=[EvidenceUrl(url="app/static/files/resume.pdf", url_type=EvidenceUrlType.WEBSITE)],
-                source="search_file_for_details",
-                entity_type=TOOL_RESULT_TYPE_FILE_DETAILS,
+                source="asset_search_details",
+                entity_type=TOOL_RESULT_TYPE_ASSET_DETAILS,
             )
         },
     )
 
     assert cards == []
-    assert len(calls["html"]) == 1
-    rendered_value, _ = calls["html"][0]
+    assert len(calls["markdown"]) == 1
+    rendered_value, _ = calls["markdown"][0]
     assert "app/static/files/resume.pdf" in rendered_value
     assert calls["caption"] == []
 
 
 def test_render_result_block_renders_weather_as_inline_html_link(monkeypatch) -> None:
-    calls: dict[str, list[object]] = {"html": [], "write": [], "caption": []}
+    calls: dict[str, list[object]] = {"markdown": [], "write": [], "caption": []}
 
     monkeypatch.setattr(
-        "rendering.rendering.st.html",
-        lambda value, **kwargs: calls["html"].append((value, kwargs)),
+        "rendering.rendering.st.markdown",
+        lambda value, **kwargs: calls["markdown"].append((value, kwargs)),
     )
     monkeypatch.setattr("rendering.rendering.st.write", lambda value: calls["write"].append(value))
     monkeypatch.setattr("rendering.rendering.st.caption", lambda value: calls["caption"].append(value))
@@ -299,8 +300,8 @@ def test_render_result_block_renders_weather_as_inline_html_link(monkeypatch) ->
     assert cards == []
     assert calls["write"] == []
     assert calls["caption"] == []
-    assert len(calls["html"]) == 1
-    rendered_value, rendered_kwargs = calls["html"][0]
+    assert len(calls["markdown"]) == 1
+    rendered_value, rendered_kwargs = calls["markdown"][0]
     assert "Toronto is warm today." in rendered_value
     assert "https://open-meteo.com/" in rendered_value
     assert rendered_kwargs == {}

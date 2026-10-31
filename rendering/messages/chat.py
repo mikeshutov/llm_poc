@@ -10,8 +10,8 @@ from conversation.conversation import generate_conversation_title
 from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo
 from conversation.summary_service import rebuild_conversation_summaries
-from request_orchestrator.models.orchestrator_result import OrchestratorResult
-from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
+from agent_runtime.models.orchestrator_result import OrchestratorResult
+from agent_runtime.models.orchestrator_payload import OrchestratorPayload
 from rendering.feedback import render_feedback_controls
 from rendering.rendering import (
     _format_roundtrip_duration,

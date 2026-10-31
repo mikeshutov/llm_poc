@@ -1,4 +1,3 @@
-import html
 import os
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,21 +17,21 @@ from rendering.cards import (
 from rendering.debug import debug_render_message, render_agent_logs
 from rendering.feedback import render_feedback_controls
 from rendering.replay import render_replay_control
-from request_orchestrator.models.evidence import EvidenceUrl, EvidenceView
-from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
-from request_orchestrator.models.synthesized_result import SynthesisResultBlock
-from tool.constants import TOOL_NAME_GENERIC_WEB_SEARCH
-from tool.constants import TOOL_NAME_GET_COMMANDER_CARDS
-from tool.constants import TOOL_NAME_SEARCH_MAGIC_CARDS
-from tool.constants import TOOL_NAME_STRUCTURED_FACTS_LOOKUP
-from tool.constants import TOOL_NAME_WIKIPEDIA_SEARCH
-from tool.constants import TOOL_RESULT_TYPE_CARD_RESULTS
-from tool.constants import TOOL_RESULT_TYPE_FILE
-from tool.constants import TOOL_RESULT_TYPE_FILE_DETAILS
-from tool.constants import TOOL_RESULT_TYPE_FILE_RESULTS
-from tool.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
-from tool.constants import TOOL_RESULT_TYPE_RULES
-from tool.constants import TOOL_RESULT_TYPE_WEATHER
+from retrieval.evidence import EvidenceUrl, EvidenceView
+from agent_runtime.models.orchestrator_payload import OrchestratorPayload
+from agent_runtime.models.synthesized_result import SynthesisResultBlock
+from capabilities.registry.constants import TOOL_NAME_GENERIC_WEB_SEARCH
+from capabilities.registry.constants import TOOL_NAME_GET_COMMANDER_CARDS
+from capabilities.registry.constants import TOOL_NAME_SEARCH_MAGIC_CARDS
+from capabilities.registry.constants import TOOL_NAME_STRUCTURED_FACTS_LOOKUP
+from capabilities.registry.constants import TOOL_NAME_WIKIPEDIA_SEARCH
+from capabilities.registry.constants import TOOL_RESULT_TYPE_CARD_RESULTS
+from capabilities.registry.constants import TOOL_RESULT_TYPE_FILE
+from capabilities.registry.constants import TOOL_RESULT_TYPE_ASSET_DETAILS
+from capabilities.registry.constants import TOOL_RESULT_TYPE_ASSET_RESULTS
+from capabilities.registry.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
+from capabilities.registry.constants import TOOL_RESULT_TYPE_RULES
+from capabilities.registry.constants import TOOL_RESULT_TYPE_WEATHER
 
 
 @dataclass(frozen=True)
@@ -60,15 +59,15 @@ CARD_LAYOUTS_BY_EVIDENCE_TYPE: dict[str, dict[str, int]] = {
 
 INLINE_EVIDENCE_TYPES: set[str] = {
     TOOL_RESULT_TYPE_FILE,
-    TOOL_RESULT_TYPE_FILE_DETAILS,
-    TOOL_RESULT_TYPE_FILE_RESULTS,
+    TOOL_RESULT_TYPE_ASSET_DETAILS,
+    TOOL_RESULT_TYPE_ASSET_RESULTS,
     TOOL_RESULT_TYPE_WEATHER,
 }
 
 FILE_EVIDENCE_TYPES: set[str] = {
     TOOL_RESULT_TYPE_FILE,
-    TOOL_RESULT_TYPE_FILE_DETAILS,
-    TOOL_RESULT_TYPE_FILE_RESULTS,
+    TOOL_RESULT_TYPE_ASSET_DETAILS,
+    TOOL_RESULT_TYPE_ASSET_RESULTS,
 }
 
 INLINE_EVIDENCE_TOOL_NAMES: set[str] = {
@@ -320,29 +319,13 @@ def _render_result_content(
     links: list[tuple[str, str]],
     labels: list[str] | None = None,
 ) -> None:
-    chips = "".join(
-        (
-            "<a "
-            f'href="{html.escape(url, quote=True)}" '
-            'target="_blank" rel="noopener noreferrer" '
-            "style=\"display:inline-flex;align-items:center;gap:0.2rem;margin:0 0.25rem 0 0.35rem;"
-            "padding:0.08rem 0.4rem;border:1px solid rgba(49,51,63,0.22);border-radius:999px;"
-            "font-size:0.72rem;line-height:1.25;text-decoration:none;color:inherit;\">"
-            f"<span aria-hidden=\"true\">&#8599;</span> {html.escape(label)}</a>"
-        )
-        for label, url in links
-    )
-    label_chips = "".join(
-        (
-            '<span style="display:inline-flex;align-items:center;gap:0.2rem;margin:0 0.25rem 0 0.35rem;'
-            "padding:0.08rem 0.4rem;border:1px solid rgba(49,51,63,0.22);border-radius:999px;"
-            'font-size:0.72rem;line-height:1.25;">'
-            f"{html.escape(label)}</span>"
-        )
-        for label in (labels or [])
-    )
-    escaped_content = html.escape(content).replace("\n", "<br>")
-    st.html(f'<span style="white-space:pre-wrap">{escaped_content}</span>{chips}{label_chips}')
+    source_links = [f"[{label}]({url})" for label, url in links]
+    source_labels = list(labels or [])
+    source_parts = [*source_links, *source_labels]
+    rendered_content = content
+    if source_parts:
+        rendered_content = f"{content}\n\n_{' · '.join(source_parts)}_"
+    st.markdown(rendered_content)
 
 
 def _render_result_block(

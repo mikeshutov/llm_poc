@@ -4,11 +4,11 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from artifacts.models import Artifact
+from assets.models import AssetReference
 from jobs.models import JobSchedule
 from jobs.repository.job_repository import JobRepository
 from jobs.repository.job_result_repository import JobResultRepository
-from request_orchestrator.models.plan import Plan, PlanStep, PlanningResult
+from agent_runtime.models.plan import Plan, PlanStep, PlanningResult
 
 
 def test_job_schedule_normalizes_and_validates_weekdays() -> None:
@@ -28,17 +28,17 @@ def test_job_schedule_rejects_invalid_timezone_and_weekday() -> None:
         JobSchedule(days_of_week=[1], run_time=time(9), timezone="Not/A_Timezone")
 
 
-def test_artifact_normalizes_generic_reference() -> None:
-    artifact = Artifact(
+def test_asset_reference_normalizes_generic_reference() -> None:
+    reference = AssetReference(
         id=uuid4(),
         user_id="user-123",
-        artifact_type=" report ",
-        artifact_id=" report-123 ",
+        asset_type=" report ",
+        asset_id=" report-123 ",
         created_at="2026-01-01T00:00:00Z",
     )
 
-    assert artifact.artifact_type == "report"
-    assert artifact.artifact_id == "report-123"
+    assert reference.asset_type == "report"
+    assert reference.asset_id == "report-123"
 
 
 def test_plan_can_be_round_tripped_as_job_payload() -> None:

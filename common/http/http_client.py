@@ -5,7 +5,7 @@ from typing import Any
 
 import requests
 
-from cache.rest_cache_repository import RestCacheRepository
+from common.cache.rest_cache_repository import RestCacheRepository
 
 DEFAULT_TTL = timedelta(hours=1)
 DEFAULT_USER_AGENT = "POCProductSearch/1.0"

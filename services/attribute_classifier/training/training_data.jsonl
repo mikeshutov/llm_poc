@@ -1,10 +1,41 @@
-{"text":"call me datorman from now on. I like to have a good time laugh and just chit chat about random topics from AI to farts","labels":["technology.interests","media.interests"]}
-{"text":"i really like magic the gathering","labels":["media.interests"]}
-{"text":"what kind food would you recommend?","labels":["food.likes","food.dislikes","food.favorites","food.interests"]}
-{"text":"Whats going on in Toronto?","labels":["media.likes"]}
-{"text":"what are some food recommendations?","labels":["food.likes","food.dislikes","food.favorites","food.interests"]}
+{"text":"call me datorman from now on. I like to have a good time laugh and just chit chat about random topics from AI to farts","labels":["technology.interest","media.interest"]}
+{"text":"i really like magic the gathering","labels":["media.interest"]}
+{"text":"what kind food would you recommend?","labels":["food.preference","food.avoidance","food.interest"]}
+{"text":"Whats going on in Toronto?","labels":["media.preference"]}
+{"text":"what are some food recommendations?","labels":["food.preference","food.avoidance","food.interest"]}
 {"text":"Anything interesting in toronto?","labels":[]}
-{"text":"what do you suggest I do today?","labels":["projects.goals","fitness.interests","media.interests"]}
-{"text":"what kind books could be interesting to read?","labels":["media.likes","media.dislikes","media.favorites","media.interests"]}
-{"text":"what can you tell me about final fantasy?","labels":["media.likes","media.interests"]}
-{"text":"im trying to understand more about tech","labels":["technology.interests","technology.skills"]}
+{"text":"what do you suggest I do today?","labels":["projects.goal","fitness.interest","media.interest"]}
+{"text":"what kind books could be interesting to read?","labels":["media.preference","media.avoidance","media.interest"]}
+{"text":"what can you tell me about final fantasy?","labels":["media.preference","media.interest"]}
+{"text":"im trying to understand more about tech","labels":["technology.interest","technology.skill"]}
+{"text":"what kind of lunch would you suggest?","labels":["food.preference","food.avoidance"]}
+{"text":"what should I make for dinner tonight?","labels":["food.preference","food.avoidance"]}
+{"text":"give me a few healthy meal ideas","labels":["food.preference","food.avoidance","fitness.interest"]}
+{"text":"I want something quick and filling for lunch","labels":["food.preference","food.avoidance"]}
+{"text":"recommend a recipe based on what I usually enjoy eating","labels":["food.preference","food.avoidance"]}
+{"text":"I am allergic to peanuts","labels":["food.avoidance"]}
+{"text":"I do not eat pork or shellfish","labels":["food.avoidance"]}
+{"text":"I love spicy food and grilled chicken","labels":["food.preference"]}
+{"text":"please remember that I prefer vegetarian meals","labels":["food.preference"]}
+{"text":"what cuisines might I enjoy exploring?","labels":["food.preference","food.interest"]}
+{"text":"I have been learning about Japanese cooking","labels":["food.interest"]}
+{"text":"what are my favorite foods?","labels":["food.preference"]}
+{"text":"what foods should I avoid when suggesting recipes?","labels":["food.avoidance"]}
+{"text":"I am training for a marathon; what activities might suit me?","labels":["fitness.interest","fitness.goal"]}
+{"text":"help me choose a workout for today","labels":["fitness.preference","fitness.goal","fitness.interest"]}
+{"text":"I want to improve my strength","labels":["fitness.goal"]}
+{"text":"I enjoy cycling and hiking","labels":["fitness.preference"]}
+{"text":"what technology topics would I probably enjoy?","labels":["technology.interest","technology.preference"]}
+{"text":"I am comfortable with Python and SQL","labels":["technology.skill"]}
+{"text":"I want to become better at public speaking","labels":["career.goal","career.skill"]}
+{"text":"what kind of work do I like?","labels":["career.preference"]}
+{"text":"I am interested in product management","labels":["career.interest"]}
+{"text":"help me plan my project milestones","labels":["projects.goal"]}
+{"text":"I am working on a home automation project","labels":["projects.interest","technology.skill"]}
+{"text":"what books or movies would I enjoy?","labels":["media.preference","media.avoidance"]}
+{"text":"I usually like science fiction novels","labels":["media.preference"]}
+{"text":"I want to learn more about documentaries","labels":["media.interest"]}
+{"text":"which games would I probably enjoy?","labels":["media.preference"]}
+{"text":"what should I know about Toronto this week?","labels":["media.preference","media.interest"]}
+{"text":"I am curious about renewable energy","labels":["technology.interest"]}
+{"text":"suggest something that matches my tastes but avoid things I dislike","labels":["food.preference","food.avoidance","media.preference","media.avoidance"]}

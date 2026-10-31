@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 from uuid import UUID
 
 import psycopg
 from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+
+from common.config import ROLE_ASSISTANT, ROLE_USER
 
 from conversation.models.conversation_models import (
     Conversation,
@@ -27,8 +29,10 @@ from common.data import bounded_json_value
 from db.connection import get_connection
 from llm.repository.conversation_model_config_repository import ConversationModelConfigRepository
 from personalization.tone.models import TonePreferences
-from request_orchestrator.constants import NodeName
-from request_orchestrator.models.orchestrator_payload import OrchestratorPayload
+from agent_runtime.constants import NodeName
+
+if TYPE_CHECKING:
+    from agent_runtime.models.orchestrator_payload import OrchestratorPayload
 
 
 class ConversationRepository:
@@ -273,7 +277,7 @@ class ConversationRepository:
         self.append_message(
             roundtrip.id,
             kind=ConversationMessageKind.USER,
-            role="user",
+                role=ROLE_USER,
             content=user_prompt,
         )
         return roundtrip
@@ -311,7 +315,7 @@ class ConversationRepository:
         self.append_message(
             roundtrip_id,
             kind=ConversationMessageKind.ASSISTANT,
-            role="assistant",
+                role=ROLE_ASSISTANT,
             content=response,
             payload=synthesis_payload,
             metadata={"model": model, "stage": "synthesis"} if model else {"stage": "synthesis"},

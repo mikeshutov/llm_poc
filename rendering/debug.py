@@ -1,14 +1,13 @@
 import streamlit as st
 from pydantic import BaseModel, Field
 
-from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
+from agent_runtime.constants import NodeName
+from agent_runtime.models.evaluation_result import EVALUATION_STATUS_RETRYABLE
 
 
 PROFILE_LOAD_KIND = "profile_load"
 PLAN_KIND = "plan"
-EVALUATOR_KIND = "evaluator"
 TOOL_CALL_KIND = "tool_call"
-SYNTHESIS_KIND = "synthesis"
 EXECUTION_RESULT_KIND = "execution_result"
 LLM_CALL_KIND = "llm_call"
 RERANKER_CALL_KIND = "reranker_call"
@@ -111,7 +110,11 @@ def debug_render_message(content, content_title: str) -> None:
 
 
 def _build_profile_load_payload(entry: dict) -> dict:
-    data = entry.get("data") or {}
+    # fetch_trace_messages_for_roundtrip already unwraps node_log.payload[data]
+    # before handing entries to the renderer. Keep accepting the wrapped shape
+    # for callers that provide raw log payloads, but use the entry itself when
+    # the profile fields are already at the top level.
+    data = entry.get("data") or entry
     return ProfileLoadLogPayload(
         title=data.get("title") or "User Profile Loaded",
         requested_user_attribute_types=data.get("requested_user_attribute_types") or [],
@@ -179,7 +182,19 @@ def _build_tool_call_payload(entry: dict) -> dict:
 
 
 def _build_llm_call_payload(entry: dict) -> dict:
-    metadata = entry.get("metadata") or {}
+    metadata = dict(entry.get("metadata") or {})
+    input_object = entry.get(
+        "input_object",
+        entry.get("input", metadata.get("input", metadata.get("input_object"))),
+    )
+    output_object = entry.get(
+        "output_object",
+        entry.get("output", metadata.get("output", metadata.get("output_object"))),
+    )
+    # These compact diagnostics are promoted to top-level fields below;
+    # retaining them in metadata only duplicates the rendered payload.
+    for key in ("input", "output", "input_object", "output_object"):
+        metadata.pop(key, None)
     return LlmCallLogPayload(
         model_scope=entry.get("model_scope") or entry.get("agent") or "",
         model=entry.get("model") or "",
@@ -193,17 +208,8 @@ def _build_llm_call_payload(entry: dict) -> dict:
         computed_output_cost=str(entry.get("computed_output_cost") or ""),
         computed_total_cost=str(entry.get("computed_total_cost") or ""),
         latency_ms=entry.get("latency_ms"),
-        # Compact LLM diagnostics store these as `metadata.input` and
-        # `metadata.output`. Keep the old keys as a fallback for historical
-        # node logs created before the compact format.
-        input_object=entry.get(
-            "input_object",
-            entry.get("input", metadata.get("input", metadata.get("input_object"))),
-        ),
-        output_object=entry.get(
-            "output_object",
-            entry.get("output", metadata.get("output", metadata.get("output_object"))),
-        ),
+        input_object=input_object,
+        output_object=output_object,
         metadata=metadata,
     ).model_dump()
 
@@ -215,9 +221,9 @@ def _build_log_payload(entry: dict) -> tuple[str, dict]:
         payload = _build_profile_load_payload(entry)
     elif kind == PLAN_KIND:
         payload = _build_plan_payload(entry)
-    elif kind == EVALUATOR_KIND:
+    elif kind == NodeName.EVALUATOR.value:
         payload = _build_evaluator_payload(entry)
-    elif kind == SYNTHESIS_KIND:
+    elif kind == NodeName.SYNTHESIS.value:
         payload = _build_synthesis_payload(entry)
     elif kind == EXECUTION_RESULT_KIND:
         payload = _build_execution_result_payload(entry)
