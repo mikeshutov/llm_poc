@@ -8,16 +8,18 @@ from langchain_core.tools import BaseTool
 from common.data import sanitize_for_json_storage
 from common.logging import compact_trace_inputs, compact_trace_outputs, record_node_log
 from request_orchestrator.models.agent_state import AgentState
+from request_orchestrator.models.agent_result import AnswerStatus, ExecutionStatus
 from request_orchestrator.constants import NodeName
 from request_orchestrator.models.evaluation_result import EVALUATION_STATUS_TERMINAL
 from request_orchestrator.models.plan import PlanningResult
-from request_orchestrator.models.plan import Plan, PlanStep
+from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.planner.prompts.planner_prompt import build_planner_prompt
 from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
 from llm.conversation_model_config import OPENAI_PROVIDER
 from llm.conversation_model_config import PLANNER_STAGE
 from llm.usage import record_llm_call
 from rendering.debug import PLAN_KIND
+from request_orchestrator.shared.planner.tool_call_parser import parse_tool_calls_to_plan_steps
 from request_orchestrator.shared.planner.tool_wrapper import build_tools
 
 def invoke_planner(
@@ -86,50 +88,10 @@ def invoke_planner(
             "tool_calls": getattr(response, "tool_calls", None),
         },
     )
-    tool_calls = getattr(response, "tool_calls", None) or []
-    steps = []
-    available_fields_by_tool = {
-        candidate.name: set(getattr(candidate, "available_result_fields", ()))
-        for candidate in tools
-    }
-    for index, call in enumerate(tool_calls):
-        name = call.get("name", "")
-        args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
-        if "parameters" in args:
-            tool_arguments = args.get("parameters", {})
-            if not isinstance(tool_arguments, dict):
-                tool_arguments = {}
-        else:
-            # Some providers may return the underlying tool arguments even
-            # though the bound tool exposes the orchestration envelope. Keep
-            # those arguments instead of silently executing the tool with {}.
-            tool_arguments = {
-                key: value
-                for key, value in args.items()
-                if key not in {"hypothesis", "evaluation_fields"}
-            }
-        hypothesis = str(args.get("hypothesis", ""))
-        evaluation_fields = [
-            field.strip()
-            for field in args.get("evaluation_fields", [])
-            if (
-                isinstance(field, str)
-                and field.strip()
-                and field.strip().lower() not in {"name", "title"}
-                and field.strip() in available_fields_by_tool.get(name, set())
-            )
-        ] if isinstance(args.get("evaluation_fields", []), list) else []
-        metadata: dict[str, object] = {}
-        if evaluation_fields:
-            metadata = {**metadata, "evaluation_fields": evaluation_fields}
-        steps.append(PlanStep(
-            id=str(call.get("id") or f"E{index + 1}"),
-            plan=hypothesis,
-            hypothesis=hypothesis,
-            metadata=metadata,
-            tool=name,
-            args=tool_arguments,
-        ))
+    steps = parse_tool_calls_to_plan_steps(
+        getattr(response, "tool_calls", None) or [],
+        tools,
+    )
     return PlanningResult(steps=steps), llm_call
 
 
@@ -157,6 +119,10 @@ def run_planner(agent_state: AgentState) -> AgentState:
             payload={"error": str(e)},
         )
         agent_state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
+        agent_state.result = agent_state.result.copy(
+            answer_status=AnswerStatus.FAILED,
+            execution_status=ExecutionStatus.FAILED,
+        )
         return agent_state
 
     plan = Plan(steps=planning_result.steps)
@@ -168,23 +134,13 @@ def run_planner(agent_state: AgentState) -> AgentState:
     if not plan.steps:
         agent_state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
 
-    compact_steps = [
-        {
-            "id": step.id,
-            "tool": step.tool,
-            "agent": step.agent,
-            "hypothesis_preview": step.hypothesis[:500],
-            "argument_keys": sorted(step.args),
-            "evaluation_fields": list(getattr(step, "evaluation_fields", [])),
-        }
-        for step in plan.steps
-    ]
+    plan_steps = [step.model_dump(mode="json") for step in plan.steps]
     payload = {
         "agent_name": agent_state.agent_profile.name,
         "kind": PLAN_KIND,
         "status": "ready" if plan.steps else "completed",
         "data": sanitize_for_json_storage({
-            "steps": compact_steps,
+            "steps": plan_steps,
         }),
     }
     record_node_log(

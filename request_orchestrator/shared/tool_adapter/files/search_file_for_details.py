@@ -6,6 +6,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel
 
 from files.urls import static_file_url
+from files.models import FileChunkResult
 from files.repository.file_chunk_repository import FileChunkRepository
 from llm.clients.embeddings import embed_text
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
@@ -19,16 +20,16 @@ class SearchFileForDetailsArgs(BaseModel):
     query: str
 
 
-def _tool_result(result: list[dict]) -> ToolResult:
+def _tool_result(result: list[FileChunkResult]) -> ToolResult:
     evidence: list[EvidenceView] = []
     for file_result in result:
         evidence_view = EvidenceView(
-            item_id=str(file_result.get("file_id", "")),
+            item_id=str(file_result.file_id),
             tool_name=TOOL_NAME_SEARCH_FILE_FOR_DETAILS,
-            title=str(file_result.get("file_name", "")).strip() or "File Detail",
-            summary=str(file_result.get("content", "")).strip() or "Matched file content.",
+            title=file_result.file_name.strip() or "File Detail",
+            summary=file_result.content.strip() or "Matched file content.",
             urls=[EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)]
-            if (file_url := static_file_url(str(file_result.get("file_path", ""))))
+            if (file_url := static_file_url(file_result.file_path))
             else [],
             source=TOOL_NAME_SEARCH_FILE_FOR_DETAILS,
             entity_type=TOOL_RESULT_TYPE_FILE_DETAILS,
@@ -44,8 +45,8 @@ def _tool_result(result: list[dict]) -> ToolResult:
     TOOL_NAME_SEARCH_FILE_FOR_DETAILS,
     args_schema=SearchFileForDetailsArgs,
     description="""
-Search within a specific uploaded file for content relevant to a query. Returns the most relevant chunks in document order.
-Use search_files first to find relevant files and get their file_id, then use this tool to retrieve specific content.
+Search within one known uploaded file for content relevant to a query. Returns the most relevant chunks in document order.
+Use file_search first when the relevant file_id is not known.
 
 
 """,
@@ -54,7 +55,7 @@ def search_file_for_details(file_id: str, query: str) -> ToolResult:
     try:
         parsed_id = UUID(file_id)
     except ValueError:
-        return ToolResult.error(f"Invalid file_id '{file_id}'. Use search_files to obtain a valid file_id first.")
+        return ToolResult.error(f"Invalid file_id '{file_id}'. Use file_search to obtain a valid file_id first.")
 
     embedded_query = embed_text(query)
     results = FileChunkRepository().search_file_via_chunks(
@@ -63,5 +64,5 @@ def search_file_for_details(file_id: str, query: str) -> ToolResult:
         user_id=get_current_user_id(),
     )
     return _tool_result(
-        [{"file_id": str(r.file_id), "file_name": r.file_name, "file_path": r.file_path, "content": r.content} for r in results]
+        results
     )

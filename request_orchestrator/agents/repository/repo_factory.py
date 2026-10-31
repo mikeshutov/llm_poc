@@ -1,4 +1,4 @@
-from request_orchestrator.agents.repository.agent_repository import AgentRepository
+from request_orchestrator.agents.repository.user_agent_repository import AgentRepository
 
 
 def get_agent_repo() -> AgentRepository:

@@ -13,7 +13,6 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from common.config import CHUNK_ENCODING, FILES_DIR, IMAGE_MIME_PREFIX
 from files.repository.file_chunk_repository import FileChunkRepository
 from files.repository.file_repository import FileRepository
-from llm.clients.embeddings import embed_text
 from llm.clients.llm_client import LlmClient
 
 SUPPORTED_TEXT_FILE_TYPES = ["pdf", "txt", "docx"]
@@ -71,7 +70,6 @@ def process_uploaded_file(
         user_id=user_id,
         conversation_id=parsed_conversation_id,
     )
-    embedded_chunks = [(i, chunk, embed_text(chunk)) for i, chunk in enumerate(chunks)]
-    FileChunkRepository().save_chunks(saved_file.id, embedded_chunks)
+    FileChunkRepository().save_content(saved_file.id, "file", chunks)
 
     return file.name, str(saved_file.id), chunks

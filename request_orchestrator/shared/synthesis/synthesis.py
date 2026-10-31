@@ -11,6 +11,7 @@ from llm.usage import record_llm_call
 from request_orchestrator.models.main_state import MainState
 from request_orchestrator.constants import NodeName
 from request_orchestrator.models.orchestrator_result import OrchestratorResult
+from request_orchestrator.models.agent_result import AnswerStatus, ExecutionStatus
 from request_orchestrator.models.synthesized_result import SynthesisResult, SynthesisResultBlock
 from request_orchestrator.shared.evidence import (
     build_evidence_bundle_from_tool_results,
@@ -39,33 +40,101 @@ def _resolve_synthesis_model_name(state: MainState) -> str:
     )
 
 
-def _build_result_blocks(synthesis_result: SynthesisResult, evidence_steps) -> tuple[list, list[str]]:
+def _build_result_blocks(
+    synthesis_result: SynthesisResult,
+    evidence_steps,
+) -> tuple[list, list[str]]:
     result_blocks = [block.model_copy(deep=True) for block in synthesis_result.result]
-    used_evidence_ids = [
-        evidence_id
-        for block in result_blocks
-        for evidence_id in block.evidence_ids
-        if evidence_id
-    ]
-    if used_evidence_ids:
-        return result_blocks, used_evidence_ids
-
-    evidence_ids: list[str] = []
+    supplied_evidence_ids: set[str] = set()
+    supplied_evidence_order: list[str] = []
     seen: set[str] = set()
     for step in evidence_steps:
         for evidence in step.evidence:
             evidence_id = str(evidence.id)
+            supplied_evidence_ids.add(evidence_id)
             if evidence_id in seen:
                 continue
             seen.add(evidence_id)
-            evidence_ids.append(evidence_id)
+            supplied_evidence_order.append(evidence_id)
+
+    model_supplied_citations = any(
+        bool(block.evidence_ids)
+        for block in result_blocks
+    )
+    for block in result_blocks:
+        block.evidence_ids = list(dict.fromkeys(
+            evidence_id
+            for evidence_id in block.evidence_ids
+            if evidence_id in supplied_evidence_ids
+        ))
+
+    used_evidence_ids = list(dict.fromkeys(
+        evidence_id
+        for block in result_blocks
+        for evidence_id in block.evidence_ids
+        if evidence_id
+    ))
+    if used_evidence_ids or model_supplied_citations:
+        return result_blocks, used_evidence_ids
 
     return (
         [
-            block.model_copy(update={"evidence_ids": list(evidence_ids)})
+            block.model_copy(update={"evidence_ids": list(supplied_evidence_order)})
             for block in result_blocks
         ],
-        evidence_ids,
+        supplied_evidence_order,
+    )
+
+
+def _build_failure_result(state: MainState, reason: str) -> MainState:
+    """Return a bounded failure response instead of asking an LLM to guess."""
+    missing_information = list(state.missing_information)
+    next_question = (
+        "Please provide: " + "; ".join(missing_information)
+        if missing_information
+        else "Would you like me to try a different search or provide more details?"
+    )
+    state.result = OrchestratorResult(
+        agent_result=state.result.agent_result.copy(
+            tool_call_ids=state.gather_tool_call_ids(),
+            relevant_evidence_ids=[],
+        ),
+        result_blocks=[],
+        answer=[reason],
+        next_question=next_question,
+        roundtrip_summary=reason,
+        roundtrip_latency_ms=state.result.roundtrip_latency_ms,
+    )
+    return state
+
+
+def _has_current_roundtrip_evidence(tool_results) -> bool:
+    """Only evidence produced by the current execution state may authorize synthesis."""
+    return any(tool_result.evidence for tool_result in tool_results)
+
+
+def _should_refuse_synthesis(state: MainState, tool_results) -> bool:
+    agent_state = state.main_agent_state
+    if agent_state is None or _has_current_roundtrip_evidence(tool_results):
+        return False
+    plan = agent_state.node_states.planner.plan
+    no_executable_work = not plan or not plan.steps
+    if no_executable_work and (
+        agent_state.result.answer_status == AnswerStatus.PENDING
+        and agent_state.result.execution_status == ExecutionStatus.PENDING
+    ):
+        return True
+    attempted_work = (
+        bool(plan and plan.steps)
+        or agent_state.result.execution_status != ExecutionStatus.PENDING
+        or agent_state.result.answer_status == AnswerStatus.FAILED
+    )
+    return attempted_work and (
+        agent_state.result.answer_status == AnswerStatus.FAILED
+        or agent_state.result.execution_status in {
+            ExecutionStatus.FAILED,
+            ExecutionStatus.NO_NEW_WORK,
+        }
     )
 
 
@@ -73,6 +142,11 @@ def _build_result_blocks(synthesis_result: SynthesisResult, evidence_steps) -> t
 def run_synthesis(state: MainState) -> MainState:
     execution_context = state.execution_context
     tool_results = state.gather_tool_results()
+    if _should_refuse_synthesis(state, tool_results):
+        return _build_failure_result(
+            state,
+            "I couldn't find any information for that request. Try rephrasing.",
+        )
     relevant_evidence_ids = _resolve_relevant_evidence_ids(state)
     evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
     all_evidence_steps = build_evidence_steps_from_tool_results(

@@ -43,6 +43,7 @@ class AgentProfile:
     kind: AgentKind = AgentKind.BUILTIN
     execution_strategy: AgentExecutionStrategy = AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR
     allowed_categories: set[str] = field(default_factory=set)
+    excluded_categories: set[str] = field(default_factory=set)
     extra_tools: list[Any] = field(default_factory=list)
     tools_by_name: dict[str, Any] = field(init=False, default_factory=dict)
     tool_categories: dict[str, Any] = field(init=False, default_factory=dict)
@@ -81,8 +82,8 @@ class AgentProfile:
 
     def allowed_category_names(self) -> set[str]:
         if self.allowed_categories:
-            return set(self.allowed_categories)
-        return set(TOOL_CATEGORIES.keys())
+            return set(self.allowed_categories) - self.excluded_categories
+        return set(TOOL_CATEGORIES.keys()) - self.excluded_categories
 
     @property
     def tools(self) -> list[Any]:

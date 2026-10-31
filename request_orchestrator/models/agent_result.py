@@ -4,19 +4,39 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from uuid import UUID
 
-class ResultStatus(StrEnum):
+
+class AnswerStatus(StrEnum):
     PENDING = "pending"
     SUCCESS = "success"
     PARTIAL_SUCCESS = "partial_success"
+    FAILED = "failed"
+
+
+class ExecutionStatus(StrEnum):
+    """Outcome of executing the planned work, independent of answerability."""
+
+    PENDING = "pending"
+    SUCCESS = "success"
+    PARTIAL = "partial"
     NO_NEW_WORK = "no_new_work"
     FAILED = "failed"
+
+
+# Compatibility alias for callers that still import the old name.
+ResultStatus = AnswerStatus
 
 
 @dataclass(frozen=True)
 class AgentResult:
     tool_call_ids: list[UUID] = field(default_factory=list)
     relevant_evidence_ids: list[UUID] = field(default_factory=list)
-    result_status: ResultStatus = ResultStatus.PENDING
+    answer_status: AnswerStatus = AnswerStatus.PENDING
+    execution_status: ExecutionStatus = ExecutionStatus.PENDING
+
+    @property
+    def result_status(self) -> AnswerStatus:
+        """Backward-compatible name for answer_status."""
+        return self.answer_status
 
     def with_recorded_tool_call(self, tool_call_id: UUID) -> "AgentResult":
         if tool_call_id in self.tool_call_ids:
@@ -28,8 +48,17 @@ class AgentResult:
         *,
         tool_call_ids: list[UUID] | None = None,
         relevant_evidence_ids: list[UUID] | None = None,
-        result_status: ResultStatus | None = None,
+        answer_status: AnswerStatus | None = None,
+        execution_status: ExecutionStatus | None = None,
+        result_status: AnswerStatus | None = None,
     ) -> "AgentResult":
+        resolved_answer_status = (
+            answer_status
+            if answer_status is not None
+            else result_status
+            if result_status is not None
+            else self.answer_status
+        )
         return AgentResult(
             tool_call_ids=(
                 list(self.tool_call_ids)
@@ -41,5 +70,10 @@ class AgentResult:
                 if relevant_evidence_ids is None
                 else list(relevant_evidence_ids)
             ),
-            result_status=self.result_status if result_status is None else result_status,
+            answer_status=resolved_answer_status,
+            execution_status=(
+                self.execution_status
+                if execution_status is None
+                else execution_status
+            ),
         )

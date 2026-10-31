@@ -13,6 +13,7 @@ TOP_LEVEL_PROFILE = AgentProfile(
     name="request_orchestrator",
     scope=MAIN_AGENT_MODEL_SCOPE,
     description="Top-level request planner and executor.",
+    excluded_categories={"file_management"},
 )
 TOP_LEVEL_STRATEGY = PlannerExecutorEvaluatorStratagy(router)
 

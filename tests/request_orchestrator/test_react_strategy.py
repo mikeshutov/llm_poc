@@ -9,6 +9,7 @@ from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.plan import Plan, PlanStep
 from request_orchestrator.strategies.react.graph import ReactStratagy
 from request_orchestrator.strategies.react.decision import DecisionResult
+from request_orchestrator.strategies.react.decision import DecisionStatus
 
 
 def _state(max_turns: int = 3) -> AgentState:
@@ -65,3 +66,21 @@ def test_react_stops_at_max_turns(monkeypatch) -> None:
     strategy.run(state, thread_id="test")
 
     assert calls == ["planner"]
+
+
+def test_react_records_explicit_blocked_decision(monkeypatch) -> None:
+    strategy = ReactStratagy()
+    state = _state()
+
+    monkeypatch.setattr(
+        "request_orchestrator.strategies.react.graph.run_decision",
+        lambda *args, **kwargs: DecisionResult(
+            plan=Plan(steps=[]),
+            status=DecisionStatus.BLOCKED,
+        ),
+    )
+
+    result = strategy.run(state, thread_id="test")
+
+    assert result.node_states.planner.decision_status == DecisionStatus.BLOCKED
+    assert result.result.answer_status.value == "failed"

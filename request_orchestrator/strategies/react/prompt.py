@@ -20,6 +20,10 @@ def build_react_decision_prompt(
 ) -> tuple[AgentPrompt, list[BaseTool]]:
     return build_decision_prompt(
         state,
-        instruction=REACT_DECISION_INSTRUCTION,
+        instruction=(
+            REACT_DECISION_INSTRUCTION
+            + " When returning no tool calls, return a JSON object with status SATISFIED or BLOCKED. "
+            + "A response with tool calls means CONTINUE."
+        ),
         rules="\n".join(f"- {rule}" for rule in REACT_DECISION_RULES),
     )

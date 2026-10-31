@@ -28,9 +28,9 @@ class GenericWebSearchArgs(BaseModel):
         min_length=1,
         description="Search query text. Use a single string and do not leave it blank.",
     )
-    search_type: Literal["web_search", "news_search", "suggestion_search"] = Field(
+    search_type: Literal["web_search", "suggestion_search"] = Field(
         default="web_search",
-        description="Type of web search to run.",
+        description="Type of non-news web search to run. Use search_news for current news.",
     )
     country: str = Field(
         default="CA",
@@ -122,7 +122,7 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
     TOOL_NAME_GENERIC_WEB_SEARCH,
     args_schema=GenericWebSearchArgs,
     description=f"""
-Run a general web or news search. `suggestion_search` is treated the same as `web_search`.
+Run a general web search. Use search_news for current or recent news.
 
 
 
@@ -137,6 +137,8 @@ def generic_web_search(
     normalized_query = query_text.strip()
     if not normalized_query:
         raise ValueError("query_text is required and cannot be blank.")
+    if search_type == SearchType.NEWS_SEARCH.value:
+        raise ValueError("Use search_news for news searches.")
 
     brave_client = BraveSearchClient()
     match _coerce_search_type(search_type):

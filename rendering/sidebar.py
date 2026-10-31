@@ -1056,7 +1056,7 @@ def render_sidebar(conversation_repository) -> None:
                         first_name=new_first_name.strip() or None,
                         last_name=new_last_name.strip() or None,
                         display_name=new_display_name.strip() or None,
-                        metadata=ConversationMetadata(sources=[SOURCE_STREAMLIT]),
+                        metadata={"sources": [SOURCE_STREAMLIT]},
                     )
                     st.session_state[USER_CREATE_FORM_KEY] = False
                     st.session_state.pop("new_user_first_name_input", None)

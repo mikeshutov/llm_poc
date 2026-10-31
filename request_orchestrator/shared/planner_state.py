@@ -12,3 +12,4 @@ class PlannerNodeState:
     needs_replan: bool = False
     plan_count: int = 0
     no_result_attempts: int = 0
+    decision_status: str = ""

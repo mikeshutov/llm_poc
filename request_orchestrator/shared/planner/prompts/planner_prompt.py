@@ -62,6 +62,15 @@ def _format_minimal_tool_schema(tool) -> str:
     return "\n".join(lines)
 
 
+def _group_tools_by_prefix(tools: list[object]) -> list[list[object]]:
+    groups: dict[str, list[object]] = {}
+    for tool in tools:
+        name = str(getattr(tool, "name", ""))
+        prefix = name.split(".", 1)[0] if "." in name else name
+        groups.setdefault(prefix, []).append(tool)
+    return list(groups.values())
+
+
 def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext:
     allowed_categories = state.agent_profile.tool_categories
     tools = []
@@ -76,12 +85,12 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
             if category is None:
                 continue
             tools.extend(category.tools)
-            if category.rules and not _is_profile_management_agent(state):
+            if category.rules:
                 rules[category_name] = category.rules
     else:
         for category in allowed_categories.values():
             tools.extend(category.tools)
-            if category.rules and not _is_profile_management_agent(state):
+            if category.rules:
                 rules_name = next((name for name, candidate in allowed_categories.items() if candidate is category), None)
                 if rules_name is not None:
                     rules[rules_name] = category.rules
@@ -110,12 +119,32 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
             if name in discovered_tool_names
         }
 
+    active_tool_names = set(deduped_tools)
+    for category_name in tuple(rules):
+        category = allowed_categories.get(category_name)
+        if category is None or not any(tool.name in active_tool_names for tool in category.tools):
+            rules.pop(category_name, None)
+
+    from tool.tools import TOOLS_BY_NAME
+
+    for tool in deduped_tools.values():
+        registered_tool = TOOLS_BY_NAME.get(getattr(tool, "name", ""))
+        tool_rules = tuple(
+            getattr(tool, "rules", ()) or getattr(registered_tool, "rules", ()) or ()
+        )
+        if tool_rules:
+            rules[getattr(tool, "name")] = list(tool_rules)
+
+    tool_groups = _group_tools_by_prefix(list(deduped_tools.values()))
     if _is_profile_management_agent(state):
-        compiled_tools = "\n".join(_format_minimal_tool_schema(tool) for tool in deduped_tools.values())
+        compiled_tools = "\n\n".join(
+            "\n".join(_format_minimal_tool_schema(tool) for tool in group)
+            for group in tool_groups
+        )
     else:
-        compiled_tools = "\n".join(
-            f"- {t.name}: {t.description}".strip()
-            for t in deduped_tools.values()
+        compiled_tools = "\n\n".join(
+            "\n".join(f"- {tool.name}: {tool.description}".strip() for tool in group)
+            for group in tool_groups
         )
     return CompiledPlannerContext(tools=list(deduped_tools.values()), compiled_tools=compiled_tools, rules=rules)
 def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]]:

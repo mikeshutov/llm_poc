@@ -41,6 +41,13 @@ def test_native_tool_collection_wraps_only_discovered_tools() -> None:
     assert "parameters" in tools[0].args_schema.model_fields
 
 
+def test_native_tool_names_are_provider_safe() -> None:
+    wrapped = wrap_tool(registered_tools[0].fn)
+
+    assert "." not in wrapped.name
+    assert "." not in wrapped.name
+
+
 def test_native_tool_description_exposes_declared_result_fields() -> None:
     native = wrap_tool(Tool(lookup, result_type=TOOL_RESULT_TYPE_MEAL_RESULTS))
 

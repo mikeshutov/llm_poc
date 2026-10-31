@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from requests.exceptions import RequestException
 
 from integrations.cocktail_db import CocktailDbClient
-from integrations.cocktail_db.models import CocktailSearchResult
+from integrations.cocktail_db.models import CocktailIngredient, CocktailSearchResult
 from request_orchestrator.models.evidence import EvidenceView, ToolResult
 from request_orchestrator.shared.tool_adapter.food.candidate_mapper import rerank_cocktail_search_result
 from request_orchestrator.shared.tool_adapter.food.constants import DEFAULT_MEAL_RERANK_LIMIT
@@ -27,7 +27,7 @@ class CocktailSearchMetadata(BaseModel):
     alcoholic: str | None = None
     glass: str | None = None
     tags: list[str] = []
-    ingredients: list[dict[str, object]] = []
+    ingredients: list[CocktailIngredient] = []
     retrieved_count: int
     reranked: bool
 
@@ -50,7 +50,7 @@ def _tool_result(result: CocktailSearchResult) -> ToolResult:
             alcoholic=cocktail.alcoholic,
             glass=cocktail.glass,
             tags=list(cocktail.tags or []),
-            ingredients=[ingredient.model_dump(exclude_none=True) for ingredient in cocktail.ingredients],
+            ingredients=list(cocktail.ingredients),
             retrieved_count=result.retrieved_count,
             reranked=result.reranked,
         )

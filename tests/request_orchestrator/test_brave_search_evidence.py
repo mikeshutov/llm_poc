@@ -14,8 +14,8 @@ from products.models.product_result import ProductResult
 from products.models.product_search_results import ProductSearchResults
 from products.models.product_source import ProductSource
 from request_orchestrator.models.evidence import EvidenceView
-from request_orchestrator.shared.tool_adapter.products.find_products_web import _product_summary
-from request_orchestrator.shared.tool_adapter.products.find_products_web import _tool_result as web_product_tool_result
+from request_orchestrator.shared.tool_adapter.products.find_products import _product_summary
+from request_orchestrator.shared.tool_adapter.products.find_products import _tool_result as product_tool_result
 from request_orchestrator.shared.tool_adapter.search.brave_news_search import _tool_result as brave_news_tool_result
 from request_orchestrator.shared.tool_adapter.search.generic_web_search import _news_search_tool_result, _web_search_tool_result
 from reranker.models import Candidate
@@ -155,7 +155,7 @@ def test_product_result_metadata_is_not_repeated_on_each_evidence_item() -> None
         source=ProductSource.WEB,
     )
 
-    result = web_product_tool_result(
+    result = product_tool_result(
         ProductSearchResults(
             internal_results=[],
             external_results=[product],

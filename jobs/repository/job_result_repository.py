@@ -7,8 +7,8 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from artifacts.models import Artifact
-from artifacts.repository.artifact_repository import ArtifactRepository
+from assets.models import AssetReference
+from assets.repository.asset_repository import AssetRepository
 from db.connection import get_connection
 from jobs.models import JobResult, JobResultStatus
 
@@ -16,17 +16,17 @@ from jobs.models import JobResult, JobResultStatus
 class JobResultRepository:
     def __init__(self, conn: psycopg.Connection | None = None):
         self._conn = conn or get_connection()
-        self._artifact_repo = ArtifactRepository(self._conn)
+        self._asset_repo = AssetRepository(self._conn)
 
     @staticmethod
     def _result_from_row(row: dict[str, Any]) -> JobResult:
         return JobResult.model_validate(row)
 
     @staticmethod
-    def _artifact_from_row(row: dict[str, Any]) -> Artifact:
+    def _artifact_from_row(row: dict[str, Any]) -> AssetReference:
         payload = dict(row)
         payload.pop("job_result_id", None)
-        return Artifact.model_validate(payload)
+        return AssetReference.model_validate(payload)
 
     @staticmethod
     def _require_user_id(user_id: str) -> str:
@@ -142,7 +142,7 @@ class JobResultRepository:
         artifact_type: str,
         artifact_id: str,
         metadata: dict[str, Any] | None = None,
-    ) -> Artifact:
+    ) -> AssetReference:
         resolved_user_id = self._require_user_id(user_id)
         if not artifact_type.strip() or not artifact_id.strip():
             raise ValueError("artifact_type and artifact_id are required")
@@ -158,7 +158,7 @@ class JobResultRepository:
             )
             if cur.fetchone() is None:
                 raise ValueError("job result not found for user")
-            artifact = self._artifact_repo.create_or_get(
+            asset = self._asset_repo.create_or_get_reference(
                 user_id=resolved_user_id,
                 artifact_type=artifact_type,
                 artifact_id=artifact_id,
@@ -166,23 +166,24 @@ class JobResultRepository:
             )
             cur.execute(
                 """
-                INSERT INTO job_result_artifacts (job_result_id, artifact_id)
+                INSERT INTO job_result_assets (job_result_id, asset_id)
                 SELECT %s, %s
                 RETURNING job_result_id
                 """,
-                (result_id, artifact.id),
+                (result_id, asset.id),
             )
             row = cur.fetchone()
-            return artifact
+            return asset
 
-    def list_artifacts(self, result_id: UUID, *, user_id: str) -> list[Artifact]:
+    def list_artifacts(self, result_id: UUID, *, user_id: str) -> list[AssetReference]:
         resolved_user_id = self._require_user_id(user_id)
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT a.id, a.user_id, a.artifact_type, a.artifact_id, a.metadata, a.created_at
-                FROM job_result_artifacts jra
-                JOIN artifacts a ON a.id = jra.artifact_id
+                SELECT a.id, a.user_id, a.asset_type AS artifact_type,
+                       a.name AS artifact_id, a.metadata, a.created_at
+                FROM job_result_assets jra
+                JOIN assets a ON a.id = jra.asset_id
                 WHERE jra.job_result_id = %s AND EXISTS (
                     SELECT 1
                     FROM job_results

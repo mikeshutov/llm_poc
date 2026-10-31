@@ -6,16 +6,30 @@ from langgraph.graph import END, StateGraph
 
 from llm.conversation_model_config import PLANNER_STAGE
 from request_orchestrator.constants import DISCOVER_AGENT_STATE_EDGE, EXECUTE_TOOLS_EDGE
-from request_orchestrator.models.agent_result import ResultStatus
+from request_orchestrator.models.agent_result import AnswerStatus, ExecutionStatus
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.shared.executor.executor import run_executor
 from request_orchestrator.shared.state_enrichment import discover_agent_state_node
-from request_orchestrator.strategies.react.decision import run_decision
+from request_orchestrator.strategies.react.decision import DecisionStatus, run_decision
 from request_orchestrator.strategies.react.prompt import build_react_decision_prompt
 
 
 @dataclass(frozen=True)
 class ReactStratagy:
+    @staticmethod
+    def _record_decision_status(state: AgentState, status: str) -> None:
+        normalized = status.upper()
+        if normalized in {"DONE", "COMPLETE", "COMPLETED"}:
+            normalized = DecisionStatus.SATISFIED
+        state.node_states.planner.decision_status = normalized
+        if normalized == DecisionStatus.SATISFIED:
+            state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
+        elif normalized == DecisionStatus.BLOCKED:
+            state.result = state.result.copy(
+                answer_status=AnswerStatus.FAILED,
+                execution_status=ExecutionStatus.FAILED,
+            )
+
     def _initial_decision(self, state: AgentState) -> AgentState:
         try:
             result = run_decision(
@@ -24,11 +38,15 @@ class ReactStratagy:
                 prompt_builder=build_react_decision_prompt,
             )
         except Exception:
-            state.result = state.result.copy(result_status=ResultStatus.FAILED)
+            state.result = state.result.copy(
+                answer_status=AnswerStatus.FAILED,
+                execution_status=ExecutionStatus.FAILED,
+            )
             state.node_states.planner.plan = None
             return state
         state.node_states.planner.plan = result.plan
         state.node_states.planner.plan_count += 1
+        self._record_decision_status(state, result.status)
         return state
 
     def _reason(self, state: AgentState) -> AgentState:
@@ -41,21 +59,37 @@ class ReactStratagy:
                 prompt_builder=build_react_decision_prompt,
             )
         except Exception:
-            state.result = state.result.copy(result_status=ResultStatus.FAILED)
+            state.result = state.result.copy(
+                answer_status=AnswerStatus.FAILED,
+                execution_status=ExecutionStatus.FAILED,
+            )
             state.node_states.planner.plan = None
             return state
         state.node_states.planner.plan = result.plan
         state.node_states.planner.plan_count += 1
+        self._record_decision_status(state, result.status)
         return state
 
     def _route_after_decision(self, state: AgentState) -> str:
         plan = state.node_states.planner.plan
+        decision_status = state.node_states.planner.decision_status
+        if decision_status == DecisionStatus.BLOCKED:
+            return END
+        if decision_status == DecisionStatus.SATISFIED:
+            return END
         if plan is None or not plan.steps or state.node_states.planner.plan_count > state.max_turns:
+            if not plan or not plan.steps:
+                state.result = state.result.copy(answer_status=AnswerStatus.FAILED)
             return END
         return EXECUTE_TOOLS_EDGE
 
     def _route_after_execute(self, state: AgentState) -> str:
         if state.node_states.planner.plan_count >= state.max_turns:
+            state.node_states.planner.decision_status = DecisionStatus.BLOCKED
+            state.result = state.result.copy(
+                answer_status=AnswerStatus.FAILED,
+                execution_status=ExecutionStatus.FAILED,
+            )
             return END
         return "reason"
 

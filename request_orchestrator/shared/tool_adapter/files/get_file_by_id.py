@@ -5,6 +5,7 @@ from uuid import UUID
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
+from files.repository.file_chunk_repository import FileChunkRepository
 from files.repository.file_repository import FileRepository
 from files.urls import static_file_url
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
@@ -53,7 +54,7 @@ def _tool_result(result: GetFileByIdResult) -> ToolResult:
     TOOL_NAME_GET_FILE_BY_ID,
     args_schema=GetFileByIdArgs,
     description="""
-Retrieve file metadata and a preview of its contents by file_id. Returns name, type, upload date, and the first chunk of content.
+Retrieve file metadata and a short preview by file_id. Use file.read for the complete file content.
 Use when a file_id is already known from context or a previous tool call.
 
 
@@ -64,16 +65,16 @@ def get_file_by_id(file_id: str) -> ToolResult:
         parsed_id = UUID(file_id)
     except ValueError:
         return ToolResult.error(f"Invalid file_id '{file_id}'.")
-    row = FileRepository().get_file_by_id(parsed_id, user_id=get_current_user_id())
-    if not row:
+    file = FileRepository().get_file_by_id(parsed_id, user_id=get_current_user_id())
+    if not file:
         return ToolResult.error(f"No file found with id '{file_id}'.")
     return _tool_result(
         GetFileByIdResult(
-            file_id=str(row["id"]),
-            file_name=row["file_name"],
-            file_path=row["file_path"],
-            file_type=row["file_type"],
-            uploaded_at=str(row["uploaded_at"]),
-            first_chunk=row.get("first_chunk"),
+            file_id=str(file.id),
+            file_name=file.name,
+            file_path=file.storage_path,
+            file_type=file.mime_type,
+            uploaded_at=file.created_at.isoformat(),
+            first_chunk=FileChunkRepository().get_first_chunk(file.id, user_id=get_current_user_id()),
         )
     )

@@ -38,7 +38,7 @@ def _tool_result(result: UserProfileUpdateResult) -> ToolResult:
 @tool(
     TOOL_NAME_SET_USER_FIRST_NAME,
     args_schema=SetUserFirstNameArgs,
-    description="Set the user's first name when it is missing and explicitly provided.",
+    description="Set the user's first name.",
 )
 def set_user_first_name(first_name: str) -> ToolResult:
     user_id = get_current_user_id()

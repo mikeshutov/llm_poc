@@ -31,11 +31,12 @@ class RateLimitPolicy:
 class Tool:
     fn: Any
     result_type: str = "generic"
+    rules: tuple[str, ...] = ()
     excluded_result_fields: frozenset[str] = frozenset()
     rate_limit_key: str | None = None
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
     rate_limit_policy: RateLimitPolicy | None = None
-    version: int = 2
+    version: int = 3
     cache_policy: ToolCachePolicy | None = None
 
     @property

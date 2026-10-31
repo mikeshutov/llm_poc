@@ -247,6 +247,14 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
     assert main_state.node_states.planner.plan.steps[0].args == {'query_text': 'boots'}
     assert main_state.node_states.planner.plan.steps[0].hypothesis == 'Find matching boots.'
     assert main_state.node_states.planner.plan.steps[0].metadata == {}
+    plan_log = next(
+        event['payload']
+        for event in repo.conversation_events
+        if event['event_type'] == 'plan' and event['payload']['data']['steps']
+    )
+    assert plan_log['data']['steps'][0]['tool'] == 'generic_web_search'
+    assert plan_log['data']['steps'][0]['hypothesis'] == 'Find matching boots.'
+    assert plan_log['data']['steps'][0]['args'] == {'query_text': 'boots'}
 
 
 def test_agent_log_persists_conversation_event_immediately() -> None:

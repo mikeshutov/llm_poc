@@ -35,6 +35,7 @@ def test_debug_llm_payload_reads_compact_input_and_output_metadata() -> None:
 
     assert payload["input_object"] == {"hash": "input-hash", "message_count": 2}
     assert payload["output_object"] == {"hash": "output-hash", "preview": "ok"}
+    assert payload["metadata"] == {}
 
 
 def test_serialize_roundtrip_payload_preserves_persisted_evidence() -> None:

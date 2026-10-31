@@ -381,4 +381,4 @@ def test_profile_management_profile_includes_update_user_tone_tool() -> None:
     profile = build_profile_management_profile(UserProfile())
     tool_names = [tool.name for tool in profile.extra_tools]
 
-    assert "update_user_tone" in tool_names
+    assert "user_update_tone" in tool_names

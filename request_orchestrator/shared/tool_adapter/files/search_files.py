@@ -6,6 +6,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel
 
 from files.urls import static_file_url
+from files.models import FileChunkResult
 from files.repository.file_chunk_repository import FileChunkRepository, FileTypeFilter
 from llm.clients.embeddings import embed_text
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
@@ -23,20 +24,18 @@ class SearchFilesMetadata(BaseModel):
     top_chunk: str
 
 
-def _tool_result(result: list[dict]) -> ToolResult:
+def _tool_result(result: list[FileChunkResult]) -> ToolResult:
     evidence: list[EvidenceView] = []
 
     for file_result in result:
-        metadata = SearchFilesMetadata(
-            top_chunk=str(file_result.get("top_chunk", "")),
-        )
+        metadata = SearchFilesMetadata(top_chunk=file_result.content)
         evidence_view = EvidenceView(
-            item_id=str(file_result.get("file_id", "")),
+            item_id=str(file_result.file_id),
             tool_name=TOOL_NAME_SEARCH_FILES,
-            title=str(file_result.get("file_name", "")).strip() or "File Search Result",
-            summary=str(file_result.get("top_chunk", "")).strip() or "Matched uploaded file.",
+            title=file_result.file_name.strip() or "File Search Result",
+            summary=file_result.content.strip() or "Matched uploaded file.",
             urls=[EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)]
-            if (file_url := static_file_url(str(file_result.get("file_path", ""))))
+            if (file_url := static_file_url(file_result.file_path))
             else [],
             source=TOOL_NAME_SEARCH_FILES,
             entity_type=TOOL_RESULT_TYPE_FILE_RESULTS,
@@ -56,7 +55,7 @@ def _tool_result(result: list[dict]) -> ToolResult:
     TOOL_NAME_SEARCH_FILES,
     args_schema=SearchFilesArgs,
     description="""
-Search uploaded files by semantic similarity to a query. Returns file names that are relevant to the query.
+Discover uploaded files by semantic similarity to a query. Use file_search_details when a file_id is already known.
 
 
 
@@ -70,5 +69,5 @@ def search_files(query: str, file_type: Optional[FileTypeFilter] = None) -> Tool
         user_id=get_current_user_id(),
     )
     return _tool_result(
-        [{"file_id": str(r.file_id), "file_name": r.file_name, "file_path": r.file_path, "top_chunk": r.content} for r in results]
+        results
     )

@@ -22,7 +22,7 @@ from request_orchestrator.strategies.planner_executor_evaluator.result_validator
 from request_orchestrator.strategies.planner_executor_evaluator.validator import validator
 from request_orchestrator.constants import EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
 from request_orchestrator.models.agent_execution_context import AgentExecutionContext
-from request_orchestrator.models.agent_result import ResultStatus
+from request_orchestrator.models.agent_result import AnswerStatus, ExecutionStatus
 from request_orchestrator.models.agent_state import AgentState
 from request_orchestrator.models.evaluation_result import (
     EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT,
@@ -192,7 +192,8 @@ def test_execution_result_router_replans_once_after_an_empty_execution() -> None
 
     run_execution_result_validator(state)
 
-    assert state.result.result_status is ResultStatus.FAILED
+    assert state.result.answer_status is AnswerStatus.FAILED
+    assert state.result.execution_status is ExecutionStatus.SUCCESS
     assert state.node_states.planner.no_result_attempts == 1
     assert execution_result_router(state) == PLAN_EDGE
 
@@ -228,7 +229,7 @@ def test_execution_result_router_skips_evaluator_after_second_empty_execution() 
 
     run_execution_result_validator(state)
 
-    assert state.result.result_status is ResultStatus.FAILED
+    assert state.result.answer_status is AnswerStatus.FAILED
     assert state.node_states.planner.no_result_attempts == 2
     assert execution_result_router(state) == END
 

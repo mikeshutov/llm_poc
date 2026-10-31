@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import json
+from enum import StrEnum
 from time import perf_counter
 from typing import Any
 
@@ -16,20 +18,48 @@ from llm.usage import record_llm_call
 from rendering.debug import PLAN_KIND
 from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from request_orchestrator.models.agent_state import AgentState
-from request_orchestrator.models.plan import Plan, PlanStep
+from request_orchestrator.models.plan import Plan
 from request_orchestrator.shared.evidence import (
     build_evidence_bundle_from_tool_results,
     build_evidence_steps_from_tool_results,
 )
 from request_orchestrator.shared.planner.prompts.planner_prompt import _compile_tools_rules_from_state
 from request_orchestrator.shared.planner.prompts.planner_rules import build_planner_rules
+from request_orchestrator.shared.planner.tool_call_parser import parse_tool_calls_to_plan_steps
 from request_orchestrator.shared.planner.tool_wrapper import build_tools
+
+
+class DecisionStatus(StrEnum):
+    CONTINUE = "CONTINUE"
+    SATISFIED = "SATISFIED"
+    BLOCKED = "BLOCKED"
 
 
 @dataclass(frozen=True)
 class DecisionResult:
     plan: Plan
-    status: str
+    status: DecisionStatus
+
+
+def _normalize_status(value: Any) -> str:
+    normalized = str(value or "").strip().upper()
+    if normalized in {"DONE", "SATISFIED", "COMPLETE", "COMPLETED"}:
+        return DecisionStatus.SATISFIED
+    if normalized == DecisionStatus.BLOCKED:
+        return DecisionStatus.BLOCKED
+    return DecisionStatus.CONTINUE
+
+
+def _parse_decision_status(response: Any, has_tool_calls: bool) -> DecisionStatus:
+    content = getattr(response, "content", "")
+    if isinstance(content, str) and content.strip():
+        try:
+            payload = json.loads(content)
+            if isinstance(payload, dict):
+                return _normalize_status(payload.get("status"))
+        except (TypeError, ValueError):
+            pass
+    return DecisionStatus.CONTINUE if has_tool_calls else DecisionStatus.SATISFIED
 
 
 DecisionPromptBuilder = Callable[[AgentState], tuple[AgentPrompt, list[BaseTool]]]
@@ -71,36 +101,10 @@ def build_decision_prompt(
 
 
 def _parse_plan(response: Any, tools: list[BaseTool]) -> Plan:
-    available_fields_by_tool = {
-        candidate.name: set(getattr(candidate, "available_result_fields", ())) for candidate in tools
-    }
-    steps: list[PlanStep] = []
-    for index, call in enumerate(getattr(response, "tool_calls", None) or []):
-        name = call.get("name", "")
-        args = call.get("args", {}) if isinstance(call.get("args", {}), dict) else {}
-        parameters = args.get("parameters", args)
-        if not isinstance(parameters, dict):
-            parameters = {}
-        metadata: dict[str, object] = {}
-        fields = args.get("evaluation_fields", [])
-        if isinstance(fields, list):
-            valid_fields = [
-                field for field in fields
-                if isinstance(field, str)
-                and field.strip() in available_fields_by_tool.get(name, set())
-            ]
-            if valid_fields:
-                metadata = {**metadata, "evaluation_fields": valid_fields}
-        hypothesis = str(args.get("hypothesis", ""))
-        steps.append(PlanStep(
-            id=str(call.get("id") or f"E{index + 1}"),
-            plan=hypothesis,
-            hypothesis=hypothesis,
-            metadata=metadata,
-            tool=name,
-            args=parameters,
-        ))
-    return Plan(steps=steps)
+    return Plan(steps=parse_tool_calls_to_plan_steps(
+        getattr(response, "tool_calls", None) or [],
+        tools,
+    ))
 
 
 def run_decision(
@@ -159,7 +163,10 @@ def run_decision(
             "tool_calls": getattr(response, "tool_calls", None),
         },
     )
-    status = "CONTINUE" if plan.steps else "DONE"
+    status = _parse_decision_status(
+        response,
+        bool(getattr(response, "tool_calls", None)),
+    )
     record_node_log(
         conversation_id=state.execution_context.conversation_id,
         roundtrip_id=state.execution_context.roundtrip_id,

@@ -28,7 +28,7 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
                 {
                     "id": "E1",
                     "plan": "Search for results",
-                    "tool": "generic_web_search",
+                    "tool": "search.web",
                     "args": {"query_text": "example query"},
                 }
             ]
@@ -40,15 +40,15 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
         ToolResult(
             tool_call_id=uuid4(),
             plan_step_id=plan.steps[0].db_id,
-            tool_name="generic_web_search",
+                tool_name="search.web",
             result={"secret": "raw payload should not be in planner prompt"},
             evidence=[
                 EvidenceView(
                     item_id="item-1",
-                    tool_name="generic_web_search",
+                        tool_name="search.web",
                     title="Example Result",
                     summary="Short evidence summary.",
-                    source="generic_web_search",
+                        source="search.web",
                     entity_type="web_search_results",
                     llm_metadata={"kind": "web"},
                 )

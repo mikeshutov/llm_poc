@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Literal
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
+from common.html_text import html_to_plain_text
 from products.models.product_result import ProductResult
 from products.models.product_search_results import ProductSearchResults
 from products.product_retrieval import find_products as catalog_find_products
+from products.product_retrieval import find_products_web as web_find_products
 from products.models.product_query import ProductQuery
 from request_orchestrator.models.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolMetadata, ToolResult
 from tool.constants import TOOL_NAME_FIND_PRODUCTS
@@ -24,6 +26,10 @@ class ProductFiltersArgs(BaseModel):
 
 
 class FindProductsArgs(BaseModel):
+    source: Literal["internal", "web", "both"] = Field(
+        ...,
+        description="Product source to query: internal catalog, external web shopping, or both.",
+    )
     query_text: str = Field(
         ...,
         description=(
@@ -51,7 +57,7 @@ class ProductEvidenceMetadata(BaseModel):
 def _product_summary(product: ProductResult) -> str:
     parts: list[str] = []
     if product.description:
-        parts.append(product.description.strip())
+        parts.append(html_to_plain_text(product.description))
     if product.price is not None:
         parts.append(f"Price {product.price}")
     return ". ".join(part for part in parts if part) or f"Product result for {product.name}."
@@ -102,7 +108,9 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
     TOOL_NAME_FIND_PRODUCTS,
     args_schema=FindProductsArgs,
     description="""
-Search the internal product catalog.
+Search for products using the requested product source.
+
+Use source='internal' for the internal catalog, source='web' for external shopping results, or source='both' to combine both result sets.
 
 
 
@@ -120,11 +128,29 @@ Examples:
 
 """,
 )
-def find_products(
+def search_products(
+    source: Literal["internal", "web", "both"],
     query_text: str,
     product_filters: ProductFiltersArgs | None = None,
 ) -> ToolResult:
-    return _tool_result(catalog_find_products(
-        query_text=query_text,
-        product_filters=ProductQuery(**product_filters.model_dump()) if product_filters else None,
-    ))
+    if source == "web" and product_filters is not None:
+        raise ValueError("product_filters can only be used with source='internal' or source='both'.")
+
+    internal_results: list[ProductResult] = []
+    external_results: list[ProductResult] = []
+    if source in {"internal", "both"}:
+        internal_results = catalog_find_products(
+            query_text=query_text,
+            product_filters=ProductQuery(**product_filters.model_dump()) if product_filters else None,
+        ).internal_results
+    if source in {"web", "both"}:
+        external_results = web_find_products(query_text=query_text).external_results
+
+    return _tool_result(
+        ProductSearchResults(
+            internal_results=internal_results,
+            external_results=external_results,
+            retrieved_count=len(internal_results) + len(external_results),
+            reranked=True,
+        )
+    )

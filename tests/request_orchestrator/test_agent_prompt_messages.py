@@ -72,3 +72,34 @@ def test_agent_prompt_sends_tool_evidence_instead_of_raw_output() -> None:
         '      "title": "Boots",\n      "summary": "Waterproof boots"\n'
         '    }\n  ],\n  "tool_metadata": {}\n}'
     )
+
+
+def test_agent_prompt_preserves_historical_tool_names() -> None:
+    tool_call_id = uuid4()
+    prompt = AgentPrompt(
+        instruction="",
+        conversation_context=ConversationContext(
+            messages=[
+                ConversationMessage(
+                    tool_call_id, uuid4(), 0, "tool_call", "internal", "assistant", "", {
+                        "tool_name": "products_search",
+                        "provider_tool_call_id": "call-1",
+                        "input_payload": {"query": "boots"},
+                    }, {}, None, "",
+                ),
+                ConversationMessage(
+                    uuid4(), uuid4(), 1, "tool_result", "internal", "tool", "", {
+                        "tool_name": "products_search",
+                        "provider_tool_call_id": "call-1",
+                        "status": "completed",
+                        "evidence": [],
+                    }, {}, tool_call_id, "",
+                ),
+            ],
+        ),
+    )
+    prompt.include_section(PromptSectionKeys.CONVERSATION_CONTEXT)
+
+    messages = prompt.build_messages()
+
+    assert messages[0]["tool_calls"][0]["function"]["name"] == "products_search"

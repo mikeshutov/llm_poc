@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from artifacts.models import Artifact
+from assets.models import AssetReference
 from jobs.models import JobSchedule
 from jobs.repository.job_repository import JobRepository
 from jobs.repository.job_result_repository import JobResultRepository
@@ -28,8 +28,8 @@ def test_job_schedule_rejects_invalid_timezone_and_weekday() -> None:
         JobSchedule(days_of_week=[1], run_time=time(9), timezone="Not/A_Timezone")
 
 
-def test_artifact_normalizes_generic_reference() -> None:
-    artifact = Artifact(
+def test_asset_reference_normalizes_generic_reference() -> None:
+    artifact = AssetReference(
         id=uuid4(),
         user_id="user-123",
         artifact_type=" report ",

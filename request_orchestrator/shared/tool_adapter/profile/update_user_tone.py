@@ -142,7 +142,7 @@ def _tone_preferences_equal(left: TonePreferences | None, right: TonePreferences
 @tool(
     TOOL_NAME_UPDATE_USER_TONE,
     args_schema=UpdateUserToneArgs,
-    description="Update durable user tone preferences when the user clearly expresses how they want responses to sound.",
+    description="Update durable user tone preferences.",
 )
 def update_user_tone(
     confidence: float,

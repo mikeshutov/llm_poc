@@ -20,7 +20,7 @@ from request_orchestrator.models.evaluation_result import (
     EvaluationResult,
     TERMINAL_EVALUATION_STATUSES,
 )
-from request_orchestrator.models.agent_result import ResultStatus
+from request_orchestrator.models.agent_result import AnswerStatus
 from request_orchestrator.shared.evidence import (
     build_evidence_bundle_from_tool_results,
     build_evidence_steps_from_tool_results,
@@ -55,16 +55,29 @@ def _apply_evaluation(
         for step in evidence_steps
         for evidence in step.evidence
     ]
-    deduped_relevant_evidence = _dedupe_evidence_ids(all_evidence_ids)
+    available_evidence_ids = set(_dedupe_evidence_ids(all_evidence_ids))
+    requested_evidence_ids = _dedupe_evidence_ids(evaluation.relevant_evidence)
+    # Older evaluator responses did not include relevant_evidence. Preserve
+    # compatibility for those responses, but honor an explicit selection.
+    selected_evidence_ids = (
+        requested_evidence_ids
+        if requested_evidence_ids
+        else _dedupe_evidence_ids(all_evidence_ids)
+    )
+    deduped_relevant_evidence = [
+        evidence_id
+        for evidence_id in selected_evidence_ids
+        if evidence_id in available_evidence_ids
+    ]
     state.result = state.result.copy(relevant_evidence_ids=deduped_relevant_evidence)
     state.node_states.evaluator.evaluation_status = evaluation.status
     state.node_states.evaluator.missing_information = evaluation.missing_information
     if evaluation.status in TERMINAL_EVALUATION_STATUSES:
         state.result = state.result.copy(
-            result_status=(
-                ResultStatus.SUCCESS
+            answer_status=(
+                AnswerStatus.SUCCESS
                 if evaluation.status in {EVALUATION_STATUS_SATISFIED, EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT}
-                else ResultStatus.FAILED
+                else AnswerStatus.FAILED
             )
         )
     return deduped_relevant_evidence
@@ -103,7 +116,7 @@ def run_evaluator(state: AgentState) -> AgentState:
         deduped_relevant_evidence = _dedupe_evidence_ids(all_evidence_ids)
         state.result = state.result.copy(
             relevant_evidence_ids=deduped_relevant_evidence,
-            result_status=ResultStatus.SUCCESS,
+            answer_status=AnswerStatus.SUCCESS,
         )
         state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
         state.node_states.evaluator.missing_information = []
@@ -171,7 +184,7 @@ def run_evaluator(state: AgentState) -> AgentState:
     try:
         evaluation = EvaluationResult.model_validate_json(raw)
     except Exception as exc:
-        state.result = state.result.copy(relevant_evidence_ids=[], result_status=ResultStatus.FAILED)
+        state.result = state.result.copy(relevant_evidence_ids=[], answer_status=AnswerStatus.FAILED)
         state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_TERMINAL
         record_node_log(
             conversation_id=execution_context.conversation_id,

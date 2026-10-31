@@ -15,7 +15,7 @@ from tool.constants import TOOL_RESULT_TYPE_MEMORY_DETAIL
 
 
 class GetMemoryDetailArgs(BaseModel):
-    roundtrip_id: str = Field(..., description="The roundtrip_id returned from search_roundtrip_memories.")
+    roundtrip_id: str = Field(..., description="The roundtrip_id returned from memory.search when searching within conversation_ids.")
 
 
 class GetMemoryDetailResult(BaseModel):
@@ -47,7 +47,7 @@ class MemoryDetailEvidenceMetadata(BaseModel):
     args_schema=GetMemoryDetailArgs,
     description="""
 Retrieve the full detail for a previously found roundtrip memory by roundtrip_id.
-Use after search_roundtrip_memories when you need the exact prior exchange, including the original user prompt and generated response.
+Use after memory.search when you need the exact prior exchange, including the original user prompt and generated response.
 
 
 """,

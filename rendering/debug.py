@@ -179,7 +179,19 @@ def _build_tool_call_payload(entry: dict) -> dict:
 
 
 def _build_llm_call_payload(entry: dict) -> dict:
-    metadata = entry.get("metadata") or {}
+    metadata = dict(entry.get("metadata") or {})
+    input_object = entry.get(
+        "input_object",
+        entry.get("input", metadata.get("input", metadata.get("input_object"))),
+    )
+    output_object = entry.get(
+        "output_object",
+        entry.get("output", metadata.get("output", metadata.get("output_object"))),
+    )
+    # These compact diagnostics are promoted to top-level fields below;
+    # retaining them in metadata only duplicates the rendered payload.
+    for key in ("input", "output", "input_object", "output_object"):
+        metadata.pop(key, None)
     return LlmCallLogPayload(
         model_scope=entry.get("model_scope") or entry.get("agent") or "",
         model=entry.get("model") or "",
@@ -193,17 +205,8 @@ def _build_llm_call_payload(entry: dict) -> dict:
         computed_output_cost=str(entry.get("computed_output_cost") or ""),
         computed_total_cost=str(entry.get("computed_total_cost") or ""),
         latency_ms=entry.get("latency_ms"),
-        # Compact LLM diagnostics store these as `metadata.input` and
-        # `metadata.output`. Keep the old keys as a fallback for historical
-        # node logs created before the compact format.
-        input_object=entry.get(
-            "input_object",
-            entry.get("input", metadata.get("input", metadata.get("input_object"))),
-        ),
-        output_object=entry.get(
-            "output_object",
-            entry.get("output", metadata.get("output", metadata.get("output_object"))),
-        ),
+        input_object=input_object,
+        output_object=output_object,
         metadata=metadata,
     ).model_dump()
 
