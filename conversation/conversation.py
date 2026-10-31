@@ -2,7 +2,7 @@ from llm.clients.llm_client import get_llm_client
 from conversation.prompts.title_prompt import SYSTEM_PROMPT
 from conversation.prompts.summary_prompt import build_prompt as build_summary_prompt
 from conversation.models.conversation_models import ConversationRoundtrip, ConversationSummaryResponse
-from common.config import CONTENT_KEY, ROLE_KEY, ROLE_USER
+from common.config import CONTENT_KEY, ROLE_ASSISTANT, ROLE_KEY, ROLE_USER
 from common.data import strip_code_fences
 from conversation.utils import flatten_conversation_entries
 from conversation.repository.repo_factory import get_conversation_repo
@@ -28,7 +28,7 @@ def generate_conversation_summary(
         entries.extend(
             {ROLE_KEY: message.role, CONTENT_KEY: message.content}
             for message in repository.list_messages(roundtrip.id, include_internal=False)
-            if message.role in {"user", "assistant"} and message.content.strip()
+            if message.role in {ROLE_USER, ROLE_ASSISTANT} and message.content.strip()
         )
     result = get_llm_client().call_with_tools(
         build_summary_prompt(previous_summary),

@@ -2,6 +2,7 @@ ROLE_KEY = "role"
 CONTENT_KEY = "content"
 ROLE_USER = "user"
 ROLE_ASSISTANT = "assistant"
+ROLE_TOOL = "tool"
 ROLE_SYSTEM = "system"
 ROLE_DEBUG = "debug"
 

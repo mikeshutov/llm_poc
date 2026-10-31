@@ -6,6 +6,7 @@ from uuid import UUID
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel
 
+from common.config import ROLE_ASSISTANT, ROLE_TOOL
 from common.data import bounded_json_value
 from common.signatures import build_signature
 from retrieval.evidence import EvidenceView, ToolResult
@@ -54,7 +55,7 @@ class MessageToolRepository:
             output.pop("raw_payload", None)
         request_hash = build_signature({"tool_name": step.tool, "input": sanitized_input})
         request_message = self._repo.append_message(
-            roundtrip_id, kind="tool_call", role="assistant", visibility="internal",
+            roundtrip_id, kind="tool_call", role=ROLE_ASSISTANT, visibility="internal",
             content=f"{step.tool}: {step.hypothesis or step.plan}".strip(),
             payload={
                 "tool_name": step.tool, "input_payload": sanitized_input,
@@ -68,7 +69,7 @@ class MessageToolRepository:
             }, metadata={"tool_name": step.tool},
         )
         result_message = self._repo.append_message(
-            roundtrip_id, kind="tool_result", role="tool", visibility="internal",
+            roundtrip_id, kind="tool_result", role=ROLE_TOOL, visibility="internal",
             # The result is represented by the structured evidence payload;
             # repeating the call hypothesis in content duplicates the tool
             # call when the message stream is converted for the LLM.

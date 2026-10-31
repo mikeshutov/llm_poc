@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 import tiktoken
 
-from common.config import CHUNK_ENCODING
+from common.config import CHUNK_ENCODING, ROLE_ASSISTANT, ROLE_TOOL, ROLE_USER
 from common.data import bounded_json_value, is_meaningful_prompt_value, prune_empty_prompt_values
 from personalization.profile.models import UserProfile
 from conversation.models.conversation_models import ConversationContext
@@ -394,13 +394,13 @@ class AgentPrompt:
                     # result/evidence (when present elsewhere in history) is
                     # the useful context to retain.
                     continue
-            elif role in {"user", "assistant", "tool"} and isinstance(content, str) and content.strip():
+            elif role in {ROLE_USER, ROLE_ASSISTANT, ROLE_TOOL} and isinstance(content, str) and content.strip():
                 message_type = {
-                    "user": HumanMessage,
-                    "assistant": AIMessage,
-                    "tool": ToolMessage,
+                    ROLE_USER: HumanMessage,
+                    ROLE_ASSISTANT: AIMessage,
+                    ROLE_TOOL: ToolMessage,
                 }[role]
-                if role == "tool":
+                if role == ROLE_TOOL:
                     continue
                 messages.append(message_type(content=content))
 

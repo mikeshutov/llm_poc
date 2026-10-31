@@ -9,6 +9,8 @@ from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from common.config import ROLE_ASSISTANT, ROLE_USER
+
 from conversation.models.conversation_models import (
     Conversation,
     ConversationMessage,
@@ -275,7 +277,7 @@ class ConversationRepository:
         self.append_message(
             roundtrip.id,
             kind=ConversationMessageKind.USER,
-            role="user",
+                role=ROLE_USER,
             content=user_prompt,
         )
         return roundtrip
@@ -313,7 +315,7 @@ class ConversationRepository:
         self.append_message(
             roundtrip_id,
             kind=ConversationMessageKind.ASSISTANT,
-            role="assistant",
+                role=ROLE_ASSISTANT,
             content=response,
             payload=synthesis_payload,
             metadata={"model": model, "stage": "synthesis"} if model else {"stage": "synthesis"},
