@@ -11,7 +11,14 @@ from common.logging import record_node_log
 from agent_runtime.constants import NodeName
 from capabilities.registry.tools import tools
 from capabilities.discovery.discover_capabilities_tool import CAPABILITY_DISCOVERY_TOOL
-from capabilities.adapters.profile import USER_MANAGEMENT_TOOL
+from capabilities.adapters.profile import (
+    USER_MANAGEMENT_TOOL,
+    set_user_display_name,
+    set_user_first_name,
+    set_user_last_name,
+    update_user_tone,
+)
+from capabilities.adapters.user_attributes import upsert_user_attribute
 from common.cache.repository import InvalidCachePayloadError, ToolCacheRepository
 from agent_runtime.context import get_current_user_id
 from requests.exceptions import Timeout
@@ -203,6 +210,13 @@ class ToolRegistry:
 
 GLOBAL_TOOL_REGISTRY = ToolRegistry(enable_cache=True)
 _REGISTERED_DEFAULTS = False
+PROFILE_RUNTIME_TOOLS = (
+    set_user_display_name,
+    set_user_first_name,
+    set_user_last_name,
+    update_user_tone,
+    upsert_user_attribute,
+)
 
 
 def register_default_tools() -> None:
@@ -215,6 +229,11 @@ def register_default_tools() -> None:
     # ``capabilities.registry.tools`` and therefore is never persisted by the tool seeder.
     GLOBAL_TOOL_REGISTRY.register(CAPABILITY_DISCOVERY_TOOL)
     GLOBAL_TOOL_REGISTRY.register(USER_MANAGEMENT_TOOL)
+    # Profile tools are runtime-only capabilities. They are available to the
+    # profile-management agent through its static tool list, but are not
+    # persisted or returned by dynamic capability discovery.
+    for tool in PROFILE_RUNTIME_TOOLS:
+        GLOBAL_TOOL_REGISTRY.register(tool)
     _REGISTERED_DEFAULTS = True
 
 

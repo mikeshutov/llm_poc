@@ -14,6 +14,7 @@ from capabilities.adapters.profile import (
     update_user_tone,
 )
 from capabilities.adapters.user_attributes import upsert_user_attribute
+from capabilities.registry.tools import TOOL_CATEGORIES
 from agents.profile_management.prompts import build_profile_management_rules
 
 
@@ -34,6 +35,7 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
             "personal details that should update their user attributes."
         ),
         allowed_categories=set(),
+        excluded_categories=set(TOOL_CATEGORIES),
         static_tools=static_tools,
         execution_strategy=AgentExecutionStrategy.DIRECT_RETURN,
         delegatable=True,

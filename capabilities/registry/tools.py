@@ -208,7 +208,6 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
         rules=[
             "Use weather_current for current weather, temperature, or conditions requests.",
             "Use weather_historical_month only when the user specifies a past month or historical period.",
-            "Do not answer current-weather requests from conversation summaries or older weather results.",
         ],
     ),
     "finance": ToolCategory(
@@ -222,19 +221,10 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     "web_search": ToolCategory(
         tools=WEB_SEARCH_TOOLS,
         description="Search the web, current news, or Hacker News discussions for fresh external results.",
-        rules=[
-            "Use web_fetch when the user provides a URL or asks to inspect, summarize, or extract details from a specific page.",
-            "Use search_news for current, recent, latest, breaking, or location-based news requests.",
-            "Use search_hacker_news for Hacker News stories, comments, and discussions.",
-            "Use web_search for non-news web information or broader web research.",
-            "Use a live search for fresh information; do not rely on conversation summaries or older search results unless the user explicitly asks about them.",
-            "Use prior search results and fetched page evidence to refine follow-up searches when needed.",
-        ],
     ),
     "knowledge": ToolCategory(
         tools=KNOWLEDGE_TOOLS,
         description="Look up information from Wikipedia, Wikidata structured facts, or country data.",
-        rules=["These tools can be used multiple times as needed."],
     ),
     "calendar": ToolCategory(
         tools=CALENDAR_TOOLS,

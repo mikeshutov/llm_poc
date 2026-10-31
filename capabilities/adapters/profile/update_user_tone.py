@@ -74,6 +74,13 @@ class UpdateUserToneResult(BaseModel):
     minimum_confidence: float
     tone: TonePreferences | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_tone_instance(cls, value):
+        if isinstance(value, dict) and isinstance(value.get("tone"), BaseModel):
+            value = {**value, "tone": value["tone"].model_dump()}
+        return value
+
 
 class UpdateUserToneMetadata(BaseModel):
     user_id: str | None = None
@@ -139,6 +146,12 @@ def _tone_preferences_equal(left: TonePreferences | None, right: TonePreferences
     return left.model_dump() == right.model_dump()
 
 
+def _tone_result_value(tone: TonePreferences | None) -> TonePreferences | None:
+    if tone is None:
+        return None
+    return TonePreferences.model_validate(tone.model_dump())
+
+
 @tool(
     TOOL_NAME_UPDATE_USER_TONE,
     args_schema=UpdateUserToneArgs,
@@ -173,7 +186,7 @@ def update_user_tone(
                 ),
                 confidence=confidence,
                 minimum_confidence=MIN_TONE_UPDATE_CONFIDENCE,
-                tone=profile.tone,
+                tone=_tone_result_value(profile.tone),
             ),
         )
 
@@ -194,7 +207,7 @@ def update_user_tone(
                 reason="Tone update skipped because the requested values do not change the stored tone preference.",
                 confidence=confidence,
                 minimum_confidence=MIN_TONE_UPDATE_CONFIDENCE,
-                tone=profile.tone,
+                tone=_tone_result_value(profile.tone),
             ),
         )
 
@@ -216,6 +229,6 @@ def update_user_tone(
             status="updated",
             confidence=confidence,
             minimum_confidence=MIN_TONE_UPDATE_CONFIDENCE,
-            tone=updated_profile.tone,
+            tone=_tone_result_value(updated_profile.tone),
         ),
     )
