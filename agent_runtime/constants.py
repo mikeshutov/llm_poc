@@ -16,7 +16,7 @@ class NodeName(StrEnum):
     VALIDATE_EXECUTION_RESULT = "validate_execution_result"
     SYNTHESIS = "synthesis"
     SYNTHESIZE = "synthesize"
-    REASON = "reason"
+    REASONER = "reasoner"
     ATTRIBUTE_DISCOVERY = "attribute_discovery"
     CAPABILITY_DISCOVERY = "capability_discovery"
     COMPLETION_EVALUATOR = "completion_evaluator"

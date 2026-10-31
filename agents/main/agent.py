@@ -9,7 +9,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from common.data import repair_common_json_issues, strip_code_fences
 from common.data import bounded_json_value
 from common.logging import record_node_log
-from agent_runtime.constants import EXECUTE_TOOLS_EDGE
+from agent_runtime.constants import EXECUTE_TOOLS_EDGE, NodeName
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.synthesized_result import SynthesisResult, SynthesisResultBlock
@@ -42,7 +42,7 @@ def run_reasoner(state: AgentState) -> AgentState:
     except Exception as exc:
         record_node_log(
             roundtrip_id=state.execution_context.roundtrip_id,
-            node_name="reasoner",
+            node_name=NodeName.REASONER,
             stage="invoke",
             event_type="reasoner_failure",
             level="error",
@@ -96,7 +96,7 @@ def _route_after_execute(state: AgentState) -> str:
             execution_status=ExecutionStatus.FAILED,
         )
         return END
-    return "reasoner"
+    return NodeName.REASONER.value
 
 
 def _append_execution_messages(state: AgentState) -> None:
@@ -142,18 +142,18 @@ def _append_execution_messages(state: AgentState) -> None:
 class MainReasonerStrategy:
     def _compile_graph(self):
         builder = StateGraph(AgentState)
-        builder.add_node("reasoner", run_reasoner)
+        builder.add_node(NodeName.REASONER.value, run_reasoner)
         builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
-        builder.set_entry_point("reasoner")
+        builder.set_entry_point(NodeName.REASONER.value)
         builder.add_conditional_edges(
-            "reasoner",
+            NodeName.REASONER.value,
             _route_after_reasoner,
             {EXECUTE_TOOLS_EDGE: EXECUTE_TOOLS_EDGE, END: END},
         )
         builder.add_conditional_edges(
             EXECUTE_TOOLS_EDGE,
             _route_after_execute,
-            {"reasoner": "reasoner", END: END},
+            {NodeName.REASONER.value: NodeName.REASONER.value, END: END},
         )
         return builder.compile()
 

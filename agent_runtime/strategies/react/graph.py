@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from langgraph.graph import END, StateGraph
 
 from llm.conversation_model_config import PLANNER_STAGE
-from agent_runtime.constants import DISCOVER_AGENT_STATE_EDGE, EXECUTE_TOOLS_EDGE
+from agent_runtime.constants import DISCOVER_AGENT_STATE_EDGE, EXECUTE_TOOLS_EDGE, NodeName
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.execution.tool_executor import run_executor
@@ -75,17 +75,17 @@ class ReactStrategy:
                 execution_status=ExecutionStatus.FAILED,
             )
             return END
-        return "reason"
+        return NodeName.REASONER.value
 
     def _compile_graph(self):
         builder = StateGraph(AgentState)
         builder.add_node(DISCOVER_AGENT_STATE_EDGE, discover_agent_state_node)
-        builder.add_node("reason", self._reason)
+        builder.add_node(NodeName.REASONER.value, self._reason)
         builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
-        builder.set_entry_point("reason")
-        builder.add_conditional_edges("reason", self._route_after_decision, {EXECUTE_TOOLS_EDGE: EXECUTE_TOOLS_EDGE, END: END})
-        builder.add_conditional_edges(EXECUTE_TOOLS_EDGE, self._route_after_execute, {"reason": DISCOVER_AGENT_STATE_EDGE, END: END})
-        builder.add_edge(DISCOVER_AGENT_STATE_EDGE, "reason")
+        builder.set_entry_point(NodeName.REASONER.value)
+        builder.add_conditional_edges(NodeName.REASONER.value, self._route_after_decision, {EXECUTE_TOOLS_EDGE: EXECUTE_TOOLS_EDGE, END: END})
+        builder.add_conditional_edges(EXECUTE_TOOLS_EDGE, self._route_after_execute, {NodeName.REASONER.value: DISCOVER_AGENT_STATE_EDGE, END: END})
+        builder.add_edge(DISCOVER_AGENT_STATE_EDGE, NodeName.REASONER.value)
         return builder.compile()
 
     def run(self, agent_state: AgentState, *, thread_id: str) -> AgentState:

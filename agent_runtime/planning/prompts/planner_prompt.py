@@ -11,6 +11,7 @@ from retrieval.evidence_store import (
 )
 from agent_runtime.planning.models.compiled_planner_context import CompiledPlannerContext
 from agent_runtime.planning.prompts.planner_rules import build_planner_rules
+from capabilities.registry.tools import TOOLS_BY_NAME
 
 
 ATTRIBUTE_TYPE_MINIMAL_DESCRIPTION = 'Typed user-attribute key such as `food.preference`, `projects.goal`, or `technology.skill`.'
@@ -124,8 +125,6 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
         category = allowed_categories.get(category_name)
         if category is None or not any(tool.name in active_tool_names for tool in category.tools):
             rules.pop(category_name, None)
-
-    from capabilities.registry.tools import TOOLS_BY_NAME
 
     for tool in deduped_tools.values():
         registered_tool = TOOLS_BY_NAME.get(getattr(tool, "name", ""))

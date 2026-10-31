@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from common.cache.policy import ToolCachePolicy
 from capabilities.registry.discovery_metadata import get_tool_discovery_metadata
+from capabilities.registry.result_schemas import RESULT_SCHEMAS
 from capabilities.retry.policy import RetryPolicy
 
 DEFAULT_RESULT_FIELDS = (
@@ -61,8 +62,6 @@ class Tool:
 
     @property
     def available_result_fields(self) -> tuple[str, ...]:
-        from capabilities.registry.result_schemas import RESULT_SCHEMAS
-
         result_schema = RESULT_SCHEMAS.get(self.result_type)
         fields = (
             tuple(result_schema.model_fields)

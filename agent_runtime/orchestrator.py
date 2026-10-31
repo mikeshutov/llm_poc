@@ -8,6 +8,7 @@ from agent_runtime.constants import (
     ENRICH_STATE_EDGE,
     LOAD_AGENTS_EDGE,
     PROFILE_LOADING_EDGE,
+    NodeName,
 )
 from agent_runtime.models.orchestrator_graph_state import OrchestratorGraphState
 from agent_runtime.models.main_state import MainState
@@ -29,13 +30,13 @@ class OrchestratorGraph:
         builder.add_node(LOAD_AGENTS_EDGE, load_agents_node)
         builder.add_node(ENRICH_STATE_EDGE, enrich_state_node)
         builder.add_node(PROFILE_LOADING_EDGE, load_user_profile_node)
-        builder.add_node("main_request_strategy", run_main_request_strategy_node)
+        builder.add_node(NodeName.MAIN_REQUEST_STRATEGY.value, run_main_request_strategy_node)
         builder.set_entry_point(LOAD_AGENTS_EDGE)
 
         builder.add_edge(LOAD_AGENTS_EDGE, ENRICH_STATE_EDGE)
         builder.add_edge(ENRICH_STATE_EDGE, PROFILE_LOADING_EDGE)
-        builder.add_edge(PROFILE_LOADING_EDGE, "main_request_strategy")
-        builder.add_edge("main_request_strategy", END)
+        builder.add_edge(PROFILE_LOADING_EDGE, NodeName.MAIN_REQUEST_STRATEGY.value)
+        builder.add_edge(NodeName.MAIN_REQUEST_STRATEGY.value, END)
         
         return builder.compile()
 

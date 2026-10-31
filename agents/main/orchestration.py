@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from agent_runtime.models.main_state import MainState
 from agent_runtime.models.orchestrator_graph_state import OrchestratorGraphState
-from agents.discovery import load_agents
+from agents.discovery.load_agents import load_agents
 from agents.main.profile_loading import load_user_profile
 from agent_runtime.state_enrichment import enrich_state_node as shared_enrich_state_node
 from agents.main.request import run_main_request_strategy

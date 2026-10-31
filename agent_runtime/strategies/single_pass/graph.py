@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from langgraph.graph import END, StateGraph
 
 from llm.conversation_model_config import PLANNER_STAGE
-from agent_runtime.constants import EXECUTE_TOOLS_EDGE
+from agent_runtime.constants import EXECUTE_TOOLS_EDGE, NodeName
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.execution.tool_executor import run_executor
@@ -89,9 +89,9 @@ class DirectReturnStrategy:
 
     def _compile_graph(self):
         builder = StateGraph(AgentState)
-        builder.add_node("reasoner", self._reasoner)
+        builder.add_node(NodeName.REASONER.value, self._reasoner)
         builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
-        builder.set_entry_point("reasoner")
+        builder.set_entry_point(NodeName.REASONER.value)
         builder.add_conditional_edges(
             "reasoner",
             self._route_after_reasoner,

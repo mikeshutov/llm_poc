@@ -8,6 +8,7 @@ from agent_runtime.models.agent_inputs import AgentInputs
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.main_state import MainState
 from agents.main.agent import MainReasonerStrategy
+from agents.profile_management.profile import build_profile_management_profile
 from retrieval.evidence_store import (
     build_evidence_bundle_from_tool_results,
     build_evidence_steps_from_tool_results,
@@ -30,6 +31,7 @@ from capabilities.adapters.profile import (
     reset_user_management_agent_state,
     reset_user_management_state,
 )
+from agent_runtime.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
 
 
 TOP_LEVEL_PROFILE = AgentProfile(
@@ -109,9 +111,6 @@ def _is_uuid(value: str) -> bool:
 
 
 def _ensure_static_agents(main_state: MainState) -> None:
-    from agents.profile_management.profile import build_profile_management_profile
-    from agent_runtime.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
-
     if PROFILE_MANAGEMENT_AGENT_NAME in main_state.agent_states:
         return
     profile = build_profile_management_profile(main_state.execution_context.user_profile)

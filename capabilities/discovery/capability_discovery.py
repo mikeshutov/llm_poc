@@ -19,6 +19,7 @@ from capabilities.registry.repository.repo_factory import get_tool_registry_repo
 from capabilities.registry.tools import TOOL_CATEGORIES
 from common.logging import record_node_log
 from agent_runtime.constants import NodeName
+from agents.discovery.agent_selection_query import build_agent_selection_query
 
 MAX_DISCOVERED_CAPABILITIES = 5
 RUNTIME_DISCOVERY_TOOL_NAME = "discover_capabilities"
@@ -250,8 +251,6 @@ def capability_discovery(
     Agent discovery is only enabled for the top-level request. Agent planner
     iterations discover tools and attributes, but cannot delegate to agents.
     """
-    from agents.discovery.agent_selection_query import build_agent_selection_query
-
     query = (query or main_state.discovery_query or build_agent_selection_query(
         current_user_request=main_state.task,
         conversation_context=main_state.execution_context.conversation_context,

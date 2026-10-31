@@ -186,7 +186,7 @@ def run_decision(
         user_id=state.execution_context.user_profile.user_id,
         agent=state.resolve_agent_scope(),
         stage=stage,
-        node_name=NodeName.REASON,
+        node_name=NodeName.REASONER,
         callsite=callsite,
         latency_ms=latency_ms,
         owner_agent_name=state.agent_profile.name,
@@ -206,7 +206,7 @@ def run_decision(
         event_type=PLAN_KIND,
         source=state.agent_profile.name,
         agent_name=state.agent_profile.name,
-        node_name=NodeName.REASON,
+        node_name=NodeName.REASONER,
         agent_version=state.agent_profile.version,
         payload={
             "agent_name": state.agent_profile.name,

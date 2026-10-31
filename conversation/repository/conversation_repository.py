@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Optional, Sequence
 from uuid import UUID
 
 import psycopg
@@ -28,7 +28,9 @@ from db.connection import get_connection
 from llm.repository.conversation_model_config_repository import ConversationModelConfigRepository
 from personalization.tone.models import TonePreferences
 from agent_runtime.constants import NodeName
-from agent_runtime.models.orchestrator_payload import OrchestratorPayload
+
+if TYPE_CHECKING:
+    from agent_runtime.models.orchestrator_payload import OrchestratorPayload
 
 
 class ConversationRepository:

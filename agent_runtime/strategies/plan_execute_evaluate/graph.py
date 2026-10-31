@@ -7,7 +7,7 @@ from langgraph.graph import END, StateGraph
 
 from agent_runtime.strategies.plan_execute_evaluate.validator import validator
 from agent_runtime.strategies.plan_execute_evaluate.result_validator import execution_result_router, run_execution_result_validator
-from agent_runtime.constants import DISCOVER_AGENT_STATE_EDGE, EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE
+from agent_runtime.constants import DISCOVER_AGENT_STATE_EDGE, EVALUATE_EDGE, EXECUTE_TOOLS_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE, NodeName
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.evaluation import evaluator_router, run_evaluator
 from agent_runtime.execution.tool_executor import run_executor
@@ -27,7 +27,7 @@ class PlannerExecutorEvaluatorStrategy:
         builder.add_node(PLAN_EDGE, run_planner)
         builder.add_node(EVALUATE_EDGE, run_evaluator)
         builder.add_node(EXECUTE_TOOLS_EDGE, run_executor)
-        builder.add_node("validate_execution_result", run_execution_result_validator)
+        builder.add_node(NodeName.VALIDATE_EXECUTION_RESULT.value, run_execution_result_validator)
         builder.set_entry_point(PLAN_EDGE)
         builder.add_conditional_edges(PLAN_EDGE, validator, {
             EXECUTE_TOOLS_EDGE: EXECUTE_TOOLS_EDGE,
@@ -38,8 +38,8 @@ class PlannerExecutorEvaluatorStrategy:
             PLAN_EDGE: DISCOVER_AGENT_STATE_EDGE,
             SYNTHESIZE_EDGE: END,
         })
-        builder.add_edge(EXECUTE_TOOLS_EDGE, "validate_execution_result")
-        builder.add_conditional_edges("validate_execution_result", execution_result_router, {
+        builder.add_edge(EXECUTE_TOOLS_EDGE, NodeName.VALIDATE_EXECUTION_RESULT.value)
+        builder.add_conditional_edges(NodeName.VALIDATE_EXECUTION_RESULT.value, execution_result_router, {
             PLAN_EDGE: DISCOVER_AGENT_STATE_EDGE,
             EVALUATE_EDGE: EVALUATE_EDGE,
             SYNTHESIZE_EDGE: END,
