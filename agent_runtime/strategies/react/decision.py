@@ -18,7 +18,7 @@ from rendering.debug import PLAN_KIND
 from agent_runtime.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
-from agent_runtime.models.decision import DecisionStatus, normalize_decision_status
+from agent_runtime.models.decision import DecisionStatus
 from agent_runtime.models.plan import Plan
 from retrieval.evidence_store import (
     build_evidence_bundle_from_tool_results,
@@ -45,7 +45,10 @@ def _parse_decision_status(response: Any, has_tool_calls: bool) -> DecisionStatu
             payload = json.loads(content)
             if isinstance(payload, dict):
                 if "status" in payload:
-                    return normalize_decision_status(payload.get("status"))
+                    try:
+                        return DecisionStatus(payload["status"])
+                    except (TypeError, ValueError):
+                        return DecisionStatus.CONTINUE
                 return DecisionStatus.CONTINUE if has_tool_calls else DecisionStatus.SATISFIED
         except (TypeError, ValueError):
             pass

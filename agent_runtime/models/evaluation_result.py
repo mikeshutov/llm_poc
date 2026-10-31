@@ -25,5 +25,8 @@ EvaluationStatus = Literal[
 class EvaluationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: EvaluationStatus = EVALUATION_STATUS_RETRYABLE
-    relevant_evidence: list[str] = Field(default_factory=list)
+    relevant_evidence: list[str] = Field(
+        ...,
+        description="Evidence UUIDs that directly support the evaluation. Use an empty list when none are relevant.",
+    )
     missing_information: list[str] = Field(default_factory=list)

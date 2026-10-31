@@ -14,6 +14,7 @@ from agent_runtime.models.relevant_evidence import RelevantEvidenceByTool
 from common.data import bounded_json_value
 from retrieval.evidence_store import build_evidence_bundle_from_tool_results
 from capabilities.registry.constants import EVIDENCE_PERSISTENCE_EXCLUDED_TOOL_NAMES
+from capabilities.registry.repository import message_repository
 
 
 def _normalize_evidence_ids(
@@ -117,9 +118,7 @@ class OrchestratorResult:
         )
 
     def to_persistence_models(self) -> tuple[OrchestratorPayload, RelevantEvidenceByTool]:
-        from capabilities.registry.repository.message_repository import MessageToolRepository
-
-        tool_results = MessageToolRepository().get_tool_results(self.agent_result.tool_call_ids)
+        tool_results = message_repository.MessageToolRepository().get_tool_results(self.agent_result.tool_call_ids)
         evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
         evidence_by_id = {
             evidence_id: _project_evidence_for_persistence(evidence)

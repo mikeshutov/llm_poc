@@ -41,7 +41,7 @@ def test_react_runs_initial_action_then_planner_decision(monkeypatch) -> None:
         calls.append(stage)
         return DecisionResult(
             plan=action if len(calls) == 1 else Plan(steps=[]),
-            status="CONTINUE" if len(calls) == 1 else "DONE",
+            status=DecisionStatus.CONTINUE if len(calls) == 1 else DecisionStatus.SATISFIED,
         )
 
     monkeypatch.setattr("agent_runtime.strategies.react.graph.run_decision", fake_decision)
@@ -62,7 +62,7 @@ def test_react_stops_at_max_turns(monkeypatch) -> None:
 
     def fake_decision(state, *, stage, callsite, prompt_builder):
         calls.append(stage)
-        return DecisionResult(plan=action, status="CONTINUE")
+        return DecisionResult(plan=action, status=DecisionStatus.CONTINUE)
 
     monkeypatch.setattr("agent_runtime.strategies.react.graph.run_decision", fake_decision)
     monkeypatch.setattr("agent_runtime.strategies.react.graph.run_executor", lambda current: current)
@@ -98,7 +98,7 @@ def test_direct_return_reasons_once(monkeypatch) -> None:
 
     def fake_decision(state, *, stage, callsite, prompt_builder):
         calls.append(callsite)
-        return DecisionResult(plan=action, status="CONTINUE")
+        return DecisionResult(plan=action, status=DecisionStatus.CONTINUE)
 
     monkeypatch.setattr(
         "agent_runtime.strategies.single_pass.graph.run_decision",

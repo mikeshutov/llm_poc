@@ -56,16 +56,9 @@ def _apply_evaluation(
     ]
     available_evidence_ids = set(_dedupe_evidence_ids(all_evidence_ids))
     requested_evidence_ids = _dedupe_evidence_ids(evaluation.relevant_evidence)
-    # Older evaluator responses did not include relevant_evidence. Preserve
-    # compatibility for those responses, but honor an explicit selection.
-    selected_evidence_ids = (
-        requested_evidence_ids
-        if requested_evidence_ids
-        else _dedupe_evidence_ids(all_evidence_ids)
-    )
     deduped_relevant_evidence = [
         evidence_id
-        for evidence_id in selected_evidence_ids
+        for evidence_id in requested_evidence_ids
         if evidence_id in available_evidence_ids
     ]
     state.result = state.result.copy(relevant_evidence_ids=deduped_relevant_evidence)

@@ -13,6 +13,7 @@ from .agent_execution_context import AgentExecutionContext
 from .agent_result import AgentResult
 from retrieval.evidence import ToolResult
 from agent_runtime.models.node_state import AgentNodeStates
+from capabilities.registry.repository import message_repository
 
 @dataclass
 class AgentState:
@@ -88,18 +89,16 @@ class AgentState:
 
     def gather_tool_results(self) -> list[ToolResult]:
         gathered = list(self.direct_tool_results)
-        from capabilities.registry.repository.message_repository import MessageToolRepository
         if self.result.tool_call_ids:
-            gathered.extend(MessageToolRepository().get_tool_results(self.result.tool_call_ids))
+            gathered.extend(message_repository.MessageToolRepository().get_tool_results(self.result.tool_call_ids))
         for agent_state in self.delegated_agent_states.values():
             gathered.extend(agent_state.gather_tool_results())
         return gathered
 
     def gather_tool_calls(self):
         gathered = []
-        from capabilities.registry.repository.message_repository import MessageToolRepository
         if self.result.tool_call_ids:
-            gathered.extend(MessageToolRepository().get_tool_calls(self.result.tool_call_ids))
+            gathered.extend(message_repository.MessageToolRepository().get_tool_calls(self.result.tool_call_ids))
         for agent_state in self.delegated_agent_states.values():
             gathered.extend(agent_state.gather_tool_calls())
         return gathered

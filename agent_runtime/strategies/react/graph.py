@@ -11,7 +11,7 @@ from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.execution.tool_executor import run_executor
 from agent_runtime.state_enrichment import discover_agent_state_node
-from agent_runtime.models.decision import DecisionStatus, normalize_decision_status
+from agent_runtime.models.decision import DecisionStatus
 from agent_runtime.strategies.react.decision import run_decision
 from agent_runtime.strategies.react.prompt import build_react_decision_prompt
 
@@ -19,12 +19,11 @@ from agent_runtime.strategies.react.prompt import build_react_decision_prompt
 @dataclass(frozen=True)
 class ReactStrategy:
     @staticmethod
-    def _record_decision_status(state: AgentState, status: str) -> None:
-        normalized = normalize_decision_status(status)
-        state.node_states.planner.decision_status = normalized
-        if normalized == DecisionStatus.SATISFIED:
+    def _record_decision_status(state: AgentState, status: DecisionStatus) -> None:
+        state.node_states.planner.decision_status = status
+        if status == DecisionStatus.SATISFIED:
             state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
-        elif normalized == DecisionStatus.BLOCKED:
+        elif status == DecisionStatus.BLOCKED:
             state.result = state.result.copy(
                 answer_status=AnswerStatus.FAILED,
                 execution_status=ExecutionStatus.FAILED,
