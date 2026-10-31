@@ -8,7 +8,7 @@ from typing import Any
 
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
-from reranker.models import RerankerRequest, RerankerRequestCandidate, RerankerScore
+from retrieval.reranker_models import RerankerRequest, RerankerRequestCandidate, RerankerScore
 
 DEFAULT_MODEL_NAME = "BAAI/bge-reranker-v2-m3"
 MODEL_NAME = os.getenv("RERANKER_MODEL", DEFAULT_MODEL_NAME)

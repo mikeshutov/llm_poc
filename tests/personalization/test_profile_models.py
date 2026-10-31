@@ -21,8 +21,8 @@ from personalization.profile.models import GeoLocation, GeoMetadata, UserAttribu
 from personalization.profile.service import build_user_profile, hydrate_user_profile_core, load_user_profile_attributes
 from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
-from request_orchestrator.models.agent_prompt import AgentPrompt, PromptSectionKeys
-from request_orchestrator.models.synthesized_result import SynthesisResult
+from agent_runtime.models.agent_prompt import AgentPrompt, PromptSectionKeys
+from agent_runtime.models.synthesized_result import SynthesisResult
 from common.data import repair_common_json_issues
 
 
@@ -48,7 +48,7 @@ def test_user_attributes_section_accepts_dataclass_shaped_attributes() -> None:
         user_id=None,
         value=["pizza", "eggs"],
         attribute_embedding=[0.1, 0.2],
-        attribute_type="food.likes",
+        attribute_type="food.preference",
         group_key=None,
         source="explicit",
         is_active=True,
@@ -61,7 +61,7 @@ def test_user_attributes_section_accepts_dataclass_shaped_attributes() -> None:
     section = UserAttributesSection(attributes=[legacy_attribute])
 
     assert len(section.attributes) == 1
-    assert section.attributes[0].attribute_type == "food.likes"
+    assert section.attributes[0].attribute_type == "food.preference"
     assert section.attributes[0].value == ["pizza", "eggs"]
 
 
@@ -77,7 +77,7 @@ def test_load_user_profile_attributes_condenses_same_type_and_group_key() -> Non
                     user_id=None,
                     value=['pizza', 'eggs'],
                     attribute_embedding=None,
-                    attribute_type='food.likes',
+                    attribute_type='food.preference',
                     group_key=None,
                     source='explicit',
                     is_active=True,
@@ -91,7 +91,7 @@ def test_load_user_profile_attributes_condenses_same_type_and_group_key() -> Non
                     user_id=None,
                     value=['eggs', 'coffee'],
                     attribute_embedding=None,
-                    attribute_type='food.likes',
+                    attribute_type='food.preference',
                     group_key=None,
                     source='explicit',
                     is_active=True,
@@ -105,7 +105,7 @@ def test_load_user_profile_attributes_condenses_same_type_and_group_key() -> Non
                     user_id=None,
                     value=['cake'],
                     attribute_embedding=None,
-                    attribute_type='food.likes',
+                    attribute_type='food.preference',
                     group_key='desserts',
                     source='explicit',
                     is_active=True,
@@ -124,7 +124,7 @@ def test_load_user_profile_attributes_condenses_same_type_and_group_key() -> Non
     try:
         load_user_profile_attributes(
             profile,
-            requested_attribute_types=['food.likes'],
+            requested_attribute_types=['food.preference'],
         )
     finally:
         profile_service.get_user_attribute_repo = original_repo_getter
@@ -134,7 +134,7 @@ def test_load_user_profile_attributes_condenses_same_type_and_group_key() -> Non
     ungrouped = next(attribute for attribute in profile.user_attributes.attributes if attribute.group_key is None)
     desserts = next(attribute for attribute in profile.user_attributes.attributes if attribute.group_key == 'desserts')
 
-    assert ungrouped.attribute_type == 'food.likes'
+    assert ungrouped.attribute_type == 'food.preference'
     assert ungrouped.value == ['pizza', 'eggs', 'coffee']
     assert desserts.value == ['cake']
     assert captured_user_ids == ['user-123']
@@ -149,7 +149,7 @@ def test_prompt_profile_excludes_management_fields_by_default() -> None:
                     user_id=None,
                     value=['pizza'],
                     attribute_embedding=None,
-                    attribute_type='food.likes',
+                    attribute_type='food.preference',
                     group_key='meals',
                     source='explicit',
                     is_active=True,
@@ -179,7 +179,7 @@ def test_prompt_profile_excludes_management_fields_by_default() -> None:
     default_rendered = default_prompt.build()
     management_rendered = management_prompt.build()
 
-    assert 'food.likes' in default_rendered
+    assert 'food.preference' in default_rendered
     assert 'pizza' in default_rendered
     assert 'group_key' not in default_rendered
     assert 'source' not in default_rendered

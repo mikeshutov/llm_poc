@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from personalization.profile.models import UserProfile
-from reranker import Candidate, DEFAULT_TOP_K, rerank_candidates
+from retrieval import Candidate, DEFAULT_TOP_K, rerank_candidates
 from products.models.product_result import ProductResult
 
 

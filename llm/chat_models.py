@@ -17,10 +17,10 @@ from llm.conversation_model_config import (
     PLANNER_STAGE,
     XAI_PROVIDER,
 )
-from request_orchestrator.models.agent_execution_context import AgentExecutionContext
+from agent_runtime.models.agent_execution_context import AgentExecutionContext
 
 if TYPE_CHECKING:
-    from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
+    from agent_runtime.models.agent_profile import AgentProfile
 
 
 def default_planner_model_for_agent_scope(agent_scope: str) -> str:

@@ -7,7 +7,7 @@ from products.models.product_result import ProductResult
 from products.models.product_search_results import ProductSearchResults
 from products.models.product_source import ProductSource
 from products.repository.product_repository import ProductRepository
-from reranker.constants import DEFAULT_TOP_K
+from retrieval.reranker_constants import DEFAULT_TOP_K
 from test_utilities.fake_reranker import FakeReranker
 
 

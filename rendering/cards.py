@@ -6,7 +6,7 @@ from typing import Any, Iterable
 import pandas as pd
 import streamlit as st
 
-from request_orchestrator.models.evidence import EvidenceView
+from retrieval.evidence import EvidenceView
 
 # messy but fine for now
 def render_cards(
@@ -159,28 +159,16 @@ def _render_meal_evidence_card(item: EvidenceView) -> None:
 
         with content_col:
             title = item.title.strip() or "Meal"
-            st.markdown(f"### Recipe: {title}")
+            recipe_url = item.url.strip()
+            if recipe_url:
+                st.markdown(f"### [{title}]({recipe_url})")
+            else:
+                st.markdown(f"### {title}")
 
             category = str(_metadata_value(item.llm_metadata, "category") or "").strip()
             area = str(_metadata_value(item.llm_metadata, "area") or "").strip()
             if category or area:
                 st.caption(" | ".join(part for part in (category, area) if part))
-
-            ingredients = _ingredient_lines(_metadata_value(item.llm_metadata, "ingredients"))
-            if ingredients:
-                st.markdown("**Ingredients**")
-                st.markdown("\n".join(f"- {ingredient}" for ingredient in ingredients))
-
-            instructions = str(_raw_value(item.raw_payload, "instructions") or "").strip()
-            if instructions:
-                st.markdown("**Recipe**")
-                st.write(instructions)
-            elif item.summary.strip():
-                st.write(item.summary.strip())
-
-            recipe_url = item.url.strip()
-            if recipe_url:
-                st.link_button("Open recipe", recipe_url)
 
         with image_col:
             image_url = item.image_url.strip()
@@ -202,19 +190,6 @@ def _string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item).strip() for item in value if str(item).strip()]
-
-
-def _ingredient_lines(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-
-    ingredients: list[str] = []
-    for ingredient in value:
-        name = str(_raw_value(ingredient, "name") or "").strip()
-        measure = str(_raw_value(ingredient, "measure") or "").strip()
-        if name:
-            ingredients.append(" ".join(part for part in (measure, name) if part))
-    return ingredients
 
 
 def _pricing_rows(source: Any) -> list[dict[str, str]]:

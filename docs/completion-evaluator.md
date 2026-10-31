@@ -4,6 +4,8 @@ The evaluator has an optional local completion/answerability fast path backed by
 
 After tool execution, the application sends the evaluator evidence as the premise and the current request as an answerability hypothesis. A high-confidence entailment produces a `SATISFIED` evaluation directly. Neutral, contradictory, low-confidence, malformed, or unavailable NLI results fall back to the existing LLM evaluator.
 
+This gate belongs to the shared evaluator path used by existing planner/executor/evaluator user agents. The top-level main request uses the reasoner loop and does not route through this evaluator gate.
+
 Start the service with:
 
 ```text

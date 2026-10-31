@@ -10,8 +10,8 @@ from common.data import bounded_json_value, sanitize_for_json_storage
 from conversation.models.conversation_models import LlmCallRecord, LlmUsage
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.conversation_model_config import ConversationModelConfig
-from request_orchestrator.shared.runtime_context import get_current_agent_name
-from request_orchestrator.constants import NodeName
+from agent_runtime.context import get_current_agent_name
+from agent_runtime.constants import NodeName
 
 ONE_MILLION = Decimal("1000000")
 

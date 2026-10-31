@@ -3,7 +3,7 @@ import pytest
 from products.models.product_result import ProductResult
 from products.models.product_search_results import ProductSearchResults
 from products.models.product_source import ProductSource
-from request_orchestrator.shared.tool_adapter.products.find_products import search_products
+from capabilities.adapters.products.find_products import search_products
 
 
 def _internal_result() -> ProductSearchResults:

@@ -12,10 +12,10 @@ from services.attribute_classifier.models import (
 def test_request_accepts_string_and_structured_attributes() -> None:
     request = AttributeClassificationRequest(
         context="winter hiking",
-        attributes=["food.likes", {"id": "color", "text": "preferred color"}],
+        attributes=["food.preference", {"id": "color", "text": "preferred color"}],
     )
 
-    assert request.attributes[0] == "food.likes"
+    assert request.attributes[0] == "food.preference"
     assert request.attributes[1] == AttributeCandidate(id="color", text="preferred color")
 
 

@@ -6,8 +6,8 @@ from uuid import UUID
 
 from conversation.repository.repo_factory import get_conversation_repo
 from common.data import bounded_json_value
-from request_orchestrator.constants import NodeName
-from request_orchestrator.shared.runtime_context import get_current_roundtrip_id
+from agent_runtime.constants import NodeName
+from agent_runtime.context import get_current_roundtrip_id
 
 logger = logging.getLogger(__name__)
 

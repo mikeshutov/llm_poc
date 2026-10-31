@@ -6,9 +6,9 @@ from uuid import UUID
 from dotenv import load_dotenv
 import streamlit as st
 
-from request_orchestrator.service import run_request_orchestrator_for_query
-from request_orchestrator.agents.seeder import seed_system_agents
-from tool.seeder import seed_tools
+from agent_runtime.service import run_request_orchestrator_for_query
+from agents.seeder import seed_system_agents
+from capabilities.registry.seeder import seed_tools
 from common.config import CONTENT_KEY, ROLE_KEY, ROLE_USER
 from conversation.constants import SOURCE_STREAMLIT
 from conversation.models.conversation_models import ConversationMetadata

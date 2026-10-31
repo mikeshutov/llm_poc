@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from request_orchestrator.models.plan import Plan
+from agent_runtime.models.plan import Plan
 from jobs.models.schedule import JobSchedule
 
 

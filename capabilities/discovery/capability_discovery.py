@@ -1,0 +1,331 @@
+from __future__ import annotations
+
+import math
+import os
+import re
+from time import perf_counter
+from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
+from typing import Any
+
+from llm.clients.embeddings import embed_text
+from agent_runtime.models.main_state import MainState
+from capabilities.discovery.models import (
+    AvailableAgent,
+    AvailableTool,
+    CapabilityDiscoveryResult,
+)
+from capabilities.registry.repository.repo_factory import get_tool_registry_repo
+from capabilities.registry.tools import TOOL_CATEGORIES
+from common.logging import record_node_log
+from agent_runtime.constants import NodeName
+
+MAX_DISCOVERED_CAPABILITIES = 5
+RUNTIME_DISCOVERY_TOOL_NAME = "discover_capabilities"
+STATIC_CAPABILITY_TOOL_NAMES = {RUNTIME_DISCOVERY_TOOL_NAME, "user_management"}
+RETRIEVAL_K = max(
+    MAX_DISCOVERED_CAPABILITIES,
+    int(os.getenv("CAPABILITY_DISCOVERY_RETRIEVAL_TOP_K", "20")),
+)
+TOP_K = min(
+    MAX_DISCOVERED_CAPABILITIES,
+    max(1, int(os.getenv("CAPABILITY_DISCOVERY_TOP_K", str(MAX_DISCOVERED_CAPABILITIES)))),
+)
+SEMANTIC_WEIGHT = float(os.getenv("CAPABILITY_DISCOVERY_SEMANTIC_WEIGHT", "1.0"))
+BM25_WEIGHT = float(os.getenv("CAPABILITY_DISCOVERY_BM25_WEIGHT", "0.7"))
+RRF_K = max(1, int(os.getenv("CAPABILITY_DISCOVERY_RRF_K", "60")))
+BM25_K1 = float(os.getenv("CAPABILITY_DISCOVERY_BM25_K1", "1.2"))
+BM25_B = float(os.getenv("CAPABILITY_DISCOVERY_BM25_B", "0.75"))
+_TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+
+
+def _similarity(left: list[float], right: list[float]) -> float:
+    if len(left) != len(right) or not left:
+        return -1.0
+    dot = sum(a * b for a, b in zip(left, right))
+    left_norm = math.sqrt(sum(value * value for value in left))
+    right_norm = math.sqrt(sum(value * value for value in right))
+    if left_norm == 0 or right_norm == 0:
+        return -1.0
+    return dot / (left_norm * right_norm)
+
+
+@lru_cache(maxsize=256)
+def _cached_embed_text(text: str, embedder_key: int) -> tuple[float, ...]:
+    return tuple(embed_text(text))
+
+
+def _tokenize(text: str) -> list[str]:
+    return _TOKEN_PATTERN.findall(text.lower())
+
+
+def _bm25_rank(query: str, candidates: list[tuple[str, str, Any]]) -> list[tuple[float, int, str]]:
+    """Rank candidates lexically using BM25."""
+    query_terms = _tokenize(query)
+    if not query_terms or not candidates:
+        return []
+    documents = [(candidate_id, _tokenize(text)) for candidate_id, text, _ in candidates]
+    document_frequency: dict[str, int] = {}
+    for _, terms in documents:
+        for term in set(terms):
+            document_frequency[term] = document_frequency.get(term, 0) + 1
+    average_length = sum(len(terms) for _, terms in documents) / len(documents)
+    if average_length == 0:
+        return []
+
+    query_frequency = {term: query_terms.count(term) for term in set(query_terms)}
+    scored: list[tuple[float, int, str]] = []
+    for index, (candidate_id, terms) in enumerate(documents):
+        term_frequency = {term: terms.count(term) for term in query_frequency}
+        normalization = 1 - BM25_B + BM25_B * len(terms) / average_length
+        score = 0.0
+        for term, qtf in query_frequency.items():
+            tf = term_frequency[term]
+            if not tf:
+                continue
+            df = document_frequency.get(term, 0)
+            idf = math.log(1 + (len(documents) - df + 0.5) / (df + 0.5))
+            score += idf * (tf * (BM25_K1 + 1) / (tf + BM25_K1 * normalization)) * qtf
+        if score > 0:
+            scored.append((score, index, candidate_id))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return scored
+
+
+def _semantic_rank(
+    query_embedding: list[float] | None, candidates: list[tuple[str, str, Any]]
+) -> list[tuple[float, int, str]]:
+    if query_embedding is None:
+        return []
+    ranked: list[tuple[float, int, str]] = []
+    for index, (candidate_id, searchable_text, _) in enumerate(candidates):
+        score = _similarity(
+            query_embedding,
+            list(_cached_embed_text(searchable_text, id(embed_text))),
+        )
+        ranked.append((score, index, candidate_id))
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    return ranked[:RETRIEVAL_K]
+
+
+def _rrf_rank(
+    candidate_ids: list[str],
+    ranked_lists: list[tuple[float, list[tuple[float, int, str]]]],
+) -> list[str]:
+    """Fuse ranked lists with weighted reciprocal rank fusion."""
+    original_order = {candidate_id: index for index, candidate_id in enumerate(candidate_ids)}
+    scores: dict[str, float] = {}
+    for weight, ranked in ranked_lists:
+        if weight <= 0:
+            continue
+        for rank, (_, _, candidate_id) in enumerate(ranked, start=1):
+            scores[candidate_id] = scores.get(candidate_id, 0.0) + weight / (RRF_K + rank)
+    return sorted(scores, key=lambda candidate_id: (-scores[candidate_id], original_order[candidate_id]))
+
+
+def _rerank_candidates(
+    query: str,
+    candidates: list[tuple[str, str, Any]],
+    semantic_rank: list[tuple[float, int, str]],
+) -> list[tuple[float, Any]]:
+    lexical_rank = _bm25_rank(query, candidates)
+    ranked_ids = _rrf_rank(
+        [candidate_id for candidate_id, _, _ in candidates],
+        [(SEMANTIC_WEIGHT, semantic_rank), (BM25_WEIGHT, lexical_rank)],
+    )
+    values = {candidate_id: value for candidate_id, _, value in candidates}
+    return [(0.0, values[candidate_id]) for candidate_id in ranked_ids[:TOP_K]]
+
+
+def _rank_candidates(
+    query: str,
+    query_embedding: list[float] | None,
+    candidates: list[tuple[str, str, Any]],
+) -> list[tuple[float, Any]]:
+    semantic_rank = _semantic_rank(query_embedding, candidates) if query_embedding is not None else []
+    return _rerank_candidates(query, candidates, semantic_rank)
+
+
+def _build_tool_candidates() -> list[tuple[str, str, AvailableTool]]:
+    candidates: list[tuple[str, str, AvailableTool]] = []
+    for category in TOOL_CATEGORIES.values():
+        for tool in sorted(category.tools, key=lambda candidate: candidate.name):
+            if tool.name in STATIC_CAPABILITY_TOOL_NAMES:
+                continue
+            available_tool = AvailableTool(
+                name=tool.name,
+                    title=tool.discovery_metadata.title,
+                    category=tool.discovery_metadata.category,
+                description=tool.description,
+            )
+            candidates.append(
+                (
+                    tool.name,
+                    f"{tool.name}: {tool.description}",
+                    available_tool,
+                )
+            )
+    return candidates
+
+
+def _discover_persisted_tools(
+    query: str,
+    query_embedding: list[float] | None,
+) -> list[tuple[float, AvailableTool]]:
+    if query_embedding is None:
+        return []
+    registered_tools = get_tool_registry_repo().list_relevant(
+        query_embedding=query_embedding,
+        limit=RETRIEVAL_K,
+    )
+    candidates: list[tuple[str, str, AvailableTool]] = []
+    for tool in registered_tools:
+        if tool.name in STATIC_CAPABILITY_TOOL_NAMES:
+            continue
+        metadata = getattr(tool, "metadata", {}) or {}
+        title = metadata.get("title", "")
+        category = metadata.get("category", "")
+        scope_terms = metadata.get("scope_terms", [])
+        if not isinstance(scope_terms, list | tuple):
+            scope_terms = []
+        searchable_text = " ".join(
+            part
+            for part in (tool.name, title, category, tool.description, *scope_terms)
+            if isinstance(part, str) and part
+        )
+        candidates.append(
+            (
+                tool.name,
+                searchable_text,
+                AvailableTool(
+                    name=tool.name,
+                    title=title,
+                    category=category,
+                    description=tool.description,
+                ),
+            )
+        )
+
+    # The vector query supplies the semantic ordering; BM25 adds exact-term
+    # precision within that candidate set before the final TOP_K cutoff.
+    semantic_rank = [
+        (0.0, index, candidate_id)
+        for index, (candidate_id, _, _) in enumerate(candidates)
+    ]
+    return _rerank_candidates(query, candidates, semantic_rank)
+
+
+def _build_agent_candidates(main_state: MainState) -> list[tuple[str, str, AvailableAgent]]:
+    candidates: list[tuple[str, str, AvailableAgent]] = []
+    for agent_state in main_state.agent_states.values():
+        profile = agent_state.agent_profile
+        if profile.name == "profile_management":
+            continue
+        if not profile.delegatable:
+            continue
+        available_agent = AvailableAgent(
+            agent=profile.name,
+            description=profile.description,
+            tools=sorted(profile.tool_names),
+        )
+        searchable_text = " ".join(
+            [
+                profile.name,
+                profile.description,
+                " ".join(profile.tool_names),
+            ]
+        )
+        candidates.append((profile.name, searchable_text, available_agent))
+    return candidates
+
+
+def capability_discovery(
+    main_state: MainState,
+    *,
+    include_agents: bool = True,
+    query: str | None = None,
+) -> CapabilityDiscoveryResult:
+    """Find concrete capabilities relevant to the current request.
+
+    Agent discovery is only enabled for the top-level request. Agent planner
+    iterations discover tools and attributes, but cannot delegate to agents.
+    """
+    from agents.discovery.agent_selection_query import build_agent_selection_query
+
+    query = (query or main_state.discovery_query or build_agent_selection_query(
+        current_user_request=main_state.task,
+        conversation_context=main_state.execution_context.conversation_context,
+    )).strip()
+    tool_candidates = _build_tool_candidates()
+    agent_candidates = _build_agent_candidates(main_state) if include_agents else []
+    query_embedding = (
+        main_state.discovery_query_embedding
+        if query == main_state.discovery_query
+        else None
+    )
+    embedding_reused = query_embedding is not None
+    embedding_started_at = perf_counter()
+    if query_embedding is None:
+        try:
+            query_embedding = embed_text(query)
+            if query == main_state.discovery_query:
+                main_state.discovery_query_embedding = query_embedding
+        except Exception as exc:
+            query_embedding = None
+            record_node_log(
+                node_name=NodeName.CAPABILITY_DISCOVERY,
+                stage="embedding",
+                event_type="capability_discovery",
+                level="warning",
+                message="Capability discovery embedding failed",
+                roundtrip_id=main_state.execution_context.roundtrip_id,
+                payload={"query": query, "error": str(exc)},
+                duration_ms=int((perf_counter() - embedding_started_at) * 1000),
+            )
+
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="capability-discovery") as executor:
+        tool_future = executor.submit(_discover_persisted_tools, query, query_embedding)
+        agent_future = executor.submit(_rank_candidates, query, query_embedding, agent_candidates)
+        try:
+            tool_matches = tool_future.result()
+        except Exception as exc:
+            record_node_log(
+                node_name=NodeName.CAPABILITY_DISCOVERY,
+                stage="tool_lookup",
+                event_type="capability_discovery",
+                level="warning",
+                message="Persisted tool capability lookup failed; using fallback",
+                roundtrip_id=main_state.execution_context.roundtrip_id,
+                payload={"query": query, "error": str(exc), "fallback": True},
+            )
+            tool_matches = []
+        agent_matches = agent_future.result()
+
+    # Preserve a useful discovery result for a query with no lexical or
+    # semantic hit, while applying TOP_K to the fallback.
+    if not tool_matches:
+        tool_matches = [(0.0, value) for _, _, value in tool_candidates[:TOP_K]]
+    if not agent_matches:
+        agent_matches = [(0.0, value) for _, _, value in agent_candidates[:TOP_K]]
+
+    result = CapabilityDiscoveryResult(
+        agents=[value for _, value in agent_matches],
+        tools=[value for _, value in tool_matches],
+    )
+    record_node_log(
+        node_name=NodeName.CAPABILITY_DISCOVERY,
+        stage="enrich_state",
+        event_type="capability_discovery",
+        message="Capability discovery completed",
+        roundtrip_id=main_state.execution_context.roundtrip_id,
+        payload={
+            "query": query,
+            "embedding_reused": embedding_reused,
+            "discovered_tools": [tool.name for tool in result.tools],
+            "discovered_agents": [agent.agent for agent in result.agents],
+            "tool_count": len(result.tools),
+            "agent_count": len(result.agents),
+        },
+        duration_ms=int((perf_counter() - embedding_started_at) * 1000),
+    )
+    return result

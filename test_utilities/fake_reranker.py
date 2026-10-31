@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from reranker.models import Candidate, RerankerScore
+from retrieval.reranker_models import Candidate, RerankerScore
 
 
 class FakeReranker:

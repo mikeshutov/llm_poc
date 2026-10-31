@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from request_orchestrator.agent_runner.models.agent_profile import AgentProfile
-from request_orchestrator.models.agent_prompt import EvidenceStep
-from request_orchestrator.models.agent_state import AgentState
-from request_orchestrator.models.evidence import EvidenceView
-from request_orchestrator.shared.evaluator.completion_gate import _build_premise, try_completion_evaluation
+from agent_runtime.models.agent_profile import AgentProfile
+from agent_runtime.models.agent_prompt import EvidenceStep
+from agent_runtime.models.agent_state import AgentState
+from retrieval.evidence import EvidenceView
+from agent_runtime.evaluation.completion import _build_premise, try_completion_evaluation
 from serviceclients.completion_evaluator.models import CompletionEvaluatorResult
 
 

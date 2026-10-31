@@ -32,15 +32,14 @@ def test_http_page_is_an_asset_subtype() -> None:
     assert page.asset_type == AssetType.HTTP_PAGE
 
 
-def test_legacy_artifact_reference_uses_asset_naming_internally() -> None:
+def test_asset_reference_uses_canonical_asset_fields() -> None:
     reference = AssetReference(
         id=uuid4(),
         user_id="user-1",
-        artifact_type="file",
-        artifact_id="asset-123",
+        asset_type="file",
+        asset_id="asset-123",
         created_at=datetime.now(timezone.utc),
     )
 
     assert reference.asset_type == "file"
     assert reference.asset_id == "asset-123"
-    assert reference.artifact_type == "file"

@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from jobs.orchestration import job_orchestrator
 from jobs.service import generate_job_plan
-from request_orchestrator.models.plan import PlanStep, PlanningResult
+from agent_runtime.models.plan import PlanStep, PlanningResult
 
 
 def _planning_result(*, steps: list[PlanStep], status: str = "ready") -> PlanningResult:

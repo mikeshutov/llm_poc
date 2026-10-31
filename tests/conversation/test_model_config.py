@@ -39,13 +39,13 @@ from llm.conversation_model_config import (
 from llm.model_config_resolver import resolve_conversation_model_config
 from personalization.profile.models import UserProfile
 from rendering.sidebar import build_model_config_rows
-from request_orchestrator.strategies.main_request_strategy import TOP_LEVEL_PROFILE
-from request_orchestrator.models.agent_execution_context import AgentExecutionContext
-from request_orchestrator.models.agent_result import AgentResult
-from request_orchestrator.models.orchestrator_result import OrchestratorResult
-from request_orchestrator.service import run_request_orchestrator_for_query
-from request_orchestrator.shared.runtime_context import bind_runtime_context
-from reranker.service import CandidateReranker
+from agents.main.request import TOP_LEVEL_PROFILE
+from agent_runtime.models.agent_execution_context import AgentExecutionContext
+from agent_runtime.models.agent_result import AgentResult
+from agent_runtime.models.orchestrator_result import OrchestratorResult
+from agent_runtime.service import run_request_orchestrator_for_query
+from agent_runtime.context import bind_runtime_context
+from retrieval.reranker import CandidateReranker
 
 
 class TrackingChatOpenAI:
@@ -242,7 +242,7 @@ def test_conversation_model_config_groups_models_by_provider() -> None:
 
 
 def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> None:
-    from request_orchestrator.models.agent_state import AgentState
+    from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
     config = resolve_conversation_model_config(
@@ -311,7 +311,7 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
 
 
 def test_llm_factory_build_llm_for_stage_uses_anthropic_provider() -> None:
-    from request_orchestrator.models.agent_state import AgentState
+    from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
     config = resolve_conversation_model_config(
@@ -327,7 +327,7 @@ def test_llm_factory_build_llm_for_stage_uses_anthropic_provider() -> None:
     )
 
     with patch('llm.chat_models.ChatAnthropic', TrackingChatAnthropic), patch(
-        'request_orchestrator.models.agent_state.build_chat_model',
+        'agent_runtime.models.agent_state.build_chat_model',
         side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name),
     ):
         state = AgentState.new(
@@ -351,7 +351,7 @@ def test_llm_factory_build_llm_for_stage_uses_anthropic_provider() -> None:
 
 
 def test_llm_factory_build_llm_for_stage_uses_deepseek_openai_compatible_endpoint() -> None:
-    from request_orchestrator.models.agent_state import AgentState
+    from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
     config = resolve_conversation_model_config(
@@ -367,7 +367,7 @@ def test_llm_factory_build_llm_for_stage_uses_deepseek_openai_compatible_endpoin
     )
 
     with patch('llm.chat_models.ChatOpenAI', TrackingChatOpenAI), patch(
-        'request_orchestrator.models.agent_state.build_chat_model',
+        'agent_runtime.models.agent_state.build_chat_model',
         side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name),
     ):
         state = AgentState.new(
@@ -392,7 +392,7 @@ def test_llm_factory_build_llm_for_stage_uses_deepseek_openai_compatible_endpoin
 
 
 def test_llm_factory_build_llm_for_stage_uses_google_openai_compatible_endpoint() -> None:
-    from request_orchestrator.models.agent_state import AgentState
+    from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
     config = resolve_conversation_model_config(
@@ -408,7 +408,7 @@ def test_llm_factory_build_llm_for_stage_uses_google_openai_compatible_endpoint(
     )
 
     with patch('llm.chat_models.ChatOpenAI', TrackingChatOpenAI), patch(
-        'request_orchestrator.models.agent_state.build_chat_model',
+        'agent_runtime.models.agent_state.build_chat_model',
         side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name),
     ):
         state = AgentState.new(
@@ -436,7 +436,7 @@ def test_llm_factory_build_llm_for_stage_uses_google_openai_compatible_endpoint(
 
 
 def test_llm_factory_build_llm_for_stage_uses_xai_openai_compatible_endpoint() -> None:
-    from request_orchestrator.models.agent_state import AgentState
+    from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
     config = resolve_conversation_model_config(
@@ -452,7 +452,7 @@ def test_llm_factory_build_llm_for_stage_uses_xai_openai_compatible_endpoint() -
     )
 
     with patch('llm.chat_models.ChatOpenAI', TrackingChatOpenAI), patch(
-        'request_orchestrator.models.agent_state.build_chat_model',
+        'agent_runtime.models.agent_state.build_chat_model',
         side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name),
     ):
         state = AgentState.new(
@@ -477,7 +477,7 @@ def test_llm_factory_build_llm_for_stage_uses_xai_openai_compatible_endpoint() -
 
 
 def test_llm_factory_build_llm_for_stage_uses_cohere_openai_compatible_endpoint() -> None:
-    from request_orchestrator.models.agent_state import AgentState
+    from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
     config = resolve_conversation_model_config(
@@ -493,7 +493,7 @@ def test_llm_factory_build_llm_for_stage_uses_cohere_openai_compatible_endpoint(
     )
 
     with patch('llm.chat_models.ChatOpenAI', TrackingChatOpenAI), patch(
-        'request_orchestrator.models.agent_state.build_chat_model',
+        'agent_runtime.models.agent_state.build_chat_model',
         side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name),
     ):
         state = AgentState.new(
@@ -518,7 +518,7 @@ def test_llm_factory_build_llm_for_stage_uses_cohere_openai_compatible_endpoint(
 
 
 def test_llm_factory_build_llm_for_stage_uses_mistral_openai_compatible_endpoint() -> None:
-    from request_orchestrator.models.agent_state import AgentState
+    from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
     config = resolve_conversation_model_config(
@@ -534,7 +534,7 @@ def test_llm_factory_build_llm_for_stage_uses_mistral_openai_compatible_endpoint
     )
 
     with patch('llm.chat_models.ChatOpenAI', TrackingChatOpenAI), patch(
-        'request_orchestrator.models.agent_state.build_chat_model',
+        'agent_runtime.models.agent_state.build_chat_model',
         side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name),
     ):
         state = AgentState.new(
@@ -571,23 +571,23 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
         captured_context_kwargs['limit'] = limit
         return ConversationContext()
 
-    with patch('request_orchestrator.service.get_conversation_repo', return_value=fake_repo), patch(
-        'request_orchestrator.service.get_conversation_model_config_repo',
+    with patch('agent_runtime.service.get_conversation_repo', return_value=fake_repo), patch(
+        'agent_runtime.service.get_conversation_model_config_repo',
         return_value=fake_model_config_repo,
     ), patch(
-        'request_orchestrator.service.build_roundtrip_context',
+        'agent_runtime.service.build_roundtrip_context',
         side_effect=fake_build_roundtrip_context,
     ), patch(
-        'request_orchestrator.service.build_user_profile',
+        'agent_runtime.service.build_user_profile',
         return_value=UserProfile(),
     ), patch(
-        'request_orchestrator.service.MainState.initialize_agent_states',
+        'agent_runtime.service.MainState.initialize_agent_states',
         return_value=None,
     ), patch(
-        'request_orchestrator.service.run_agent',
+        'agent_runtime.service.run_agent',
         return_value=OrchestratorResult(agent_result=AgentResult(), answer=['done']),
     ), patch(
-        'request_orchestrator.service.embed_text',
+        'agent_runtime.service.embed_text',
         return_value=[0.1, 0.2, 0.3],
     ):
         run_request_orchestrator_for_query(str(conversation_id), 'hello world', user_id='anonymous')
@@ -619,23 +619,23 @@ def test_run_request_orchestrator_passes_geometadata_to_user_profile_builder() -
             geometadata=kwargs.get('geometadata'),
         )
 
-    with patch('request_orchestrator.service.get_conversation_repo', return_value=fake_repo), patch(
-        'request_orchestrator.service.get_conversation_model_config_repo',
+    with patch('agent_runtime.service.get_conversation_repo', return_value=fake_repo), patch(
+        'agent_runtime.service.get_conversation_model_config_repo',
         return_value=fake_model_config_repo,
     ), patch(
-        'request_orchestrator.service.build_roundtrip_context',
+        'agent_runtime.service.build_roundtrip_context',
         return_value=ConversationContext(),
     ), patch(
-        'request_orchestrator.service.build_user_profile',
+        'agent_runtime.service.build_user_profile',
         side_effect=fake_build_user_profile,
     ), patch(
-        'request_orchestrator.service.MainState.initialize_agent_states',
+        'agent_runtime.service.MainState.initialize_agent_states',
         return_value=None,
     ), patch(
-        'request_orchestrator.service.run_agent',
+        'agent_runtime.service.run_agent',
         return_value=OrchestratorResult(agent_result=AgentResult(), answer=['done']),
     ), patch(
-        'request_orchestrator.service.embed_text',
+        'agent_runtime.service.embed_text',
         return_value=[0.1, 0.2, 0.3],
     ):
         run_request_orchestrator_for_query(str(conversation_id), 'hello world', user_id='anonymous')

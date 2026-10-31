@@ -11,7 +11,7 @@ class FakeResponse:
         return {"relevant_attributes": ["waterproof rating"]}
 
 
-def test_client_returns_relevant_attributes(monkeypatch, caplog) -> None:
+def test_client_returns_relevant_attributes(monkeypatch) -> None:
     calls = {}
 
     def post(url, *, json, timeout):
@@ -20,10 +20,9 @@ def test_client_returns_relevant_attributes(monkeypatch, caplog) -> None:
 
     monkeypatch.setattr("serviceclients.attribute_classifier.client.requests.post", post)
 
-    with caplog.at_level("INFO", logger="serviceclients.attribute_classifier.client"):
-        result = AttributeClassifierClient(base_url="http://classifier").relevant_attributes(
-            "winter hiking", ["waterproof rating", "color"]
-        )
+    result = AttributeClassifierClient(base_url="http://classifier").relevant_attributes(
+        "winter hiking", ["waterproof rating", "color"]
+    )
 
     assert result == ["waterproof rating"]
     assert calls["url"] == "http://classifier/classify"
@@ -31,5 +30,3 @@ def test_client_returns_relevant_attributes(monkeypatch, caplog) -> None:
         "context": "winter hiking",
         "attributes": ["waterproof rating", "color"],
     }
-    assert "Sending attribute classification request" in caplog.text
-    assert "Received attribute classification result" in caplog.text

@@ -1,139 +1,89 @@
 # Context Assembly
-The right mental model is not "we build one giant context blob and pass it everywhere." What we actually do is build a shared `AgentState`, and then each prompt-building step pulls the specific sections it wants from that state.
+
+The runtime builds one shared `AgentState`, then each discovery, agent, and execution step reads the smallest useful slice of that state. The top-level request path is:
+
+`load agents → enrich state → load profile → reason → execute → reason … → result`
 
 ## AgentState First
-At the start of a turn we assemble a reusable `AgentState` that can hold:
+
+At the start of a turn, `AgentState` can hold:
+
 1. The latest user prompt as the active task.
-2. Conversation context, including top-level summaries and recent roundtrip history.
-3. A lightweight user profile with geo/location-aware metadata.
-4. Discovery output such as relevant tools, delegatable agents, and requested attribute types.
-5. Iteration state, including plans and raw tool results gathered so far.
-6. Subagent state for secondary agent paths such as profile management.
+2. Conversation summaries and recent roundtrip context.
+3. Lightweight user profile metadata and selectively hydrated attributes.
+4. Static capabilities and dynamically discovered tools and agents.
+5. Reasoner message history, plans, tool results, and evidence.
+6. Subagent state for paths such as profile management.
 7. Final result fields, logs, and runtime data needed across the graph.
 
-That gives the graph one shared runtime picture of the turn without forcing every prompt to receive every field.
-
 ## Conversation Context Layer
-`build_roundtrip_context(...)` currently builds `ConversationContext` from four layers:
-1. `conversation.summary` as the top-level conversation summary.
-2. The latest stored batch summary as `latest_conversation_summary`.
-3. Recent roundtrips after the latest summary cutoff, derived from ordered user and assistant messages plus `roundtrip_summary`.
-4. Recent roundtrip tool summaries after the latest summary cutoff.
 
-Important detail:
-1. The current user prompt is not embedded into stored conversation context.
-2. We create the roundtrip row early, but context assembly only includes roundtrips that already have a user message or `roundtrip_summary`.
-3. The live user request is passed separately as `state.task`.
+`build_roundtrip_context(...)` builds `ConversationContext` from the conversation summary, latest stored batch summary, recent roundtrips, and recent roundtrip tool summaries. The live user request is passed separately as `state.task`.
 
 ## Profile Hydration Layer
-We also prepare a separate `User Profile` object inside state.
 
-That profile starts with lightweight durable identity and geometadata. Stored user attributes are then loaded in stages:
-1. Attribute discovery sees the lightweight profile, not the full durable attribute set.
-2. It selects specific attribute types such as `food.likes` or `projects.goals` when they would materially help.
-3. `load_user_profile` hydrates only those requested attribute types into the profile.
-4. Later steps use that hydrated profile slice instead of preloading everything.
-
-Tone also follows this selective pattern:
-1. It is not included by default everywhere.
-2. Planning includes tone so the planner can see available user communication preferences.
-3. Synthesis includes tone so the final response can match the user's preferred style.
+Attribute discovery first sees lightweight profile metadata. It selects only the attribute types that could materially help, and `load_user_profile` hydrates those types into the profile before reasoning. Tone follows the same selective pattern.
 
 ## Prompt Assembly Per Step
-After shared state exists, each prompt is built from the smallest useful slice of it.
 
 ### Discovery
-Capability and attribute discovery get:
-1. The latest user prompt.
-2. Conversation context.
-3. Lightweight user profile metadata.
-4. Available tools, agent profiles, and attribute types.
 
-Their job is to narrow the capabilities and profile data made available to the main planner.
+Capability and attribute discovery receive the current request, conversation context, lightweight profile metadata, and capability metadata. Initial capability discovery retrieves dynamic tools while static capabilities remain available independently.
 
 ### Profile Loading
-`load_user_profile` is not an LLM prompt step.
 
-It uses attribute-discovery output in state to hydrate only the requested durable attribute types before later prompts run.
+`load_user_profile` is not an LLM prompt step. It uses attribute-discovery output to hydrate the requested durable attribute types.
 
-### Planner
-The planner currently gets:
-1. The latest task and any unresolved evaluator feedback.
-2. Conversation context.
-3. The hydrated user profile, including tone.
-4. Allowed tools and planner rules.
-5. Previous iterations with raw step results.
+### Main Reasoner
 
-So the planner is not working from the full raw conversation transcript, but it does currently receive structured conversation context.
+The main reasoner receives the current task and conversation context, the hydrated profile, static capabilities such as `discover_capabilities` and `user_management`, dynamically discovered tools and permitted agents, prior `AIMessage`/`ToolMessage` history, and accumulated evidence.
+
+It returns the existing synthesis-shaped answer contract plus internal `PlanStep` objects. A non-empty plan continues the loop; an empty plan produces the final result.
 
 ### Executor
-The executor does not build an LLM planning prompt.
 
-It uses the current plan plus accumulated state to execute tool calls and store raw results keyed by canonical step IDs.
+The executor does not build an LLM prompt. It executes authorized `PlanStep` objects, records tool calls and evidence, and returns structured tool results.
 
-### Evaluator
-The evaluator sits between execution and synthesis.
+### Shared evaluator
 
-It gets:
-1. The goal.
-2. The latest user prompt.
-3. The user profile.
-4. Prompt-safe evidence views derived from execution results.
+The evaluator remains available to existing planner/executor/evaluator user-agent strategies. It is not part of the main reasoner loop.
 
-Its job is to decide whether the current evidence is sufficient, whether another meaningful planning pass is needed, or whether the loop should terminate.
+### Final response
 
-### Synthesis
-Synthesis currently gets:
-1. The latest user prompt.
-2. A narrowed conversation context containing only `conversation_summary`, `latest_conversation_summary`, and the latest stored `tool_summary`.
-3. The user profile, including tone.
-4. Prompt-safe evidence views derived from execution results.
-
-Important detail:
-1. Synthesis does not currently receive `recent_roundtrips`.
-2. Synthesis does not receive planner-history payloads.
-3. Synthesis works from the narrowed summaries plus evidence.
+The reasoner returns the existing `SynthesisResult` fields: `result`, `next_question`, and `roundtrip_summary`. Evidence IDs are normalized and validated before the result is stored in orchestrator state.
 
 ## Evidence Model
-Execution now keeps raw step results in iteration trace, and prompt-facing evidence is derived separately from that raw data.
 
-The practical split is:
-1. Raw step results stay useful for execution, logging, persistence, and planner history.
-2. Hydrated evidence is normalized for application-side lookup and source rendering.
-3. Evidence views are the smaller prompt-safe records passed to evaluator and synthesis.
+Execution keeps raw step results for persistence, logging, and follow-up reasoning. Retrieval-facing evidence is normalized separately for prompt use, source rendering, pagination metadata, and final attribution. Completed tool results are passed to the next reasoner turn as LangChain message entries.
 
 ## Overall Flow
-In practice the flow is:
-1. Build `AgentState`.
-2. Run request analysis.
-3. Hydrate the requested slice of the user profile.
-4. Plan and execute.
-5. Evaluate whether another planning pass is needed.
-6. Synthesize from narrowed context plus evidence.
 
-Simple diagram to illustrate the shape of the flow:
+1. Build `AgentState`.
+2. Discover initial agents, capabilities, and relevant attribute types.
+3. Hydrate requested profile attributes.
+4. Invoke the main reasoner with static and dynamic capabilities.
+5. Execute planned `PlanStep` objects when present.
+6. Append each tool call and result as `AIMessage` and `ToolMessage` entries.
+7. Return to the reasoner until it produces no executable steps, reaches the max-turn limit, or becomes blocked.
 
 ```mermaid
 flowchart TD
-    A[Context Builder] --> B[Build Shared AgentState]
+    A[Build AgentState] --> B[Load Agents]
+    B --> C[Discover Capabilities and Attributes]
+    C --> D[Load Requested Profile Attributes]
+    D --> E[Main Reasoner]
+    E -->|PlanStep objects| F[Execute Tools or Agents]
+    F --> G[Aggregate Results and Evidence]
+    G --> H[Append AIMessage and ToolMessage]
+    H --> E
+    E -->|No steps, blocked, or max turns| I[Store SynthesisResult-shaped Answer]
 
-    subgraph C[AgentState]
-        direction TB
-        S1[Latest User Prompt / Task]
-        S2[Conversation Context]
-        S3[Lightweight User Profile]
-        S4[Discovered Capabilities And Attributes]
-        S5[Iteration Trace / Raw Tool Results]
-        S6[Subagent States]
+    subgraph Capabilities
+        J[Static: discover_capabilities and user_management]
+        K[Dynamic: up to five discovered tools and permitted agents]
     end
-
-    B --> C
-    C --> D[Capability And Attribute Discovery]
-    D --> E[Profile Loader hydrates requested attributes]
-    E --> F[Planner builds prompt from goal, context, tools, profile, prior iterations]
-    F --> G[Executor runs current plan]
-    G --> H[Evaluator checks evidence sufficiency]
-    H -->|Needs more work| J[Re-enrich Agent State]
-    J --> F
-    H -->|Enough evidence| I[Synthesis builds prompt from summaries plus evidence]
+    J --> E
+    K --> E
+    C --> K
+    E -->|Explicit discovery request| C
 ```

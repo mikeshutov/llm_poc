@@ -67,24 +67,16 @@ class AssetChunk(BaseModel):
 
 
 class AssetReference(BaseModel):
-    """Compatibility view of a job artifact reference during migration."""
+    """Reference to a canonical asset associated with a job result."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     id: UUID
     user_id: str | None = None
-    asset_type: str = Field(alias="artifact_type")
-    asset_id: str = Field(alias="artifact_id")
+    asset_type: str
+    asset_id: str
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
-
-    @property
-    def artifact_type(self) -> str:
-        return self.asset_type
-
-    @property
-    def artifact_id(self) -> str:
-        return self.asset_id
 
     @field_validator("asset_type", "asset_id")
     @classmethod

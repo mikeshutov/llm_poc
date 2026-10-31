@@ -3,7 +3,7 @@ The repo now has a fairly deep observability layer across prompts, LLM calls, to
 
 ## What We Record
 At a high level, each turn can produce observable data in a few layers:
-1. Agent-stage logs such as capability discovery, profile hydration, planning, evaluation, synthesis, and tool calls.
+1. Agent-stage logs such as capability discovery, profile hydration, reasoner turns, evaluation for user-agent strategies, final responses, and tool calls.
 2. Stored prompt rows for important LLM stages.
 3. Structured LLM call records with usage, cost, latency, and prompt metadata.
 4. Structured local reranker events with model, candidate, evidence, and latency metadata.
@@ -17,12 +17,15 @@ The Streamlit debug experience renders structured agent logs rather than raw tex
 
 Current log types include:
 1. `profile_load`
-2. `plan`
-3. `evaluator`
-4. `tool_call`
-5. `synthesis`
+2. `reason`
+3. `plan`
+4. `evaluator`
+5. `tool_call`
+6. `synthesis`
 
 These logs are shaped into typed payloads in `rendering/debug.py`, which keeps the UI consistent and makes the logs easier to scan as JSON.
+
+The main reasoner log records complete planned `PlanStep` objects, including the target tool or agent, hypothesis, arguments, and metadata. Capability-discovery requests and returned capabilities are logged separately. Tool results are appended to the reasoner's LangChain history as `AIMessage` and `ToolMessage` entries for the next turn.
 
 ## Prompt Observability
 Prompt construction is observable at the section level.
@@ -39,7 +42,7 @@ Prompt construction is observable at the section level.
 That means we can inspect not just the final prompt, but also which sections were included and how expensive each section was.
 
 Important LLM-stage prompts are also stored as roundtrip prompt rows, including:
-1. planner
+1. reasoner (currently persisted under the `planner` model stage)
 2. evaluator
 3. synthesis
 
@@ -95,7 +98,7 @@ At the end of a turn, the roundtrip payload can include:
 5. `tool_summary`
 6. `agent_logs`
 7. `used_evidence_ids`
-8. `hydrated_evidence_by_id`
+8. `evidence_by_id`
 9. `llm_usage`
 10. `roundtrip_latency_ms`
 
@@ -106,7 +109,7 @@ Observability now also extends into answer attribution.
 
 The final synthesized result can carry:
 1. `used_evidence_ids` for the evidence referenced by the answer
-2. `hydrated_evidence_by_id` for the typed full evidence objects behind those ids
+2. `evidence_by_id` for the typed full evidence objects behind those ids
 
 That supports:
 1. source rendering in the UI
@@ -128,4 +131,4 @@ This observability layer exists so we can answer questions like:
 4. How long did the whole roundtrip take?
 5. Which tools ran and how long did they take?
 6. What evidence supported the final answer?
-7. Why did the system replan, retry, or stop?
+7. Why did the reasoner execute another turn, retry, or stop?

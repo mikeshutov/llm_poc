@@ -139,13 +139,13 @@ class JobResultRepository:
         result_id: UUID,
         *,
         user_id: str,
-        artifact_type: str,
-        artifact_id: str,
+        asset_type: str,
+        asset_id: str,
         metadata: dict[str, Any] | None = None,
     ) -> AssetReference:
         resolved_user_id = self._require_user_id(user_id)
-        if not artifact_type.strip() or not artifact_id.strip():
-            raise ValueError("artifact_type and artifact_id are required")
+        if not asset_type.strip() or not asset_id.strip():
+            raise ValueError("asset_type and asset_id are required")
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
@@ -160,8 +160,8 @@ class JobResultRepository:
                 raise ValueError("job result not found for user")
             asset = self._asset_repo.create_or_get_reference(
                 user_id=resolved_user_id,
-                artifact_type=artifact_type,
-                artifact_id=artifact_id,
+                asset_type=asset_type,
+                asset_id=asset_id,
                 metadata=metadata,
             )
             cur.execute(
@@ -180,8 +180,8 @@ class JobResultRepository:
         with self._conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
                 """
-                SELECT a.id, a.user_id, a.asset_type AS artifact_type,
-                       a.name AS artifact_id, a.metadata, a.created_at
+                SELECT a.id, a.user_id, a.asset_type,
+                       a.name AS asset_id, a.metadata, a.created_at
                 FROM job_result_assets jra
                 JOIN assets a ON a.id = jra.asset_id
                 WHERE jra.job_result_id = %s AND EXISTS (

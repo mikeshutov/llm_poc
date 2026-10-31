@@ -7,7 +7,9 @@ from personalization.profile.models import GeoLocation, GeoMetadata, UserAttribu
 from personalization.profile.repository.repo_factory import get_user_profile_repo
 from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
-from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
+from personalization.user_attributes.models.user_attribute_types import (
+    ATTRIBUTE_TYPE_VALUES,
+)
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 
 VALID_ATTRIBUTE_TYPES = set(ATTRIBUTE_TYPE_VALUES)
@@ -96,7 +98,7 @@ def load_user_profile_attributes(
 ) -> UserProfile:
     normalized_types: list[str] = []
     for attribute_type in requested_attribute_types:
-        normalized_type = str(attribute_type).strip()
+        normalized_type = str(attribute_type).strip() if attribute_type else None
         if normalized_type and normalized_type in VALID_ATTRIBUTE_TYPES and normalized_type not in normalized_types:
             normalized_types.append(normalized_type)
 

@@ -11,29 +11,29 @@ ATTRIBUTE_CATEGORIES = (
     "fitness",
 )
 
-ATTRIBUTE_QUALIFIERS = (
-    "likes",
-    "dislikes",
-    "favorites",
-    "interests",
-    "skills",
-    "goals",
+ATTRIBUTE_KINDS = (
+    "preference",
+    "avoidance",
+    "interest",
+    "skill",
+    "goal",
 )
 
 ATTRIBUTE_TYPE_VALUES = tuple(
-    f"{category}.{qualifier}"
+    f"{category}.{kind}"
     for category in ATTRIBUTE_CATEGORIES
-    for qualifier in ATTRIBUTE_QUALIFIERS
+    for kind in ATTRIBUTE_KINDS
 )
 
 UserAttributeType: TypeAlias = Literal[*ATTRIBUTE_TYPE_VALUES]
+
 ATTRIBUTE_TYPE_DESCRIPTION = ", ".join(ATTRIBUTE_TYPE_VALUES)
 ATTRIBUTE_TYPE_FORMAT_DESCRIPTION = (
     "Use the format `prefix.suffix` where prefix is one of "
-    f"{', '.join(ATTRIBUTE_CATEGORIES)} and suffix is one of {', '.join(ATTRIBUTE_QUALIFIERS)}."
+    f"{', '.join(ATTRIBUTE_CATEGORIES)} and suffix is one of {', '.join(ATTRIBUTE_KINDS)}."
 )
 ATTRIBUTE_TYPE_EXAMPLE_DESCRIPTION = (
-    "Examples: `food.likes`, `projects.goals`, `technology.skills`."
+    "Examples: `food.preference`, `projects.goal`, `technology.skill`."
 )
 ATTRIBUTE_TYPE_COMPACT_DESCRIPTION = (
     f"{ATTRIBUTE_TYPE_FORMAT_DESCRIPTION} {ATTRIBUTE_TYPE_EXAMPLE_DESCRIPTION}"
