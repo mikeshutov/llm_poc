@@ -21,7 +21,8 @@ from capabilities.adapters.profile import (
 )
 from agents.profile_management.profile import build_profile_management_profile
 from agent_runtime.models.main_state import MainState
-from agents.main.agent import MainReasonerStrategy, _append_execution_messages
+from agents.main.agent import MainReasonerStrategy
+from agent_runtime.execution.message_history import append_execution_messages
 from agents.main import agent as main_reasoner
 from agent_runtime.models.decision import DecisionStatus
 from agent_runtime.strategies.react.decision import DecisionResult
@@ -149,7 +150,7 @@ def test_main_reasoner_appends_subagent_result_to_next_llm_message_history() -> 
         },
     ))
 
-    _append_execution_messages(state)
+    append_execution_messages(state)
 
     assert len(state.reasoner_message_history) == 2
     assert state.reasoner_message_history[0].tool_calls[0]["name"] == "document_writing"

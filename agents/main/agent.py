@@ -12,7 +12,6 @@ from agent_runtime.models.decision import DecisionStatus
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.synthesized_result import SynthesisResult, SynthesisResultBlock
 from agent_runtime.execution.tool_executor import run_executor
-from agent_runtime.execution.message_history import append_execution_messages
 from agent_runtime.strategies.react.decision import run_decision
 from agents.main.prompts import build_reasoner_prompt
 
@@ -95,9 +94,6 @@ def _route_after_execute(state: AgentState) -> str:
         )
         return END
     return NodeName.REASONER.value
-
-
-_append_execution_messages = append_execution_messages
 
 
 @dataclass(frozen=True)

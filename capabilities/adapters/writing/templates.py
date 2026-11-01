@@ -73,6 +73,11 @@ class WritingTemplateMetadata(BaseModel):
     default_filename: str | None = None
     version: int
 
+    @classmethod
+    def from_template(cls, template: WritingTemplate) -> "WritingTemplateMetadata":
+        """Project a validated definition into the metadata-only result model."""
+        return cls(**template.model_dump(exclude={"template_file"}))
+
 
 class WritingTemplateListResult(BaseModel):
     templates: list[WritingTemplateMetadata] = Field(default_factory=list)
@@ -188,10 +193,7 @@ def writing_templates(
             "Supported formats are txt, md, docx, and pdf."
         )
     matches = [template for template in load_writing_templates() if _matches(template, args)]
-    metadata = [
-        WritingTemplateMetadata.model_validate(template.model_dump())
-        for template in matches
-    ]
+    metadata = [WritingTemplateMetadata.from_template(template) for template in matches]
     result = WritingTemplateListResult(templates=metadata)
     evidence = [
         EvidenceView(
@@ -201,9 +203,7 @@ def writing_templates(
             summary=template.description,
             source=TOOL_NAME_WRITING_TEMPLATES,
             entity_type=TOOL_RESULT_TYPE_WRITING_TEMPLATES,
-            llm_metadata=WritingTemplateMetadata.model_validate(
-                template.model_dump()
-            ).model_dump(mode="json"),
+            llm_metadata=WritingTemplateMetadata.from_template(template).model_dump(mode="json"),
         )
         for template in matches
     ]

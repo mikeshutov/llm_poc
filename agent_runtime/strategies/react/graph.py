@@ -18,11 +18,6 @@ from common.logging import record_node_log
 
 def _plan_was_entirely_duplicate_rejected(state: AgentState) -> bool:
     """Return true when every step in the latest plan was an exact duplicate.
-
-    A duplicate is not a recoverable tool error: executing the same request
-    again cannot produce new work.  REACT must stop before asking its LLM to
-    select the same action again.  Mixed plans are intentionally excluded so
-    successful/new work can still be observed and followed up.
     """
     plan = state.node_states.planner.plan
     if plan is None or not plan.steps:
@@ -67,10 +62,6 @@ class ReactStrategy:
                 message_history=state.reasoner_message_history,
             )
         except Exception as exc:
-            # Keep the graph's failure semantics, but do not hide failures that
-            # occur before an LLM call is recorded. Without this, provider,
-            # prompt, or tool-schema errors look like a REACT agent simply
-            # skipped its reasoner.
             record_node_log(
                 conversation_id=state.execution_context.conversation_id,
                 roundtrip_id=state.execution_context.roundtrip_id,

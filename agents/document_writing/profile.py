@@ -12,6 +12,11 @@ class DocumentWritingDelegationArgs(AgentDelegationArgs):
     """LLM-facing parameters for delegating work to the document writer."""
 from agents.document_writing.prompts import build_document_writing_rules
 from capabilities.registry.constants import (
+    TOOL_NAME_FILE_CREATE,
+    TOOL_NAME_FILE_EDIT,
+    TOOL_NAME_FILE_LIST,
+    TOOL_NAME_FILE_MOVE,
+    TOOL_NAME_FILE_READ,
     TOOL_NAME_LOOKUP_EVIDENCE,
     TOOL_NAME_WEB_FETCH,
     TOOL_NAME_WRITING_TEMPLATES,
@@ -27,11 +32,11 @@ from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 
 
 _DOCUMENT_WRITING_TOOL_NAMES = {
-    "file_create",
-    "file_read",
-    "file_edit",
-    "file_list",
-    "file_move",
+    TOOL_NAME_FILE_CREATE,
+    TOOL_NAME_FILE_READ,
+    TOOL_NAME_FILE_EDIT,
+    TOOL_NAME_FILE_LIST,
+    TOOL_NAME_FILE_MOVE,
     TOOL_NAME_LOOKUP_EVIDENCE,
     TOOL_NAME_WEB_FETCH,
     TOOL_NAME_WRITING_TEMPLATES,

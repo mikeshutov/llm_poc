@@ -81,10 +81,6 @@ def _execute_step(
     args = resolved_args if resolved_args is not None else _substitute_refs(step.args, tool_results_by_step_id)
     started_at = perf_counter()
     if rejection_reason:
-        # Keep duplicate rejection machine-readable.  REACT agents receive
-        # executor results as observations; without this marker a duplicate
-        # looks identical to an ordinary tool failure and the reasoner can
-        # keep planning the same action indefinitely.
         is_duplicate = "already made in this roundtrip" in rejection_reason
         output = ToolResult.error(
             rejection_reason,

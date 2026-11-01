@@ -146,7 +146,7 @@ GAMES_TOOLS = [
     Tool(get_magic_card_rulings, result_type=TOOL_RESULT_TYPE_RULES, cache_policy=ToolCachePolicy(3600)),
 ]
 MEMORY_TOOLS = [
-    Tool(get_memory_detail, result_type=TOOL_RESULT_TYPE_MEMORY_DETAIL, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
+    Tool(get_memory_detail, result_type=TOOL_RESULT_TYPE_MEMORY_DETAIL, version=4, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
     Tool(lookup_evidence, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
     Tool(search_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
 ]
@@ -269,7 +269,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
         description="Search prior conversation summaries for relevant past requests and discussions as memories.",
         rules=[
             "Use memory_search without conversation_ids to discover relevant conversations, then use it again with returned conversation_ids to find specific historical mentions or exchanges.",
-            "Use memory_detail after memory_search when you need the exact prior prompt, response, or structured payload for one memory hit.",
+            "Use memory_detail only after memory_search has returned an exact roundtrip UUID in evidence metadata; never pass a topic, title, conversation name, or search query as roundtrip_id.",
             "Use memory_lookup_evidence with an array of evidence IDs from prior conversation messages when you need the full records behind prior cited evidence.",
             "When the user asks what was previously said, decided, suggested, or discussed about a topic, prefer the two-step memories flow over guessing from current context.",
         ],

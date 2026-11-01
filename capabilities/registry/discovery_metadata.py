@@ -45,7 +45,7 @@ _DISCOVERY_METADATA: dict[str, ToolDiscoveryMetadata] = {
     "games_commander_cards": ToolDiscoveryMetadata("Commander card recommendations", "Magic: The Gathering", "Retrieve reranked card recommendations for a Magic: The Gathering commander."),
     "games_search_cards": ToolDiscoveryMetadata("Magic card search", "Magic: The Gathering", "Search Scryfall for Magic: The Gathering cards by name or advanced query."),
     "games_card_rulings": ToolDiscoveryMetadata("Magic card rulings", "Magic: The Gathering", "Retrieve official rules rulings for a Magic: The Gathering card."),
-    "memory_detail": ToolDiscoveryMetadata("Conversation memory detail", "conversation memory", "Retrieve the exact prompt, response, or structured payload for a previously found conversation memory."),
+    "memory_detail": ToolDiscoveryMetadata("Conversation memory detail", "conversation memory", "Retrieve the exact prompt, response, or structured payload for a previously found conversation memory using the exact roundtrip UUID returned by memory_search. Do not pass a topic, title, conversation name, or search query.", version=4),
     "memory_lookup_evidence": ToolDiscoveryMetadata("Historical evidence lookup", "conversation memory", "Retrieve full evidence records by evidence ID from prior conversation context."),
     "memory_search": ToolDiscoveryMetadata("Conversation memory search", "conversation memory", "Discover relevant past conversations or search detailed exchanges within selected conversations."),
     "asset_search": ToolDiscoveryMetadata("Asset discovery", "assets", "Search assets by semantic relevance, asset type, or content type.", ("documents", "web pages", "asset metadata")),
