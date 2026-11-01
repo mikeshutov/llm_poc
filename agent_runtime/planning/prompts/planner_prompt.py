@@ -12,6 +12,7 @@ from retrieval.evidence_store import (
 from agent_runtime.planning.models.compiled_planner_context import CompiledPlannerContext
 from agent_runtime.planning.prompts.planner_rules import build_planner_rules
 from capabilities.registry.tools import TOOLS_BY_NAME
+from capabilities.discovery.models import AvailableTool
 
 
 ATTRIBUTE_TYPE_MINIMAL_DESCRIPTION = 'Typed user-attribute key such as `food.preference`, `projects.goal`, or `technology.skill`.'
@@ -26,6 +27,11 @@ MISSING_INFORMATION_REPLAN_RULE = (
 )
 def _is_profile_management_agent(state: AgentState) -> bool:
     return state.agent_profile.name == PROFILE_MANAGEMENT_AGENT_NAME
+
+
+def _prompt_tools(tools: list[object]) -> list[AvailableTool]:
+    """Convert executable tools to the typed capability catalog used in prompts."""
+    return [AvailableTool.from_tool(tool) for tool in tools]
 
 
 def _format_field_line(name: str, field_info, required: bool, minimal: bool = False) -> str:
@@ -147,8 +153,8 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
             conversation_context=state.execution_context.conversation_context,
             task=state.inputs.task,
             available_tools=(
-                [] if capabilities is None else capabilities.tools
-            ) + list(state.agent_profile.static_tools),
+                [] if capabilities is None else list(capabilities.tools)
+            ) + _prompt_tools(list(state.agent_profile.static_tools)),
             rules=build_planner_rules(context.rules),
         )
         for section in (
@@ -190,7 +196,7 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
         user_profile=state.execution_context.user_profile,
         conversation_context=state.execution_context.conversation_context,
         task=state.inputs.task,
-        available_tools=context.compiled_tools,
+        available_tools=_prompt_tools(context.tools),
         rules=compiled_rules,
         evidence=evidence_steps,
         missing_information=state.node_states.evaluator.missing_information,

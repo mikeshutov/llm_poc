@@ -3,6 +3,8 @@ from capabilities.registry.tools import TOOL_CATEGORIES
 
 BASE_RULES = [
     "Do not include raw UUIDs or internal identifiers in your response.",
+    "Ground every factual claim, citation, source title, URL, and date in the EVIDENCE supplied for this roundtrip.",
+    "If the supplied evidence does not support a claim, say that the information is unavailable rather than using general knowledge or inventing a source.",
 ]
 TONE_ADAPTATION_RULE = (
     "Apply the user's tone profile preferences when writing the response. Adapt wording, structure, and level of detail without mentioning the preferences themselves."

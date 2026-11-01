@@ -54,6 +54,7 @@ from capabilities.adapters.weather import (
     get_current_weather,
     get_historical_month_weather,
 )
+from capabilities.adapters.writing import writing_templates
 from capabilities.registry.constants import TOOL_RESULT_TYPE_BOOK_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CALCULATION
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CALENDAR
@@ -87,6 +88,7 @@ from common.cache.policy import ToolCachePolicy
 from capabilities.retry.policy import RetryPolicy
 from capabilities.registry.constants import TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_WEB_PAGE
+from capabilities.registry.constants import TOOL_RESULT_TYPE_WRITING_TEMPLATES
 from capabilities.registry.models import RateLimitPolicy, Tool, ToolCategory
 
 # Rate limiter and retry policy
@@ -144,18 +146,26 @@ GAMES_TOOLS = [
     Tool(get_magic_card_rulings, result_type=TOOL_RESULT_TYPE_RULES, cache_policy=ToolCachePolicy(3600)),
 ]
 MEMORY_TOOLS = [
-    Tool(get_memory_detail, result_type=TOOL_RESULT_TYPE_MEMORY_DETAIL, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
+    Tool(get_memory_detail, result_type=TOOL_RESULT_TYPE_MEMORY_DETAIL, version=4, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
     Tool(lookup_evidence, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
     Tool(search_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
 ]
 FILE_TOOLS = [Tool(search_assets, result_type=TOOL_RESULT_TYPE_ASSET_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(search_asset_details, result_type=TOOL_RESULT_TYPE_ASSET_DETAILS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(get_file_by_id, result_type=TOOL_RESULT_TYPE_FILE, cache_policy=ToolCachePolicy(300, is_user_specific=True))]
 FILE_MANAGEMENT_TOOLS = [
-    Tool(file_create, result_type=TOOL_RESULT_TYPE_FILE),
-    Tool(file_read, result_type=TOOL_RESULT_TYPE_FILE),
-    Tool(file_edit, result_type=TOOL_RESULT_TYPE_FILE),
+    Tool(file_create, result_type=TOOL_RESULT_TYPE_FILE, version=4),
+    Tool(file_read, result_type=TOOL_RESULT_TYPE_FILE, version=4),
+    Tool(file_edit, result_type=TOOL_RESULT_TYPE_FILE, version=4),
     Tool(file_delete, result_type=TOOL_RESULT_TYPE_FILE),
     Tool(file_list, result_type=TOOL_RESULT_TYPE_FILE),
     Tool(file_move, result_type=TOOL_RESULT_TYPE_FILE),
+]
+WRITING_TOOLS = [
+    Tool(
+        writing_templates,
+        result_type=TOOL_RESULT_TYPE_WRITING_TEMPLATES,
+        version=1,
+        cache_policy=ToolCachePolicy(3600),
+    ),
 ]
 PROFILE_TOOLS = [
     Tool(
@@ -259,7 +269,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
         description="Search prior conversation summaries for relevant past requests and discussions as memories.",
         rules=[
             "Use memory_search without conversation_ids to discover relevant conversations, then use it again with returned conversation_ids to find specific historical mentions or exchanges.",
-            "Use memory_detail after memory_search when you need the exact prior prompt, response, or structured payload for one memory hit.",
+            "Use memory_detail only after memory_search has returned an exact roundtrip UUID in evidence metadata; never pass a topic, title, conversation name, or search query as roundtrip_id.",
             "Use memory_lookup_evidence with an array of evidence IDs from prior conversation messages when you need the full records behind prior cited evidence.",
             "When the user asks what was previously said, decided, suggested, or discussed about a topic, prefer the two-step memories flow over guessing from current context.",
         ],
@@ -285,9 +295,17 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "Keep all paths inside the managed files directory.",
         ],
     ),
+    "writing": ToolCategory(
+        tools=WRITING_TOOLS,
+        description="Discover reusable writing template metadata and supported document formats.",
+        rules=[
+            "Use writing_templates to discover a suitable structure before creating a document when the user requests a reusable writing format.",
+            "The tool returns metadata only; do not assume template content is available.",
+        ],
+    ),
 }
 
-tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *WEB_SEARCH_TOOLS, *KNOWLEDGE_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *MATH_TOOLS, *GAMES_TOOLS, *MEMORY_TOOLS, *FILE_TOOLS, *FILE_MANAGEMENT_TOOLS, *PROFILE_TOOLS]
+tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *WEB_SEARCH_TOOLS, *KNOWLEDGE_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *MATH_TOOLS, *GAMES_TOOLS, *MEMORY_TOOLS, *FILE_TOOLS, *FILE_MANAGEMENT_TOOLS, *WRITING_TOOLS, *PROFILE_TOOLS]
 
 TOOLS_BY_NAME = {tool.name: tool for tool in tools}
 

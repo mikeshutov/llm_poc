@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 from llm.conversation_model_config import EVALUATOR_STAGE, ModelSelection, PLANNER_STAGE
 from capabilities.registry.tools import TOOL_CATEGORIES
 
@@ -11,10 +13,26 @@ from capabilities.registry.tools import TOOL_CATEGORIES
 DEFAULT_PLANNER_PROMPT_INSTRUCTION = "You are a planning agent."
 DEFAULT_PLANNER_RULES = ""
 PROFILE_MANAGEMENT_AGENT_NAME = "profile_management"
+DOCUMENT_WRITING_AGENT_NAME = "document_writing"
+RESEARCH_AGENT_NAME = "research"
 DEFAULT_SYNTHESIS_INSTRUCTION = (
     "Solve the following task or problem using the provided evidence. "
 )
 DEFAULT_MAX_TURNS = 10
+
+
+class AgentDelegationArgs(BaseModel):
+    """Default contract used when an agent does not define a custom one."""
+
+    task: str = Field(
+        ...,
+        min_length=1,
+        description="The complete task to delegate to this agent.",
+    )
+    evidence_ids: list[str] = Field(
+        default_factory=list,
+        description="Evidence IDs the delegated agent must use as its source material.",
+    )
 
 
 class AgentKind(StrEnum):
@@ -56,6 +74,7 @@ class AgentProfile:
     planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
     planner_rules: str = DEFAULT_PLANNER_RULES
     synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION
+    delegation_args_schema: type[BaseModel] = AgentDelegationArgs
 
     def __post_init__(self) -> None:
         resolved_categories = {

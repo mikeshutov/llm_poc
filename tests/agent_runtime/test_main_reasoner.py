@@ -22,9 +22,29 @@ from capabilities.adapters.profile import (
 from agents.profile_management.profile import build_profile_management_profile
 from agent_runtime.models.main_state import MainState
 from agents.main.agent import MainReasonerStrategy
+from agent_runtime.execution.message_history import append_execution_messages
 from agents.main import agent as main_reasoner
 from agent_runtime.models.decision import DecisionStatus
 from agent_runtime.strategies.react.decision import DecisionResult
+from agent_runtime.models.agent_prompt import EvidenceStep
+from agent_runtime.models.synthesized_result import SynthesisResultBlock
+from retrieval.evidence import ToolResult
+from retrieval.evidence import EvidenceUrl, EvidenceView
+from agents.main.request import _normalize_generated_file_links
+
+
+def test_normalize_generated_file_links_uses_file_evidence_url() -> None:
+    evidence = EvidenceView(
+        title="report.pdf",
+        entity_type="file",
+        urls=[EvidenceUrl(url="app/static/files/anonymous/report.pdf")],
+    )
+    blocks = _normalize_generated_file_links(
+        [SynthesisResultBlock(content="[Download](sandbox:/mnt/data/report.pdf)")],
+        [EvidenceStep(type="file", evidence=[evidence])],
+    )
+
+    assert blocks[0].content == "[Download](app/static/files/anonymous/report.pdf)"
 
 
 def test_main_reasoner_loops_until_final_structured_answer(monkeypatch) -> None:
@@ -72,6 +92,73 @@ def test_main_reasoner_does_not_receive_planner_only_tool_constraints() -> None:
     assert "Do not make one planned tool step depend on another step's output" not in rendered
     assert "Use at most ONE web search tool call in the entire plan" not in rendered
     assert "Tool calls may be planned across multiple reasoner turns" in rendered
+    assert "Ground factual claims, citations, URLs, and generated document content" in rendered
+
+
+def test_main_reasoner_represents_agents_as_tool_shaped_capabilities() -> None:
+    state = AgentState.new(
+        agent_profile=AgentProfile(name="request_orchestrator", scope="main_agent"),
+        task="Research this topic",
+        execution_context=AgentExecutionContext.new(),
+        llm=object(),
+    )
+    delegated = AgentState.new(
+        agent_profile=AgentProfile(
+            name="research",
+            scope="main_agent",
+            description="Research a topic using multiple sources.",
+        ),
+        execution_context=state.execution_context,
+        llm=object(),
+    )
+    state.available_agent_states = {"research": delegated}
+    state.inputs.discovered_capabilities = CapabilityDiscoveryResult(
+        agents=[AvailableAgent(agent="research", description=delegated.agent_profile.description)]
+    )
+
+    prompt, tools = main_reasoner.build_reasoner_prompt(state)
+
+    assert all(isinstance(item, AvailableTool) for item in prompt.available_tools)
+    capabilities = prompt.sections_raw["available_tools"]
+    assert all(isinstance(item, dict) for item in capabilities)
+    research_capability = next(item for item in capabilities if item["name"] == "research")
+    assert research_capability["category"] == "agents"
+    assert "agent" not in research_capability
+    assert "research" in {tool.name for tool in tools}
+
+
+def test_main_reasoner_appends_subagent_result_to_next_llm_message_history() -> None:
+    state = AgentState.new(
+        agent_profile=AgentProfile(name="request_orchestrator", scope="main_agent"),
+        execution_context=AgentExecutionContext.new(),
+        llm=object(),
+    )
+    state.node_states.planner.plan = Plan(steps=[PlanStep(
+        id="E1",
+        plan="Create the document.",
+        agent="document_writing",
+        args={"task": "Create the document."},
+    )])
+    state.direct_tool_results.append(ToolResult(
+        plan_step_id=state.node_states.planner.plan.steps[0].db_id,
+        tool_name="document_writing",
+        result={
+            "agent": "document_writing",
+            "status": "success",
+            "summary": "File created.",
+            "evidence": [],
+        },
+    ))
+
+    append_execution_messages(state)
+
+    assert len(state.reasoner_message_history) == 2
+    assert state.reasoner_message_history[0].tool_calls[0]["name"] == "document_writing"
+    assert state.reasoner_message_history[0].tool_calls[0]["args"] == {
+        "task": "Create the document.",
+        "evidence_ids": [],
+    }
+    assert "File created." in state.reasoner_message_history[1].content
 
 
 def test_runtime_discovery_tool_is_static_and_updates_active_capabilities(monkeypatch) -> None:

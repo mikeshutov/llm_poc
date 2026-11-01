@@ -9,7 +9,6 @@ class NodeName(StrEnum):
     ENRICH_STATE = "enrich_state"
     LOAD_USER_PROFILE = "load_user_profile"
     MAIN_REQUEST_STRATEGY = "main_request_strategy"
-    DISCOVER_AGENT_STATE = "discover_agent_state"
     PLANNER = "planner"
     EXECUTOR = "execute_tools"
     EVALUATOR = "evaluator"
@@ -31,5 +30,3 @@ SYNTHESIZE_EDGE = NodeName.SYNTHESIZE.value
 PLAN_EDGE = NodeName.PLANNER.value
 EXECUTE_TOOLS_EDGE = NodeName.EXECUTOR.value
 EVALUATE_EDGE = NodeName.EVALUATOR.value
-
-DISCOVER_AGENT_STATE_EDGE = NodeName.DISCOVER_AGENT_STATE.value

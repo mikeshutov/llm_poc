@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import re
+from pathlib import PurePosixPath
+from urllib.parse import unquote
 from uuid import UUID
 
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
@@ -34,11 +37,48 @@ from capabilities.adapters.profile import (
 from agent_runtime.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
 
 
+_SANDBOX_FILE_LINK = re.compile(r"\]\(\s*sandbox:/mnt/data/(?P<path>[^)\s]+)\s*\)", re.IGNORECASE)
+
+
+def _file_name_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.casefold())
+
+
+def _normalize_generated_file_links(
+    result_blocks: list[SynthesisResultBlock],
+    evidence_steps,
+) -> list[SynthesisResultBlock]:
+    """Replace model-invented sandbox links with canonical file evidence URLs."""
+    file_urls: dict[str, str] = {}
+    for step in evidence_steps:
+        for evidence in step.evidence:
+            if evidence.entity_type != "file" or not evidence.url:
+                continue
+            file_urls[_file_name_key(evidence.title)] = evidence.url
+
+    if not file_urls:
+        return result_blocks
+    fallback_url = next(iter(file_urls.values())) if len(file_urls) == 1 else ""
+
+    def replace_link(match: re.Match[str]) -> str:
+        filename = PurePosixPath(unquote(match.group("path"))).name
+        canonical_url = file_urls.get(_file_name_key(filename), fallback_url)
+        return f"]({canonical_url})" if canonical_url else match.group(0)
+
+    return [
+        block.model_copy(update={"content": _SANDBOX_FILE_LINK.sub(replace_link, block.content)})
+        for block in result_blocks
+    ]
+
+
 TOP_LEVEL_PROFILE = AgentProfile(
     name="request_orchestrator",
     scope=MAIN_AGENT_MODEL_SCOPE,
     description="Top-level request reasoner and executor.",
-    excluded_categories={"file_management"},
+    # Document operations, including template discovery, belong to the
+    # document-writing agent. The top-level reasoner delegates those requests
+    # instead of executing writing capabilities directly.
+    excluded_categories={"file_management", "writing"},
     static_tools=[CAPABILITY_DISCOVERY_TOOL, USER_MANAGEMENT_TOOL],
 )
 TOP_LEVEL_STRATEGY = MainReasonerStrategy()
@@ -87,6 +127,7 @@ def run_main_request_strategy(main_state: MainState) -> MainState:
     )
     evidence_steps = filter_evidence_steps(evidence_steps, set(main_state.relevant_evidence_ids)) or evidence_steps
     result_blocks, used_evidence_ids = _build_result_blocks(synthesis_result, evidence_steps)
+    result_blocks = _normalize_generated_file_links(result_blocks, evidence_steps)
     main_state.result = OrchestratorResult(
         agent_result=main_state.result.agent_result.copy(
             tool_call_ids=main_state.gather_tool_call_ids(),

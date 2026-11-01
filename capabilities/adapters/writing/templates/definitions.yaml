@@ -1,0 +1,37 @@
+templates:
+  - id: research-paper
+    name: Research Paper
+    description: A baseline research paper organized around an abstract, methodology, evidence-based findings, discussion, limitations, conclusion, and references.
+    category: research
+    formats: [docx, pdf, md]
+    tags: [research, paper, academic, evidence]
+    required_fields: [title, abstract, introduction, methodology, findings, discussion, limitations, conclusion, references]
+    template_file: research-paper.md
+    version: 1
+  - id: essay
+    name: Essay
+    description: A structured essay with a title, contextual introduction and thesis, evidence-based body paragraphs, conclusion, and references.
+    category: academic
+    formats: [docx, pdf, md]
+    tags: [essay, academic, research]
+    required_fields: [title, introduction, body_paragraphs, conclusion, references]
+    template_file: essay.md
+    version: 1
+  - id: report
+    name: Report
+    description: A professional report with an executive summary, findings, recommendations, and supporting references.
+    category: business
+    formats: [docx, pdf, md]
+    tags: [report, business, findings]
+    required_fields: [title, subject]
+    template_file: report.md
+    version: 1
+  - id: meeting-notes
+    name: Meeting Notes
+    description: Concise meeting notes organized by participants, decisions, action items, and follow-up dates.
+    category: notes
+    formats: [docx, md, txt]
+    tags: [meeting, notes, action items]
+    required_fields: [title, date, participants]
+    template_file: meeting-notes.md
+    version: 1

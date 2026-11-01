@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from agent_runtime.models.plan import PlanStep
 from agent_runtime.context import bind_agent_context, bind_runtime_context
 from capabilities.registry.global_registry import call_tool
 from capabilities.registry.repository.message_repository import MessageToolRepository
+from agent_runtime.execution.message_history import append_execution_messages
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,11 @@ def _execute_step(
     args = resolved_args if resolved_args is not None else _substitute_refs(step.args, tool_results_by_step_id)
     started_at = perf_counter()
     if rejection_reason:
-        output = ToolResult.error(rejection_reason)
+        is_duplicate = "already made in this roundtrip" in rejection_reason
+        output = ToolResult.error(
+            rejection_reason,
+            **({"status": "duplicate"} if is_duplicate else {}),
+        )
         error_text = rejection_reason
     else:
         try:
@@ -207,7 +213,9 @@ def run_executor(agent_state: AgentState) -> AgentState:
     if plan is None:
         return agent_state
     if agent_state.available_agent_states is not None:
-        return _run_top_level_executor(agent_state)
+        result = _run_top_level_executor(agent_state)
+        append_execution_messages(result)
+        return result
     tool_repo = MessageToolRepository() if isinstance(agent_state.execution_context.roundtrip_id, UUID) else None
     allowed_tool_names = set(agent_state.agent_profile.tool_names)
     iteration_number = planner_state.plan_count
@@ -279,6 +287,7 @@ def run_executor(agent_state: AgentState) -> AgentState:
                     execution_result=execution_result,
                 )
 
+    append_execution_messages(agent_state)
     return agent_state
 
 
@@ -294,9 +303,11 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
     iteration_number = agent_state.node_states.planner.plan_count
     for step in plan.steps:
         if step.agent:
+            delegated_task = _delegated_task(step)
             request_signature = build_signature({
                 "agent_name": step.agent,
-                "task": step.plan,
+                "task": delegated_task,
+                "evidence_ids": step.args.get("evidence_ids", []),
             })
             if request_signature in agent_state.executed_request_signatures:
                 record_node_log(
@@ -308,17 +319,66 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
                     message="Delegated request skipped as duplicate",
                     payload={"agent": step.agent, "step_id": step.id, "status": "duplicate"},
                 )
+                agent_state.direct_tool_results.append(
+                    _duplicate_result(
+                        capability_name=step.agent,
+                        plan_step_id=step.db_id,
+                    )
+                )
                 continue
             agent_state.executed_request_signatures.append(request_signature)
             delegated = agent_state.available_agent_states.get(step.agent)
             if delegated is None:
+                agent_state.direct_tool_results.append(
+                    ToolResult.error(
+                        f"Delegated agent '{step.agent}' is not available.",
+                        status="error",
+                    ).model_copy(update={
+                        "tool_name": step.agent,
+                        "plan_step_id": step.db_id,
+                    })
+                )
                 continue
-            delegated.inputs = AgentInputs.new(
-                task=step.plan,
-                request_task=delegated.inputs.request_task,
+            delegated_run = AgentState.new(
+                agent_profile=delegated.agent_profile,
+                execution_context=delegated.execution_context,
+                llm=delegated.llm,
+                inputs=AgentInputs.new(
+                    task=delegated_task,
+                    request_task=delegated.inputs.request_task,
+                    tool_names=delegated.inputs.tool_names,
+                    tool_category_names=delegated.inputs.tool_category_names,
+                    discovered_capabilities=delegated.inputs.discovered_capabilities,
+                    discovered_attribute_types=delegated.inputs.discovered_attribute_types,
+                    evidence_ids=step.args.get("evidence_ids", []),
+                ),
             )
+            delegated_run.available_agent_states = delegated.available_agent_states
             runner = agent_registry.get(delegated.agent_profile)
-            agent_state.delegated_agent_states[step.agent] = runner(delegated)
+            completed = runner(delegated_run)
+            completion_result = _agent_completion_result(
+                agent_name=step.agent,
+                state=completed,
+                plan_step_id=step.db_id,
+                task=delegated_task,
+            )
+            if tool_repo is not None and agent_state.execution_context.roundtrip_id is not None:
+                # Persist the delegated agent as a tool-like call so its
+                # evidence, especially generated-file URLs, survives into the
+                # parent result and UI payload.
+                persisted_step = step.model_copy(update={"tool": step.agent, "agent": ""})
+                tool_call_id = tool_repo.append_tool_call(
+                    agent_state.execution_context.roundtrip_id,
+                    plan,
+                    persisted_step,
+                    input_payload=step.args,
+                    output_payload=completion_result,
+                    evidence=completion_result.evidence,
+                    duration_ms=0,
+                )
+                agent_state.result = agent_state.result.with_recorded_tool_call(tool_call_id)
+            else:
+                agent_state.direct_tool_results.append(completion_result)
             continue
 
         resolved_args = _substitute_refs(step.args, {})
@@ -336,6 +396,10 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
                 message="Tool request skipped as duplicate",
                 payload={"tool_name": step.tool, "step_id": step.id, "status": "duplicate"},
             )
+            agent_state.direct_tool_results.append(_duplicate_result(
+                capability_name=step.tool,
+                plan_step_id=step.db_id,
+            ))
             continue
         if (
             tool_repo is not None
@@ -352,6 +416,10 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
                 message="Tool request skipped because it was already persisted",
                 payload={"tool_name": step.tool, "step_id": step.id, "status": "duplicate"},
             )
+            agent_state.direct_tool_results.append(_duplicate_result(
+                capability_name=step.tool,
+                plan_step_id=step.db_id,
+            ))
             continue
         agent_state.executed_request_signatures.append(request_signature)
         execution_result = execute_step(
@@ -386,3 +454,76 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
                 })
             )
     return agent_state
+
+
+def _duplicate_result(*, capability_name: str, plan_step_id) -> ToolResult:
+    return ToolResult(
+        plan_step_id=plan_step_id,
+        tool_name=capability_name,
+        result={
+            "error": f"Request for '{capability_name}' was already completed in this roundtrip.",
+            "status": "duplicate",
+        },
+    )
+
+
+def _agent_completion_result(
+    *,
+    agent_name: str,
+    state: AgentState,
+    plan_step_id,
+    task: str,
+) -> ToolResult:
+    """Translate internal subagent state into the parent capability contract."""
+    child_results = state.gather_tool_results()
+    evidence = []
+    seen_evidence_ids = set()
+    for child_result in child_results:
+        for item in child_result.evidence:
+            if item.id in seen_evidence_ids:
+                continue
+            seen_evidence_ids.add(item.id)
+            evidence.append(item)
+
+    status = state.result.answer_status.value
+    if state.result.execution_status.value not in {"pending", "success"}:
+        status = state.result.execution_status.value
+    summaries = [item.summary.strip() for item in evidence if item.summary.strip()]
+    summary = (
+        f"{agent_name} completed the delegated task. " + " ".join(dict.fromkeys(summaries))
+        if summaries
+        else f"{agent_name} completed the delegated task."
+    )
+    return ToolResult(
+        tool_call_id=plan_step_id,
+        plan_step_id=plan_step_id,
+        tool_name=agent_name,
+        result={
+            "agent": agent_name,
+            "task": task,
+            "evidence_ids": state.inputs.evidence_ids,
+            "status": status,
+            "summary": summary,
+            "evidence": [
+                bounded_json_value(
+                    item.model_dump(mode="json", exclude={"raw_payload"}),
+                    max_bytes=8_000,
+                )
+                for item in evidence
+            ],
+        },
+        evidence=evidence,
+    )
+
+
+def _delegated_task(step: PlanStep) -> str:
+    """Use the explicit delegation task, falling back only for legacy plans."""
+    explicit_task = step.args.get("task") if isinstance(step.args, dict) else None
+    if isinstance(explicit_task, str) and explicit_task.strip():
+        return explicit_task.strip()
+    if step.args:
+        return (
+            "Execute the delegated request using these parameters:\n"
+            + json.dumps(step.args, ensure_ascii=False, indent=2, default=str)
+        )
+    return step.plan or step.hypothesis

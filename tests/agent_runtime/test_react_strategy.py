@@ -11,6 +11,7 @@ from agent_runtime.strategies.react.graph import ReactStrategy
 from agent_runtime.strategies.single_pass.graph import DirectReturnStrategy
 from agent_runtime.strategies.react.decision import DecisionResult
 from agent_runtime.models.decision import DecisionStatus
+from retrieval.evidence import ToolResult
 
 
 def _state(max_turns: int = 3) -> AgentState:
@@ -37,7 +38,7 @@ def test_react_runs_initial_action_then_planner_decision(monkeypatch) -> None:
     calls: list[str] = []
     action = Plan(steps=[PlanStep(id="E1", plan="lookup", tool="lookup", args={})])
 
-    def fake_decision(state, *, stage, callsite, prompt_builder):
+    def fake_decision(state, *, stage, callsite, prompt_builder, message_history=None):
         calls.append(stage)
         return DecisionResult(
             plan=action if len(calls) == 1 else Plan(steps=[]),
@@ -60,7 +61,7 @@ def test_react_stops_at_max_turns(monkeypatch) -> None:
     calls: list[str] = []
     action = Plan(steps=[PlanStep(id="E1", plan="lookup", tool="lookup", args={})])
 
-    def fake_decision(state, *, stage, callsite, prompt_builder):
+    def fake_decision(state, *, stage, callsite, prompt_builder, message_history=None):
         calls.append(stage)
         return DecisionResult(plan=action, status=DecisionStatus.CONTINUE)
 
@@ -70,6 +71,29 @@ def test_react_stops_at_max_turns(monkeypatch) -> None:
     strategy.run(state, thread_id="test")
 
     assert calls == ["planner"]
+
+
+def test_react_stops_when_latest_plan_is_entirely_duplicate_rejected() -> None:
+    strategy = ReactStrategy()
+    state = _state()
+    step = PlanStep(id="E1", plan="lookup", tool="lookup", args={})
+    state.node_states.planner.plan = Plan(steps=[step])
+    state.direct_tool_results.append(
+        ToolResult(
+            plan_step_id=step.db_id,
+            tool_name="lookup",
+            result={
+                "error": "Tool request for 'lookup' was already made in this roundtrip.",
+                "status": "duplicate",
+            },
+        )
+    )
+
+    route = strategy._route_after_execute(state)
+
+    assert route == "__end__"
+    assert state.node_states.planner.decision_status == DecisionStatus.BLOCKED
+    assert state.result.execution_status.value == "no_new_work"
 
 
 def test_react_records_explicit_blocked_decision(monkeypatch) -> None:

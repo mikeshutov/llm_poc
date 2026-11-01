@@ -14,6 +14,7 @@ from common.data import bounded_json_value, is_meaningful_prompt_value, prune_em
 from personalization.profile.models import UserProfile
 from conversation.models.conversation_models import ConversationContext
 from retrieval.evidence import EvidenceView
+from capabilities.discovery.models import AvailableTool
 
 EVIDENCE_VIEW_COMPACT = "compact"
 EVIDENCE_VIEW_EVALUATOR = "evaluator"
@@ -45,6 +46,7 @@ class PromptSectionKeys:
     MISSING_INFORMATION = "missing_information"
     TASK = "task"
     SCHEMA = "schema"
+    EVIDENCE_IDS = "evidence_ids"
 
 
 BUILTIN_SECTION_KEYS = (
@@ -57,6 +59,7 @@ BUILTIN_SECTION_KEYS = (
     PromptSectionKeys.MISSING_INFORMATION,
     PromptSectionKeys.TASK,
     PromptSectionKeys.SCHEMA,
+    PromptSectionKeys.EVIDENCE_IDS,
 )
 
 ROLE_RULES_SECTION_KEYS = (PromptSectionKeys.RULES,)
@@ -68,6 +71,7 @@ INPUT_SECTION_KEYS = (
     PromptSectionKeys.EVIDENCE,
     PromptSectionKeys.MISSING_INFORMATION,
     PromptSectionKeys.TASK,
+    PromptSectionKeys.EVIDENCE_IDS,
 )
 OUTPUT_CONTRACT_SECTION_KEYS = (PromptSectionKeys.SCHEMA,)
 
@@ -100,9 +104,10 @@ class AgentPrompt:
     rules: str = ""
     schema: str = ""
     available_tool_categories: Any = ""
-    available_tools: Any = ""
+    available_tools: list[AvailableTool] = field(default_factory=list)
     evidence: list[EvidenceStep] | None = None
     missing_information: list[str] = field(default_factory=list)
+    evidence_ids: list[str] = field(default_factory=list)
     evidence_view: EvidenceViewMode = EVIDENCE_VIEW_COMPACT
     _enabled_sections: dict[str, dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
 
@@ -143,6 +148,8 @@ class AgentPrompt:
                 value = self.missing_information
             elif key == PromptSectionKeys.TASK:
                 value = self.task
+            elif key == PromptSectionKeys.EVIDENCE_IDS:
+                value = self.evidence_ids
             elif key == PromptSectionKeys.SCHEMA:
                 value = self.schema.strip()
             if is_meaningful_prompt_value(value):

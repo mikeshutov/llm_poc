@@ -6,7 +6,7 @@ import json
 from time import perf_counter
 from typing import Any
 
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 
 from common.data import sanitize_for_json_storage
 from common.logging import record_node_log
@@ -17,7 +17,10 @@ from llm.usage import record_llm_call
 from rendering.debug import PLAN_KIND
 from agent_runtime.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from agent_runtime.models.agent_state import AgentState
-from agent_runtime.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
+from agent_runtime.models.agent_profile import (
+    AgentExecutionStrategy,
+    PROFILE_MANAGEMENT_AGENT_NAME,
+)
 from agent_runtime.models.decision import DecisionStatus
 from agent_runtime.models.plan import Plan
 from retrieval.evidence_store import (
@@ -28,6 +31,7 @@ from agent_runtime.planning.prompts.planner_prompt import _compile_tools_rules_f
 from agent_runtime.planning.prompts.planner_rules import build_planner_rules
 from agent_runtime.planning.tool_call_parser import parse_tool_calls_to_plan_steps
 from agent_runtime.planning.tool_wrapper import build_tools
+from capabilities.discovery.models import AvailableAgent, AvailableTool
 
 
 @dataclass(frozen=True)
@@ -58,6 +62,35 @@ def _parse_decision_status(response: Any, has_tool_calls: bool) -> DecisionStatu
 DecisionPromptBuilder = Callable[[AgentState], tuple[AgentPrompt, list[BaseTool]]]
 
 
+def _build_agent_delegation_tools(agent_states) -> list[BaseTool]:
+    delegation_tools: list[BaseTool] = []
+    for agent_state in agent_states:
+        profile = agent_state.agent_profile
+        args_schema = profile.delegation_args_schema
+
+        def delegate(*, agent_name=profile.name, **kwargs):
+            payload = dict(kwargs)
+            evidence_ids = payload.get("evidence_ids")
+            if isinstance(evidence_ids, list):
+                payload["evidence_ids"] = list(dict.fromkeys(
+                    evidence_id.strip()
+                    for evidence_id in evidence_ids
+                    if isinstance(evidence_id, str) and evidence_id.strip()
+                ))
+            return {"agent": agent_name, **payload}
+
+        delegation_tools.append(
+            StructuredTool.from_function(
+                func=delegate,
+                name=profile.name,
+                description=profile.description,
+                args_schema=args_schema,
+                metadata={"agent_delegation": True},
+            )
+        )
+    return delegation_tools
+
+
 def build_decision_prompt(
     state: AgentState,
     *,
@@ -73,28 +106,57 @@ def build_decision_prompt(
             tool_results,
             build_evidence_bundle_from_tool_results(tool_results).evidence_views_by_tool_call_id,
         )
-    available_capabilities = context.compiled_tools
+    available_capabilities: list[AvailableTool] = [
+        AvailableTool.from_tool(tool)
+        for tool in context.tools
+    ]
+    delegation_tools: list[BaseTool] = []
     if state.available_agent_states is not None:
         capabilities = state.inputs.discovered_capabilities
+        allowed_capability_names = {tool.name for tool in context.tools}
+        discovered_agent_names = {
+            agent.agent
+            for agent in ([] if capabilities is None else capabilities.agents)
+        }
+        delegated_states = [
+            delegated
+            for delegated in state.available_agent_states.values()
+            if delegated.agent_profile.delegatable
+            and delegated.agent_profile.name != PROFILE_MANAGEMENT_AGENT_NAME
+            and (
+                capabilities is None
+                or delegated.agent_profile.name in discovered_agent_names
+            )
+        ]
+        delegation_tools = _build_agent_delegation_tools(delegated_states)
         available_capabilities = [
-            *([] if capabilities is None else capabilities.tools),
             *[
-                {
-                    "agent": delegated.agent_profile.name,
-                    "description": delegated.agent_profile.description,
-                    "tools": sorted(delegated.agent_profile.tool_names),
-                }
-                for delegated in state.available_agent_states.values()
-                if delegated.agent_profile.delegatable
-                and delegated.agent_profile.name != PROFILE_MANAGEMENT_AGENT_NAME
+                tool
+                for tool in (
+                    []
+                    if capabilities is None
+                    else capabilities.as_available_tools(include_agents=False)
+                )
+                if tool.name in allowed_capability_names
             ],
-            *state.agent_profile.static_tools,
+            *[
+                    AvailableAgent(
+                        agent=delegated.agent_profile.name,
+                        description=delegated.agent_profile.description,
+                    ).as_available_tool()
+                for delegated in delegated_states
+            ],
+            *[
+                AvailableTool.from_tool(tool)
+                for tool in state.agent_profile.static_tools
+            ],
         ]
     prompt = AgentPrompt(
         instruction=instruction,
         user_profile=state.execution_context.user_profile,
         conversation_context=state.execution_context.conversation_context,
         task=state.inputs.task,
+        evidence_ids=state.inputs.evidence_ids,
         available_tools=available_capabilities,
         rules=f"{build_planner_rules(context.rules)}\n\n{rules}",
         evidence=evidence,
@@ -107,18 +169,20 @@ def build_decision_prompt(
         PromptSectionKeys.RULES,
         PromptSectionKeys.MISSING_INFORMATION,
         PromptSectionKeys.TASK,
+        PromptSectionKeys.EVIDENCE_IDS,
     )
     if include_evidence:
         sections = (*sections[:4], PromptSectionKeys.EVIDENCE, *sections[4:])
     for section in sections:
         prompt.include_section(section)
-    return prompt, context.tools
+    return prompt, [*context.tools, *delegation_tools]
 
 
-def _parse_plan(response: Any, tools: list[BaseTool]) -> Plan:
+def _parse_plan(response: Any, tools: list[BaseTool], agent_names: set[str] | None = None) -> Plan:
     return Plan(steps=parse_tool_calls_to_plan_steps(
         getattr(response, "tool_calls", None) or [],
         tools,
+        agent_names=agent_names,
     ))
 
 
@@ -132,6 +196,19 @@ def run_decision(
     tool_choice: str | None = None,
 ) -> DecisionResult:
     prompt, tools = prompt_builder(state)
+    agent_names = {
+        delegated.agent_profile.name
+        for delegated in (state.available_agent_states or {}).values()
+        if delegated.agent_profile.delegatable
+        and delegated.agent_profile.name != PROFILE_MANAGEMENT_AGENT_NAME
+        and (
+            state.inputs.discovered_capabilities is None
+            or delegated.agent_profile.name in {
+                agent.agent
+                for agent in state.inputs.discovered_capabilities.agents
+            }
+        )
+    }
     prompt_messages = prompt.build_messages()
     if message_history:
         prompt_messages = [*prompt_messages, *message_history]
@@ -162,9 +239,14 @@ def run_decision(
         bind_kwargs["tool_choice"] = tool_choice
 
     started_at = perf_counter()
-    response = llm.bind_tools(build_tools(tools), **bind_kwargs).invoke(prompt_messages)
+    bound_tools = (
+        build_tools(tools, include_evaluation_wrapper=False)
+        if state.agent_profile.execution_strategy == AgentExecutionStrategy.REACT
+        else build_tools(tools)
+    )
+    response = llm.bind_tools(bound_tools, **bind_kwargs).invoke(prompt_messages)
     latency_ms = int((perf_counter() - started_at) * 1000)
-    plan = _parse_plan(response, tools)
+    plan = _parse_plan(response, tools, agent_names=agent_names)
     llm_call = record_llm_call(
         raw_response=response,
         model_name=model_name,

@@ -17,3 +17,5 @@ Pillow
 yfinance
 pycountry
 python-docx
+reportlab
+PyYAML

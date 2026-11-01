@@ -20,6 +20,7 @@ from capabilities.registry.tools import TOOL_CATEGORIES
 from common.logging import record_node_log
 from agent_runtime.constants import NodeName
 from agents.discovery.agent_selection_query import build_agent_selection_query
+from agents.repository.repo_factory import get_agent_repo
 
 MAX_DISCOVERED_CAPABILITIES = 5
 RUNTIME_DISCOVERY_TOOL_NAME = "discover_capabilities"
@@ -216,10 +217,43 @@ def _discover_persisted_tools(
     return _rerank_candidates(query, candidates, semantic_rank)
 
 
-def _build_agent_candidates(main_state: MainState) -> list[tuple[str, str, AvailableAgent]]:
+def _discover_agent_profiles(
+    main_state: MainState,
+    query_embedding: list[float] | None,
+) -> list[Any]:
+    from agents.seeder import SYSTEM_AGENT_PROFILES
+
+    profiles_by_name = {profile.name: profile for profile in SYSTEM_AGENT_PROFILES}
+    profiles_by_name.update({profile.name: profile for profile in main_state.agent_profiles})
+    try:
+        repository = get_agent_repo()
+        for agent in repository.list_system_agents():
+            profile = profiles_by_name.get(agent.name) or agent.to_agent_profile()
+            profiles_by_name[profile.name] = profile
+
+        user_id = (main_state.execution_context.user_profile.user_id or "").strip()
+        if user_id and query_embedding is not None:
+            for agent in repository.list_relevant_for_user(
+                user_id,
+                query_embedding=query_embedding,
+            ):
+                profiles_by_name[agent.name] = agent.to_agent_profile()
+    except Exception as exc:
+        record_node_log(
+            node_name=NodeName.CAPABILITY_DISCOVERY,
+            stage="agent_lookup",
+            event_type="capability_discovery",
+            level="warning",
+            message="Persisted agent capability lookup failed; using built-in candidates",
+            roundtrip_id=main_state.execution_context.roundtrip_id,
+            payload={"error": str(exc), "fallback": True},
+        )
+    return list(profiles_by_name.values())
+
+
+def _build_agent_candidates(agent_profiles: list[Any]) -> list[tuple[str, str, AvailableAgent]]:
     candidates: list[tuple[str, str, AvailableAgent]] = []
-    for agent_state in main_state.agent_states.values():
-        profile = agent_state.agent_profile
+    for profile in agent_profiles:
         if profile.name == "profile_management":
             continue
         if not profile.delegatable:
@@ -255,8 +289,6 @@ def capability_discovery(
         current_user_request=main_state.task,
         conversation_context=main_state.execution_context.conversation_context,
     )).strip()
-    tool_candidates = _build_tool_candidates()
-    agent_candidates = _build_agent_candidates(main_state) if include_agents else []
     query_embedding = (
         main_state.discovery_query_embedding
         if query == main_state.discovery_query
@@ -282,9 +314,14 @@ def capability_discovery(
                 duration_ms=int((perf_counter() - embedding_started_at) * 1000),
             )
 
+    tool_candidates = _build_tool_candidates()
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="capability-discovery") as executor:
         tool_future = executor.submit(_discover_persisted_tools, query, query_embedding)
-        agent_future = executor.submit(_rank_candidates, query, query_embedding, agent_candidates)
+        agent_future = executor.submit(
+            _discover_agent_profiles,
+            main_state,
+            query_embedding,
+        ) if include_agents else None
         try:
             tool_matches = tool_future.result()
         except Exception as exc:
@@ -298,7 +335,9 @@ def capability_discovery(
                 payload={"query": query, "error": str(exc), "fallback": True},
             )
             tool_matches = []
-        agent_matches = agent_future.result()
+        agent_profiles = agent_future.result() if agent_future is not None else []
+        agent_candidates = _build_agent_candidates(agent_profiles)
+        agent_matches = _rank_candidates(query, query_embedding, agent_candidates)
 
     # Preserve a useful discovery result for a query with no lexical or
     # semantic hit, while applying TOP_K to the fallback.
@@ -311,6 +350,15 @@ def capability_discovery(
         agents=[value for _, value in agent_matches],
         tools=[value for _, value in tool_matches],
     )
+    if include_agents:
+        selected_agent_names = {agent.agent for agent in result.agents}
+        existing_names = {profile.name for profile in main_state.agent_profiles}
+        for profile in agent_profiles:
+            if profile.name not in selected_agent_names or profile.name in existing_names:
+                continue
+            main_state.agent_profiles.append(profile)
+            existing_names.add(profile.name)
+        main_state.initialize_agent_states()
     record_node_log(
         node_name=NodeName.CAPABILITY_DISCOVERY,
         stage="enrich_state",

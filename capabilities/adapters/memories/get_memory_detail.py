@@ -15,7 +15,14 @@ from capabilities.registry.constants import TOOL_RESULT_TYPE_MEMORY_DETAIL
 
 
 class GetMemoryDetailArgs(BaseModel):
-    roundtrip_id: str = Field(..., description="The roundtrip_id returned from memory.search when searching within conversation_ids.")
+    roundtrip_id: str = Field(
+        ...,
+        description=(
+            "The exact roundtrip UUID returned in memory_search evidence metadata. "
+            "This must be a UUID, not a topic, title, conversation name, or search query. "
+            "Call memory_search first if no roundtrip UUID is available."
+        ),
+    )
 
 
 class GetMemoryDetailResult(BaseModel):
@@ -46,8 +53,11 @@ class MemoryDetailEvidenceMetadata(BaseModel):
     TOOL_NAME_GET_MEMORY_DETAIL,
     args_schema=GetMemoryDetailArgs,
     description="""
-Retrieve the full detail for a previously found roundtrip memory by roundtrip_id.
-Use after memory.search when you need the exact prior exchange, including the original user prompt and generated response.
+Retrieve the full detail for a previously found roundtrip memory using its exact UUID.
+Use only the roundtrip_id returned by memory_search evidence metadata. Do not pass a topic,
+title, conversation name, or natural-language query as roundtrip_id. Call memory_search first
+when you need to find the relevant memory. Use this tool when you need the exact prior exchange,
+including the original user prompt and generated response.
 
 
 """,

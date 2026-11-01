@@ -23,6 +23,7 @@ from personalization.tone.models import TonePreferences
 from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from agent_runtime.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from agent_runtime.models.synthesized_result import SynthesisResult
+from capabilities.discovery.models import AvailableTool
 from common.data import repair_common_json_issues
 
 
@@ -457,7 +458,7 @@ def test_agent_prompt_orders_sections_by_builtin_order_instead_of_include_order(
         user_profile=UserProfile(user_id='user-123', display_name='Mike'),
         conversation_context=ConversationContext(),
         task='Find boots.',
-        available_tools='- search_products',
+        available_tools=[AvailableTool(name='search_products')],
         schema='{"steps": []}',
     )
 
