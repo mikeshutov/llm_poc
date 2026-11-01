@@ -84,7 +84,7 @@ class AssetRepository:
                 """
                 DELETE FROM assets
                 WHERE id = %s
-                  AND (user_id IS NULL OR (%s IS NOT NULL AND user_id = %s))
+                  AND (user_id IS NULL OR (%s::text IS NOT NULL AND user_id = %s::text))
                   AND asset_type = %s
                 """,
                 (asset_id, resolved_user_id, resolved_user_id, AssetType.FILE.value),
@@ -141,7 +141,7 @@ class AssetRepository:
                 SET name = %s, updated_at = now()
                 FROM file_assets f
                 WHERE a.id = f.asset_id AND a.id = %s
-                  AND (a.user_id IS NULL OR (%s IS NOT NULL AND a.user_id = %s))
+                  AND (a.user_id IS NULL OR (%s::text IS NOT NULL AND a.user_id = %s::text))
                 """,
                 (name, asset_id, resolved_user_id, resolved_user_id),
             )
@@ -161,7 +161,7 @@ class AssetRepository:
                 FROM assets a
                 JOIN file_assets f ON f.asset_id = a.id
                 WHERE a.id = %s
-                  AND (a.user_id IS NULL OR (%s IS NOT NULL AND a.user_id = %s))
+                  AND (a.user_id IS NULL OR (%s::text IS NOT NULL AND a.user_id = %s::text))
                   AND a.asset_type = %s
                 """,
                 (asset_id, resolved_user_id, resolved_user_id, AssetType.FILE.value),
@@ -186,7 +186,7 @@ class AssetRepository:
                        f.storage_path, f.mime_type, f.size_bytes, f.checksum
                 FROM assets a
                 JOIN file_assets f ON f.asset_id = a.id
-                WHERE (a.user_id IS NULL OR (%s IS NOT NULL AND a.user_id = %s))
+                WHERE (a.user_id IS NULL OR (%s::text IS NOT NULL AND a.user_id = %s::text))
                   AND a.asset_type = %s
                 """ + query_clause + """
                 ORDER BY a.created_at DESC

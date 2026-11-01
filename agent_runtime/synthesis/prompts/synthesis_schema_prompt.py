@@ -2,6 +2,7 @@ SYNTHESIS_SCHEMA = """
 Result must be self-contained and final.
 Ensure the `roundtrip_summary` field is a detailed plain-language diagnostic summary of the roundtrip outcome for history and retrieval.
 Set `next_question` to a follow-up question or statement only when it is useful; otherwise use an empty string.
+Ground every factual claim and every citation, source title, URL, and date in EVIDENCE. If EVIDENCE does not support the requested answer, say so instead of filling the gap from general knowledge or inventing references.
 Associate each result block with supporting `evidence_ids`; never expose internal IDs in content. Use each UUID exactly as it appears in EVIDENCE.
 
 Return only a valid JSON object. Do not include commentary, markdown, or a refusal outside the JSON object.

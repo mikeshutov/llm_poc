@@ -43,5 +43,38 @@ def wrap_tool(original: BaseTool) -> StructuredTool:
     )
 
 
-def build_tools(tools: Iterable[BaseTool]) -> list[BaseTool]:
-    return [wrap_tool(candidate) for candidate in tools]
+def adapt_tool(original: BaseTool) -> BaseTool:
+    """Convert an internal capability into a provider-bindable LangChain tool.
+
+    REACT agents must not receive the planner/evaluation envelope, but custom
+    capability ``Tool`` records are not themselves accepted by LangChain's
+    ``bind_tools``. This adapter preserves the capability's native argument
+    schema and execution behavior without adding hypothesis fields.
+    """
+    if isinstance(original, BaseTool):
+        return original
+
+    args_schema = getattr(original, "args_schema", None)
+
+    def invoke_native(**kwargs: Any) -> Any:
+        return original.invoke(kwargs)
+
+    return StructuredTool.from_function(
+        func=invoke_native,
+        name=original.name,
+        description=original.description,
+        args_schema=args_schema if isinstance(args_schema, type) else None,
+    )
+
+
+def build_tools(
+    tools: Iterable[Any],
+    *,
+    include_evaluation_wrapper: bool = True,
+) -> list[BaseTool]:
+    return [
+        candidate
+        if (getattr(candidate, "metadata", None) or {}).get("agent_delegation")
+        else wrap_tool(candidate) if include_evaluation_wrapper else adapt_tool(candidate)
+        for candidate in tools
+    ]

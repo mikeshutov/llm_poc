@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+from datetime import date, datetime, time
 import json
 from typing import Any
 from uuid import UUID
@@ -80,6 +81,8 @@ def bounded_json_value(
             return project(asdict(item), depth + 1)
         if isinstance(item, UUID):
             return str(item)
+        if isinstance(item, (datetime, date, time)):
+            return item.isoformat()
         if isinstance(item, str):
             return item if len(item) <= max_string else item[:max_string] + "…"
         if isinstance(item, dict):

@@ -4,12 +4,16 @@ from collections.abc import Iterable
 
 from agent_runtime.models.agent_profile import AgentProfile
 from agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
+from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
+from agents.research.profile import RESEARCH_PROFILE
 from agents.models.agent import Agent, AgentType
 from agents.repository.repo_factory import get_agent_repo
 
 
 SYSTEM_AGENT_PROFILES: tuple[AgentProfile, ...] = (
     PROFILE_MANAGEMENT_PROFILE,
+    DOCUMENT_WRITING_PROFILE,
+    RESEARCH_PROFILE,
 )
 
 

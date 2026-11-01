@@ -11,12 +11,14 @@ from agent_runtime.models.plan import PlanStep
 def parse_tool_calls_to_plan_steps(
     tool_calls: Iterable[dict[str, Any]],
     tools: list[BaseTool],
+    agent_names: set[str] | None = None,
 ) -> list[PlanStep]:
     """Normalize provider tool calls into executable orchestration steps."""
     available_fields_by_tool = {
         candidate.name: set(getattr(candidate, "available_result_fields", ()))
         for candidate in tools
     }
+    agent_names = agent_names or set()
     steps: list[PlanStep] = []
     for index, call in enumerate(tool_calls):
         if not isinstance(call, dict):
@@ -53,12 +55,16 @@ def parse_tool_calls_to_plan_steps(
             if evaluation_fields
             else {}
         )
-        steps.append(PlanStep(
-            id=str(call.get("id") or f"E{index + 1}"),
-            plan=hypothesis,
-            hypothesis=hypothesis,
-            metadata=metadata,
-            tool=name,
-            args=parameters,
-        ))
+        step_kwargs = {
+            "id": str(call.get("id") or f"E{index + 1}"),
+            "plan": hypothesis,
+            "hypothesis": hypothesis,
+            "metadata": metadata,
+            "args": parameters,
+        }
+        if name in agent_names:
+            step_kwargs["agent"] = name
+        else:
+            step_kwargs["tool"] = name
+        steps.append(PlanStep(**step_kwargs))
     return steps

@@ -13,6 +13,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from common.config import CHUNK_ENCODING, FILES_DIR, IMAGE_MIME_PREFIX
 from assets.repository.asset_chunk_repository import AssetChunkRepository
 from assets.repository.asset_repository import AssetRepository
+from assets.files.storage import scoped_file_path
 from llm.clients.llm_client import LlmClient
 
 SUPPORTED_TEXT_FILE_TYPES = ["pdf", "txt", "docx"]
@@ -46,7 +47,7 @@ def process_uploaded_file(
     user_id: str | None = None,
     conversation_id: str | UUID | None = None,
 ) -> tuple[str, str, list[str]]:
-    file_path = os.path.join(FILES_DIR, file.name)
+    file_path = str(scoped_file_path(file.name, user_id=user_id))
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, "wb") as f:
         f.write(file.raw_bytes)
@@ -62,14 +63,13 @@ def process_uploaded_file(
             chunk_overlap=CHUNK_OVERLAP,
         ).split_text(raw_text)
 
-    parsed_conversation_id = UUID(str(conversation_id)) if conversation_id else None
+    stored_name = os.path.basename(file_path)
     saved_file = AssetRepository().create_file(
-        name=file.name,
+        name=stored_name,
         storage_path=file_path,
         mime_type=file.type,
         user_id=user_id,
-        conversation_id=parsed_conversation_id,
     )
     AssetChunkRepository().replace_content(saved_file.id, "file", chunks)
 
-    return file.name, str(saved_file.id), chunks
+    return stored_name, str(saved_file.id), chunks

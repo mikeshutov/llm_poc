@@ -5,8 +5,22 @@ from types import SimpleNamespace
 
 from agent_runtime.models.main_state import MainState
 from capabilities.discovery.capability_discovery import capability_discovery
+from capabilities.discovery.models import AvailableAgent, AvailableTool, CapabilityDiscoveryResult
 
 discover_module = importlib.import_module("capabilities.discovery.capability_discovery")
+
+
+def test_discovery_projects_tools_and_agents_to_common_capability_shape() -> None:
+    result = CapabilityDiscoveryResult(
+        tools=[AvailableTool(name="web_search", category="web")],
+        agents=[AvailableAgent(agent="research", description="Research topics")],
+    )
+
+    capabilities = result.as_available_tools()
+
+    assert [capability.name for capability in capabilities] == ["web_search", "research"]
+    assert capabilities[0].category == "web"
+    assert capabilities[1].category == "agents"
 
 
 def test_capability_discovery_uses_persisted_tool_embeddings(monkeypatch) -> None:
@@ -21,7 +35,7 @@ def test_capability_discovery_uses_persisted_tool_embeddings(monkeypatch) -> Non
             return [SimpleNamespace(name="search_meals", description="Search meal recipes.")]
 
     monkeypatch.setattr(discover_module, "get_tool_registry_repo", lambda: FakeToolRepository())
-    state = MainState.new(task="food recommendations", agent_profiles=[])
+    state = MainState.new(task="food recommendations", llm=object(), agent_profiles=[])
 
     result = capability_discovery(state)
 
@@ -31,7 +45,7 @@ def test_capability_discovery_uses_persisted_tool_embeddings(monkeypatch) -> Non
 
 def test_capability_discovery_falls_back_without_embeddings(monkeypatch) -> None:
     monkeypatch.setattr(discover_module, "embed_text", lambda _: (_ for _ in ()).throw(RuntimeError("offline")))
-    state = MainState.new(task="Find books", agent_profiles=[])
+    state = MainState.new(task="Find books", llm=object(), agent_profiles=[])
 
     result = capability_discovery(state)
 
@@ -39,7 +53,7 @@ def test_capability_discovery_falls_back_without_embeddings(monkeypatch) -> None
 
 def test_capability_discovery_limits_ranked_results_to_five(monkeypatch) -> None:
     monkeypatch.setattr(discover_module, "embed_text", lambda _: [1.0, 0.0])
-    state = MainState.new(task="Find anything", agent_profiles=[])
+    state = MainState.new(task="Find anything", llm=object(), agent_profiles=[])
 
     result = capability_discovery(state)
 
@@ -49,7 +63,7 @@ def test_capability_discovery_limits_ranked_results_to_five(monkeypatch) -> None
 
 def test_capability_discovery_excludes_static_tools_and_profile_agent(monkeypatch) -> None:
     monkeypatch.setattr(discover_module, "embed_text", lambda _: [1.0, 0.0])
-    state = MainState.new(task="Find anything", agent_profiles=[])
+    state = MainState.new(task="Find anything", llm=object(), agent_profiles=[])
 
     result = capability_discovery(state)
 

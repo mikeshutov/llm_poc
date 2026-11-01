@@ -24,6 +24,7 @@ from agent_runtime.models.agent_state import AgentState
 from retrieval.evidence import ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.execution.tool_executor import _substitute_refs, run_executor
+from agent_runtime.execution.message_history import append_execution_messages
 from agent_runtime.context import (
     get_current_conversation_id,
     get_current_roundtrip_id,
@@ -58,6 +59,23 @@ def test_substitute_refs_uses_typed_tool_results() -> None:
         "value": {"value": "b"}
     }
     assert _substitute_refs({"value": "#E2"}, {}) == {"value": "#E2"}
+
+
+def test_subagent_execution_appends_tool_exchange_to_local_message_history(monkeypatch) -> None:
+    plan = Plan.model_validate({
+        "steps": [{"id": "E1", "plan": "Run tool", "tool": "tool_a", "args": {}}]
+    })
+    state = _state_for_plan(plan)
+    monkeypatch.setattr(
+        "agent_runtime.execution.tool_executor.call_tool",
+        lambda **kwargs: ToolResult(result={"ok": True}),
+    )
+
+    run_executor(state)
+
+    assert len(state.reasoner_message_history) == 2
+    assert state.reasoner_message_history[0].tool_calls[0]["name"] == "tool_a"
+    assert state.reasoner_message_history[1].name == "tool_a"
 
 
 def test_run_executor_parallelizes_typed_plan_steps() -> None:
@@ -132,3 +150,44 @@ def test_run_executor_propagates_runtime_context_to_worker_threads() -> None:
         "roundtrip_id": str(state.execution_context.roundtrip_id),
         "user_id": "user-789",
     }
+
+
+def test_run_executor_returns_standardized_subagent_result_without_merging_state(monkeypatch) -> None:
+    parent = _state_for_plan(Plan.model_validate({
+        "steps": [{
+            "id": "E1",
+            "plan": "Create the document.",
+            "agent": "document_writing",
+            "args": {"task": "Create the document."},
+        }],
+    }))
+    delegated = AgentState.new(
+        task="",
+        agent_profile=AgentProfile(name="document_writing", scope=MAIN_AGENT_MODEL_SCOPE),
+        execution_context=parent.execution_context,
+        llm=object(),
+    )
+    parent.available_agent_states = {"document_writing": delegated}
+
+    completed = AgentState.new(
+        task="",
+        agent_profile=delegated.agent_profile,
+        execution_context=parent.execution_context,
+        llm=object(),
+    )
+
+    class Registry:
+        @staticmethod
+        def get(profile):
+            return lambda state: completed
+
+    monkeypatch.setattr("agents.registry.agent_registry", Registry())
+
+    run_executor(parent)
+
+    assert parent.delegated_agent_states == {}
+    assert parent.available_agent_states["document_writing"] is delegated
+    assert delegated.inputs.task == ""
+    assert len(parent.direct_tool_results) == 1
+    assert parent.direct_tool_results[0].tool_name == "document_writing"
+    assert parent.direct_tool_results[0].result["status"] == "pending"

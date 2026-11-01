@@ -98,7 +98,7 @@ def invoke_planner(
 @traceable(name="Planner Node", process_inputs=compact_trace_inputs, process_outputs=compact_trace_outputs)
 def run_planner(agent_state: AgentState) -> AgentState:
     prompt, tools = build_planner_prompt(state=agent_state)
-    prompt_messages = prompt.build_messages()
+    prompt_messages = [*prompt.build_messages(), *agent_state.reasoner_message_history]
     prompt_input_object = {"messages": prompt_messages}
     planning_result: PlanningResult
     try:

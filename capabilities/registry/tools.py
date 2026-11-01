@@ -54,6 +54,7 @@ from capabilities.adapters.weather import (
     get_current_weather,
     get_historical_month_weather,
 )
+from capabilities.adapters.writing import writing_templates
 from capabilities.registry.constants import TOOL_RESULT_TYPE_BOOK_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CALCULATION
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CALENDAR
@@ -87,6 +88,7 @@ from common.cache.policy import ToolCachePolicy
 from capabilities.retry.policy import RetryPolicy
 from capabilities.registry.constants import TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_WEB_PAGE
+from capabilities.registry.constants import TOOL_RESULT_TYPE_WRITING_TEMPLATES
 from capabilities.registry.models import RateLimitPolicy, Tool, ToolCategory
 
 # Rate limiter and retry policy
@@ -150,12 +152,20 @@ MEMORY_TOOLS = [
 ]
 FILE_TOOLS = [Tool(search_assets, result_type=TOOL_RESULT_TYPE_ASSET_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(search_asset_details, result_type=TOOL_RESULT_TYPE_ASSET_DETAILS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(get_file_by_id, result_type=TOOL_RESULT_TYPE_FILE, cache_policy=ToolCachePolicy(300, is_user_specific=True))]
 FILE_MANAGEMENT_TOOLS = [
-    Tool(file_create, result_type=TOOL_RESULT_TYPE_FILE),
-    Tool(file_read, result_type=TOOL_RESULT_TYPE_FILE),
-    Tool(file_edit, result_type=TOOL_RESULT_TYPE_FILE),
+    Tool(file_create, result_type=TOOL_RESULT_TYPE_FILE, version=4),
+    Tool(file_read, result_type=TOOL_RESULT_TYPE_FILE, version=4),
+    Tool(file_edit, result_type=TOOL_RESULT_TYPE_FILE, version=4),
     Tool(file_delete, result_type=TOOL_RESULT_TYPE_FILE),
     Tool(file_list, result_type=TOOL_RESULT_TYPE_FILE),
     Tool(file_move, result_type=TOOL_RESULT_TYPE_FILE),
+]
+WRITING_TOOLS = [
+    Tool(
+        writing_templates,
+        result_type=TOOL_RESULT_TYPE_WRITING_TEMPLATES,
+        version=1,
+        cache_policy=ToolCachePolicy(3600),
+    ),
 ]
 PROFILE_TOOLS = [
     Tool(
@@ -285,9 +295,17 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "Keep all paths inside the managed files directory.",
         ],
     ),
+    "writing": ToolCategory(
+        tools=WRITING_TOOLS,
+        description="Discover reusable writing template metadata and supported document formats.",
+        rules=[
+            "Use writing_templates to discover a suitable structure before creating a document when the user requests a reusable writing format.",
+            "The tool returns metadata only; do not assume template content is available.",
+        ],
+    ),
 }
 
-tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *WEB_SEARCH_TOOLS, *KNOWLEDGE_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *MATH_TOOLS, *GAMES_TOOLS, *MEMORY_TOOLS, *FILE_TOOLS, *FILE_MANAGEMENT_TOOLS, *PROFILE_TOOLS]
+tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *WEB_SEARCH_TOOLS, *KNOWLEDGE_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *MATH_TOOLS, *GAMES_TOOLS, *MEMORY_TOOLS, *FILE_TOOLS, *FILE_MANAGEMENT_TOOLS, *WRITING_TOOLS, *PROFILE_TOOLS]
 
 TOOLS_BY_NAME = {tool.name: tool for tool in tools}
 

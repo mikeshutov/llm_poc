@@ -16,6 +16,7 @@ from agent_runtime.synthesis.prompts.synthesis_rules import BASE_RULES
 def test_synthesis_schema_forbids_displaying_evidence_ids_in_content() -> None:
     assert "never expose internal IDs in content" in SYNTHESIS_SCHEMA
     assert "Use each UUID exactly as it appears in EVIDENCE" in SYNTHESIS_SCHEMA
+    assert "Ground every factual claim and every citation" in SYNTHESIS_SCHEMA
     assert '"2f70c491-bcd8-5e2e-a520-1e0d3e8768c2"' in SYNTHESIS_SCHEMA
 
 

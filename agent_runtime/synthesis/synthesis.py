@@ -46,14 +46,20 @@ def _build_result_blocks(
     result_blocks = [block.model_copy(deep=True) for block in synthesis_result.result]
     supplied_evidence_ids: set[str] = set()
     supplied_evidence_order: list[str] = []
+    supplied_evidence_by_id = {}
     seen: set[str] = set()
+    seen_urls: set[str] = set()
     for step in evidence_steps:
         for evidence in step.evidence:
             evidence_id = str(evidence.id)
             supplied_evidence_ids.add(evidence_id)
-            if evidence_id in seen:
+            supplied_evidence_by_id[evidence_id] = evidence
+            evidence_url = evidence.url.strip()
+            dedupe_key = f"url:{evidence_url}" if evidence_url else f"id:{evidence_id}"
+            if evidence_id in seen or dedupe_key in seen_urls:
                 continue
             seen.add(evidence_id)
+            seen_urls.add(dedupe_key)
             supplied_evidence_order.append(evidence_id)
 
     model_supplied_citations = any(
@@ -61,11 +67,19 @@ def _build_result_blocks(
         for block in result_blocks
     )
     for block in result_blocks:
-        block.evidence_ids = list(dict.fromkeys(
-            evidence_id
-            for evidence_id in block.evidence_ids
-            if evidence_id in supplied_evidence_ids
-        ))
+        normalized_block_ids: list[str] = []
+        seen_block_keys: set[str] = set()
+        for evidence_id in block.evidence_ids:
+            if evidence_id not in supplied_evidence_ids:
+                continue
+            evidence = supplied_evidence_by_id[evidence_id]
+            evidence_url = evidence.url.strip()
+            dedupe_key = f"url:{evidence_url}" if evidence_url else f"id:{evidence_id}"
+            if dedupe_key in seen_block_keys:
+                continue
+            seen_block_keys.add(dedupe_key)
+            normalized_block_ids.append(evidence_id)
+        block.evidence_ids = normalized_block_ids
 
     used_evidence_ids = list(dict.fromkeys(
         evidence_id
