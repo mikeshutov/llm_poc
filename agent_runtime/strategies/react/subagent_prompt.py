@@ -26,7 +26,7 @@ REACT_DECISION_INSTRUCTION = (
     "briefly explain the decision. "
     "Use only facts, source details, and URLs supported by the observed evidence; if "
     "evidence is insufficient, choose a research action instead of guessing. Native "
-    "Native tool calls are the authoritative actions."
+    "tool calls are the authoritative actions."
 )
 
 

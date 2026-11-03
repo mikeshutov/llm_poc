@@ -16,6 +16,7 @@ def load_agents_node(state: OrchestratorGraphState) -> dict[str, MainState]:
     load_agents(main_state)
     return _main_state_update(main_state)
 
+
 def enrich_state_node(state: OrchestratorGraphState) -> dict[str, MainState]:
     return shared_enrich_state_node(state)
 

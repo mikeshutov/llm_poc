@@ -1,14 +1,14 @@
 from __future__ import annotations
-from dataclasses import asdict
 
 from langsmith import traceable
 
-from personalization.profile.service import hydrate_user_profile_core, load_user_profile_attributes
-from common.logging import compact_trace_inputs, compact_trace_outputs, record_node_log
-from agent_runtime.models.main_state import MainState
-from agent_runtime.models.agent_profile import AgentName
 from agent_runtime.constants import NodeName
+from agent_runtime.models.agent_profile import AgentName
+from agent_runtime.models.main_state import MainState
+from common.logging import compact_trace_inputs, compact_trace_outputs, record_node_log
+from personalization.profile.service import hydrate_user_profile_core, load_user_profile_attributes
 from rendering.debug import PROFILE_LOAD_KIND
+
 
 @traceable(name="Load User Profile Node", process_inputs=compact_trace_inputs, process_outputs=compact_trace_outputs)
 def load_user_profile(

@@ -5,28 +5,15 @@ from pathlib import PurePosixPath
 from urllib.parse import unquote
 from uuid import UUID
 
-from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 from agent_runtime.models.agent_profile import AgentName, AgentProfile
 from agent_runtime.models.agent_inputs import AgentInputs
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.main_state import MainState
-from agents.main.agent import MainReasonerStrategy
-from agents.profile_management.profile import build_profile_management_profile
-from retrieval.evidence_store import (
-    build_evidence_bundle_from_tool_results,
-    build_evidence_steps_from_tool_results,
-    filter_evidence_steps,
-)
 from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agent_runtime.models.synthesized_result import SynthesisResult, SynthesisResultBlock
-from agent_runtime.synthesis.synthesis import _build_result_blocks
-from capabilities.discovery.discover_capabilities_tool import (
-    CAPABILITY_DISCOVERY_TOOL,
-    bind_capability_discovery_agent_state,
-    bind_capability_discovery_state,
-    reset_capability_discovery_agent_state,
-    reset_capability_discovery_state,
-)
+from agents.main.agent import MainReasonerStrategy
+from agents.profile_management.profile import build_profile_management_profile
+from capabilities.adapters.math import calculate
 from capabilities.adapters.profile import (
     USER_MANAGEMENT_TOOL,
     bind_user_management_agent_state,
@@ -34,8 +21,20 @@ from capabilities.adapters.profile import (
     reset_user_management_agent_state,
     reset_user_management_state,
 )
-from capabilities.adapters.math import calculate
-from agent_runtime.models.agent_profile import AgentName
+from capabilities.discovery.discover_capabilities_tool import (
+    CAPABILITY_DISCOVERY_TOOL,
+    bind_capability_discovery_agent_state,
+    bind_capability_discovery_state,
+    reset_capability_discovery_agent_state,
+    reset_capability_discovery_state,
+)
+from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
+from retrieval.evidence_store import (
+    build_evidence_bundle_from_tool_results,
+    build_evidence_steps_from_tool_results,
+    filter_evidence_steps,
+)
+from agent_runtime.synthesis.synthesis import _build_result_blocks
 
 
 _GENERATED_FILE_LINK = re.compile(
