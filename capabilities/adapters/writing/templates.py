@@ -7,6 +7,11 @@ import yaml
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from assets.files.file_types import (
+    DOCUMENT_FILE_TYPES,
+    DOCUMENT_FILE_TYPES_DESCRIPTION,
+    FileType,
+)
 from capabilities.registry.constants import (
     TOOL_NAME_WRITING_TEMPLATES,
     TOOL_RESULT_TYPE_WRITING_TEMPLATES,
@@ -18,7 +23,11 @@ from retrieval.evidence import EvidenceView, ToolResult
 # catalog are deployed together.
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 TEMPLATE_DEFINITIONS_FILE = "definitions.yaml"
-SUPPORTED_TEMPLATE_FORMATS = frozenset({"txt", "md", "docx", "pdf"})
+SUPPORTED_TEMPLATE_FORMATS = DOCUMENT_FILE_TYPES - {FileType.SVG}
+SUPPORTED_TEMPLATE_FORMATS_DESCRIPTION = ", ".join(
+    file_type.value
+    for file_type in sorted(SUPPORTED_TEMPLATE_FORMATS, key=lambda item: item.value)
+)
 
 
 class WritingTemplate(BaseModel):
@@ -28,7 +37,7 @@ class WritingTemplate(BaseModel):
     name: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)
     category: str = Field(..., min_length=1)
-    formats: list[str] = Field(..., min_length=1)
+    formats: list[FileType] = Field(..., min_length=1)
     tags: list[str]
     required_fields: list[str]
     template_file: str = Field(..., min_length=1)
@@ -50,13 +59,13 @@ class WritingTemplate(BaseModel):
 
     @field_validator("formats")
     @classmethod
-    def validate_formats(cls, value: list[str]) -> list[str]:
+    def validate_formats(cls, value: list[FileType]) -> list[FileType]:
         unsupported = sorted(set(value) - SUPPORTED_TEMPLATE_FORMATS)
         if unsupported:
             raise ValueError(
                 "Unsupported template format(s): "
                 + ", ".join(unsupported)
-                + ". Supported formats are txt, md, docx, and pdf."
+                + f". Supported formats are {SUPPORTED_TEMPLATE_FORMATS_DESCRIPTION}."
             )
         return list(dict.fromkeys(value))
 
@@ -66,7 +75,7 @@ class WritingTemplateMetadata(BaseModel):
     name: str
     description: str
     category: str
-    formats: list[str]
+    formats: list[FileType]
     tags: list[str]
     required_fields: list[str]
     default_title: str | None = None
@@ -91,7 +100,7 @@ class WritingTemplatesArgs(BaseModel):
     category: str | None = Field(default=None, description="Optional template category filter.")
     format: str | None = Field(
         default=None,
-        description="Optional output format filter: txt, md, docx, or pdf.",
+        description=f"Optional output format filter: {SUPPORTED_TEMPLATE_FORMATS_DESCRIPTION}.",
     )
 
 
@@ -190,7 +199,7 @@ def writing_templates(
     if args.format and args.format.strip().lower() not in SUPPORTED_TEMPLATE_FORMATS:
         raise ValueError(
             f"Unsupported template format '{args.format}'. "
-            "Supported formats are txt, md, docx, and pdf."
+            f"Supported formats are {SUPPORTED_TEMPLATE_FORMATS_DESCRIPTION}."
         )
     matches = [template for template in load_writing_templates() if _matches(template, args)]
     metadata = [WritingTemplateMetadata.from_template(template) for template in matches]

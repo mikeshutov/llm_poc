@@ -32,4 +32,6 @@ def build_document_writing_rules() -> str:
     )
 
 
-__all__ = ["build_document_writing_rules"]
+__all__ = [
+    "build_document_writing_rules",
+]

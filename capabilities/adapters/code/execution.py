@@ -10,6 +10,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from agent_runtime.context import get_current_conversation_id, get_current_user_id
+from common.config import ANONYMOUS_OWNER
 from common.config import FILES_DIR
 from capabilities.registry.constants import (
     TOOL_NAME_CODE_EXECUTE,
@@ -63,7 +64,7 @@ def _docker_workspace_path(path: Path) -> str:
 
 
 def _conversation_workspace() -> Path | None:
-    user_id = (get_current_user_id() or "anonymous").strip()
+    user_id = (get_current_user_id() or ANONYMOUS_OWNER).strip()
     conversation_id = (get_current_conversation_id() or "").strip()
     if (
         not user_id
@@ -179,4 +180,8 @@ def code_execute(code: str, timeout_seconds: int = 10) -> ToolResult:
     return ToolResult(result=result, evidence=[evidence])
 
 
-__all__ = ["CodeExecutionResult", "CodeExecuteArgs", "code_execute"]
+__all__ = [
+    "CodeExecutionResult",
+    "CodeExecuteArgs",
+    "code_execute",
+]

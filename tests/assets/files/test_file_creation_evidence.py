@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from assets.models import AssetOrigin, AssetType, FileAsset
+from assets.files.writer import normalize_file_format as _normalize_format
 from capabilities.adapters.files.management import _file_created_result
-from capabilities.adapters.files.management import _normalize_format
 
 
 def test_file_format_normalization_accepts_descriptive_and_mime_values() -> None:

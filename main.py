@@ -9,7 +9,7 @@ import streamlit as st
 from agent_runtime.service import run_request_orchestrator_for_query
 from agents.seeder import seed_system_agents
 from capabilities.registry.seeder import seed_tools
-from common.config import CONTENT_KEY, ROLE_KEY, ROLE_USER
+from common.config import ANONYMOUS_OWNER, CONTENT_KEY, ROLE_KEY, ROLE_USER
 from conversation.constants import SOURCE_STREAMLIT
 from conversation.models.conversation_models import ConversationMetadata
 from conversation.models.replay_models import PreparedReplayConversation
@@ -78,7 +78,7 @@ PENDING_REPLAY_PREPARE_KEY = "pending_replay_prepare"
 def ensure_selected_user_id() -> str:
     profiles = user_profile_repository.list_profiles(limit=100)
     if not profiles:
-        user_profile_repository.ensure_profile("anonymous", display_name="Anonymous")
+        user_profile_repository.ensure_profile(ANONYMOUS_OWNER, display_name="Anonymous")
         profiles = user_profile_repository.list_profiles(limit=100)
 
     selected_user_id = str(uid).strip() if uid else st.session_state.get("selected_user_id")

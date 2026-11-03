@@ -12,6 +12,13 @@ from capabilities.adapters.files.management import (
 )
 
 __all__ = [
-    "get_file_by_id", "search_asset_details", "search_assets",
-    "file_create", "file_read", "file_edit", "file_delete", "file_list", "file_move",
+    "get_file_by_id",
+    "search_asset_details",
+    "search_assets",
+    "file_create",
+    "file_read",
+    "file_edit",
+    "file_delete",
+    "file_list",
+    "file_move",
 ]

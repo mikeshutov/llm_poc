@@ -1,5 +1,5 @@
 from common.config.env import get_env_bool, get_env_float, get_env_int
-from common.config.file_constants import FILES_DIR, IMAGE_MIME_PREFIX
+from common.config.file_constants import ANONYMOUS_OWNER, FILES_DIR, IMAGE_MIME_PREFIX
 from common.config.message_constants import (
     CONTENT_KEY,
     ROLE_ASSISTANT,
@@ -14,6 +14,7 @@ from common.config.message_constants import (
 from common.config.model_constants import CHUNK_ENCODING, EMBEDDING_MODEL
 
 __all__ = [
+    "ANONYMOUS_OWNER",
     "CHUNK_ENCODING",
     "CONTENT_KEY",
     "EMBEDDING_MODEL",

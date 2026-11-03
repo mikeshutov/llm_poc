@@ -3,4 +3,7 @@ from serviceclients.attribute_classifier.client import (
     AttributeClassifierUnavailableError,
 )
 
-__all__ = ["AttributeClassifierClient", "AttributeClassifierUnavailableError"]
+__all__ = [
+    "AttributeClassifierClient",
+    "AttributeClassifierUnavailableError",
+]

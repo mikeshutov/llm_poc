@@ -12,9 +12,11 @@ from agent_runtime.context import get_current_user_id
 from assets.files.storage import scoped_file_path
 from assets.files.urls import static_file_url
 from assets.files.models import FileListResult
+from assets.files.file_types import FileType, WORKSPACE_FILE_TYPES, WORKSPACE_FILE_TYPES_DESCRIPTION
+from assets.files.writer import normalize_file_format, write_file
 from assets.models import AssetOrigin
 from assets.repository.asset_repository import AssetRepository
-from common.config import FILES_DIR
+from common.config import ANONYMOUS_OWNER, FILES_DIR
 from capabilities.registry.constants import (
     TOOL_NAME_WORKSPACE_FILE_DELETE,
     TOOL_NAME_WORKSPACE_FILE_EDIT,
@@ -35,7 +37,7 @@ class WorkspacePathArgs(BaseModel):
 
 
 class WorkspaceWriteArgs(WorkspacePathArgs):
-    content: str = Field(default="", description="UTF-8 text content to write.")
+    content: str = Field(default="", description=f"UTF-8 text content to write. Supported file types include {WORKSPACE_FILE_TYPES_DESCRIPTION}.")
     overwrite: bool = Field(default=False, description="Whether to replace an existing file.")
 
 
@@ -67,7 +69,7 @@ class WorkspacePromoteArgs(BaseModel):
 
 
 def _workspace_root() -> Path:
-    user_id = (get_current_user_id() or "anonymous").strip()
+    user_id = (get_current_user_id() or ANONYMOUS_OWNER).strip()
     conversation_id = (get_current_conversation_id() or "").strip()
     if (
         not user_id
@@ -119,13 +121,19 @@ def _result(path: Path, operation: str, *, content: str | None = None, items: li
     return ToolResult(result=payload, evidence=[evidence])
 
 
-@tool(TOOL_NAME_WORKSPACE_FILE_WRITE, args_schema=WorkspaceWriteArgs, description="Write UTF-8 text to a file in the current conversation workspace.")
+@tool(TOOL_NAME_WORKSPACE_FILE_WRITE, args_schema=WorkspaceWriteArgs, description=f"Write UTF-8 text to a file in the current conversation workspace. Supported file types include {WORKSPACE_FILE_TYPES_DESCRIPTION}.")
 def workspace_file_write(path: str, content: str = "", overwrite: bool = False) -> ToolResult:
     target = _safe_path(path)
     if target.exists() and not overwrite:
         raise ValueError(f"Workspace file already exists: '{path}'. Set overwrite=true to replace it.")
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(content, encoding="utf-8")
+    file_format = FileType.TXT
+    if target.suffix:
+        _, file_format = normalize_file_format(
+            target.name,
+            supported_types=WORKSPACE_FILE_TYPES,
+        )
+    write_file(target, content, file_format)
     return _result(target, "written")
 
 
@@ -239,4 +247,11 @@ def workspace_file_promote(paths: list[str]) -> ToolResult:
     )
 
 
-__all__ = ["workspace_file_write", "workspace_file_read", "workspace_file_edit", "workspace_file_list", "workspace_file_delete", "workspace_file_promote"]
+__all__ = [
+    "workspace_file_write",
+    "workspace_file_read",
+    "workspace_file_edit",
+    "workspace_file_list",
+    "workspace_file_delete",
+    "workspace_file_promote",
+]

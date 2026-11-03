@@ -71,4 +71,6 @@ def get_forecast_weather(
         return ToolResult.error(f"Weather service unavailable: {exc}")
 
 
-__all__ = ["get_forecast_weather"]
+__all__ = [
+    "get_forecast_weather",
+]

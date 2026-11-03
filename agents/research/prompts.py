@@ -22,4 +22,6 @@ def build_research_rules() -> str:
     )
 
 
-__all__ = ["build_research_rules"]
+__all__ = [
+    "build_research_rules",
+]

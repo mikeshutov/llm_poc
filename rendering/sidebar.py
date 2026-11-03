@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
+from common.config import ANONYMOUS_OWNER
 from llm.repository.repo_factory import get_conversation_model_config_repo
 from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig, EVALUATOR_STAGE, PLANNER_STAGE
 from conversation.constants import SOURCE_STREAMLIT
@@ -152,7 +153,7 @@ def _switch_user(conversation_repository, user_id: str) -> None:
 
 
 def _delete_conversation(conversation_repository, conversation_id: str) -> None:
-    selected_user_id = st.session_state.get("selected_user_id", "anonymous")
+    selected_user_id = st.session_state.get("selected_user_id", ANONYMOUS_OWNER)
     conversation_repository.delete_conversation(UUID(conversation_id), user_id=selected_user_id)
     latest = conversation_repository.get_latest_conversation(selected_user_id)
     clear_feedback_state()
@@ -996,7 +997,7 @@ def render_sidebar(conversation_repository) -> None:
     user_profile_repository = get_user_profile_repo()
     profiles = user_profile_repository.list_profiles(limit=100)
     if not profiles:
-        user_profile_repository.ensure_profile("anonymous", display_name="Anonymous")
+        user_profile_repository.ensure_profile(ANONYMOUS_OWNER, display_name="Anonymous")
         profiles = user_profile_repository.list_profiles(limit=100)
 
     selected_user_id = st.session_state.get("selected_user_id") or profiles[0].user_id

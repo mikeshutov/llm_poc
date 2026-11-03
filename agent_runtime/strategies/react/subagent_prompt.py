@@ -45,4 +45,6 @@ def build_subagent_decision_prompt(
     )
 
 
-__all__ = ["build_subagent_decision_prompt"]
+__all__ = [
+    "build_subagent_decision_prompt",
+]

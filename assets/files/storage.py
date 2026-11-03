@@ -3,10 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 
-from common.config import FILES_DIR
-
-
-ANONYMOUS_OWNER = "anonymous"
+from common.config import ANONYMOUS_OWNER, FILES_DIR
 
 
 def _owner_segment(user_id: str | None) -> str:

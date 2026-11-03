@@ -21,4 +21,6 @@ def build_profile_management_rules() -> str:
     )
 
 
-__all__ = ["build_profile_management_rules"]
+__all__ = [
+    "build_profile_management_rules",
+]

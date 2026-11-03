@@ -1,8 +1,6 @@
-from capabilities.adapters.files.management import (
-    _normalize_format,
-    _read_document,
-    _write_document,
-)
+from assets.files.writer import normalize_file_format as _normalize_format
+from assets.files.writer import write_file as _write_document
+from capabilities.adapters.files.management import _read_document
 
 
 def test_file_format_is_inferred_or_normalized() -> None:
