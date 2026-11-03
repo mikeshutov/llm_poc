@@ -8,13 +8,16 @@ from pydantic import BaseModel, Field
 
 from llm.conversation_model_config import EVALUATOR_STAGE, ModelSelection, PLANNER_STAGE
 from capabilities.registry.tools import TOOL_CATEGORIES
+from agent_runtime.planning.prompts.planner_rules import DEFAULT_PLANNER_PROMPT_INSTRUCTION
+
+class AgentName(StrEnum):
+    REQUEST_ORCHESTRATOR = "request_orchestrator"
+    PROFILE_MANAGEMENT = "profile_management"
+    DOCUMENT_WRITING = "document_writing"
+    RESEARCH = "research"
+    CODING = "coding"
 
 
-DEFAULT_PLANNER_PROMPT_INSTRUCTION = "You are a planning agent."
-DEFAULT_PLANNER_RULES = ""
-PROFILE_MANAGEMENT_AGENT_NAME = "profile_management"
-DOCUMENT_WRITING_AGENT_NAME = "document_writing"
-RESEARCH_AGENT_NAME = "research"
 DEFAULT_SYNTHESIS_INSTRUCTION = (
     "Solve the following task or problem using the provided evidence. "
 )
@@ -72,7 +75,6 @@ class AgentProfile:
     delegatable: bool = True
     max_turns: int = DEFAULT_MAX_TURNS
     planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
-    planner_rules: str = DEFAULT_PLANNER_RULES
     synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION
     delegation_args_schema: type[BaseModel] = AgentDelegationArgs
 

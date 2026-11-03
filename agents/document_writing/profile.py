@@ -4,7 +4,7 @@ from agent_runtime.models.agent_profile import AgentDelegationArgs
 from agent_runtime.models.agent_profile import (
     AgentExecutionStrategy,
     AgentProfile,
-    DOCUMENT_WRITING_AGENT_NAME,
+    AgentName,
 )
 
 
@@ -50,7 +50,7 @@ def build_document_writing_profile() -> AgentProfile:
         if tool.name in _DOCUMENT_WRITING_TOOL_NAMES
     ]
     return AgentProfile(
-        name=DOCUMENT_WRITING_AGENT_NAME,
+        name=AgentName.DOCUMENT_WRITING,
         scope=MAIN_AGENT_MODEL_SCOPE,
         version=5,
         description=(
@@ -68,9 +68,9 @@ def build_document_writing_profile() -> AgentProfile:
         max_turns=10,
         planner_instruction=(
             "Manage the user's explicit document-writing request using the available "
-            "managed-file tools. Do not answer the user directly."
+            "managed-file tools. Do not answer the user directly.\n\n"
+            f"{build_document_writing_rules()}"
         ),
-        planner_rules=build_document_writing_rules(),
         delegation_args_schema=DocumentWritingDelegationArgs,
     )
 

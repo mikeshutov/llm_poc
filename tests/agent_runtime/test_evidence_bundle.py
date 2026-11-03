@@ -325,7 +325,7 @@ def test_build_evidence_bundle_normalizes_weather_to_single_record() -> None:
     assert record.item_id == "Toronto"
     assert record.location_name == "Toronto"
     assert record.url == "https://open-meteo.com/"
-    assert record.source == "weather_current"
+    assert record.source == "weather_lookup"
     assert record.summary == "21.2 C in Toronto, Canada, wind 4.3 km/h, at 2026-08-12T11:15"
 
 

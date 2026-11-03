@@ -269,7 +269,6 @@ def _initialize_user_agent_edit_form(user_id: str, user_agent) -> None:
     st.session_state[f"{widget_prefix}::execution_strategy"] = user_agent.execution_strategy.value
     st.session_state[f"{widget_prefix}::allowed_categories"] = list(user_agent.allowed_categories)
     st.session_state[f"{widget_prefix}::planner_instruction"] = user_agent.planner_instruction
-    st.session_state[f"{widget_prefix}::planner_rules"] = user_agent.planner_rules
     st.session_state[f"{widget_prefix}::max_turns"] = user_agent.max_turns
     for model_config in user_agent.model_configs:
         st.session_state[f"{widget_prefix}::{model_config.stage}::provider"] = model_config.provider
@@ -681,12 +680,6 @@ def render_user_agents_dialog(user_id: str) -> None:
             height=140,
             key=f"{widget_prefix}::planner_instruction",
         )
-        planner_rules = st.text_area(
-            "Planner rules",
-            placeholder="Optional extra rules or constraints.",
-            height=120,
-            key=f"{widget_prefix}::planner_rules",
-        )
         max_turns = st.number_input(
             "Max turns",
             min_value=1,
@@ -718,7 +711,6 @@ def render_user_agents_dialog(user_id: str) -> None:
                 execution_strategy=execution_strategy,
                 allowed_categories=allowed_category_names,
                 planner_instruction=planner_instruction,
-                planner_rules=planner_rules.strip(),
                 max_turns=int(max_turns),
                 is_active=form_agent.is_active if form_agent is not None else True,
                 model_configs=model_configs,

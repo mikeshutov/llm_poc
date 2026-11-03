@@ -12,10 +12,12 @@ def build_profile_management_rules() -> str:
         "- Requested or updated attribute types must use the format prefix.suffix such as "
         "food.preference or projects.goal.\n\n"
         "Execution rules:\n"
-        "- Do not repeat executed calls.\n"
-        "- Do not make one planned tool step depend on another step's output. Each step must "
-        "stand on its own inputs for now.\n"
-        "- Keep plans to one sentence."
+        "- Map a requested tone to the closest available supported tone/formality value; "
+        "do not invent new tone values. Only update the durable profile preference when "
+        "the user clearly asks for that preference to be remembered.\n"
+        "- For any clear durable tone preference, execute the corresponding profile mutation "
+        "before returning; do not report success without a completed update or an explicit "
+        "unchanged result.\n"
     )
 
 

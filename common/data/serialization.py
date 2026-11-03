@@ -9,6 +9,19 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
+def _normalize_external_scalar(value: Any) -> Any:
+    """Convert common third-party numeric containers without importing them."""
+    module_name = type(value).__module__.split(".", 1)[0]
+    if module_name == "numpy":
+        tolist = getattr(value, "tolist", None)
+        if callable(tolist):
+            return tolist()
+        item = getattr(value, "item", None)
+        if callable(item):
+            return item()
+    return value
+
+
 def is_meaningful_prompt_value(value: Any) -> bool:
     if value is None:
         return False
@@ -42,6 +55,7 @@ def prune_empty_prompt_values(value: Any) -> Any:
 
 
 def sanitize_for_json_storage(value: Any) -> Any:
+    value = _normalize_external_scalar(value)
     if isinstance(value, BaseModel):
         return sanitize_for_json_storage(value.model_dump())
     if is_dataclass(value):
@@ -73,6 +87,7 @@ def bounded_json_value(
     max_bytes = max(256, int(max_bytes))
 
     def project(item: Any, depth: int) -> Any:
+        item = _normalize_external_scalar(item)
         if depth >= max_depth:
             return "[truncated: maximum depth]"
         if isinstance(item, BaseModel):
@@ -83,7 +98,10 @@ def bounded_json_value(
             return str(item)
         if isinstance(item, (datetime, date, time)):
             return item.isoformat()
+        if isinstance(item, (bytes, bytearray, memoryview)):
+            return f"[binary data omitted: {len(item)} bytes]"
         if isinstance(item, str):
+            item = item.replace("\x00", "")
             return item if len(item) <= max_string else item[:max_string] + "…"
         if isinstance(item, dict):
             result: dict[str, Any] = {}

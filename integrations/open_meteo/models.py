@@ -11,6 +11,7 @@ class DailyWeather(BaseModel):
     temperature_2m_min: list[Optional[float]] = []
     precipitation_sum: list[Optional[float]] = []
     windspeed_10m_max: list[Optional[float]] = []
+    weathercode: list[Optional[int]] = []
 
 
 class GeocodedLocation(BaseModel):

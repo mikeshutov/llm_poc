@@ -22,51 +22,21 @@ At a high level this repo explores:
 ## Main App Flow
 Rough breakdown of the current agent loop flow.
 1. Prompt comes in and we assemble conversation context.
-2. We pass that context plus the latest user prompt into agent state.
-3. We load likely useful user-created agents for the main planner to consider.
-4. We prepare a small `User Profile` section that starts with geo/location-aware metadata plus an initially empty user-attributes section.
-5. Capability discovery identifies useful tools and delegatable agents, while attribute discovery identifies user-profile data that may help.
-6. We load the discovered profile attributes and condense overlapping records for prompt efficiency.
-7. The main agent plans a mixture of direct tool calls and delegated agent tasks.
-8. The main agent executes its plan; delegated agents maintain their own planner/executor/evaluator state beneath the main execution state.
-9. After execution, the evaluator decides whether another useful planning pass is needed or whether the request can be synthesized.
-10. Synthesis generates the final response, roundtrip summary, and tool summary from the completed main-agent state and explicit evidence.
+2. Request analysis preloads matching user attributes and attempts to preload useful tools.
+3. The reasoner decides whether to call tools or produce a completed response.
+4. Tool execution runs direct tools or delegated agents and returns structured results.
+5. The reasoner uses those results for another pass until no tool calls remain.
+6. The completed response is returned from the final reasoning state and collected evidence.
 
 We also store conversations, roundtrips, prompt rows, summaries, and tool calls for future prompts.
 
 ```mermaid
 flowchart LR
-    PROMPT["User prompt"]
-
-    subgraph ORCHESTRATOR["Request orchestrator agent boundary"]
-        subgraph ENRICHMENT["Capability and State Enrichment Layer"]
-            CAPABILITY["Capability discovery<br/>Load tools and agents via<br/>embeddings"]
-            ATTRIBUTE["Attribute discovery for<br/>profile enrichment"]
-        end
-
-        PLANNER["Planner"]
-
-        subgraph CAPABILITY_EXECUTION["Capability execution"]
-            AGENT_TOOL_EXEC["Agent / Tool Executor"]
-            RERANK["Rerank results"]
-            AGENT_TOOL_EXEC --> RERANK
-        end
-
-        EVALUATOR["Evaluator"]
-        SYNTHESIS["Synthesis"]
-        RESPONSE["Assistant response"]
-
-        ENRICHMENT --> PLANNER
-
-        PLANNER --> CAPABILITY_EXECUTION
-        RERANK --> EVALUATOR
-
-        EVALUATOR -->|missing information| ENRICHMENT
-        EVALUATOR -->|sufficient evidence or terminal| SYNTHESIS
-        SYNTHESIS --> RESPONSE
-    end
-
-    PROMPT --> ENRICHMENT
+    PROMPT["Prompt"] --> ANALYSIS["Request Analysis<br/>Preload matching user attributes<br/>Attempt to preload tools"]
+    ANALYSIS --> REASON["Reason"]
+    REASON -->|tool calls| EXECUTE["Tool Execution"]
+    EXECUTE -->|tool results| REASON
+    REASON -->|no tool calls| RESPONSE["Completed Response"]
 ```
 
 ## Documentation

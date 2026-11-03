@@ -5,12 +5,10 @@ from personalization.profile.models import UserProfile
 from agent_runtime.models.agent_profile import (
     AgentExecutionStrategy,
     AgentProfile,
-    PROFILE_MANAGEMENT_AGENT_NAME,
+    AgentName,
 )
 from capabilities.adapters.profile import (
-    set_user_display_name,
-    set_user_first_name,
-    set_user_last_name,
+    update_user_names,
     update_user_tone,
 )
 from capabilities.adapters.user_attributes import upsert_user_attribute
@@ -19,14 +17,10 @@ from agents.profile_management.prompts import build_profile_management_rules
 
 
 def build_profile_management_profile(user_profile: UserProfile | None = None) -> AgentProfile:
-    static_tools = [set_user_display_name, update_user_tone, upsert_user_attribute]
-    if user_profile is None or not (user_profile.first_name or '').strip():
-        static_tools.append(set_user_first_name)
-    if user_profile is None or not (user_profile.last_name or '').strip():
-        static_tools.append(set_user_last_name)
+    static_tools = [update_user_names, update_user_tone, upsert_user_attribute]
 
     return AgentProfile(
-        name=PROFILE_MANAGEMENT_AGENT_NAME,
+        name=AgentName.PROFILE_MANAGEMENT,
         scope=PROFILE_AGENT_MODEL_SCOPE,
         version=3,
         description=(
@@ -43,9 +37,9 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
         planner_instruction=(
             'Maintain durable user profile fields and durable user attributes. '
             'Do not answer the user. '
-            'If no profile mutation is needed, return no steps.'
+            'If no profile mutation is needed, return no steps.\n\n'
+            f'{build_profile_management_rules()}'
         ),
-        planner_rules=build_profile_management_rules(),
     )
 
 

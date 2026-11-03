@@ -14,6 +14,10 @@ def test_file_format_normalization_accepts_descriptive_and_mime_values() -> None
     assert _normalize_format("report.txt", "doc") == ("report.docx", "docx")
 
 
+def test_file_format_normalization_supports_svg() -> None:
+    assert _normalize_format("chart", "image/svg+xml") == ("chart.svg", "svg")
+
+
 def test_created_file_result_contains_download_evidence() -> None:
     file = FileAsset(
         id=uuid4(),
@@ -34,6 +38,6 @@ def test_created_file_result_contains_download_evidence() -> None:
     assert evidence.item_id == str(file.id)
     assert evidence.title == "report.pdf"
     assert evidence.entity_type == "file"
-    assert evidence.url == "app/static/files/user-123/report.pdf"
+    assert evidence.url == "/app/static/files/user-123/report.pdf"
     assert evidence.llm_metadata["filename"] == "report.pdf"
     assert evidence.llm_metadata["mime_type"] == "application/pdf"

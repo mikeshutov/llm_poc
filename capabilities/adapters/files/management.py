@@ -44,7 +44,7 @@ class FileIdArgs(BaseModel):
 class FileCreateArgs(BaseModel):
     file_name: str = Field(..., min_length=1, description="The new file name, relative to the managed files directory.")
     content: str = Field(default="", description="Text content for the new file or document.")
-    format: str | None = Field(default=None, description="Output format such as txt, md, or docx. If omitted, infer it from file_name.")
+    format: str | None = Field(default=None, description="Output format such as txt, md, docx, pdf, or svg. If omitted, infer it from file_name.")
     title: str | None = Field(default=None, description="Optional document title, used for structured formats such as docx.")
 
 
@@ -162,6 +162,8 @@ def _normalize_format(file_name: str, file_format: str | None) -> tuple[str, str
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
         "pdf": "pdf",
         "application/pdf": "pdf",
+        "svg": "svg",
+        "image/svg+xml": "svg",
     }
     normalized = aliases.get(requested)
     if normalized is None:
@@ -177,8 +179,8 @@ def _normalize_format(file_name: str, file_format: str | None) -> tuple[str, str
             normalized = "txt"
         else:
             normalized = requested
-    if normalized not in {"txt", "md", "docx", "pdf"}:
-        raise ValueError("Unsupported file format. Supported formats are txt, md, docx, and pdf.")
+    if normalized not in {"txt", "md", "docx", "pdf", "svg"}:
+        raise ValueError("Unsupported file format. Supported formats are txt, md, docx, pdf, and svg.")
     path = Path(file_name)
     if not path.suffix:
         file_name = f"{file_name}.{normalized}"
@@ -203,7 +205,7 @@ def _document_paragraphs(content: str) -> list[str]:
 
 
 def _write_document(path: Path, content: str, file_format: str, title: str | None) -> None:
-    if file_format in {"txt", "md"}:
+    if file_format in {"txt", "md", "svg"}:
         path.write_text(content, encoding="utf-8")
         return
     if file_format == "pdf":
@@ -263,7 +265,7 @@ def _read_document(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-@tool(TOOL_NAME_FILE_CREATE, args_schema=FileCreateArgs, description="Create a new managed text, Word, or PDF document. Supports txt, md, docx, and pdf formats.")
+@tool(TOOL_NAME_FILE_CREATE, args_schema=FileCreateArgs, description="Create a new managed text, Word, PDF, or SVG file. Supports txt, md, docx, pdf, and svg formats.")
 def file_create(
     file_name: str,
     content: str = "",
@@ -283,6 +285,8 @@ def file_create(
             mime_type=(
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 if file_format == "docx"
+                else "image/svg+xml"
+                if file_format == "svg"
                 else mimetypes.guess_type(target.name)[0] or "text/plain"
             ),
             user_id=get_current_user_id(),

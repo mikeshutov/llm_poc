@@ -20,7 +20,6 @@ class AgentState:
     agent_profile: AgentProfile
     inputs: AgentInputs = field(default_factory=AgentInputs)
     available_agent_states: dict[str, "AgentState"] | None = None
-    delegated_agent_states: dict[str, "AgentState"] = field(default_factory=dict)
     direct_tool_results: list[ToolResult] = field(default_factory=list)
     executed_request_signatures: list[str] = field(default_factory=list)
     execution_context: AgentExecutionContext = field(default_factory=AgentExecutionContext)
@@ -91,16 +90,12 @@ class AgentState:
         gathered = list(self.direct_tool_results)
         if self.result.tool_call_ids:
             gathered.extend(message_repository.MessageToolRepository().get_tool_results(self.result.tool_call_ids))
-        for agent_state in self.delegated_agent_states.values():
-            gathered.extend(agent_state.gather_tool_results())
         return gathered
 
     def gather_tool_calls(self):
         gathered = []
         if self.result.tool_call_ids:
             gathered.extend(message_repository.MessageToolRepository().get_tool_calls(self.result.tool_call_ids))
-        for agent_state in self.delegated_agent_states.values():
-            gathered.extend(agent_state.gather_tool_calls())
         return gathered
 
     def gather_used_tools(self) -> list[str]:

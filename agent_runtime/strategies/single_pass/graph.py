@@ -12,7 +12,7 @@ from agent_runtime.models.agent_state import AgentState
 from agent_runtime.execution.tool_executor import run_executor
 from agent_runtime.models.decision import DecisionStatus
 from agent_runtime.strategies.react.decision import run_decision
-from agent_runtime.strategies.react.prompt import build_react_decision_prompt
+from agent_runtime.strategies.react.subagent_prompt import build_subagent_decision_prompt
 
 
 @dataclass(frozen=True)
@@ -20,6 +20,8 @@ class DirectReturnStrategy:
     @staticmethod
     def _record_decision_status(state: AgentState, status: DecisionStatus) -> None:
         state.node_states.planner.decision_status = status
+        if state.node_states.planner.plan and state.node_states.planner.plan.steps:
+            return
         if status == DecisionStatus.SATISFIED:
             state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
         elif status == DecisionStatus.BLOCKED:
@@ -36,7 +38,7 @@ class DirectReturnStrategy:
                 state,
                 stage=PLANNER_STAGE,
                 callsite=f"{AgentExecutionStrategy.DIRECT_RETURN.value}.{NodeName.REASONER.value}",
-                prompt_builder=build_react_decision_prompt,
+                prompt_builder=build_subagent_decision_prompt,
             )
         except Exception:
             state.result = state.result.copy(
@@ -54,6 +56,8 @@ class DirectReturnStrategy:
     def _route_after_reasoner(state: AgentState) -> str:
         plan = state.node_states.planner.plan
         decision_status = state.node_states.planner.decision_status
+        if plan is not None and plan.steps:
+            return EXECUTE_TOOLS_EDGE
         if decision_status in {DecisionStatus.BLOCKED, DecisionStatus.SATISFIED}:
             return END
         if plan is None or not plan.steps or state.node_states.planner.plan_count >= state.max_turns:

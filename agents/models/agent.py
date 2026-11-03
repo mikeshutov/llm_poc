@@ -31,7 +31,6 @@ class Agent(BaseModel):
     execution_strategy: AgentExecutionStrategy = AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR
     allowed_categories: list[str] = Field(default_factory=list)
     planner_instruction: str
-    planner_rules: str = AgentProfile.__dataclass_fields__["planner_rules"].default
     max_turns: int = AgentProfile.__dataclass_fields__["max_turns"].default
     is_active: bool = True
     model_configs: list[AgentModelConfig] = Field(default_factory=list)
@@ -66,7 +65,6 @@ class Agent(BaseModel):
                 for config in self.model_configs
             },
             planner_instruction=self.planner_instruction,
-            planner_rules=self.planner_rules,
             delegatable=True,
             max_turns=self.max_turns,
         )

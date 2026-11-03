@@ -6,11 +6,9 @@ from langsmith import traceable
 from personalization.profile.service import hydrate_user_profile_core, load_user_profile_attributes
 from common.logging import compact_trace_inputs, compact_trace_outputs, record_node_log
 from agent_runtime.models.main_state import MainState
+from agent_runtime.models.agent_profile import AgentName
 from agent_runtime.constants import NodeName
 from rendering.debug import PROFILE_LOAD_KIND
-
-ORCHESTRATOR_AGENT_NAME = "request_orchestrator"
-
 
 @traceable(name="Load User Profile Node", process_inputs=compact_trace_inputs, process_outputs=compact_trace_outputs)
 def load_user_profile(
@@ -31,11 +29,11 @@ def load_user_profile(
         conversation_id=main_state.execution_context.conversation_id,
         roundtrip_id=main_state.execution_context.roundtrip_id,
         event_type=PROFILE_LOAD_KIND,
-        source=ORCHESTRATOR_AGENT_NAME,
-        agent_name=ORCHESTRATOR_AGENT_NAME,
-        node_name=NodeName.LOAD_USER_PROFILE,
+        source=AgentName.REQUEST_ORCHESTRATOR,
+        agent_name=AgentName.REQUEST_ORCHESTRATOR,
+        node_name=NodeName.ENRICH_STATE,
         payload={
-            "agent_name": ORCHESTRATOR_AGENT_NAME,
+            "agent_name": AgentName.REQUEST_ORCHESTRATOR,
             "kind": PROFILE_LOAD_KIND,
             "data": {
                 "title": title,

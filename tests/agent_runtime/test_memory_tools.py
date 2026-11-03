@@ -63,6 +63,9 @@ def test_get_memory_detail_returns_typed_result() -> None:
 def test_get_memory_detail_rejects_invalid_roundtrip_id() -> None:
     result = get_memory_detail.invoke({"roundtrip_id": "not-a-uuid"})
 
-    assert result.result.error == "Invalid roundtrip_id 'not-a-uuid'."
+    assert result.result.error == (
+        "Invalid roundtrip_id 'not-a-uuid'. Call memory_search first and use the exact "
+        "roundtrip UUID returned in its evidence."
+    )
     assert result.evidence == []
     assert result.evidence == []

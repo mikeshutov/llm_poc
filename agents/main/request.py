@@ -6,7 +6,7 @@ from urllib.parse import unquote
 from uuid import UUID
 
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
-from agent_runtime.models.agent_profile import AgentProfile
+from agent_runtime.models.agent_profile import AgentName, AgentProfile
 from agent_runtime.models.agent_inputs import AgentInputs
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.main_state import MainState
@@ -34,10 +34,15 @@ from capabilities.adapters.profile import (
     reset_user_management_agent_state,
     reset_user_management_state,
 )
-from agent_runtime.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
+from capabilities.adapters.math import calculate
+from agent_runtime.models.agent_profile import AgentName
 
 
-_SANDBOX_FILE_LINK = re.compile(r"\]\(\s*sandbox:/mnt/data/(?P<path>[^)\s]+)\s*\)", re.IGNORECASE)
+_GENERATED_FILE_LINK = re.compile(
+    r"\]\(\s*(?:(?:sandbox:)?/app/static/files/|sandbox:/mnt/data/)"
+    r"(?P<path>[^)\s]+)\s*\)",
+    re.IGNORECASE,
+)
 
 
 def _file_name_key(value: str) -> str:
@@ -66,20 +71,22 @@ def _normalize_generated_file_links(
         return f"]({canonical_url})" if canonical_url else match.group(0)
 
     return [
-        block.model_copy(update={"content": _SANDBOX_FILE_LINK.sub(replace_link, block.content)})
+        block.model_copy(update={"content": _GENERATED_FILE_LINK.sub(replace_link, block.content)})
         for block in result_blocks
     ]
 
 
 TOP_LEVEL_PROFILE = AgentProfile(
-    name="request_orchestrator",
+    name=AgentName.REQUEST_ORCHESTRATOR,
     scope=MAIN_AGENT_MODEL_SCOPE,
     description="Top-level request reasoner and executor.",
-    # Document operations, including template discovery, belong to the
-    # document-writing agent. The top-level reasoner delegates those requests
-    # instead of executing writing capabilities directly.
     excluded_categories={"file_management", "writing"},
-    static_tools=[CAPABILITY_DISCOVERY_TOOL, USER_MANAGEMENT_TOOL],
+    static_tools=[CAPABILITY_DISCOVERY_TOOL, USER_MANAGEMENT_TOOL, calculate],
+    planner_instruction=(
+        "For straightforward arithmetic or percentage questions, call math_calculate "
+        "directly when a calculation tool is available; do not delegate these requests "
+        "to the coding agent or use code execution."
+    ),
 )
 TOP_LEVEL_STRATEGY = MainReasonerStrategy()
 
@@ -152,7 +159,7 @@ def _is_uuid(value: str) -> bool:
 
 
 def _ensure_static_agents(main_state: MainState) -> None:
-    if PROFILE_MANAGEMENT_AGENT_NAME in main_state.agent_states:
+    if AgentName.PROFILE_MANAGEMENT in main_state.agent_states:
         return
     profile = build_profile_management_profile(main_state.execution_context.user_profile)
     main_state.agent_profiles.append(profile)

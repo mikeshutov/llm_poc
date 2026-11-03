@@ -1,5 +1,6 @@
 from common.config import get_env_bool, get_env_float, get_env_int
 from capabilities.adapters.books import search_books
+from capabilities.adapters.code import code_execute
 from capabilities.adapters.calendar import get_world_time, public_holidays_lookup
 from capabilities.adapters.files import (
     file_create,
@@ -14,6 +15,7 @@ from capabilities.adapters.files import (
 )
 from capabilities.adapters.finance import (
     exchange_rates_lookup,
+    get_crypto_historical_prices,
     get_crypto_markets,
     get_stock_price,
 )
@@ -38,9 +40,7 @@ from capabilities.adapters.products import (
     search_products,
 )
 from capabilities.adapters.profile import (
-    set_user_display_name,
-    set_user_first_name,
-    set_user_last_name,
+    update_user_names,
     update_user_tone,
 )
 from capabilities.adapters.search import (
@@ -51,12 +51,20 @@ from capabilities.adapters.search import (
 )
 from capabilities.adapters.web import generic_web_search, web_fetch
 from capabilities.adapters.weather import (
-    get_current_weather,
-    get_historical_month_weather,
+    get_weather,
 )
 from capabilities.adapters.writing import writing_templates
+from capabilities.adapters.workspace import (
+    workspace_file_delete,
+    workspace_file_edit,
+    workspace_file_list,
+    workspace_file_promote,
+    workspace_file_read,
+    workspace_file_write,
+)
 from capabilities.registry.constants import TOOL_RESULT_TYPE_BOOK_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CALCULATION
+from capabilities.registry.constants import TOOL_RESULT_TYPE_CODE_EXECUTION
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CALENDAR
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CARD_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_COCKTAIL_RESULTS
@@ -89,6 +97,7 @@ from capabilities.retry.policy import RetryPolicy
 from capabilities.registry.constants import TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_WEB_PAGE
 from capabilities.registry.constants import TOOL_RESULT_TYPE_WRITING_TEMPLATES
+from capabilities.registry.constants import TOOL_RESULT_TYPE_WORKSPACE_FILE
 from capabilities.registry.models import RateLimitPolicy, Tool, ToolCategory
 
 # Rate limiter and retry policy
@@ -107,14 +116,16 @@ BRAVE_RETRY_POLICY = RetryPolicy(
 # Tool Definitions
 PRODUCT_TOOLS = [Tool(search_products, result_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS, cache_policy=ToolCachePolicy(900)), Tool(list_product_categories, result_type=TOOL_RESULT_TYPE_PRODUCT_CATEGORIES, cache_policy=ToolCachePolicy(3600))]
 WEATHER_TOOLS = [
-    Tool(get_current_weather, result_type=TOOL_RESULT_TYPE_WEATHER, cache_policy=ToolCachePolicy(300)),
-    Tool(get_historical_month_weather, result_type=TOOL_RESULT_TYPE_WEATHER, cache_policy=ToolCachePolicy(3600)),
+    Tool(get_weather, result_type=TOOL_RESULT_TYPE_WEATHER, cache_policy=ToolCachePolicy(300)),
 ]
 FINANCE_TOOLS = [
     Tool(exchange_rates_lookup, result_type=TOOL_RESULT_TYPE_FINANCE, cache_policy=ToolCachePolicy(300)),
     Tool(get_stock_price, result_type=TOOL_RESULT_TYPE_FINANCE, cache_policy=ToolCachePolicy(300)),
 ]
-CRYPTO_TOOLS = [Tool(get_crypto_markets, result_type=TOOL_RESULT_TYPE_CRYPTO_MARKET, cache_policy=ToolCachePolicy(300))]
+CRYPTO_TOOLS = [
+    Tool(get_crypto_markets, result_type=TOOL_RESULT_TYPE_CRYPTO_MARKET, cache_policy=ToolCachePolicy(300)),
+    Tool(get_crypto_historical_prices, result_type=TOOL_RESULT_TYPE_CRYPTO_MARKET, cache_policy=ToolCachePolicy(3600)),
+]
 WEB_SEARCH_TOOLS = [
     Tool(generic_web_search, result_type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS, cache_policy=ToolCachePolicy(300), rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
     Tool(news_search, result_type=TOOL_RESULT_TYPE_NEWS_RESULTS, cache_policy=ToolCachePolicy(300), rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
@@ -139,6 +150,7 @@ FOOD_TOOLS = [
     Tool(search_cocktails, result_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS, cache_policy=ToolCachePolicy(3600)),
 ]
 MATH_TOOLS = [Tool(calculate, result_type=TOOL_RESULT_TYPE_CALCULATION, cache_policy=ToolCachePolicy(86400))]
+CODE_EXECUTION_TOOLS = [Tool(code_execute, result_type=TOOL_RESULT_TYPE_CODE_EXECUTION, version=2)]
 GAMES_TOOLS = [
     Tool(get_commander_details, result_type=TOOL_RESULT_TYPE_DECKS, cache_policy=ToolCachePolicy(3600)),
     Tool(get_commander_cards, result_type=TOOL_RESULT_TYPE_CARD_RESULTS, cache_policy=ToolCachePolicy(3600)),
@@ -152,7 +164,7 @@ MEMORY_TOOLS = [
 ]
 FILE_TOOLS = [Tool(search_assets, result_type=TOOL_RESULT_TYPE_ASSET_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(search_asset_details, result_type=TOOL_RESULT_TYPE_ASSET_DETAILS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(get_file_by_id, result_type=TOOL_RESULT_TYPE_FILE, cache_policy=ToolCachePolicy(300, is_user_specific=True))]
 FILE_MANAGEMENT_TOOLS = [
-    Tool(file_create, result_type=TOOL_RESULT_TYPE_FILE, version=4),
+    Tool(file_create, result_type=TOOL_RESULT_TYPE_FILE, version=6),
     Tool(file_read, result_type=TOOL_RESULT_TYPE_FILE, version=4),
     Tool(file_edit, result_type=TOOL_RESULT_TYPE_FILE, version=4),
     Tool(file_delete, result_type=TOOL_RESULT_TYPE_FILE),
@@ -167,29 +179,21 @@ WRITING_TOOLS = [
         cache_policy=ToolCachePolicy(3600),
     ),
 ]
+WORKSPACE_TOOLS = [
+    Tool(workspace_file_write, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+    Tool(workspace_file_read, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+    Tool(workspace_file_edit, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+    Tool(workspace_file_list, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=2),
+    Tool(workspace_file_delete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+    Tool(workspace_file_promote, result_type=TOOL_RESULT_TYPE_FILE, version=2),
+]
 PROFILE_TOOLS = [
     Tool(
-        set_user_display_name,
+        update_user_names,
         result_type=TOOL_RESULT_TYPE_PROFILE,
         rules=(
-            "Use when the user gives a nickname, preferred short name, or says phrasing such as 'call me ...'.",
-            "Do not use for a legal or explicitly identified first or last name.",
-        ),
-    ),
-    Tool(
-        set_user_first_name,
-        result_type=TOOL_RESULT_TYPE_PROFILE,
-        rules=(
-            "Use only when first_name is currently missing and the user explicitly provides their first name in this turn.",
-            "Do not use for nicknames, preferred short names, guesses, or paraphrases.",
-        ),
-    ),
-    Tool(
-        set_user_last_name,
-        result_type=TOOL_RESULT_TYPE_PROFILE,
-        rules=(
-            "Use only when last_name is currently missing and the user explicitly provides their last name in this turn.",
-            "Do not use for nicknames, preferred short names, guesses, or paraphrases.",
+            "Pass only the supplied name fields; leave other fields empty so they remain unchanged.",
+            "Use only for names explicitly provided by the user; do not infer or guess values.",
         ),
     ),
     Tool(
@@ -214,10 +218,11 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     ),
     "weather": ToolCategory(
         tools=WEATHER_TOOLS,
-        description="Retrieve current or historical weather conditions for a specified location.",
+        description="Retrieve current, forecast, or historical monthly weather conditions for a specified location.",
         rules=[
-            "Use weather_current for current weather, temperature, or conditions requests.",
-            "Use weather_historical_month only when the user specifies a past month or historical period.",
+            "Use weather_lookup without dates for current conditions.",
+            "Use weather_lookup with today or future dates for forecasts, including weekends.",
+            "Use weather_lookup with dates in one past calendar month for historical conditions.",
         ],
     ),
     "finance": ToolCategory(
@@ -238,7 +243,10 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     ),
     "calendar": ToolCategory(
         tools=CALENDAR_TOOLS,
-        description="Look up public holidays for a country and year, or get the current time for a timezone.",
+        description="Look up public holidays for a country and year, optionally filtered to a province or state, or get the current time for a timezone.",
+        rules=[
+            "For a province or state request, pass the ISO 3166-2 subdivision code when known (for example, CA-ON for Ontario).",
+        ],
     ),
     "location": ToolCategory(
         tools=LOCATION_TOOLS,
@@ -259,6 +267,10 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     "math": ToolCategory(
         tools=MATH_TOOLS,
         description="Evaluate mathematical expressions and perform mathematical calculations.",
+    ),
+    "code_execution": ToolCategory(
+        tools=CODE_EXECUTION_TOOLS,
+        description="Execute Python code in an isolated Docker sandbox with no network access and resource limits.",
     ),
     "games": ToolCategory(
         tools=GAMES_TOOLS,
@@ -299,13 +311,14 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
         tools=WRITING_TOOLS,
         description="Discover reusable writing template metadata and supported document formats.",
         rules=[
-            "Use writing_templates to discover a suitable structure before creating a document when the user requests a reusable writing format.",
+            "For every new document, use writing_templates to select a suitable structure before file_create unless the user or parent agent explicitly supplied a template or equivalent required section structure.",
+            "Use the selected template's required_fields to structure the document; do not silently create a free-form document when a suitable catalog template exists.",
             "The tool returns metadata only; do not assume template content is available.",
         ],
     ),
 }
 
-tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *WEB_SEARCH_TOOLS, *KNOWLEDGE_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *MATH_TOOLS, *GAMES_TOOLS, *MEMORY_TOOLS, *FILE_TOOLS, *FILE_MANAGEMENT_TOOLS, *WRITING_TOOLS, *PROFILE_TOOLS]
+tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *WEB_SEARCH_TOOLS, *KNOWLEDGE_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *MATH_TOOLS, *CODE_EXECUTION_TOOLS, *GAMES_TOOLS, *MEMORY_TOOLS, *FILE_TOOLS, *FILE_MANAGEMENT_TOOLS, *WRITING_TOOLS, *PROFILE_TOOLS]
 
 TOOLS_BY_NAME = {tool.name: tool for tool in tools}
 

@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from integrations.open_meteo import OPEN_METEO_WEBSITE_URL, OpenMeteoClient
 from integrations.open_meteo.models import MonthlyWeatherSummary
 from retrieval.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
-from capabilities.registry.constants import TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER
+from capabilities.registry.constants import TOOL_NAME_GET_WEATHER
 from capabilities.registry.constants import TOOL_RESULT_TYPE_WEATHER
 
 _weather_client = OpenMeteoClient()
@@ -35,12 +35,12 @@ def _tool_result(result: MonthlyWeatherSummary | None) -> ToolResult:
     )
     evidence_view = EvidenceView(
         item_id=location_name or f"{result.year}-{result.month:02d}",
-        tool_name=TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER,
+        tool_name=TOOL_NAME_GET_WEATHER,
         title="Historical Monthly Weather",
         summary=summary,
         urls=[EvidenceUrl(url=OPEN_METEO_WEBSITE_URL, url_type=EvidenceUrlType.WEBSITE)],
         location_name=location_name,
-        source=TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER,
+        source=TOOL_NAME_GET_WEATHER,
         entity_type=TOOL_RESULT_TYPE_WEATHER,
         llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,
@@ -69,7 +69,7 @@ class HistoricalMonthWeatherArgs(BaseModel):
 
 
 @tool(
-    TOOL_NAME_GET_HISTORICAL_MONTH_WEATHER,
+    TOOL_NAME_GET_WEATHER,
     args_schema=HistoricalMonthWeatherArgs,
     description="""
 Get historical weather data for a specific city, year, and month. This is useful for context on the usual weather in a city.

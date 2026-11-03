@@ -56,47 +56,32 @@ class MockLLM:
 
     def _pop_from_scenario(self, prompt: str) -> str:
         assert self._scenario is not None
-
         if self._is_evaluator_prompt(prompt):
             if self._scenario.evaluator:
                 return self._scenario.evaluator.pop(0)
             return '{"status": "SATISFIED", "relevant_evidence": [], "missing_information": [], "refined_goal": ""}'
-
         if self._is_synthesis_prompt(prompt):
             if self._scenario.synthesis:
                 return self._scenario.synthesis.pop(0)
             raise AssertionError('MockLLM synthesis response queue is empty.')
-
         if self._is_profile_planner_prompt(prompt):
             if self._scenario.profile_planner:
                 return self._scenario.profile_planner.pop(0)
             raise AssertionError('MockLLM profile-planner response queue is empty.')
-
         if self._scenario.main_planner:
             return self._scenario.main_planner.pop(0)
-
         if self._scenario.fallback:
             return self._scenario.fallback.pop(0)
-
         raise AssertionError('MockLLM main-planner response queue is empty.')
 
     def invoke(self, prompt: str, *args: Any, **kwargs: Any) -> MockLLMResponse:
         with self._lock:
             self.prompts.append(prompt)
-            self.invocations.append(
-                {
-                    'prompt': prompt,
-                    'args': args,
-                    'kwargs': kwargs,
-                }
-            )
-
+            self.invocations.append({'prompt': prompt, 'args': args, 'kwargs': kwargs})
             if self._scenario is not None:
                 return MockLLMResponse(content=self._pop_from_scenario(prompt))
-
             if not self.responses:
                 raise AssertionError('MockLLM.invoke was called without a queued response.')
-
             return MockLLMResponse(content=self.responses.pop(0))
 
     @property

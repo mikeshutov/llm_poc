@@ -9,6 +9,7 @@ from agent_runtime.models.main_state import MainState
 from agent_runtime.models.orchestrator_graph_state import OrchestratorGraphState
 from capabilities.discovery.attribute_discovery import attribute_discovery
 from capabilities.discovery.capability_discovery import capability_discovery
+from agents.main.profile_loading import load_user_profile
 
 def enrich_state(
     main_state: MainState,
@@ -33,6 +34,7 @@ def enrich_state(
                 )
             main_state.discovered_attribute_types = attribute_future.result()
             main_state.discovered_capabilities = capability_future.result()
+            load_user_profile(main_state)
     except Exception as exc:
         record_node_log(
             node_name=NodeName.ENRICH_STATE,

@@ -7,7 +7,6 @@ class NodeName(StrEnum):
 
     LOAD_AGENTS = "load_agents"
     ENRICH_STATE = "enrich_state"
-    LOAD_USER_PROFILE = "load_user_profile"
     MAIN_REQUEST_STRATEGY = "main_request_strategy"
     PLANNER = "planner"
     EXECUTOR = "execute_tools"
@@ -25,7 +24,6 @@ class NodeName(StrEnum):
 # Graph edges
 LOAD_AGENTS_EDGE = NodeName.LOAD_AGENTS.value
 ENRICH_STATE_EDGE = NodeName.ENRICH_STATE.value
-PROFILE_LOADING_EDGE = NodeName.LOAD_USER_PROFILE.value
 SYNTHESIZE_EDGE = NodeName.SYNTHESIZE.value
 PLAN_EDGE = NodeName.PLANNER.value
 EXECUTE_TOOLS_EDGE = NodeName.EXECUTOR.value

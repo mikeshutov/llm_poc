@@ -1,7 +1,11 @@
-import os
+import base64
 from dataclasses import dataclass
 from datetime import datetime
+from html import escape
+import os
+from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 import streamlit as st
 
@@ -86,6 +90,60 @@ def _is_inline_link_evidence(evidence: EvidenceView) -> bool:
 
 def _is_inline_label_evidence(evidence: EvidenceView) -> bool:
     return evidence.entity_type.strip() in INLINE_EVIDENCE_TYPES
+
+
+def _is_svg_file_evidence(evidence: EvidenceView, url: str) -> bool:
+    if evidence.entity_type.strip() not in FILE_EVIDENCE_TYPES:
+        return False
+    mime_type = str(evidence.llm_metadata.get("mime_type", "")).casefold()
+    if mime_type == "image/svg+xml":
+        return True
+    filename = evidence.title.strip().casefold()
+    return filename.endswith(".svg") or url.split("?", 1)[0].casefold().endswith(".svg")
+
+
+def _browser_file_url(url: str) -> str:
+    """Normalize legacy relative managed-file URLs for browser rendering."""
+    cleaned = url.strip()
+    if cleaned.startswith("app/static/"):
+        return f"/{cleaned}"
+    return cleaned
+
+
+def _render_svg_preview(label: str, url: str) -> None:
+    """Render a managed SVG inline while retaining its normal evidence link.
+
+    Streamlit's application static-file handler intentionally serves extensions
+    outside its safe allowlist (including ``.svg``) as ``text/plain``.  Using
+    the URL directly in an ``img`` tag therefore displays the SVG source.  For
+    managed files, embed the local SVG as a data URI instead; the evidence URL
+    remains available separately as the file link.
+    """
+    image_src = url
+    parsed_path = unquote(urlparse(url).path)
+    static_prefix = "/app/static/files/"
+    if parsed_path.startswith(static_prefix):
+        relative_path = Path(parsed_path[len(static_prefix):])
+        files_root = Path(FILES_DIR).resolve()
+        local_path = (files_root / relative_path).resolve()
+        try:
+            local_path.relative_to(files_root)
+        except ValueError:
+            local_path = None
+        if local_path is not None and local_path.is_file():
+            encoded_svg = base64.b64encode(local_path.read_bytes()).decode("ascii")
+            image_src = f"data:image/svg+xml;base64,{encoded_svg}"
+
+    st.markdown(
+        (
+            f"<div style='margin:0.5rem 0 1rem'>"
+            f"<div style='font-size:0.85rem;color:#666;margin-bottom:0.25rem'>{escape(label)}</div>"
+            f"<img src='{escape(image_src, quote=True)}' alt='{escape(label, quote=True)}' "
+            "style='max-width:100%;max-height:500px;border:1px solid #e6e6e6;border-radius:4px;padding:4px' />"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def _is_inline_evidence(evidence: EvidenceView) -> bool:
@@ -334,6 +392,7 @@ def _render_result_block(
 ) -> list[EvidenceCard]:
     inline_evidence = _build_inline_evidence(block, evidence_by_id)
     inline_links: list[tuple[str, str]] = []
+    svg_previews: list[tuple[str, str]] = []
     inline_labels: list[str] = []
     inline_file_labels: list[str] = []
     for evidence in inline_evidence:
@@ -343,7 +402,14 @@ def _render_result_block(
         evidence_url = _primary_card_url(evidence.urls)
         if evidence_url:
             label = evidence.title.strip() or evidence.source.strip() or str(evidence.id)
-            inline_links.append((label, evidence_url))
+            browser_url = (
+                _browser_file_url(evidence_url)
+                if evidence.entity_type.strip() in FILE_EVIDENCE_TYPES
+                else evidence_url
+            )
+            inline_links.append((label, browser_url))
+            if _is_svg_file_evidence(evidence, browser_url):
+                svg_previews.append((label, browser_url))
             continue
         label = _inline_evidence_label(evidence)
         source = evidence.source.strip()
@@ -354,6 +420,8 @@ def _render_result_block(
             inline_labels.append(rendered_label)
 
     _render_result_content(block.content, inline_links, inline_file_labels)
+    for label, url in svg_previews:
+        _render_svg_preview(label, url)
 
     magic_card_evidence = [
         evidence

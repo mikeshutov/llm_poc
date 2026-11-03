@@ -16,3 +16,11 @@ def test_docx_documents_are_written_and_read_as_text(tmp_path) -> None:
     _write_document(path, "Because it had a virus!", "docx", "A Short Joke")
 
     assert _read_document(path) == "A Short Joke\nBecause it had a virus!"
+
+
+def test_svg_files_are_written_and_read_as_text(tmp_path) -> None:
+    path = tmp_path / "chart.svg"
+    content = '<svg xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="5" r="4" /></svg>'
+    _write_document(path, content, "svg", None)
+
+    assert _read_document(path) == content

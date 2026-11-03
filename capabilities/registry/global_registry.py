@@ -9,13 +9,11 @@ from typing import Any
 from common.http import HttpClientError
 from common.logging import record_node_log
 from agent_runtime.constants import NodeName
-from capabilities.registry.tools import tools
+from capabilities.registry.tools import tools, WORKSPACE_TOOLS
 from capabilities.discovery.discover_capabilities_tool import CAPABILITY_DISCOVERY_TOOL
 from capabilities.adapters.profile import (
     USER_MANAGEMENT_TOOL,
-    set_user_display_name,
-    set_user_first_name,
-    set_user_last_name,
+    update_user_names,
     update_user_tone,
 )
 from capabilities.adapters.user_attributes import upsert_user_attribute
@@ -211,12 +209,12 @@ class ToolRegistry:
 GLOBAL_TOOL_REGISTRY = ToolRegistry(enable_cache=True)
 _REGISTERED_DEFAULTS = False
 PROFILE_RUNTIME_TOOLS = (
-    set_user_display_name,
-    set_user_first_name,
-    set_user_last_name,
+    update_user_names,
     update_user_tone,
     upsert_user_attribute,
 )
+AGENT_ONLY_TOOLS = tuple(WORKSPACE_TOOLS)
+AGENT_ONLY_TOOL_NAMES = {tool.name for tool in AGENT_ONLY_TOOLS}
 
 
 def register_default_tools() -> None:
@@ -234,11 +232,17 @@ def register_default_tools() -> None:
     # persisted or returned by dynamic capability discovery.
     for tool in PROFILE_RUNTIME_TOOLS:
         GLOBAL_TOOL_REGISTRY.register(tool)
+    # Workspace tools are executable only when an agent profile explicitly
+    # grants them. They remain absent from the persisted/global discovery list.
+    for tool in AGENT_ONLY_TOOLS:
+        GLOBAL_TOOL_REGISTRY.register(tool)
     _REGISTERED_DEFAULTS = True
 
 
 def call_tool(name: str, tool_input: Any = None, allowed_tool_names: set[str] | None = None) -> Any:
     register_default_tools()
+    if allowed_tool_names is None and name in AGENT_ONLY_TOOL_NAMES:
+        raise DisallowedToolError(f"Tool '{name}' is restricted to authorized agent profiles.")
     return GLOBAL_TOOL_REGISTRY.call_tool(name=name, tool_input=tool_input, allowed_tool_names=allowed_tool_names)
 
 

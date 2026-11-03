@@ -1,7 +1,7 @@
 from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
-from agent_runtime.strategies.react.prompt import build_react_decision_prompt
+from agent_runtime.strategies.react.subagent_prompt import build_subagent_decision_prompt
 
 
 def test_document_writing_agent_exposes_safe_file_tools() -> None:
@@ -30,10 +30,14 @@ def test_document_writing_react_prompt_exposes_file_creation_rules() -> None:
         llm=object(),
     )
 
-    prompt, tools = build_react_decision_prompt(state)
+    prompt, tools = build_subagent_decision_prompt(state)
 
     assert "file_create" in {tool.name for tool in tools}
     assert "file_create for new documents" in prompt.build()
+    assert "select a writing template before calling file_create" in prompt.build()
+    assert "required_fields" in prompt.build()
+    assert "OUTPUT CONTRACT" in prompt.build()
+    assert '"status"' in prompt.build()
 
 
 def test_document_writing_prompt_exposes_parent_evidence_ids() -> None:
@@ -44,6 +48,6 @@ def test_document_writing_prompt_exposes_parent_evidence_ids() -> None:
     )
     state.inputs.evidence_ids = ["evidence-1", "evidence-2"]
 
-    prompt, _ = build_react_decision_prompt(state)
+    prompt, _ = build_subagent_decision_prompt(state)
 
     assert prompt.sections_raw["evidence_ids"] == ["evidence-1", "evidence-2"]
