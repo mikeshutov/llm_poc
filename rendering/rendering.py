@@ -22,6 +22,7 @@ from rendering.debug import debug_render_message, render_agent_logs
 from rendering.feedback import render_feedback_controls
 from rendering.replay import render_replay_control
 from retrieval.evidence import EvidenceUrl, EvidenceView
+from assets.files.urls import STATIC_FILES_URL_PREFIX
 from agent_runtime.models.orchestrator_payload import OrchestratorPayload
 from agent_runtime.models.synthesized_result import SynthesisResultBlock
 from capabilities.registry.constants import TOOL_NAME_GENERIC_WEB_SEARCH
@@ -112,16 +113,11 @@ def _browser_file_url(url: str) -> str:
 
 def _render_svg_preview(label: str, url: str) -> None:
     """Render a managed SVG inline while retaining its normal evidence link.
-
-    Streamlit's application static-file handler intentionally serves extensions
-    outside its safe allowlist (including ``.svg``) as ``text/plain``.  Using
-    the URL directly in an ``img`` tag therefore displays the SVG source.  For
-    managed files, embed the local SVG as a data URI instead; the evidence URL
-    remains available separately as the file link.
+       Kinda hacky for now but ensures the result shows up for now.
     """
     image_src = url
     parsed_path = unquote(urlparse(url).path)
-    static_prefix = "/app/static/files/"
+    static_prefix = STATIC_FILES_URL_PREFIX
     if parsed_path.startswith(static_prefix):
         relative_path = Path(parsed_path[len(static_prefix):])
         files_root = Path(FILES_DIR).resolve()

@@ -16,8 +16,9 @@ from common.signatures import build_signature
 from common.logging import compact_trace_inputs, compact_trace_outputs, record_node_log
 from agent_runtime.constants import NodeName
 from agent_runtime.models.agent_state import AgentState
-from agent_runtime.models.agent_profile import AgentProfile
+from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentProfile
 from retrieval.evidence import ToolResult
+from agent_runtime.models.evaluation_result import EvaluationResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.models.plan import PlanStep
 from agent_runtime.context import bind_agent_context, bind_runtime_context
@@ -494,6 +495,13 @@ def _agent_completion_result(
         if summaries
         else f"{agent_name} completed the delegated task."
     )
+    evaluation = None
+    if state.agent_profile.execution_strategy == AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR:
+        evaluation = EvaluationResult(
+            status=state.node_states.evaluator.evaluation_status,
+            relevant_evidence=[str(value) for value in state.result.relevant_evidence_ids],
+            missing_information=list(state.node_states.evaluator.missing_information),
+        )
     return ToolResult(
         tool_call_id=plan_step_id,
         plan_step_id=plan_step_id,
@@ -513,6 +521,7 @@ def _agent_completion_result(
             ],
         },
         evidence=evidence,
+        state=evaluation,
     )
 
 

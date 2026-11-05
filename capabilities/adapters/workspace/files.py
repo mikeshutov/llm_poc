@@ -32,39 +32,38 @@ from retrieval.evidence import EvidenceView, ToolResult
 _MAX_READ_CHARS = 200_000
 
 
-class WorkspacePathArgs(BaseModel):
-    path: str = Field(..., min_length=1, description="A relative path inside the conversation workspace files directory.")
+class WorkspaceFileNameArgs(BaseModel):
+    file_name: str = Field(..., min_length=1, description="The name of a file in the root of the current conversation workspace.")
 
 
-class WorkspaceWriteArgs(WorkspacePathArgs):
+class WorkspaceWriteArgs(WorkspaceFileNameArgs):
     content: str = Field(default="", description=f"UTF-8 text content to write. Supported file types include {WORKSPACE_FILE_TYPES_DESCRIPTION}.")
     overwrite: bool = Field(default=False, description="Whether to replace an existing file.")
 
 
-class WorkspaceReadArgs(WorkspacePathArgs):
+class WorkspaceReadArgs(WorkspaceFileNameArgs):
     max_chars: int = Field(default=_MAX_READ_CHARS, ge=1, le=_MAX_READ_CHARS)
 
 
-class WorkspaceEditArgs(WorkspacePathArgs):
+class WorkspaceEditArgs(WorkspaceFileNameArgs):
     find: str = Field(..., min_length=1, description="Exact text to replace.")
     replace: str = ""
     replace_all: bool = False
 
 
 class WorkspaceListArgs(BaseModel):
-    path: str = Field(default="", description="Optional relative directory inside the workspace files directory.")
     query: str | None = Field(
         default=None,
-        description="Optional case-insensitive file path search or glob, such as '*.py' or 'report'.",
+        description="Optional case-insensitive file name search or glob, such as '*.py' or 'report'.",
     )
     recursive: bool = Field(default=True, description="Search nested directories when true.")
 
 
 class WorkspacePromoteArgs(BaseModel):
-    paths: list[str] = Field(
+    file_names: list[str] = Field(
         ...,
         min_length=1,
-        description="One or more relative workspace file paths to move into managed files.",
+        description="One or more workspace file names to move into managed files.",
     )
 
 
@@ -85,14 +84,14 @@ def _workspace_root() -> Path:
     return root
 
 
-def _safe_path(path: str, *, allow_empty: bool = False) -> Path:
-    if not path.strip() and not allow_empty:
-        raise ValueError("A workspace file path is required.")
-    relative = Path(path)
-    if relative.is_absolute() or relative == Path(".") and path.strip() not in {"", "."}:
-        raise ValueError("Workspace paths must be relative.")
+def _safe_file_name(file_name: str) -> Path:
+    if not file_name.strip() or file_name != file_name.strip():
+        raise ValueError("A workspace file name is required.")
+    candidate = Path(file_name)
+    if candidate.is_absolute() or candidate.name != file_name or file_name in {".", ".."}:
+        raise ValueError("Workspace file operations accept a file name, not a path.")
     root = _workspace_root()
-    resolved = (root / relative).resolve()
+    resolved = (root / candidate).resolve()
     if resolved != root and root not in resolved.parents:
         raise ValueError("Workspace path must remain inside the conversation workspace.")
     return resolved
@@ -122,11 +121,10 @@ def _result(path: Path, operation: str, *, content: str | None = None, items: li
 
 
 @tool(TOOL_NAME_WORKSPACE_FILE_WRITE, args_schema=WorkspaceWriteArgs, description=f"Write UTF-8 text to a file in the current conversation workspace. Supported file types include {WORKSPACE_FILE_TYPES_DESCRIPTION}.")
-def workspace_file_write(path: str, content: str = "", overwrite: bool = False) -> ToolResult:
-    target = _safe_path(path)
+def workspace_file_write(file_name: str, content: str = "", overwrite: bool = False) -> ToolResult:
+    target = _safe_file_name(file_name)
     if target.exists() and not overwrite:
-        raise ValueError(f"Workspace file already exists: '{path}'. Set overwrite=true to replace it.")
-    target.parent.mkdir(parents=True, exist_ok=True)
+        raise ValueError(f"Workspace file already exists: '{file_name}'. Set overwrite=true to replace it.")
     file_format = FileType.TXT
     if target.suffix:
         _, file_format = normalize_file_format(
@@ -138,18 +136,18 @@ def workspace_file_write(path: str, content: str = "", overwrite: bool = False) 
 
 
 @tool(TOOL_NAME_WORKSPACE_FILE_READ, args_schema=WorkspaceReadArgs, description="Read UTF-8 text from a file in the current conversation workspace.")
-def workspace_file_read(path: str, max_chars: int = _MAX_READ_CHARS) -> ToolResult:
-    target = _safe_path(path)
+def workspace_file_read(file_name: str, max_chars: int = _MAX_READ_CHARS) -> ToolResult:
+    target = _safe_file_name(file_name)
     if not target.is_file():
-        raise ValueError(f"Workspace file does not exist: '{path}'.")
+        raise ValueError(f"Workspace file does not exist: '{file_name}'.")
     return _result(target, "read", content=target.read_text(encoding="utf-8")[:max_chars])
 
 
-@tool(TOOL_NAME_WORKSPACE_FILE_EDIT, args_schema=WorkspaceEditArgs, description="Apply an exact text replacement to a file in the current conversation workspace.")
-def workspace_file_edit(path: str, find: str, replace: str = "", replace_all: bool = False) -> ToolResult:
-    target = _safe_path(path)
+@tool(TOOL_NAME_WORKSPACE_FILE_EDIT, args_schema=WorkspaceEditArgs, description="Apply an exact text replacement to a named file in the root of the current conversation workspace.")
+def workspace_file_edit(file_name: str, find: str, replace: str = "", replace_all: bool = False) -> ToolResult:
+    target = _safe_file_name(file_name)
     if not target.is_file():
-        raise ValueError(f"Workspace file does not exist: '{path}'.")
+        raise ValueError(f"Workspace file does not exist: '{file_name}'.")
     original = target.read_text(encoding="utf-8")
     occurrences = original.count(find)
     if occurrences == 0:
@@ -160,11 +158,9 @@ def workspace_file_edit(path: str, find: str, replace: str = "", replace_all: bo
     return _result(target, "edited")
 
 
-@tool(TOOL_NAME_WORKSPACE_FILE_LIST, args_schema=WorkspaceListArgs, description="Search and list files in the current conversation workspace using an optional path, query, and recursive flag.")
-def workspace_file_list(path: str = "", query: str | None = None, recursive: bool = True) -> ToolResult:
-    directory = _safe_path(path, allow_empty=True)
-    if not directory.is_dir():
-        raise ValueError(f"Workspace directory does not exist: '{path}'.")
+@tool(TOOL_NAME_WORKSPACE_FILE_LIST, args_schema=WorkspaceListArgs, description="Search and list files in the current conversation workspace using an optional file name query and recursive flag.")
+def workspace_file_list(query: str | None = None, recursive: bool = True) -> ToolResult:
+    directory = _workspace_root()
     candidates = directory.rglob("*") if recursive else directory.iterdir()
     normalized_query = query.strip().casefold() if query else ""
     items = []
@@ -183,11 +179,11 @@ def workspace_file_list(path: str = "", query: str | None = None, recursive: boo
     return _result(directory, "listed", items=items)
 
 
-@tool(TOOL_NAME_WORKSPACE_FILE_DELETE, args_schema=WorkspacePathArgs, description="Delete a file from the current conversation workspace.")
-def workspace_file_delete(path: str) -> ToolResult:
-    target = _safe_path(path)
+@tool(TOOL_NAME_WORKSPACE_FILE_DELETE, args_schema=WorkspaceFileNameArgs, description="Delete a named file from the current conversation workspace.")
+def workspace_file_delete(file_name: str) -> ToolResult:
+    target = _safe_file_name(file_name)
     if not target.is_file():
-        raise ValueError(f"Workspace file does not exist: '{path}'.")
+        raise ValueError(f"Workspace file does not exist: '{file_name}'.")
     target.unlink()
     return _result(target, "deleted")
 
@@ -197,11 +193,11 @@ def workspace_file_delete(path: str) -> ToolResult:
     args_schema=WorkspacePromoteArgs,
     description="Move one or more completed workspace files into the user's managed files area and return downloadable evidence for each.",
 )
-def workspace_file_promote(paths: list[str]) -> ToolResult:
-    sources = [_safe_path(path) for path in paths]
-    for path, source in zip(paths, sources):
+def workspace_file_promote(file_names: list[str]) -> ToolResult:
+    sources = [_safe_file_name(file_name) for file_name in file_names]
+    for file_name, source in zip(file_names, sources):
         if not source.is_file():
-            raise ValueError(f"Workspace file does not exist: '{path}'.")
+            raise ValueError(f"Workspace file does not exist: '{file_name}'.")
 
     managed_paths = [scoped_file_path(source.name, user_id=get_current_user_id()) for source in sources]
     duplicate_names = {path.name for path in managed_paths if managed_paths.count(path) > 1}

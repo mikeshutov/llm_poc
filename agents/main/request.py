@@ -35,10 +35,11 @@ from retrieval.evidence_store import (
     filter_evidence_steps,
 )
 from agent_runtime.synthesis.synthesis import _build_result_blocks
+from assets.files.urls import STATIC_FILES_URL_PREFIX
 
 
 _GENERATED_FILE_LINK = re.compile(
-    r"\]\(\s*(?:(?:sandbox:)?/app/static/files/|sandbox:/mnt/data/)"
+    rf"\]\(\s*(?:(?:sandbox:)?{re.escape(STATIC_FILES_URL_PREFIX)}|sandbox:/mnt/data/)"
     r"(?P<path>[^)\s]+)\s*\)",
     re.IGNORECASE,
 )
