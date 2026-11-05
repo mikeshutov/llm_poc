@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
+from agent_runtime.models.evaluation_result import EvaluationResult
 from common.data import prune_empty_prompt_values
 from common.html_text import html_to_plain_text, normalize_html_values
 from retrieval.reranker_models.reranker import Candidate
@@ -178,6 +179,7 @@ class ToolResult(BaseModel):
     result: Any = None
     tool_metadata: ToolMetadata = Field(default_factory=ToolMetadata)
     evidence: list[EvidenceView] = Field(default_factory=list)
+    state: EvaluationResult | None = None
 
     @classmethod
     def error(cls, error: str, **extra_result: Any) -> "ToolResult":
