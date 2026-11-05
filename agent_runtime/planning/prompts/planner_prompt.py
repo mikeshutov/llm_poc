@@ -1,8 +1,6 @@
-from agent_runtime.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
-import json
-
 from langchain_core.tools import BaseTool
 
+from agent_runtime.models.agent_profile import AgentName
 from agent_runtime.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from agent_runtime.models.agent_state import AgentState
 from retrieval.evidence_store import (
@@ -15,7 +13,6 @@ from capabilities.registry.tools import TOOLS_BY_NAME
 from capabilities.discovery.models import AvailableTool
 
 
-ATTRIBUTE_TYPE_MINIMAL_DESCRIPTION = 'Typed user-attribute key such as `food.preference`, `projects.goal`, or `technology.skill`.'
 EMPTY_EXECUTION_REPLAN_RULE = (
     "The previous plan execution produced no results. Retry with materially different "
     "tool calls or arguments; do not repeat the same request."
@@ -25,8 +22,9 @@ MISSING_INFORMATION_REPLAN_RULE = (
     "as the goal, use existing evidence as context, and plan only tool calls that directly "
     "resolve those gaps."
 )
+
 def _is_profile_management_agent(state: AgentState) -> bool:
-    return state.agent_profile.name == PROFILE_MANAGEMENT_AGENT_NAME
+    return state.agent_profile.name == AgentName.PROFILE_MANAGEMENT
 
 
 def _prompt_tools(tools: list[object]) -> list[AvailableTool]:
@@ -34,10 +32,8 @@ def _prompt_tools(tools: list[object]) -> list[AvailableTool]:
     return [AvailableTool.from_tool(tool) for tool in tools]
 
 
-def _format_field_line(name: str, field_info, required: bool, minimal: bool = False) -> str:
+def _format_field_line(name: str, field_info, required: bool) -> str:
     description = getattr(field_info, 'description', None) or 'No description provided.'
-    if minimal and name == 'attribute_type':
-        description = ATTRIBUTE_TYPE_MINIMAL_DESCRIPTION
     requirement = 'required' if required else 'optional'
     return f"- {name} ({requirement}): {description}"
 
@@ -51,9 +47,9 @@ def _format_minimal_tool_schema(tool) -> str:
         optional_fields = []
         for field_name, field_info in args_schema.model_fields.items():
             if field_info.is_required():
-                required_fields.append(_format_field_line(field_name, field_info, required=True, minimal=True))
+                required_fields.append(_format_field_line(field_name, field_info, required=True))
             else:
-                optional_fields.append(_format_field_line(field_name, field_info, required=False, minimal=True))
+                optional_fields.append(_format_field_line(field_name, field_info, required=False))
 
         if required_fields:
             lines.append('  Required fields:')
@@ -175,8 +171,6 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
     )
 
     compiled_rules = build_planner_rules(context.rules)
-    if state.agent_profile.planner_rules:
-        compiled_rules = f"{compiled_rules}\n\nAgent Rules:\n{state.agent_profile.planner_rules}"
     if state.node_states.planner.no_result_attempts:
         compiled_rules = f"{compiled_rules}\n\nExecution Feedback:\n- {EMPTY_EXECUTION_REPLAN_RULE}"
     if state.node_states.evaluator.missing_information:

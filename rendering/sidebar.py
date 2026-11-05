@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
+from common.config import ANONYMOUS_OWNER
 from llm.repository.repo_factory import get_conversation_model_config_repo
 from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig, EVALUATOR_STAGE, PLANNER_STAGE
 from conversation.constants import SOURCE_STREAMLIT
@@ -152,7 +153,7 @@ def _switch_user(conversation_repository, user_id: str) -> None:
 
 
 def _delete_conversation(conversation_repository, conversation_id: str) -> None:
-    selected_user_id = st.session_state.get("selected_user_id", "anonymous")
+    selected_user_id = st.session_state.get("selected_user_id", ANONYMOUS_OWNER)
     conversation_repository.delete_conversation(UUID(conversation_id), user_id=selected_user_id)
     latest = conversation_repository.get_latest_conversation(selected_user_id)
     clear_feedback_state()
@@ -269,7 +270,6 @@ def _initialize_user_agent_edit_form(user_id: str, user_agent) -> None:
     st.session_state[f"{widget_prefix}::execution_strategy"] = user_agent.execution_strategy.value
     st.session_state[f"{widget_prefix}::allowed_categories"] = list(user_agent.allowed_categories)
     st.session_state[f"{widget_prefix}::planner_instruction"] = user_agent.planner_instruction
-    st.session_state[f"{widget_prefix}::planner_rules"] = user_agent.planner_rules
     st.session_state[f"{widget_prefix}::max_turns"] = user_agent.max_turns
     for model_config in user_agent.model_configs:
         st.session_state[f"{widget_prefix}::{model_config.stage}::provider"] = model_config.provider
@@ -681,12 +681,6 @@ def render_user_agents_dialog(user_id: str) -> None:
             height=140,
             key=f"{widget_prefix}::planner_instruction",
         )
-        planner_rules = st.text_area(
-            "Planner rules",
-            placeholder="Optional extra rules or constraints.",
-            height=120,
-            key=f"{widget_prefix}::planner_rules",
-        )
         max_turns = st.number_input(
             "Max turns",
             min_value=1,
@@ -718,7 +712,6 @@ def render_user_agents_dialog(user_id: str) -> None:
                 execution_strategy=execution_strategy,
                 allowed_categories=allowed_category_names,
                 planner_instruction=planner_instruction,
-                planner_rules=planner_rules.strip(),
                 max_turns=int(max_turns),
                 is_active=form_agent.is_active if form_agent is not None else True,
                 model_configs=model_configs,
@@ -1004,7 +997,7 @@ def render_sidebar(conversation_repository) -> None:
     user_profile_repository = get_user_profile_repo()
     profiles = user_profile_repository.list_profiles(limit=100)
     if not profiles:
-        user_profile_repository.ensure_profile("anonymous", display_name="Anonymous")
+        user_profile_repository.ensure_profile(ANONYMOUS_OWNER, display_name="Anonymous")
         profiles = user_profile_repository.list_profiles(limit=100)
 
     selected_user_id = st.session_state.get("selected_user_id") or profiles[0].user_id

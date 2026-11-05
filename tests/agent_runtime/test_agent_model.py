@@ -58,7 +58,6 @@ def test_system_agent_seeder_delegates_each_profile(monkeypatch) -> None:
         "execution_strategy": profiles[0].execution_strategy,
         "allowed_categories": list(profiles[0].allowed_categories),
         "planner_instruction": profiles[0].planner_instruction,
-        "planner_rules": profiles[0].planner_rules,
         "max_turns": profiles[0].max_turns,
     }]
 

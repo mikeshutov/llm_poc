@@ -8,7 +8,7 @@ from products.models.product_search_results import ProductSearchResults
 from products.models.product_source import ProductSource
 from products.repository.product_repository import ProductRepository
 from retrieval.reranker_constants import DEFAULT_TOP_K
-from test_utilities.fake_reranker import FakeReranker
+from tests.test_utilities.fake_reranker import FakeReranker
 
 
 def test_product_result_to_candidate_maps_product_fields() -> None:

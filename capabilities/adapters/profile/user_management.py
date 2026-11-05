@@ -39,7 +39,7 @@ def reset_user_management_agent_state(token) -> None:
 
 
 def _run_user_management(task: str) -> UserManagementResult:
-    from agent_runtime.models.agent_profile import PROFILE_MANAGEMENT_AGENT_NAME
+    from agent_runtime.models.agent_profile import AgentName
     from agent_runtime.models.agent_inputs import AgentInputs
 
     main_state = _CURRENT_MAIN_STATE.get()
@@ -47,9 +47,9 @@ def _run_user_management(task: str) -> UserManagementResult:
     if main_state is None:
         return UserManagementResult(error="User management is unavailable outside an active request.")
 
-    delegated = main_state.agent_states.get(PROFILE_MANAGEMENT_AGENT_NAME)
+    delegated = main_state.agent_states.get(AgentName.PROFILE_MANAGEMENT)
     if delegated is None and current_agent_state is not None and current_agent_state.available_agent_states:
-        delegated = current_agent_state.available_agent_states.get(PROFILE_MANAGEMENT_AGENT_NAME)
+        delegated = current_agent_state.available_agent_states.get(AgentName.PROFILE_MANAGEMENT)
     if delegated is None:
         return UserManagementResult(error="The profile-management agent is unavailable for this request.")
 
@@ -64,14 +64,14 @@ def _run_user_management(task: str) -> UserManagementResult:
         completed = runner(delegated)
     except Exception as exc:
         return UserManagementResult(
-            agent=PROFILE_MANAGEMENT_AGENT_NAME,
+            agent=AgentName.PROFILE_MANAGEMENT,
             status=ExecutionStatus.FAILED,
             error=str(exc),
         )
 
     tool_results = completed.gather_tool_results()
     return UserManagementResult(
-        agent=PROFILE_MANAGEMENT_AGENT_NAME,
+        agent=AgentName.PROFILE_MANAGEMENT,
         status=completed.result.execution_status,
         answer_status=completed.result.answer_status,
         tool_names=completed.gather_used_tools(),

@@ -8,6 +8,9 @@ def build_research_rules() -> str:
         "- Prefer authoritative or primary sources when available, then corroborate important claims.\n"
         "- Use web search for fresh or broad information, web fetch for details from a promising page, "
         "and knowledge tools for stable facts.\n"
+        "- For the web_search tool, pass the required argument `query_text` (not `query`), along "
+        "with `search_type` when needed and a two-letter `country` code; follow the tool schema "
+        "exactly and do not retry with an invalid argument name.\n"
         "- Use news search when the request concerns recent events and books search for published works.\n"
         "- Avoid duplicate searches; refine or broaden a query only when the evidence is insufficient.\n"
         "- Track uncertainty, source quality, publication dates, and disagreements between sources.\n"
@@ -19,4 +22,6 @@ def build_research_rules() -> str:
     )
 
 
-__all__ = ["build_research_rules"]
+__all__ = [
+    "build_research_rules",
+]

@@ -6,15 +6,14 @@ from common.logging import compact_trace_inputs, compact_trace_outputs
 
 from agent_runtime.constants import (
     ENRICH_STATE_EDGE,
-    PROFILE_LOADING_EDGE,
     NodeName,
 )
 from agent_runtime.models.orchestrator_graph_state import OrchestratorGraphState
 from agent_runtime.models.main_state import MainState
+from agent_runtime.models.agent_profile import AgentName
 from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agents.main.orchestration import (
     enrich_state_node,
-    load_user_profile_node,
     run_main_request_strategy_node,
 )
 
@@ -26,11 +25,9 @@ class OrchestratorGraph:
     def _build_graph(self):
         builder = StateGraph(OrchestratorGraphState)
         builder.add_node(ENRICH_STATE_EDGE, enrich_state_node)
-        builder.add_node(PROFILE_LOADING_EDGE, load_user_profile_node)
         builder.add_node(NodeName.MAIN_REQUEST_STRATEGY.value, run_main_request_strategy_node)
         builder.set_entry_point(ENRICH_STATE_EDGE)
-        builder.add_edge(ENRICH_STATE_EDGE, PROFILE_LOADING_EDGE)
-        builder.add_edge(PROFILE_LOADING_EDGE, NodeName.MAIN_REQUEST_STRATEGY.value)
+        builder.add_edge(ENRICH_STATE_EDGE, NodeName.MAIN_REQUEST_STRATEGY.value)
         builder.add_edge(NodeName.MAIN_REQUEST_STRATEGY.value, END)
         
         return builder.compile()
@@ -50,6 +47,10 @@ class OrchestratorGraph:
 _ORCHESTRATOR = OrchestratorGraph()
 
 
-@traceable(name="request_orchestrator", process_inputs=compact_trace_inputs, process_outputs=compact_trace_outputs)
+@traceable(
+    name=AgentName.REQUEST_ORCHESTRATOR,
+    process_inputs=compact_trace_inputs,
+    process_outputs=compact_trace_outputs,
+)
 def run_agent(main_state: MainState) -> OrchestratorResult:
     return _ORCHESTRATOR.run(main_state)

@@ -20,4 +20,4 @@ def static_file_url(file_path: str) -> str:
     if path.parts[: len(_STATIC_FILES_PATH.parts)] != _STATIC_FILES_PATH.parts:
         return ""
 
-    return quote((_STREAMLIT_STATIC_PREFIX / path).as_posix(), safe="/")
+    return quote((PurePosixPath("/") / _STREAMLIT_STATIC_PREFIX / path).as_posix(), safe="/")

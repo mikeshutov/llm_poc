@@ -6,6 +6,7 @@ from agent_runtime.models.agent_profile import AgentProfile
 from agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
 from agents.research.profile import RESEARCH_PROFILE
+from agents.coding.profile import CODING_PROFILE
 from agents.models.agent import Agent, AgentType
 from agents.repository.repo_factory import get_agent_repo
 
@@ -14,6 +15,7 @@ SYSTEM_AGENT_PROFILES: tuple[AgentProfile, ...] = (
     PROFILE_MANAGEMENT_PROFILE,
     DOCUMENT_WRITING_PROFILE,
     RESEARCH_PROFILE,
+    CODING_PROFILE,
 )
 
 
@@ -37,7 +39,6 @@ def seed_system_agents(
             execution_strategy=profile.execution_strategy,
             allowed_categories=list(profile.allowed_categories),
             planner_instruction=profile.planner_instruction,
-            planner_rules=profile.planner_rules,
             max_turns=profile.max_turns,
         )
         for profile in profiles

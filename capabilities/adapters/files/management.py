@@ -3,7 +3,6 @@ from __future__ import annotations
 import mimetypes
 import os
 from pathlib import Path
-import re
 from uuid import UUID
 
 from docx import Document
@@ -19,6 +18,8 @@ from assets.repository.asset_chunk_repository import AssetChunkRepository
 from assets.repository.asset_repository import AssetRepository
 from assets.files.storage import scoped_file_path
 from assets.files.urls import static_file_url
+from assets.files.file_types import DOCUMENT_FILE_TYPES, DOCUMENT_FILE_TYPES_DESCRIPTION
+from assets.files.writer import normalize_file_format, write_file
 from agent_runtime.context import get_current_user_id
 from retrieval.evidence import ToolResult
 from capabilities.registry.constants import (
@@ -44,7 +45,7 @@ class FileIdArgs(BaseModel):
 class FileCreateArgs(BaseModel):
     file_name: str = Field(..., min_length=1, description="The new file name, relative to the managed files directory.")
     content: str = Field(default="", description="Text content for the new file or document.")
-    format: str | None = Field(default=None, description="Output format such as txt, md, or docx. If omitted, infer it from file_name.")
+    format: str | None = Field(default=None, description=f"Output format such as {DOCUMENT_FILE_TYPES_DESCRIPTION}. If omitted, infer it from file_name.")
     title: str | None = Field(default=None, description="Optional document title, used for structured formats such as docx.")
 
 
@@ -145,111 +146,6 @@ def _file_created_result(file: FileAsset) -> ToolResult:
     )
 
 
-def _normalize_format(file_name: str, file_format: str | None) -> tuple[str, str]:
-    has_explicit_format = bool(file_format and file_format.strip())
-    requested = (file_format or Path(file_name).suffix.lstrip(".") or "txt").strip().lower()
-    requested = requested.lstrip(".")
-    aliases = {
-        "text": "txt",
-        "plain text": "txt",
-        "text/plain": "txt",
-        "markdown": "md",
-        "text/markdown": "md",
-        "word": "docx",
-        "doc": "docx",
-        "docx": "docx",
-        "wordprocessingml": "docx",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-        "pdf": "pdf",
-        "application/pdf": "pdf",
-    }
-    normalized = aliases.get(requested)
-    if normalized is None:
-        # Accept descriptive values emitted by agents while retaining a small,
-        # explicit set of supported output formats.
-        if "word" in requested or "wordprocessingml" in requested or "openxmlformats" in requested:
-            normalized = "docx"
-        elif "pdf" in requested:
-            normalized = "pdf"
-        elif "markdown" in requested:
-            normalized = "md"
-        elif "text" in requested:
-            normalized = "txt"
-        else:
-            normalized = requested
-    if normalized not in {"txt", "md", "docx", "pdf"}:
-        raise ValueError("Unsupported file format. Supported formats are txt, md, docx, and pdf.")
-    path = Path(file_name)
-    if not path.suffix:
-        file_name = f"{file_name}.{normalized}"
-    elif has_explicit_format and path.suffix.lower().lstrip(".") != normalized:
-        file_name = str(path.with_suffix(f".{normalized}"))
-    elif not has_explicit_format and path.suffix.lower() == ".doc":
-        # The writer emits DOCX, so never store it with the legacy .doc suffix.
-        file_name = str(path.with_suffix(".docx"))
-    return file_name, normalized
-
-
-def _document_paragraphs(content: str) -> list[str]:
-    """Normalize user text into deterministic paragraphs without rewriting it."""
-    normalized = (content or "").replace("\r\n", "\n").replace("\r", "\n").strip("\n")
-    if not normalized:
-        return [""]
-    return [
-        " ".join(line.strip() for line in block.splitlines()).strip()
-        for block in re.split(r"\n\s*\n", normalized)
-        if block.strip()
-    ]
-
-
-def _write_document(path: Path, content: str, file_format: str, title: str | None) -> None:
-    if file_format in {"txt", "md"}:
-        path.write_text(content, encoding="utf-8")
-        return
-    if file_format == "pdf":
-        try:
-            from reportlab.lib.pagesizes import letter
-            from reportlab.lib.utils import simpleSplit
-            from reportlab.pdfgen.canvas import Canvas
-        except ImportError as exc:
-            raise ValueError("PDF creation requires the reportlab package.") from exc
-        canvas = Canvas(str(path), pagesize=letter)
-        width, height = letter
-        text = canvas.beginText(54, height - 54)
-        text.setFont("Helvetica", 12)
-        if title and title.strip():
-            text.setFont("Helvetica-Bold", 16)
-            text.textLine(title.strip())
-            text.textLine("")
-            text.setFont("Helvetica", 12)
-        paragraphs = _document_paragraphs(content)
-        for paragraph_index, paragraph in enumerate(paragraphs):
-            lines = simpleSplit(paragraph, "Helvetica", 12, width - 108) or [""]
-            for line in lines:
-                if text.getY() < 54:
-                    canvas.drawText(text)
-                    canvas.showPage()
-                    text = canvas.beginText(54, height - 54)
-                    text.setFont("Helvetica", 12)
-                text.textLine(line)
-            if paragraph_index < len(paragraphs) - 1:
-                if text.getY() < 54:
-                    canvas.drawText(text)
-                    canvas.showPage()
-                    text = canvas.beginText(54, height - 54)
-                    text.setFont("Helvetica", 12)
-                text.textLine("")
-        canvas.drawText(text)
-        canvas.save()
-        return
-    document = Document()
-    if title and title.strip():
-        document.add_heading(title.strip(), level=1)
-    for paragraph in _document_paragraphs(content):
-        document.add_paragraph(paragraph)
-    document.save(path)
-
-
 def _read_document(path: Path) -> str:
     if path.suffix.lower() == ".docx":
         return "\n".join(paragraph.text for paragraph in Document(path).paragraphs)
@@ -263,7 +159,7 @@ def _read_document(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-@tool(TOOL_NAME_FILE_CREATE, args_schema=FileCreateArgs, description="Create a new managed text, Word, or PDF document. Supports txt, md, docx, and pdf formats.")
+@tool(TOOL_NAME_FILE_CREATE, args_schema=FileCreateArgs, description=f"Create a new managed document. Supported formats: {DOCUMENT_FILE_TYPES_DESCRIPTION}.")
 def file_create(
     file_name: str,
     content: str = "",
@@ -271,18 +167,20 @@ def file_create(
     title: str | None = None,
 ) -> ToolResult:
     try:
-        file_name, file_format = _normalize_format(file_name, format)
+        file_name, file_format = normalize_file_format(file_name, format)
         target = _safe_path(scoped_file_path(file_name, user_id=get_current_user_id()))
         if target.exists():
             raise ValueError(f"A file already exists at '{file_name}'.")
         target.parent.mkdir(parents=True, exist_ok=True)
-        _write_document(target, content, file_format, title)
+        write_file(target, content, file_format, title)
         file = AssetRepository().create_file(
             name=target.name,
             storage_path=_stored_path(target),
             mime_type=(
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 if file_format == "docx"
+                else "image/svg+xml"
+                if file_format == "svg"
                 else mimetypes.guess_type(target.name)[0] or "text/plain"
             ),
             user_id=get_current_user_id(),
@@ -327,7 +225,8 @@ def file_edit(file_id: str, find: str, replace: str = "", replace_all: bool = Fa
     if occurrences > 1 and not replace_all:
         raise ValueError("The requested text occurs multiple times; set replace_all=true to edit all matches.")
     updated = original.replace(find, replace, -1 if replace_all else 1)
-    _write_document(path, updated, "docx" if path.suffix.lower() == ".docx" else path.suffix.lower().lstrip(".") or "txt", None)
+    _, file_format = normalize_file_format(path.name, path.suffix)
+    write_file(path, updated, file_format)
     _index(file.id, updated)
     return _file_result(
         file,

@@ -182,9 +182,77 @@ class OpenMeteoClient:
         weather = self.get_current(loc.latitude, loc.longitude, timezone=loc.timezone or "auto")
         return loc, weather
 
+    def get_forecast_for_location(
+        self,
+        location_name: str,
+        *,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> tuple[GeocodedLocation, DailyWeather] | None:
+        """Return a daily forecast for a location, defaulting to the next seven days."""
+        try:
+            loc = self.geocode_city(location_name)
+        except WeatherNotFoundError:
+            return None
+
+        start = start_date or datetime.utcnow().date()
+        end = end_date or (start + timedelta(days=6))
+        if end < start:
+            raise WeatherArchiveError("Forecast end date must not precede the start date.")
+        if (end - start).days > 15:
+            raise WeatherArchiveError("Forecast range must not exceed 16 days.")
+
+        payload = self._get_json(
+            f"{self.base_url_forecast}/forecast",
+            params={
+                "latitude": loc.latitude,
+                "longitude": loc.longitude,
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "daily": "weathercode,temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max",
+                "timezone": loc.timezone or "auto",
+            },
+            error_cls=WeatherArchiveError,
+        )
+        daily_payload = payload.get("daily")
+        if not isinstance(daily_payload, dict):
+            raise WeatherArchiveError("Malformed forecast response: missing 'daily' object.")
+
+        values = [
+            daily_payload.get("time"),
+            daily_payload.get("weathercode"),
+            daily_payload.get("temperature_2m_max"),
+            daily_payload.get("temperature_2m_min"),
+            daily_payload.get("precipitation_sum"),
+            daily_payload.get("windspeed_10m_max"),
+        ]
+        if not all(isinstance(value, list) for value in values):
+            raise WeatherArchiveError("Malformed forecast response: one or more daily arrays are missing.")
+        length = len(values[0])
+        if length == 0 or not all(len(value) == length for value in values[1:]):
+            raise WeatherArchiveError("Malformed forecast response: daily array lengths do not match.")
+
+        return loc, DailyWeather(
+            date=[str(value) for value in values[0]],
+            weathercode=[_to_int_or_none(value) for value in values[1]],
+            temperature_2m_max=[_to_float_or_none(value) for value in values[2]],
+            temperature_2m_min=[_to_float_or_none(value) for value in values[3]],
+            precipitation_sum=[_to_float_or_none(value) for value in values[4]],
+            windspeed_10m_max=[_to_float_or_none(value) for value in values[5]],
+        )
+
 
 def _to_float_or_none(value: Any) -> float | None:
     if value is None:
+        return None
+
+
+def _to_int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
         return None
     try:
         return float(value)

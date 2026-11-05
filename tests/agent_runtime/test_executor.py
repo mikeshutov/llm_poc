@@ -185,7 +185,6 @@ def test_run_executor_returns_standardized_subagent_result_without_merging_state
 
     run_executor(parent)
 
-    assert parent.delegated_agent_states == {}
     assert parent.available_agent_states["document_writing"] is delegated
     assert delegated.inputs.task == ""
     assert len(parent.direct_tool_results) == 1

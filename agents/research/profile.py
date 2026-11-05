@@ -3,7 +3,7 @@ from __future__ import annotations
 from agent_runtime.models.agent_profile import (
     AgentExecutionStrategy,
     AgentProfile,
-    RESEARCH_AGENT_NAME,
+    AgentName,
 )
 from agents.research.prompts import build_research_rules
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
@@ -11,7 +11,7 @@ from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 
 def build_research_profile() -> AgentProfile:
     return AgentProfile(
-        name=RESEARCH_AGENT_NAME,
+        name=AgentName.RESEARCH,
         scope=MAIN_AGENT_MODEL_SCOPE,
         version=2,
         description=(
@@ -29,8 +29,9 @@ def build_research_profile() -> AgentProfile:
             "Decompose the request, gather diverse relevant evidence, and replan when "
             "the evidence leaves an important gap. Return the collected evidence for "
             "downstream agents to look up and use. Do not answer the user directly."
+            "\n\n"
+            f"{build_research_rules()}"
         ),
-        planner_rules=build_research_rules(),
     )
 
 

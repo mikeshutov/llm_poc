@@ -35,7 +35,6 @@ def run_reasoner(state: AgentState) -> AgentState:
             callsite=f"{NodeName.MAIN_REQUEST_STRATEGY.value}.{NodeName.REASONER.value}",
             prompt_builder=build_reasoner_prompt,
             message_history=state.reasoner_message_history,
-            tool_choice=("required" if state.node_states.planner.plan_count == 0 else None),
         )
     except Exception as exc:
         record_node_log(
@@ -63,6 +62,8 @@ def run_reasoner(state: AgentState) -> AgentState:
     state.node_states.planner.plan = decision.plan
     state.node_states.planner.plan_count += 1
     state.node_states.planner.decision_status = decision.status
+    if decision.plan.steps:
+        return state
     if decision.status == DecisionStatus.SATISFIED:
         state.reasoner_result = _parse_answer(decision.raw_content)
         state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
@@ -78,6 +79,8 @@ def run_reasoner(state: AgentState) -> AgentState:
 def _route_after_reasoner(state: AgentState) -> str:
     plan = state.node_states.planner.plan
     status = state.node_states.planner.decision_status
+    if plan is not None and plan.steps:
+        return EXECUTE_TOOLS_EDGE
     if status in {DecisionStatus.SATISFIED, DecisionStatus.BLOCKED}:
         return END
     if not plan or not plan.steps or state.node_states.planner.plan_count >= state.max_turns:

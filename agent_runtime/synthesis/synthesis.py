@@ -9,6 +9,7 @@ from common.logging import compact_trace_inputs, compact_trace_outputs, record_n
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE, SYNTHESIS_STAGE
 from llm.usage import record_llm_call
 from agent_runtime.models.main_state import MainState
+from agent_runtime.models.agent_profile import AgentName
 from agent_runtime.constants import NodeName
 from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
@@ -28,7 +29,7 @@ def _resolve_relevant_evidence_ids(state: MainState) -> set[str]:
 
 
 def _resolve_agent_name(state: MainState) -> str:
-    return "request_orchestrator"
+    return AgentName.REQUEST_ORCHESTRATOR
 
 
 def _resolve_synthesis_model_name(state: MainState) -> str:

@@ -3,7 +3,7 @@ from capabilities.adapters.search.candidate_mapper import (
     news_result_to_candidate,
     rerank_news_search_response,
 )
-from test_utilities.fake_reranker import FakeReranker
+from tests.test_utilities.fake_reranker import FakeReranker
 
 
 def test_news_result_to_candidate_maps_result_fields() -> None:

@@ -11,5 +11,6 @@ db/files/
 static/files/
 services/attribute_classifier/training/trained_models/
 checkpoints/
+evaluations/
 
 .vscode

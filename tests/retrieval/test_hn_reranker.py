@@ -4,7 +4,7 @@ from capabilities.adapters.news.candidate_mapper import (
     rerank_hn_search_result,
 )
 from capabilities.adapters.news.constants import DEFAULT_HN_SEARCH_LIMIT
-from test_utilities.fake_reranker import FakeReranker
+from tests.test_utilities.fake_reranker import FakeReranker
 
 
 def test_hn_hit_to_candidate_maps_hit_fields() -> None:

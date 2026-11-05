@@ -5,6 +5,7 @@ from rendering.rendering import (
     _build_inline_evidence,
     _is_inline_label_evidence,
     _is_inline_link_evidence,
+    _is_svg_file_evidence,
     _render_result_block,
     get_renderable_result_blocks,
     render_assistant_content,
@@ -14,12 +15,22 @@ from rendering.debug import _build_llm_call_payload
 from retrieval.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView
 from agent_runtime.models.orchestrator_payload import OrchestratorPayload
 from agent_runtime.models.synthesized_result import SynthesisResultBlock
-from capabilities.registry.constants import TOOL_NAME_GET_CURRENT_WEATHER
+from capabilities.registry.constants import TOOL_NAME_GET_WEATHER
 from capabilities.registry.constants import TOOL_NAME_GENERIC_WEB_SEARCH
 from capabilities.registry.constants import TOOL_RESULT_TYPE_ASSET_DETAILS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_RULES
 from capabilities.registry.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_WEATHER
+
+
+def test_svg_file_evidence_is_detected_for_inline_preview() -> None:
+    svg = EvidenceView(
+        title="chart.svg",
+        entity_type="file",
+        llm_metadata={"mime_type": "image/svg+xml"},
+    )
+
+    assert _is_svg_file_evidence(svg, "app/static/files/anonymous/chart.svg")
 
 
 def test_debug_llm_payload_reads_compact_input_and_output_metadata() -> None:
@@ -124,7 +135,7 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
                 summary="25.9 C in Toronto",
                 urls=[],
                 image_url="",
-                source=TOOL_NAME_GET_CURRENT_WEATHER,
+                source=TOOL_NAME_GET_WEATHER,
                 entity_type=TOOL_RESULT_TYPE_WEATHER,
             ),
         },
@@ -134,7 +145,7 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
         InlineEvidenceReference(
             evidence_id="c38c296c-3e94-56a7-86e1-dfe071c82fcc",
             title="Weather Result",
-            source=TOOL_NAME_GET_CURRENT_WEATHER,
+            source=TOOL_NAME_GET_WEATHER,
         ),
     ]
     assert _is_inline_label_evidence(
@@ -144,7 +155,7 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
             summary="25.9 C in Toronto",
             urls=[],
             image_url="",
-            source=TOOL_NAME_GET_CURRENT_WEATHER,
+            source=TOOL_NAME_GET_WEATHER,
             entity_type=TOOL_RESULT_TYPE_WEATHER,
         )
     )
@@ -257,7 +268,7 @@ def test_render_result_block_renders_file_citations_as_inline_file_names(monkeyp
                 evidence_id="file-evidence",
                 title="resume.pdf",
                 summary="Experience at Acme Corp.",
-                urls=[EvidenceUrl(url="app/static/files/resume.pdf", url_type=EvidenceUrlType.WEBSITE)],
+                urls=[EvidenceUrl(url="/app/static/files/resume.pdf", url_type=EvidenceUrlType.WEBSITE)],
                 source="asset_search_details",
                 entity_type=TOOL_RESULT_TYPE_ASSET_DETAILS,
             )
@@ -267,7 +278,7 @@ def test_render_result_block_renders_file_citations_as_inline_file_names(monkeyp
     assert cards == []
     assert len(calls["markdown"]) == 1
     rendered_value, _ = calls["markdown"][0]
-    assert "app/static/files/resume.pdf" in rendered_value
+    assert "/app/static/files/resume.pdf" in rendered_value
     assert calls["caption"] == []
 
 
@@ -290,8 +301,8 @@ def test_render_result_block_renders_weather_as_inline_html_link(monkeypatch) ->
                 summary="25.9 C in Toronto",
                 urls=[EvidenceUrl(url="https://open-meteo.com/", url_type=EvidenceUrlType.WEBSITE)],
                 image_url="",
-                source=TOOL_NAME_GET_CURRENT_WEATHER,
-                tool_name=TOOL_NAME_GET_CURRENT_WEATHER,
+                source=TOOL_NAME_GET_WEATHER,
+                tool_name=TOOL_NAME_GET_WEATHER,
                 entity_type=TOOL_RESULT_TYPE_WEATHER,
             )
         },

@@ -67,7 +67,12 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         parsed_id = UUID(roundtrip_id)
     except ValueError:
         return ToolResult(
-            result=GetMemoryDetailResult(error=f"Invalid roundtrip_id '{roundtrip_id}'."),
+            result=GetMemoryDetailResult(
+                error=(
+                    f"Invalid roundtrip_id '{roundtrip_id}'. Call memory_search first and "
+                    "use the exact roundtrip UUID returned in its evidence."
+                )
+            ),
 
             evidence=[],
         )
@@ -79,7 +84,12 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
     )
     if roundtrip is None:
         return ToolResult(
-            result=GetMemoryDetailResult(error=f"No memory found with roundtrip_id '{roundtrip_id}'."),
+            result=GetMemoryDetailResult(
+                error=(
+                    f"No memory found with roundtrip_id '{roundtrip_id}'. Call memory_search "
+                    "again and use an exact roundtrip UUID from the returned evidence."
+                )
+            ),
 
             evidence=[],
         )

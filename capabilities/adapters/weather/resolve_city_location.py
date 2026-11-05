@@ -2,7 +2,7 @@ from integrations.open_meteo import OpenMeteoClient
 from integrations.open_meteo.models import GeocodedLocation
 from pydantic import BaseModel
 from retrieval.evidence import EvidenceView, ToolResult
-from capabilities.registry.constants import TOOL_NAME_GET_CURRENT_WEATHER
+from capabilities.registry.constants import TOOL_NAME_GET_WEATHER
 from capabilities.registry.constants import TOOL_RESULT_TYPE_LOCATION
 
 _weather_client = OpenMeteoClient()
@@ -27,11 +27,11 @@ def _tool_result(result: GeocodedLocation | None) -> ToolResult:
     )
     evidence_view = EvidenceView(
         item_id=(result.name or "").strip(),
-        tool_name=TOOL_NAME_GET_CURRENT_WEATHER,
+        tool_name=TOOL_NAME_GET_WEATHER,
         title=(result.name or "").strip() or "Resolved City",
         summary=f"{(result.name or '').strip()}, {(result.country or '').strip()}",
         location_name=(result.name or "").strip(),
-        source=TOOL_NAME_GET_CURRENT_WEATHER,
+        source=TOOL_NAME_GET_WEATHER,
         entity_type=TOOL_RESULT_TYPE_LOCATION,
         llm_metadata=metadata.model_dump(exclude_none=True),
         raw_payload=result,

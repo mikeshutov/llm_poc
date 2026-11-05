@@ -21,11 +21,18 @@ class PublicHolidaysLookupArgs(BaseModel):
         min_length=2,
         max_length=2,
     )
+    region_code: str | None = Field(
+        default=None,
+        description="Optional ISO 3166-2 subdivision code, such as 'CA-ON' for Ontario.",
+        min_length=5,
+        max_length=6,
+    )
 
 
 class PublicHolidaysResult(BaseModel):
     year: int
     country_code: str
+    region_code: str | None = None
     holidays: list[PublicHoliday]
 
 
@@ -70,15 +77,28 @@ Look up official public holidays for a country in a specific year.
 
 Use this when you need a holiday calendar, statutory holiday dates, or to check whether a date falls on a public holiday.
 
+For a province or state request, pass its ISO 3166-2 subdivision code in region_code,
+such as CA-ON for Ontario, so unrelated subdivisions are excluded.
+
 
 """,
 )
-def public_holidays_lookup(year: int, country_code: str) -> ToolResult:
-    holidays = _holiday_client.get_public_holidays(year=year, country_code=country_code)
+def public_holidays_lookup(year: int, country_code: str, region_code: str | None = None) -> ToolResult:
+    country = country_code.strip().upper()
+    region = region_code.strip().upper() if region_code else None
+    holidays = _holiday_client.get_public_holidays(year=year, country_code=country)
+    if region:
+        if not region.startswith(f"{country}-"):
+            raise ValueError("region_code must use the supplied country_code prefix.")
+        holidays = [
+            holiday for holiday in holidays
+            if not holiday.counties or region in holiday.counties
+        ]
     return _tool_result(
         PublicHolidaysResult(
             year=year,
-            country_code=country_code.strip().upper(),
+            country_code=country,
+            region_code=region,
             holidays=holidays,
         )
     )

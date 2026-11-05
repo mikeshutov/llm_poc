@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from assets.models import AssetOrigin, AssetType, FileAsset
+from assets.files.writer import normalize_file_format as _normalize_format
 from capabilities.adapters.files.management import _file_created_result
-from capabilities.adapters.files.management import _normalize_format
 
 
 def test_file_format_normalization_accepts_descriptive_and_mime_values() -> None:
@@ -12,6 +12,10 @@ def test_file_format_normalization_accepts_descriptive_and_mime_values() -> None
     assert _normalize_format("report.txt", "text/plain") == ("report.txt", "txt")
     assert _normalize_format("report.doc", None) == ("report.docx", "docx")
     assert _normalize_format("report.txt", "doc") == ("report.docx", "docx")
+
+
+def test_file_format_normalization_supports_svg() -> None:
+    assert _normalize_format("chart", "image/svg+xml") == ("chart.svg", "svg")
 
 
 def test_created_file_result_contains_download_evidence() -> None:
@@ -34,6 +38,6 @@ def test_created_file_result_contains_download_evidence() -> None:
     assert evidence.item_id == str(file.id)
     assert evidence.title == "report.pdf"
     assert evidence.entity_type == "file"
-    assert evidence.url == "app/static/files/user-123/report.pdf"
+    assert evidence.url == "/app/static/files/user-123/report.pdf"
     assert evidence.llm_metadata["filename"] == "report.pdf"
     assert evidence.llm_metadata["mime_type"] == "application/pdf"

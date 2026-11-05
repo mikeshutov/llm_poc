@@ -1,6 +1,6 @@
 from integrations.brave.models import WebSearchResponse
 from capabilities.adapters.search.candidate_mapper import rerank_web_search_response, web_search_result_to_candidate
-from test_utilities.fake_reranker import FakeReranker
+from tests.test_utilities.fake_reranker import FakeReranker
 
 
 def test_web_search_result_to_candidate_maps_result_fields() -> None:

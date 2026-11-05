@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Optional
 
 from langchain_core.tools import tool
@@ -8,7 +9,7 @@ from requests.exceptions import RequestException
 
 from integrations.coingecko import COINGECKO_WEBSITE_COIN_URL_TEMPLATE, CoinGeckoClient, CoinMarket
 from retrieval.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
-from capabilities.registry.constants import TOOL_NAME_GET_CRYPTO_MARKETS
+from capabilities.registry.constants import TOOL_NAME_GET_CRYPTO_HISTORICAL_PRICES, TOOL_NAME_GET_CRYPTO_MARKETS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CRYPTO_MARKET
 
 _coingecko_client = CoinGeckoClient()
@@ -23,6 +24,13 @@ class CryptoMarketsArgs(BaseModel):
         default=20,
         description="Number of coins to return (max 100). Default: 20.",
     )
+
+
+class CryptoHistoricalPricesArgs(BaseModel):
+    coin_id: str = Field(default="bitcoin", description="CoinGecko coin ID. Default: bitcoin.")
+    vs_currency: str = Field(default="usd", description="Currency for prices. Default: usd.")
+    start_date: date = Field(description="Inclusive start date in YYYY-MM-DD format.")
+    end_date: date = Field(description="Inclusive end date in YYYY-MM-DD format.")
 
 
 class CryptoMarketMetadata(BaseModel):
@@ -83,3 +91,46 @@ def get_crypto_markets(vs_currency: str = "usd", per_page: int = 20) -> ToolResu
         return _tool_result(_coingecko_client.get_markets(vs_currency=vs_currency, per_page=per_page))
     except RequestException as e:
         return ToolResult.error(f"CoinGecko API unavailable: {e}")
+
+
+@tool(
+    TOOL_NAME_GET_CRYPTO_HISTORICAL_PRICES,
+    args_schema=CryptoHistoricalPricesArgs,
+    description="Retrieve historical daily cryptocurrency prices for a specified inclusive date range.",
+)
+def get_crypto_historical_prices(
+    coin_id: str = "bitcoin",
+    vs_currency: str = "usd",
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> ToolResult:
+    try:
+        prices = _coingecko_client.get_historical_prices(
+            coin_id=coin_id, vs_currency=vs_currency, start_date=start_date, end_date=end_date
+        )
+    except (RequestException, ValueError, RuntimeError) as e:
+        return ToolResult.error(f"CoinGecko historical prices unavailable: {e}")
+    return ToolResult(
+        result=[{"timestamp": timestamp.isoformat(), "price": price, "coin_id": coin_id, "currency": vs_currency} for timestamp, price in prices],
+        evidence=[EvidenceView(
+            item_id=f"{coin_id}:{start_date}:{end_date}",
+            tool_name=TOOL_NAME_GET_CRYPTO_HISTORICAL_PRICES,
+            title=f"Historical {coin_id} prices",
+            summary=f"Retrieved {len(prices)} historical {vs_currency.upper()} price observations for {coin_id}.",
+            urls=[EvidenceUrl(url=f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart/range", url_type=EvidenceUrlType.WEBSITE)],
+            source=TOOL_NAME_GET_CRYPTO_HISTORICAL_PRICES,
+            entity_type=TOOL_RESULT_TYPE_CRYPTO_MARKET,
+            llm_metadata={
+                "coin_id": coin_id,
+                "currency": vs_currency,
+                "start_date": str(start_date),
+                "end_date": str(end_date),
+                "observation_count": len(prices),
+                "observations": [
+                    {"timestamp": timestamp.isoformat(), "price": price}
+                    for timestamp, price in prices
+                ],
+            },
+            raw_payload={"count": len(prices), "start_date": str(start_date), "end_date": str(end_date)},
+        )],
+    )

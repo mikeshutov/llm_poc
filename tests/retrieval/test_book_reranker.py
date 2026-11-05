@@ -4,7 +4,7 @@ from capabilities.adapters.books.candidate_mapper import (
     rerank_book_search_result,
 )
 from capabilities.adapters.books.constants import DEFAULT_BOOK_SEARCH_LIMIT
-from test_utilities.fake_reranker import FakeReranker
+from tests.test_utilities.fake_reranker import FakeReranker
 
 
 def test_book_to_candidate_maps_book_fields() -> None:

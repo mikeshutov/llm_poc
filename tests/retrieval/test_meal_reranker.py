@@ -1,7 +1,7 @@
 from integrations.meal_db.models import MealSearchResult
 from capabilities.adapters.food.candidate_mapper import meal_to_candidate, rerank_meal_search_result
 from capabilities.adapters.food.constants import DEFAULT_MEAL_RERANK_LIMIT
-from test_utilities.fake_reranker import FakeReranker
+from tests.test_utilities.fake_reranker import FakeReranker
 
 
 def test_meal_to_candidate_maps_meal_fields() -> None:

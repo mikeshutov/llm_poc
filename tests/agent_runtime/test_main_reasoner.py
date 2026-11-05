@@ -31,20 +31,35 @@ from agent_runtime.models.synthesized_result import SynthesisResultBlock
 from retrieval.evidence import ToolResult
 from retrieval.evidence import EvidenceUrl, EvidenceView
 from agents.main.request import _normalize_generated_file_links
+from agents.main.request import TOP_LEVEL_PROFILE
 
 
 def test_normalize_generated_file_links_uses_file_evidence_url() -> None:
     evidence = EvidenceView(
         title="report.pdf",
         entity_type="file",
-        urls=[EvidenceUrl(url="app/static/files/anonymous/report.pdf")],
+        urls=[EvidenceUrl(url="/app/static/files/anonymous/report.pdf")],
     )
     blocks = _normalize_generated_file_links(
         [SynthesisResultBlock(content="[Download](sandbox:/mnt/data/report.pdf)")],
         [EvidenceStep(type="file", evidence=[evidence])],
     )
 
-    assert blocks[0].content == "[Download](app/static/files/anonymous/report.pdf)"
+    assert blocks[0].content == "[Download](/app/static/files/anonymous/report.pdf)"
+
+
+def test_normalize_generated_file_links_replaces_app_static_file_links() -> None:
+    evidence = EvidenceView(
+        title="chart.png",
+        entity_type="file",
+        urls=[EvidenceUrl(url="/app/static/files/user-123/chart.png")],
+    )
+    blocks = _normalize_generated_file_links(
+        [SynthesisResultBlock(content="[Download](sandbox:/app/static/files/user-123/chart.png)")],
+        [EvidenceStep(type="file", evidence=[evidence])],
+    )
+
+    assert blocks[0].content == "[Download](/app/static/files/user-123/chart.png)"
 
 
 def test_main_reasoner_loops_until_final_structured_answer(monkeypatch) -> None:
@@ -76,6 +91,27 @@ def test_main_reasoner_loops_until_final_structured_answer(monkeypatch) -> None:
     assert result.reasoner_result is not None
     assert result.reasoner_result.result[0].content == "final answer"
     assert result.node_states.planner.plan_count == 2
+
+
+def test_main_reasoner_does_not_force_a_tool_on_the_first_turn(monkeypatch) -> None:
+    state = AgentState.new(
+        agent_profile=AgentProfile(name="request_orchestrator", scope="main_agent", max_turns=1),
+        task="Who wrote The Three-Body Problem?",
+        execution_context=AgentExecutionContext.new(),
+        llm=object(),
+    )
+    captured = {}
+
+    def fake_decision(*args, **kwargs):
+        captured.update(kwargs)
+        return DecisionResult(plan=Plan(steps=[]), status=DecisionStatus.SATISFIED, raw_content="{}")
+
+    monkeypatch.setattr(main_reasoner, "run_decision", fake_decision)
+    monkeypatch.setattr(main_reasoner, "run_executor", lambda current: current)
+
+    MainReasonerStrategy().run(state, thread_id="test")
+
+    assert captured.get("tool_choice") is None
 
 
 def test_main_reasoner_does_not_receive_planner_only_tool_constraints() -> None:
@@ -125,6 +161,133 @@ def test_main_reasoner_represents_agents_as_tool_shaped_capabilities() -> None:
     assert research_capability["category"] == "agents"
     assert "agent" not in research_capability
     assert "research" in {tool.name for tool in tools}
+
+
+def test_top_level_reasoner_has_direct_math_and_prefers_it_over_coding() -> None:
+    assert "math_calculate" in TOP_LEVEL_PROFILE.tool_names
+    assert "math_calculate" in TOP_LEVEL_PROFILE.planner_instruction
+    assert "coding agent" in TOP_LEVEL_PROFILE.planner_instruction
+
+
+def test_top_level_reasoner_does_not_receive_subagent_decision_contract() -> None:
+    state = AgentState.new(
+        agent_profile=TOP_LEVEL_PROFILE,
+        task="Find the answer",
+        execution_context=AgentExecutionContext.new(),
+        llm=object(),
+    )
+
+    prompt, _ = main_reasoner.build_reasoner_prompt(state)
+
+    assert "OUTPUT CONTRACT" not in prompt.build()
+
+
+def test_top_level_reasoner_uses_profile_management_facade() -> None:
+    state = AgentState.new(
+        agent_profile=TOP_LEVEL_PROFILE,
+        task="Remember that I prefer concise technical explanations.",
+        execution_context=AgentExecutionContext.new(),
+        llm=object(),
+    )
+    state.inputs.discovered_capabilities = CapabilityDiscoveryResult(
+        tools=[AvailableTool(name="user_update_tone", description="Update tone")]
+    )
+
+    _, tools = main_reasoner.build_reasoner_prompt(state)
+
+    assert "user_update_tone" not in {tool.name for tool in tools}
+    assert "user_management" in {tool.name for tool in tools}
+
+
+def test_top_level_reasoner_exposes_memory_detail_with_search_guidance() -> None:
+    state = AgentState.new(
+        agent_profile=TOP_LEVEL_PROFILE,
+        task="What did we previously discuss about agent delegation?",
+        execution_context=AgentExecutionContext.new(),
+        llm=object(),
+    )
+    state.inputs.discovered_capabilities = CapabilityDiscoveryResult(
+        tools=[
+            AvailableTool(name="memory_search", description="Search memories"),
+            AvailableTool(name="memory_detail", description="Read memory detail"),
+        ]
+    )
+
+    _, tools = main_reasoner.build_reasoner_prompt(state)
+
+    assert "memory_search" in {tool.name for tool in tools}
+    assert "memory_detail" in {tool.name for tool in tools}
+
+
+def test_main_reasoner_prompt_prefers_research_agent_for_multi_source_comparisons() -> None:
+    state = AgentState.new(
+        agent_profile=TOP_LEVEL_PROFILE,
+        task="Compare LangGraph and CrewAI for multi-agent orchestration.",
+        execution_context=AgentExecutionContext.new(),
+        llm=object(),
+    )
+
+    prompt, _ = main_reasoner.build_reasoner_prompt(state)
+
+    assert "prefer the research agent" in prompt.rules
+    assert "do not duplicate" in prompt.rules
+
+
+def test_main_reasoner_routes_structured_data_files_to_coding() -> None:
+    state = AgentState.new(
+        agent_profile=TOP_LEVEL_PROFILE,
+        task="Create a CSV with ten sample sales records.",
+        execution_context=AgentExecutionContext.new(),
+        llm=object(),
+    )
+
+    prompt, _ = main_reasoner.build_reasoner_prompt(state)
+
+    assert "CSV or other structured data-file generation" in prompt.rules
+    assert "Do not route data files through document_writing" in prompt.rules
+
+
+def test_main_reasoner_routes_source_code_artifacts_to_coding() -> None:
+    state = AgentState.new(
+        agent_profile=TOP_LEVEL_PROFILE,
+        task="Create a Python script that calculates compound interest.",
+        execution_context=AgentExecutionContext.new(),
+        llm=object(),
+    )
+
+    prompt, _ = main_reasoner.build_reasoner_prompt(state)
+
+    assert "Python scripts or other source-code artifacts" in prompt.rules
+    assert "Do not wrap source code in Markdown" in prompt.rules
+
+
+def test_main_reasoner_allows_generated_data_for_explicit_sample_charts() -> None:
+    state = AgentState.new(
+        agent_profile=TOP_LEVEL_PROFILE,
+        task="Generate a scatterplot of sample data with a regression line.",
+        execution_context=AgentExecutionContext.new(),
+        llm=object(),
+    )
+
+    prompt, _ = main_reasoner.build_reasoner_prompt(state)
+
+    assert "underspecified" in prompt.rules
+    assert "safe, conventional, reversible default" in prompt.rules
+    assert "generate a small clearly labeled dataset" in prompt.rules
+
+
+def test_main_reasoner_uses_safe_default_for_unspecified_multiplication_table() -> None:
+    state = AgentState.new(
+        agent_profile=TOP_LEVEL_PROFILE,
+        task="Generate a multiplication table and save it as CSV.",
+        execution_context=AgentExecutionContext.new(),
+        llm=object(),
+    )
+
+    prompt, _ = main_reasoner.build_reasoner_prompt(state)
+
+    assert "use 1 through 10" in prompt.rules
+    assert "Ask a clarifying question only when" in prompt.rules
 
 
 def test_main_reasoner_appends_subagent_result_to_next_llm_message_history() -> None:

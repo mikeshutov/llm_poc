@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-import json
 from time import perf_counter
 from typing import Any
 
@@ -19,9 +18,9 @@ from agent_runtime.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_profile import (
     AgentExecutionStrategy,
-    PROFILE_MANAGEMENT_AGENT_NAME,
+    AgentName,
 )
-from agent_runtime.models.decision import DecisionStatus
+from agent_runtime.models.decision import DecisionResponse, DecisionStatus
 from agent_runtime.models.plan import Plan
 from retrieval.evidence_store import (
     build_evidence_bundle_from_tool_results,
@@ -38,25 +37,8 @@ from capabilities.discovery.models import AvailableAgent, AvailableTool
 class DecisionResult:
     plan: Plan
     status: DecisionStatus
+    message: str = ""
     raw_content: str = ""
-    tool_calls: list[dict[str, Any]] = field(default_factory=list)
-
-
-def _parse_decision_status(response: Any, has_tool_calls: bool) -> DecisionStatus:
-    content = getattr(response, "content", "")
-    if isinstance(content, str) and content.strip():
-        try:
-            payload = json.loads(content)
-            if isinstance(payload, dict):
-                if "status" in payload:
-                    try:
-                        return DecisionStatus(payload["status"])
-                    except (TypeError, ValueError):
-                        return DecisionStatus.CONTINUE
-                return DecisionStatus.CONTINUE if has_tool_calls else DecisionStatus.SATISFIED
-        except (TypeError, ValueError):
-            pass
-    return DecisionStatus.CONTINUE if has_tool_calls else DecisionStatus.SATISFIED
 
 
 DecisionPromptBuilder = Callable[[AgentState], tuple[AgentPrompt, list[BaseTool]]]
@@ -96,6 +78,7 @@ def build_decision_prompt(
     *,
     instruction: str,
     rules: str,
+    schema: str = "",
     include_evidence: bool = True,
 ) -> tuple[AgentPrompt, list[BaseTool]]:
     context = _compile_tools_rules_from_state(state)
@@ -122,7 +105,7 @@ def build_decision_prompt(
             delegated
             for delegated in state.available_agent_states.values()
             if delegated.agent_profile.delegatable
-            and delegated.agent_profile.name != PROFILE_MANAGEMENT_AGENT_NAME
+            and delegated.agent_profile.name != AgentName.PROFILE_MANAGEMENT
             and (
                 capabilities is None
                 or delegated.agent_profile.name in discovered_agent_names
@@ -153,6 +136,7 @@ def build_decision_prompt(
         ]
     prompt = AgentPrompt(
         instruction=instruction,
+        schema=schema,
         user_profile=state.execution_context.user_profile,
         conversation_context=state.execution_context.conversation_context,
         task=state.inputs.task,
@@ -167,6 +151,7 @@ def build_decision_prompt(
         PromptSectionKeys.CONVERSATION_CONTEXT,
         PromptSectionKeys.AVAILABLE_TOOLS,
         PromptSectionKeys.RULES,
+        PromptSectionKeys.SCHEMA,
         PromptSectionKeys.MISSING_INFORMATION,
         PromptSectionKeys.TASK,
         PromptSectionKeys.EVIDENCE_IDS,
@@ -178,12 +163,26 @@ def build_decision_prompt(
     return prompt, [*context.tools, *delegation_tools]
 
 
-def _parse_plan(response: Any, tools: list[BaseTool], agent_names: set[str] | None = None) -> Plan:
-    return Plan(steps=parse_tool_calls_to_plan_steps(
+def _parse_response(
+    response: Any,
+    tools: list[BaseTool],
+    agent_names: set[str] | None = None,
+) -> tuple[Plan, DecisionResponse]:
+    plan = Plan(steps=parse_tool_calls_to_plan_steps(
         getattr(response, "tool_calls", None) or [],
         tools,
         agent_names=agent_names,
     ))
+    content = getattr(response, "content", "")
+    if isinstance(content, str) and content.strip():
+        try:
+            return plan, DecisionResponse.model_validate_json(content)
+        except (TypeError, ValueError):
+            pass
+    return plan, DecisionResponse(
+        status=DecisionStatus.CONTINUE if plan.steps else DecisionStatus.SATISFIED,
+        message="",
+    )
 
 
 def run_decision(
@@ -200,7 +199,7 @@ def run_decision(
         delegated.agent_profile.name
         for delegated in (state.available_agent_states or {}).values()
         if delegated.agent_profile.delegatable
-        and delegated.agent_profile.name != PROFILE_MANAGEMENT_AGENT_NAME
+        and delegated.agent_profile.name != AgentName.PROFILE_MANAGEMENT
         and (
             state.inputs.discovered_capabilities is None
             or delegated.agent_profile.name in {
@@ -246,8 +245,8 @@ def run_decision(
     )
     response = llm.bind_tools(bound_tools, **bind_kwargs).invoke(prompt_messages)
     latency_ms = int((perf_counter() - started_at) * 1000)
-    plan = _parse_plan(response, tools, agent_names=agent_names)
-    llm_call = record_llm_call(
+    plan, decision_response = _parse_response(response, tools, agent_names=agent_names)
+    record_llm_call(
         raw_response=response,
         model_name=model_name,
         provider=provider,
@@ -263,12 +262,9 @@ def run_decision(
         input_object={"messages": prompt_messages},
         output_object={
             "raw_content": response.content,
-            "tool_calls": getattr(response, "tool_calls", None),
+            "decision_status": decision_response.status,
+            "decision_message": decision_response.message,
         },
-    )
-    status = _parse_decision_status(
-        response,
-        bool(getattr(response, "tool_calls", None)),
     )
     record_node_log(
         conversation_id=state.execution_context.conversation_id,
@@ -281,7 +277,8 @@ def run_decision(
         payload={
             "agent_name": state.agent_profile.name,
             "kind": PLAN_KIND,
-            "status": status.lower(),
+            "status": decision_response.status.lower(),
+            "message": decision_response.message,
             "data": sanitize_for_json_storage({
                 "steps": [
                     step.model_dump(mode="json")
@@ -292,7 +289,7 @@ def run_decision(
     )
     return DecisionResult(
         plan=plan,
-        status=status,
+        status=decision_response.status,
+        message=decision_response.message,
         raw_content=getattr(response, "content", "") or "",
-        tool_calls=list(getattr(response, "tool_calls", None) or []),
     )

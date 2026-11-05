@@ -9,6 +9,14 @@ def build_document_writing_rules() -> str:
         "- Use file_list when the requested existing file is ambiguous.\n"
         "- Use file_read before file_edit when the exact existing text is not already known.\n"
         "- Prefer file_edit for targeted updates and file_create for new documents.\n"
+        "- For every new document, select a writing template before calling file_create unless "
+        "the user or parent agent explicitly supplied the template or an equivalent required "
+        "section structure. Call writing_templates with the requested format and the closest "
+        "category when no template was supplied; then choose the best matching template.\n"
+        "- Use the selected template's required_fields to structure the document, including all "
+        "applicable required sections. Never silently create a free-form document when a catalog "
+        "template is available; if no suitable template exists, report that to the parent agent "
+        "instead of inventing a structure.\n"
         "- When research evidence is supplied by another agent, use each evidence item's id "
         "with memory_lookup_evidence to retrieve the full evidence before writing.\n"
         "- When a supplied evidence item points to a website and its details are needed, use "
@@ -24,4 +32,6 @@ def build_document_writing_rules() -> str:
     )
 
 
-__all__ = ["build_document_writing_rules"]
+__all__ = [
+    "build_document_writing_rules",
+]
