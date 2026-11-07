@@ -23,6 +23,7 @@ def test_coding_profile_can_be_rebuilt() -> None:
         "finance_crypto_markets",
         "finance_crypto_historical_prices",
         "memory_lookup_evidence",
+        "web_fetch",
         "workspace_file_write",
         "workspace_file_read",
         "workspace_file_edit",

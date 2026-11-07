@@ -16,9 +16,14 @@ from common.signatures import build_signature
 from common.logging import compact_trace_inputs, compact_trace_outputs, record_node_log
 from agent_runtime.constants import NodeName
 from agent_runtime.models.agent_state import AgentState
-from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentProfile
-from retrieval.evidence import ToolResult
-from agent_runtime.models.evaluation_result import EvaluationResult
+from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentName, AgentProfile
+from agent_runtime.models.evaluation_result import (
+    EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT,
+    EVALUATION_STATUS_RETRYABLE,
+    EVALUATION_STATUS_SATISFIED,
+    EVALUATION_STATUS_TERMINAL,
+)
+from retrieval.evidence import ToolOutcome, ToolOutcomeStatus, ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.models.plan import PlanStep
 from agent_runtime.context import bind_agent_context, bind_runtime_context
@@ -203,6 +208,7 @@ def _record_step_result(
             error_message=execution_result.error_text or None,
             duration_ms=execution_result.latency_ms,
             status="rejected" if execution_result.rejection_reason else None,
+            is_subagent=agent_state.agent_profile.name != AgentName.REQUEST_ORCHESTRATOR,
         )
         agent_state.result = agent_state.result.with_recorded_tool_call(tool_call_id)
 
@@ -376,6 +382,7 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
                     output_payload=completion_result,
                     evidence=completion_result.evidence,
                     duration_ms=0,
+                    is_subagent=True,
                 )
                 agent_state.result = agent_state.result.with_recorded_tool_call(tool_call_id)
             else:
@@ -495,12 +502,20 @@ def _agent_completion_result(
         if summaries
         else f"{agent_name} completed the delegated task."
     )
-    evaluation = None
+    outcome = None
     if state.agent_profile.execution_strategy == AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR:
-        evaluation = EvaluationResult(
-            status=state.node_states.evaluator.evaluation_status,
-            relevant_evidence=[str(value) for value in state.result.relevant_evidence_ids],
-            missing_information=list(state.node_states.evaluator.missing_information),
+        evaluation_status = state.node_states.evaluator.evaluation_status
+        outcome_status = {
+            EVALUATION_STATUS_SATISFIED: ToolOutcomeStatus.COMPLETED,
+            EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT: ToolOutcomeStatus.PARTIAL,
+            EVALUATION_STATUS_RETRYABLE: ToolOutcomeStatus.NEEDS_INPUT,
+            EVALUATION_STATUS_TERMINAL: ToolOutcomeStatus.FAILED,
+        }[evaluation_status]
+        missing_inputs = list(state.node_states.evaluator.missing_information)
+        outcome = ToolOutcome(
+            status=outcome_status,
+            reason=("; ".join(missing_inputs) if missing_inputs else None),
+            missing_inputs=missing_inputs,
         )
     return ToolResult(
         tool_call_id=plan_step_id,
@@ -521,7 +536,7 @@ def _agent_completion_result(
             ],
         },
         evidence=evidence,
-        state=evaluation,
+        state=outcome,
     )
 
 

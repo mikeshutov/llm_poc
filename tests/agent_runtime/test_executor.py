@@ -214,10 +214,8 @@ def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch) -> Non
         execution_context=parent.execution_context,
         llm=object(),
     )
-    evidence_id = uuid4()
     completed.node_states.evaluator.evaluation_status = "RETRYABLE"
     completed.node_states.evaluator.missing_information = ["The annual wage series."]
-    completed.result = completed.result.copy(relevant_evidence_ids=[evidence_id])
 
     class Registry:
         @staticmethod
@@ -228,9 +226,9 @@ def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch) -> Non
 
     run_executor(parent)
 
-    evaluation = parent.direct_tool_results[0].state
-    assert evaluation is not None
-    assert evaluation.status == "RETRYABLE"
-    assert evaluation.missing_information == ["The annual wage series."]
-    assert evaluation.relevant_evidence == [str(evidence_id)]
+    outcome = parent.direct_tool_results[0].state
+    assert outcome is not None
+    assert outcome.status == "needs_input"
+    assert outcome.reason == "The annual wage series."
+    assert outcome.missing_inputs == ["The annual wage series."]
     assert parent.direct_tool_results[0].result["status"] == "pending"

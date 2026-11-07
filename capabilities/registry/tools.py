@@ -181,9 +181,9 @@ WRITING_TOOLS = [
 ]
 WORKSPACE_TOOLS = [
     Tool(workspace_file_write, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
-    Tool(workspace_file_read, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+    Tool(workspace_file_read, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=2),
     Tool(workspace_file_edit, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
-    Tool(workspace_file_list, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=2),
+    Tool(workspace_file_list, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=3),
     Tool(workspace_file_delete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
     Tool(workspace_file_promote, result_type=TOOL_RESULT_TYPE_FILE, version=2),
 ]

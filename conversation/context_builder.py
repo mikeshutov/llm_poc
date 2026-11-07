@@ -15,6 +15,8 @@ MAX_CONTEXT_BYTES = 120_000
 def _project_context_message(message: ConversationMessage) -> dict:
     kind = str(message.kind)
     visibility = str(message.visibility)
+    if message.is_subagent:
+        return {}
     if visibility != "visible" and kind not in {"tool_call", "tool_result"}:
         return {}
     if kind in {"tool_call", "tool_result"}:
@@ -79,7 +81,11 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
         # message. Do not load that in-progress turn into prior history.
         if roundtrip.status != "completed":
             continue
-        roundtrip_messages = conversation_repository.list_messages(roundtrip.id, include_internal=True)
+        roundtrip_messages = conversation_repository.list_messages(
+            roundtrip.id,
+            include_internal=True,
+            exclude_subagents=True,
+        )
         for message in roundtrip_messages:
             if not message.content.strip() and not message.payload:
                 continue

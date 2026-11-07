@@ -22,7 +22,7 @@ class FakeConversationRepository:
     def list_roundtrips(self, *args, **kwargs):
         return [self.roundtrip]
 
-    def list_messages(self, roundtrip_id, include_internal=True):
+    def list_messages(self, roundtrip_id, include_internal=True, exclude_subagents=False):
         return self.messages
 
 def test_context_uses_ordered_visible_messages() -> None:
@@ -44,3 +44,25 @@ def test_context_projects_out_internal_trace_messages() -> None:
         context = build_roundtrip_context(str(repository.roundtrip.conversation_id))
 
     assert all(message.visibility == "visible" for message in context.messages)
+
+
+def test_context_excludes_subagent_tool_entries() -> None:
+    repository = FakeConversationRepository()
+    repository.messages.extend([
+        ConversationMessage(
+            uuid4(), repository.roundtrip.id, 2, "tool_call", "internal", "assistant",
+            "document_writing: create the report", {"tool_name": "document_writing"},
+            {"tool_name": "document_writing"}, None, "",
+            is_subagent=True, subagent_name="document_writing",
+        ),
+        ConversationMessage(
+            uuid4(), repository.roundtrip.id, 3, "tool_result", "internal", "tool", "",
+            {"tool_name": "document_writing", "output_payload": {"task": "create the report"}},
+            {"tool_name": "document_writing"}, None, "",
+            is_subagent=True, subagent_name="document_writing",
+        ),
+    ])
+    with patch("conversation.context_builder.get_conversation_repo", return_value=repository):
+        context = build_roundtrip_context(str(repository.roundtrip.conversation_id))
+
+    assert all(message.is_subagent is not True for message in context.messages)

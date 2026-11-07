@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import fnmatch
 import mimetypes
+import re
+import shutil
 from pathlib import Path
 
 from langchain_core.tools import tool
@@ -9,14 +11,19 @@ from pydantic import BaseModel, Field
 
 from agent_runtime.context import get_current_conversation_id
 from agent_runtime.context import get_current_user_id
-from assets.files.storage import scoped_file_path
+from assets.files.storage import conversation_workspace_path, scoped_file_path
 from assets.files.urls import static_file_url
 from assets.files.models import FileListResult
-from assets.files.file_types import FileType, WORKSPACE_FILE_TYPES, WORKSPACE_FILE_TYPES_DESCRIPTION
+from assets.files.file_types import (
+    FileType,
+    TEXT_CONTENT_FILE_TYPES,
+    WORKSPACE_FILE_TYPES,
+    WORKSPACE_FILE_TYPES_DESCRIPTION,
+)
 from assets.files.writer import normalize_file_format, write_file
 from assets.models import AssetOrigin
 from assets.repository.asset_repository import AssetRepository
-from common.config import ANONYMOUS_OWNER, FILES_DIR
+from common.config import ANONYMOUS_OWNER
 from capabilities.registry.constants import (
     TOOL_NAME_WORKSPACE_FILE_DELETE,
     TOOL_NAME_WORKSPACE_FILE_EDIT,
@@ -41,8 +48,30 @@ class WorkspaceWriteArgs(WorkspaceFileNameArgs):
     overwrite: bool = Field(default=False, description="Whether to replace an existing file.")
 
 
+class WorkspaceReadOptions(BaseModel):
+    start_line: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optional 1-based first line to return, inclusive.",
+    )
+    end_line: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optional 1-based last line to return, inclusive.",
+    )
+    max_chars: int = Field(
+        default=_MAX_READ_CHARS,
+        ge=1,
+        le=_MAX_READ_CHARS,
+        description="Maximum number of characters to return after selecting the line range.",
+    )
+
+
 class WorkspaceReadArgs(WorkspaceFileNameArgs):
-    max_chars: int = Field(default=_MAX_READ_CHARS, ge=1, le=_MAX_READ_CHARS)
+    options: WorkspaceReadOptions = Field(
+        default_factory=WorkspaceReadOptions,
+        description="Optional read range and output-size settings.",
+    )
 
 
 class WorkspaceEditArgs(WorkspaceFileNameArgs):
@@ -56,6 +85,14 @@ class WorkspaceListArgs(BaseModel):
         default=None,
         description="Optional case-insensitive file name search or glob, such as '*.py' or 'report'.",
     )
+    regex: str | None = Field(
+        default=None,
+        description="Optional regular expression matched against the relative file name.",
+    )
+    search_file_contents: bool = Field(
+        default=False,
+        description="When true, also search matching text-file contents using query or regex.",
+    )
     recursive: bool = Field(default=True, description="Search nested directories when true.")
 
 
@@ -63,7 +100,7 @@ class WorkspacePromoteArgs(BaseModel):
     file_names: list[str] = Field(
         ...,
         min_length=1,
-        description="One or more workspace file names to move into managed files.",
+        description="One or more workspace file names to copy into managed files.",
     )
 
 
@@ -79,7 +116,7 @@ def _workspace_root() -> Path:
         or any(char in conversation_id for char in "/\\")
     ):
         raise ValueError("A current conversation is required for workspace file access.")
-    root = (Path(FILES_DIR) / user_id / conversation_id).resolve()
+    root = conversation_workspace_path(conversation_id, user_id=user_id).resolve()
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -136,11 +173,25 @@ def workspace_file_write(file_name: str, content: str = "", overwrite: bool = Fa
 
 
 @tool(TOOL_NAME_WORKSPACE_FILE_READ, args_schema=WorkspaceReadArgs, description="Read UTF-8 text from a file in the current conversation workspace.")
-def workspace_file_read(file_name: str, max_chars: int = _MAX_READ_CHARS) -> ToolResult:
+def workspace_file_read(
+    file_name: str,
+    options: WorkspaceReadOptions | None = None,
+) -> ToolResult:
     target = _safe_file_name(file_name)
     if not target.is_file():
         raise ValueError(f"Workspace file does not exist: '{file_name}'.")
-    return _result(target, "read", content=target.read_text(encoding="utf-8")[:max_chars])
+    read_options = options or WorkspaceReadOptions()
+    if (
+        read_options.start_line is not None
+        and read_options.end_line is not None
+        and read_options.end_line < read_options.start_line
+    ):
+        raise ValueError("end_line must be greater than or equal to start_line.")
+    lines = target.read_text(encoding="utf-8").splitlines(keepends=True)
+    start = (read_options.start_line or 1) - 1
+    end = read_options.end_line
+    content = "".join(lines[start:end])[: read_options.max_chars]
+    return _result(target, "read", content=content)
 
 
 @tool(TOOL_NAME_WORKSPACE_FILE_EDIT, args_schema=WorkspaceEditArgs, description="Apply an exact text replacement to a named file in the root of the current conversation workspace.")
@@ -158,21 +209,46 @@ def workspace_file_edit(file_name: str, find: str, replace: str = "", replace_al
     return _result(target, "edited")
 
 
-@tool(TOOL_NAME_WORKSPACE_FILE_LIST, args_schema=WorkspaceListArgs, description="Search and list files in the current conversation workspace using an optional file name query and recursive flag.")
-def workspace_file_list(query: str | None = None, recursive: bool = True) -> ToolResult:
+@tool(TOOL_NAME_WORKSPACE_FILE_LIST, args_schema=WorkspaceListArgs, description="Search and list files in the current conversation workspace using a name query or regular expression, with optional text-content search.")
+def workspace_file_list(
+    query: str | None = None,
+    regex: str | None = None,
+    search_file_contents: bool = False,
+    recursive: bool = True,
+) -> ToolResult:
     directory = _workspace_root()
     candidates = directory.rglob("*") if recursive else directory.iterdir()
     normalized_query = query.strip().casefold() if query else ""
+    try:
+        filename_pattern = re.compile(regex, re.IGNORECASE) if regex else None
+    except re.error as exc:
+        raise ValueError(f"Invalid file name regular expression: {exc}") from exc
     items = []
     for item in candidates:
         if not item.is_file():
             continue
         relative = _relative(item)
         normalized_relative = relative.casefold()
-        if normalized_query and not (
+        name_matches = not normalized_query and filename_pattern is None
+        if normalized_query and (
             normalized_query in normalized_relative
             or fnmatch.fnmatch(normalized_relative, normalized_query)
         ):
+            name_matches = True
+        if filename_pattern and filename_pattern.search(relative):
+            name_matches = True
+        if search_file_contents and (normalized_query or filename_pattern):
+            extension = item.suffix.lstrip(".").casefold()
+            if extension in {file_type.value for file_type in TEXT_CONTENT_FILE_TYPES}:
+                try:
+                    text = item.read_text(encoding="utf-8")
+                except (OSError, UnicodeError):
+                    text = ""
+                content_matches = bool(
+                    normalized_query and normalized_query in text.casefold()
+                ) or bool(filename_pattern and filename_pattern.search(text))
+                name_matches = name_matches or content_matches
+        if not name_matches:
             continue
         items.append(relative)
     items.sort()
@@ -191,7 +267,7 @@ def workspace_file_delete(file_name: str) -> ToolResult:
 @tool(
     TOOL_NAME_WORKSPACE_FILE_PROMOTE,
     args_schema=WorkspacePromoteArgs,
-    description="Move one or more completed workspace files into the user's managed files area and return downloadable evidence for each.",
+    description="Copy one or more completed workspace files into the user's managed files area, overwriting managed files with the same names, and return downloadable evidence for each.",
 )
 def workspace_file_promote(file_names: list[str]) -> ToolResult:
     sources = [_safe_file_name(file_name) for file_name in file_names]
@@ -203,22 +279,30 @@ def workspace_file_promote(file_names: list[str]) -> ToolResult:
     duplicate_names = {path.name for path in managed_paths if managed_paths.count(path) > 1}
     if duplicate_names:
         raise ValueError(f"Multiple workspace files resolve to the same managed filename: {', '.join(sorted(duplicate_names))}.")
-    existing = [path.name for path in managed_paths if path.exists()]
-    if existing:
-        raise ValueError(f"Managed files already exist: {', '.join(existing)}.")
 
     repository = AssetRepository()
+    user_id = get_current_user_id()
     files = []
     evidence = []
     for source, managed_path in zip(sources, managed_paths):
         managed_path.parent.mkdir(parents=True, exist_ok=True)
-        source.rename(managed_path)
+        existing_file = next(
+            (
+                file
+                for file in repository.list_files(user_id=user_id, query=managed_path.name)
+                if file.name == managed_path.name
+            ),
+            None,
+        )
+        shutil.copy2(source, managed_path)
         file = repository.create_file(
+            asset_id=existing_file.id if existing_file else None,
             name=managed_path.name,
             storage_path=managed_path.as_posix(),
             mime_type=mimetypes.guess_type(managed_path.name)[0] or "application/octet-stream",
-            user_id=get_current_user_id(),
+            user_id=user_id,
             origin=AssetOrigin.GENERATED,
+            size_bytes=managed_path.stat().st_size,
         )
         files.append(file)
         file_url = static_file_url(file.storage_path)
@@ -226,7 +310,7 @@ def workspace_file_promote(file_names: list[str]) -> ToolResult:
             item_id=str(file.id),
             tool_name=TOOL_NAME_WORKSPACE_FILE_PROMOTE,
             title=file.name,
-            summary="Workspace file moved to managed files and is available for download.",
+            summary="Workspace file copied to managed files and is available for download.",
             urls=[{"url": file_url}] if file_url else [],
             source=TOOL_NAME_WORKSPACE_FILE_PROMOTE,
             entity_type="file",
