@@ -292,21 +292,29 @@ class AgentPrompt:
                     if not isinstance(item, dict):
                         continue
                     evidence.append({
-                        key: item.get(key)
-                        for key in (
-                            "id", "title", "summary",
-                            "urls", "image_url", "published_at", "source",
-                            "entity_type", "location_name", "llm_metadata",
-                        )
-                        if item.get(key) not in (None, "", [], {})
+                        "evidence_id": item.get("evidence_id", item.get("id")),
+                        **{
+                            key: item.get(key)
+                            for key in (
+                                "title", "summary", "urls", "image_url",
+                                "published_at", "source", "entity_type",
+                                "location_name", "llm_metadata",
+                            )
+                            if item.get(key) not in (None, "", [], {})
+                        },
                     })
+                raw_output = payload.get("output_payload")
+                if isinstance(raw_output, dict) and "result" in raw_output:
+                    model_result = raw_output.get("result")
+                else:
+                    model_result = raw_output
                 result_payload = {
                     "tool_name": payload.get("tool_name", ""),
                     "status": payload.get("status", ""),
                     "error_message": payload.get("error_message"),
                     "duration_ms": payload.get("duration_ms"),
                     "result": bounded_json_value(
-                        payload.get("output_payload"), max_bytes=12_000
+                        model_result, max_bytes=12_000
                     ),
                     "evidence": evidence,
                     "tool_metadata": payload.get("tool_metadata", {}),
@@ -363,12 +371,14 @@ class AgentPrompt:
                     if isinstance(payload.get("tool_metadata"), dict):
                         aggregate["tool_metadata"].update(payload["tool_metadata"])
                     existing_evidence_ids = {
-                        str(item.get("id"))
+                        str(item.get("evidence_id", item.get("id")))
                         for item in aggregate["evidence"]
-                        if isinstance(item, dict) and item.get("id") is not None
+                        if isinstance(item, dict)
+                        and item.get("evidence_id", item.get("id")) is not None
                     }
                     for item in result_payload["evidence"]:
-                        item_id = str(item.get("id")) if item.get("id") is not None else None
+                        item_id_value = item.get("evidence_id", item.get("id"))
+                        item_id = str(item_id_value) if item_id_value is not None else None
                         if item_id is not None and item_id in existing_evidence_ids:
                             continue
                         aggregate["evidence"].append(item)

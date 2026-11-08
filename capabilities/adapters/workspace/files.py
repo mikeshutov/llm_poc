@@ -14,12 +14,7 @@ from agent_runtime.context import get_current_user_id
 from assets.files.storage import conversation_workspace_path, scoped_file_path
 from assets.files.urls import static_file_url
 from assets.files.models import FileListResult
-from assets.files.file_types import (
-    FileType,
-    TEXT_CONTENT_FILE_TYPES,
-    WORKSPACE_FILE_TYPES,
-    WORKSPACE_FILE_TYPES_DESCRIPTION,
-)
+from assets.files.file_types import FileType, TEXT_CONTENT_FILE_TYPES, WORKSPACE_FILE_TYPES
 from assets.files.writer import normalize_file_format, write_file
 from assets.models import AssetOrigin
 from assets.repository.asset_repository import AssetRepository
@@ -44,7 +39,7 @@ class WorkspaceFileNameArgs(BaseModel):
 
 
 class WorkspaceWriteArgs(WorkspaceFileNameArgs):
-    content: str = Field(default="", description=f"UTF-8 text content to write. Supported file types include {WORKSPACE_FILE_TYPES_DESCRIPTION}.")
+    content: str = Field(default="", description="UTF-8 text content to write. Known document formats and arbitrary source-code extensions are supported.")
     overwrite: bool = Field(default=False, description="Whether to replace an existing file.")
 
 
@@ -138,6 +133,29 @@ def _relative(path: Path) -> str:
     return path.relative_to(_workspace_root()).as_posix()
 
 
+def _read_searchable_text(path: Path) -> str | None:
+    extension = path.suffix.lstrip(".").casefold()
+    if extension in {file_type.value for file_type in TEXT_CONTENT_FILE_TYPES}:
+        try:
+            return path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            return None
+    mime_type = mimetypes.guess_type(path.name)[0] or ""
+    if mime_type.startswith(("image/", "audio/", "video/")) or mime_type in {
+        "application/pdf",
+        "application/zip",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }:
+        return None
+    try:
+        raw = path.read_bytes()
+        if b"\x00" in raw:
+            return None
+        return raw.decode("utf-8")
+    except (OSError, UnicodeError):
+        return None
+
+
 def _result(path: Path, operation: str, *, content: str | None = None, items: list[str] | None = None) -> ToolResult:
     relative = _relative(path) if path != _workspace_root() else ""
     summary = f"Workspace file {operation}: {relative}" if relative else f"Workspace files {operation}."
@@ -157,17 +175,22 @@ def _result(path: Path, operation: str, *, content: str | None = None, items: li
     return ToolResult(result=payload, evidence=[evidence])
 
 
-@tool(TOOL_NAME_WORKSPACE_FILE_WRITE, args_schema=WorkspaceWriteArgs, description=f"Write UTF-8 text to a file in the current conversation workspace. Supported file types include {WORKSPACE_FILE_TYPES_DESCRIPTION}.")
+@tool(TOOL_NAME_WORKSPACE_FILE_WRITE, args_schema=WorkspaceWriteArgs, description="Write UTF-8 text to a file in the current conversation workspace, including arbitrary source-code extensions.")
 def workspace_file_write(file_name: str, content: str = "", overwrite: bool = False) -> ToolResult:
     target = _safe_file_name(file_name)
     if target.exists() and not overwrite:
         raise ValueError(f"Workspace file already exists: '{file_name}'. Set overwrite=true to replace it.")
     file_format = FileType.TXT
     if target.suffix:
-        _, file_format = normalize_file_format(
-            target.name,
-            supported_types=WORKSPACE_FILE_TYPES,
-        )
+        try:
+            _, file_format = normalize_file_format(
+                target.name,
+                supported_types=WORKSPACE_FILE_TYPES,
+            )
+        except ValueError:
+            # Workspace files can contain source code in any text-based
+            # language; unknown extensions such as .go remain UTF-8 text.
+            file_format = FileType.TXT
     write_file(target, content, file_format)
     return _result(target, "written")
 
@@ -238,12 +261,8 @@ def workspace_file_list(
         if filename_pattern and filename_pattern.search(relative):
             name_matches = True
         if search_file_contents and (normalized_query or filename_pattern):
-            extension = item.suffix.lstrip(".").casefold()
-            if extension in {file_type.value for file_type in TEXT_CONTENT_FILE_TYPES}:
-                try:
-                    text = item.read_text(encoding="utf-8")
-                except (OSError, UnicodeError):
-                    text = ""
+            text = _read_searchable_text(item)
+            if text is not None:
                 content_matches = bool(
                     normalized_query and normalized_query in text.casefold()
                 ) or bool(filename_pattern and filename_pattern.search(text))

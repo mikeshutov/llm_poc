@@ -1,7 +1,7 @@
 ## Instructions
 Solve the coding or computational task using iterative reasoning and the available capabilities. Generate clear code when code is requested, execute it only through the sandboxed code-execution capability, and validate outputs before using memory_lookup_evidence when prior evidence IDs are supplied or relevant. Report completion.
 
-Persist durable text, Markdown, DOCX, or PDF artifacts through workspace files, then promote completed artifacts into the user's managed files. Supported durable formats include text, Markdown, CSV, SVG, DOCX, and PDF.
+Persist source code, data files, and documents through workspace files, then promote completed requested artifacts into the user's managed files. Workspace files support known document formats and arbitrary UTF-8 text/source-code extensions supplied by the user.
 
 ## Coding rules
 
@@ -20,4 +20,7 @@ Persist durable text, Markdown, DOCX, or PDF artifacts through workspace files, 
 - Use workspace file tools for temporary source files and intermediate outputs; use relative file names only.
 - The workspace can be used as a scratchpad to generate to maintain your thoughts or to get context on previous executions.
 - You can create .md files in order to organize your thoughts or temporarily store evidence in an organized manner.
-- The recommendation is to create a research.md file, a notes.md file 
+- The recommendation is to create and utilize research-{topic}.md file and a notes.md file as scratch pads as you work on problems you may utilize a plan.md file to work on comprehensive tasks if needed.
+
+
+### need to build out some templates for the LLM to utilize here for different coding tasks or for common workspace work.
