@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import sys
 from types import ModuleType, SimpleNamespace
 
@@ -30,7 +31,7 @@ from agent_runtime.models.evaluation_result import (
     EVALUATION_STATUS_SATISFIED,
     EVALUATION_STATUS_TERMINAL,
 )
-from retrieval.evidence import ToolResult
+from retrieval.evidence import EvidenceView, ToolResult
 from agent_runtime.models.plan import Plan, PlanStep
 from agent_runtime.evaluation import evaluator_router
 from agent_runtime.models.main_state import MainState
@@ -71,18 +72,18 @@ def _hydrate_plan_state(
     state.gather_tool_results = lambda: normalized_results
 
 
-def test_validator_routes_empty_plan_to_synthesis() -> None:
+def test_validator_routes_empty_plan_to_evaluator() -> None:
     state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     _hydrate_plan_state(state, plan=Plan.model_validate({"steps": []}), results={}, plan_count=1)
 
-    assert validator(state) == SYNTHESIZE_EDGE
+    assert validator(state) == EVALUATE_EDGE
 
 
-def test_validator_routes_empty_plan_to_synthesis_again() -> None:
+def test_validator_routes_missing_plan_to_evaluator() -> None:
     state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
-    _hydrate_plan_state(state, plan=Plan.model_validate({"steps": []}), results={}, plan_count=1)
+    state.node_states.planner.plan = None
 
-    assert validator(state) == SYNTHESIZE_EDGE
+    assert validator(state) == EVALUATE_EDGE
 
 
 def test_validator_routes_action_plan_to_execute() -> None:
@@ -198,7 +199,7 @@ def test_execution_result_router_replans_once_after_an_empty_execution() -> None
     assert execution_result_router(state) == PLAN_EDGE
 
 
-def test_execution_result_router_skips_evaluator_after_second_empty_execution() -> None:
+def test_execution_result_router_evaluates_after_second_empty_execution() -> None:
     state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
     _hydrate_plan_state(
         state,
@@ -231,7 +232,39 @@ def test_execution_result_router_skips_evaluator_after_second_empty_execution() 
 
     assert state.result.answer_status is AnswerStatus.FAILED
     assert state.node_states.planner.no_result_attempts == 2
-    assert execution_result_router(state) == END
+    assert execution_result_router(state) == EVALUATE_EDGE
+
+
+def test_execution_result_router_replans_before_evaluation_when_results_exist() -> None:
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
+    _hydrate_plan_state(
+        state,
+        plan=Plan.model_validate({
+            "steps": [{
+                "id": "E1",
+                "plan": "Look it up",
+                "tool": "generic_web_search",
+                "args": {"query_text": "okonomiyaki kit"},
+            }]
+        }),
+        results={"E1": {"results": ["evidence"]}},
+        plan_count=1,
+    )
+    state.gather_tool_calls = lambda: [
+        SimpleNamespace(plan_step_id=state.node_states.planner.plan.steps[0].db_id, status="completed")
+    ]
+    state.gather_tool_results = lambda: [
+        ToolResult(
+            plan_step_id=state.node_states.planner.plan.steps[0].db_id,
+            tool_name="generic_web_search",
+            result={"results": ["evidence"]},
+            evidence=[EvidenceView(title="Evidence")],
+        )
+    ]
+
+    run_execution_result_validator(state)
+
+    assert execution_result_router(state) == PLAN_EDGE
 
 
 def test_evaluator_router_returns_synthesis_when_status_is_satisfied() -> None:
@@ -261,3 +294,25 @@ def test_evaluator_router_returns_plan_when_status_is_retryable() -> None:
 
     assert evaluator_router(state) == PLAN_EDGE
     assert state.node_states.evaluator.evaluation_status == EVALUATION_STATUS_RETRYABLE
+
+
+def test_evaluator_router_requires_profile_completion_tools_before_synthesis() -> None:
+    profile = replace(TOP_LEVEL_PROFILE, required_completion_tools={"workspace_file_complete"})
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=profile)
+    state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
+    state.gather_tool_results = lambda: [
+        ToolResult(tool_name="web_search", result={"results": ["evidence"]})
+    ]
+
+    assert evaluator_router(state) == PLAN_EDGE
+
+
+def test_evaluator_router_synthesizes_after_profile_completion_tool() -> None:
+    profile = replace(TOP_LEVEL_PROFILE, required_completion_tools={"workspace_file_complete"})
+    state = AgentState.new(task="Find something", llm=object(), agent_profile=profile)
+    state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
+    state.gather_tool_results = lambda: [
+        ToolResult(tool_name="workspace_file_complete", result={"operation": "completed"})
+    ]
+
+    assert evaluator_router(state) == SYNTHESIZE_EDGE

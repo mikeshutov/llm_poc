@@ -62,6 +62,15 @@ def test_normalize_generated_file_links_replaces_app_static_file_links() -> None
     assert blocks[0].content == "[Download](/app/static/files/user-123/chart.png)"
 
 
+def test_normalize_generated_file_links_removes_unverified_sandbox_urls() -> None:
+    blocks = _normalize_generated_file_links(
+        [SynthesisResultBlock(content="[Download](sandbox:/mnt/data/report.html)")],
+        [],
+    )
+
+    assert blocks[0].content == "[Download]"
+
+
 def test_main_reasoner_loops_until_final_structured_answer(monkeypatch) -> None:
     state = AgentState.new(
         agent_profile=AgentProfile(name="request_orchestrator", scope="main_agent", max_turns=3),

@@ -126,6 +126,13 @@ class MessageToolRepository:
         return any(message.payload.get("request_hash") == request_hash
                    for message in self._repo.list_messages(roundtrip_id) if message.kind == "tool_result")
 
+    def count_request_hash(self, roundtrip_id: UUID, request_hash: str) -> int:
+        return sum(
+            message.payload.get("request_hash") == request_hash
+            for message in self._repo.list_messages(roundtrip_id)
+            if message.kind == "tool_result"
+        )
+
     def get_tool_calls(self, tool_call_ids: list[UUID]) -> list[ToolCall]:
         return [self._tool_call_from_message(message) for message in self._tool_messages_for_ids(tool_call_ids)]
 

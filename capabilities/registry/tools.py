@@ -57,6 +57,7 @@ from capabilities.adapters.writing import writing_templates
 from capabilities.adapters.workspace import (
     workspace_file_delete,
     workspace_file_edit,
+    workspace_file_complete,
     workspace_file_list,
     workspace_file_promote,
     workspace_file_read,
@@ -185,7 +186,15 @@ WORKSPACE_TOOLS = [
     Tool(workspace_file_edit, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
     Tool(workspace_file_list, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=3),
     Tool(workspace_file_delete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+    Tool(workspace_file_complete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
     Tool(workspace_file_promote, result_type=TOOL_RESULT_TYPE_FILE, version=2),
+]
+WORKSPACE_READ_TOOLS = [
+    Tool(workspace_file_read, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=2),
+    Tool(workspace_file_list, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=3),
+]
+WORKSPACE_MUTATION_TOOLS = [
+    tool for tool in WORKSPACE_TOOLS if tool.name not in {item.name for item in WORKSPACE_READ_TOOLS}
 ]
 PROFILE_TOOLS = [
     Tool(
@@ -316,9 +325,17 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "The tool returns metadata only; do not assume template content is available.",
         ],
     ),
+    "workspace": ToolCategory(
+        tools=WORKSPACE_READ_TOOLS,
+        description="Read and search files in the current conversation workspace without modifying them.",
+        rules=[
+            "Use workspace_file_list to find workspace files by name, regular expression, or text content.",
+            "Use workspace_file_read to inspect a workspace file; do not modify workspace files through this category.",
+        ],
+    ),
 }
 
-tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *WEB_SEARCH_TOOLS, *KNOWLEDGE_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *MATH_TOOLS, *CODE_EXECUTION_TOOLS, *GAMES_TOOLS, *MEMORY_TOOLS, *FILE_TOOLS, *FILE_MANAGEMENT_TOOLS, *WRITING_TOOLS, *PROFILE_TOOLS]
+tools = [*PRODUCT_TOOLS, *WEATHER_TOOLS, *FINANCE_TOOLS, *CRYPTO_TOOLS, *WEB_SEARCH_TOOLS, *KNOWLEDGE_TOOLS, *CALENDAR_TOOLS, *LOCATION_TOOLS, *BOOKS_TOOLS, *LANGUAGE_TOOLS, *FOOD_TOOLS, *MATH_TOOLS, *CODE_EXECUTION_TOOLS, *GAMES_TOOLS, *MEMORY_TOOLS, *FILE_TOOLS, *FILE_MANAGEMENT_TOOLS, *WRITING_TOOLS, *PROFILE_TOOLS, *WORKSPACE_READ_TOOLS]
 
 TOOLS_BY_NAME = {tool.name: tool for tool in tools}
 

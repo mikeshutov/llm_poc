@@ -231,6 +231,9 @@ class AgentPrompt:
             if key in raw_sections
             and key not in {
                 PromptSectionKeys.CONVERSATION_CONTEXT,
+                # Current tool results are emitted as native tool messages by
+                # the execution loop. Do not duplicate them as system JSON.
+                PromptSectionKeys.EVIDENCE,
                 # Tool definitions are supplied through bind_tools() by the
                 # caller. Do not duplicate the catalog as JSON system text.
                 PromptSectionKeys.AVAILABLE_TOOLS,

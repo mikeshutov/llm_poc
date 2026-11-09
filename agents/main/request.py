@@ -61,14 +61,14 @@ def _normalize_generated_file_links(
                 continue
             file_urls[_file_name_key(evidence.title)] = evidence.url
 
-    if not file_urls:
-        return result_blocks
     fallback_url = next(iter(file_urls.values())) if len(file_urls) == 1 else ""
 
     def replace_link(match: re.Match[str]) -> str:
         filename = PurePosixPath(unquote(match.group("path"))).name
         canonical_url = file_urls.get(_file_name_key(filename), fallback_url)
-        return f"]({canonical_url})" if canonical_url else match.group(0)
+        # Never expose model- or sandbox-generated filesystem links. A
+        # downloadable link is valid only when it came from file evidence.
+        return f"]({canonical_url})" if canonical_url else "]"
 
     return [
         block.model_copy(update={"content": _GENERATED_FILE_LINK.sub(replace_link, block.content)})

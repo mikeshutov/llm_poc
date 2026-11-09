@@ -20,6 +20,8 @@ from agent_runtime.models.agent_prompt import (
 )
 from retrieval.evidence import EvidenceView, ToolResult
 from retrieval.evidence_store import build_evidence_steps_from_tool_results
+from agent_runtime.evaluation.prompts.evaluator_prompt import build_evaluator_prompt
+from langchain_core.messages import SystemMessage
 
 
 def test_evidence_views_exclude_internal_and_raw_fields() -> None:
@@ -111,6 +113,24 @@ def test_agent_prompt_serializes_evaluator_evidence_view() -> None:
             },
         }
     ]
+
+
+def test_evaluator_evidence_is_not_duplicated_into_prompt_messages() -> None:
+    evidence = EvidenceView(title="Current result", summary="Useful evidence.")
+    state = SimpleNamespace(
+        execution_context=SimpleNamespace(user_profile=None),
+        task="Evaluate the current result.",
+    )
+    prompt = build_evaluator_prompt(
+        state,
+        [EvidenceStep(type="web_search_results", evidence=[evidence])],
+    )
+
+    messages = prompt.build_messages()
+
+    assert isinstance(messages[0], SystemMessage)
+    assert "Current result" not in messages[0].content
+    assert all("Current result" not in message.content for message in messages)
 
 
 def test_evidence_steps_present_empty_search_results_by_type() -> None:

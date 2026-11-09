@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from langgraph.graph import END
-
 from common.logging import record_node_log
 from rendering.debug import EXECUTION_RESULT_KIND
-from agent_runtime.constants import EVALUATE_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE, NodeName
+from agent_runtime.constants import EVALUATE_EDGE, PLAN_EDGE, NodeName
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_state import AgentState
 
@@ -68,9 +66,11 @@ def execution_result_router(state: AgentState) -> str:
                 "rejected_call_count": rejected_call_count,
             }},
         )
-        return SYNTHESIZE_EDGE
-    if state.result.answer_status is AnswerStatus.PARTIAL_SUCCESS:
         return EVALUATE_EDGE
+    if state.node_states.planner.plan_count >= state.max_turns:
+        return EVALUATE_EDGE
+    if state.result.answer_status is AnswerStatus.PARTIAL_SUCCESS:
+        return PLAN_EDGE
     if state.node_states.planner.no_result_attempts == 1:
         return PLAN_EDGE
-    return END
+    return EVALUATE_EDGE

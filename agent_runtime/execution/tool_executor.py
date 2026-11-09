@@ -31,6 +31,8 @@ from capabilities.registry.global_registry import call_tool
 from capabilities.registry.repository.message_repository import MessageToolRepository
 from agent_runtime.execution.message_history import append_execution_messages
 
+MAX_IDENTICAL_TOOL_CALLS = 2
+
 
 @dataclass(frozen=True)
 class StepExecutionResult:
@@ -247,7 +249,7 @@ def run_executor(agent_state: AgentState) -> AgentState:
             tool_results_by_step_id = _tool_results_by_local_step_id(agent_state)
             resolved_args_by_step_id: dict[str, dict[str, Any]] = {}
             rejection_reason_by_step_id: dict[str, str] = {}
-            seen_request_hashes: set[str] = set()
+            request_counts: dict[str, int] = {}
             for step in plan.steps:
                 resolved_args = _substitute_refs(
                     step.args,
@@ -258,14 +260,16 @@ def run_executor(agent_state: AgentState) -> AgentState:
                     rejection_reason_by_step_id[step.id] = f"Tool '{step.tool}' is not allowed for this agent."
                     continue
                 request_hash = build_signature({"tool_name": step.tool, "input": resolved_args})
-                if request_hash in seen_request_hashes or (
-                    tool_repo is not None
-                    and agent_state.execution_context.roundtrip_id is not None
-                    and tool_repo.has_request_hash(agent_state.execution_context.roundtrip_id, request_hash)
-                ):
+                persisted_count = (
+                    tool_repo.count_request_hash(agent_state.execution_context.roundtrip_id, request_hash)
+                    if tool_repo is not None and agent_state.execution_context.roundtrip_id is not None
+                    else 0
+                )
+                request_count = request_counts.get(request_hash, 0) + persisted_count
+                if request_count >= MAX_IDENTICAL_TOOL_CALLS:
                     rejection_reason_by_step_id[step.id] = f"Tool request for '{step.tool}' was already made in this roundtrip."
                     continue
-                seen_request_hashes.add(request_hash)
+                request_counts[request_hash] = request_counts.get(request_hash, 0) + 1
 
             with ThreadPoolExecutor(max_workers=len(plan.steps)) as executor:
                 futures_by_step_id = {
@@ -316,7 +320,7 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
                 "task": delegated_task,
                 "evidence_ids": step.args.get("evidence_ids", []),
             })
-            if request_signature in agent_state.executed_request_signatures:
+            if agent_state.executed_request_signatures.count(request_signature) >= MAX_IDENTICAL_TOOL_CALLS:
                 record_node_log(
                     roundtrip_id=agent_state.execution_context.roundtrip_id,
                     node_name=NodeName.EXECUTOR,
@@ -394,7 +398,7 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
             "tool_name": step.tool,
             "input": resolved_args,
         })
-        if request_signature in agent_state.executed_request_signatures:
+        if agent_state.executed_request_signatures.count(request_signature) >= MAX_IDENTICAL_TOOL_CALLS:
             record_node_log(
                 roundtrip_id=agent_state.execution_context.roundtrip_id,
                 node_name=NodeName.EXECUTOR,
@@ -409,12 +413,18 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
                 plan_step_id=step.db_id,
             ))
             continue
+        persisted_count = 0
         if (
             tool_repo is not None
             and agent_state.execution_context.roundtrip_id is not None
-            and tool_repo.has_request_hash(agent_state.execution_context.roundtrip_id, request_signature)
         ):
-            agent_state.executed_request_signatures.append(request_signature)
+            persisted_count = tool_repo.count_request_hash(
+                agent_state.execution_context.roundtrip_id,
+                request_signature,
+            )
+        if persisted_count + agent_state.executed_request_signatures.count(request_signature) >= MAX_IDENTICAL_TOOL_CALLS:
+            if persisted_count:
+                agent_state.executed_request_signatures.append(request_signature)
             record_node_log(
                 roundtrip_id=agent_state.execution_context.roundtrip_id,
                 node_name=NodeName.EXECUTOR,

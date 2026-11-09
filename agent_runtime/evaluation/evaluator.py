@@ -131,7 +131,7 @@ def run_evaluator(state: AgentState) -> AgentState:
         return state
 
     prompt = build_evaluator_prompt(state=state, evidence=evidence_steps)
-    prompt_messages = prompt.build_messages()
+    prompt_messages = [*prompt.build_messages(), *state.reasoner_message_history]
     prompt_input_object = {"messages": prompt_messages}
     llm = build_llm_for_stage(
         execution_context=execution_context,

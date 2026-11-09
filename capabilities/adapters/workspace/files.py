@@ -22,6 +22,7 @@ from common.config import ANONYMOUS_OWNER
 from capabilities.registry.constants import (
     TOOL_NAME_WORKSPACE_FILE_DELETE,
     TOOL_NAME_WORKSPACE_FILE_EDIT,
+    TOOL_NAME_WORKSPACE_FILE_COMPLETE,
     TOOL_NAME_WORKSPACE_FILE_LIST,
     TOOL_NAME_WORKSPACE_FILE_READ,
     TOOL_NAME_WORKSPACE_FILE_WRITE,
@@ -284,6 +285,20 @@ def workspace_file_delete(file_name: str) -> ToolResult:
 
 
 @tool(
+    TOOL_NAME_WORKSPACE_FILE_COMPLETE,
+    args_schema=WorkspaceFileNameArgs,
+    description="Mark a completed workspace file as the final artifact produced by the current agent.",
+)
+def workspace_file_complete(file_name: str) -> ToolResult:
+    target = _safe_file_name(file_name)
+    if not target.is_file():
+        raise ValueError(f"Workspace file does not exist: '{file_name}'.")
+    if not target.read_text(encoding="utf-8").strip():
+        raise ValueError(f"Workspace file is empty: '{file_name}'.")
+    return _result(target, "completed")
+
+
+@tool(
     TOOL_NAME_WORKSPACE_FILE_PROMOTE,
     args_schema=WorkspacePromoteArgs,
     description="Copy one or more completed workspace files into the user's managed files area, overwriting managed files with the same names, and return downloadable evidence for each.",
@@ -352,5 +367,6 @@ __all__ = [
     "workspace_file_edit",
     "workspace_file_list",
     "workspace_file_delete",
+    "workspace_file_complete",
     "workspace_file_promote",
 ]
