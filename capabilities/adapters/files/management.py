@@ -275,7 +275,13 @@ def file_move(file_id: str, destination: str) -> ToolResult:
         raise ValueError(f"No file found with id '{file_id}'.")
     file = row
     source = _safe_path(file.storage_path)
-    target = _safe_path(os.path.join(FILES_DIR, destination))
+    artifacts_root = scoped_file_path(
+        ".managed-file-root",
+        user_id=get_current_user_id(),
+    ).parent.resolve()
+    target = (artifacts_root / destination).resolve()
+    if target != artifacts_root and artifacts_root not in target.parents:
+        raise ValueError("File destination must remain inside the managed artifacts directory.")
     if target.exists():
         raise ValueError(f"A file already exists at '{destination}'.")
     target.parent.mkdir(parents=True, exist_ok=True)

@@ -51,6 +51,8 @@ class ConversationRepository:
         payload: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
         parent_message_id: UUID | None = None,
+        is_subagent: bool = False,
+        subagent_name: str | None = None,
     ) -> ConversationMessage:
         message_embedding = None
         embedding_text = (content or "").strip()
@@ -66,13 +68,14 @@ class ConversationRepository:
                 """
                 INSERT INTO conversation_message (
                     roundtrip_id, sequence, kind, visibility, role, content,
-                    payload, metadata, parent_message_id, embedding
+                    payload, metadata, parent_message_id, is_subagent, subagent_name, embedding
                 )
-                SELECT %s, COALESCE(MAX(sequence), -1) + 1, %s, %s, %s, %s, %s, %s, %s, (%s)::vector
+                SELECT %s, COALESCE(MAX(sequence), -1) + 1, %s, %s, %s, %s, %s, %s, %s, %s, %s, (%s)::vector
                 FROM conversation_message
                 WHERE roundtrip_id = %s
                 RETURNING id, roundtrip_id, sequence, kind, visibility, role,
-                          content, payload, metadata, parent_message_id, created_at, embedding
+                          content, payload, metadata, parent_message_id, is_subagent,
+                          subagent_name, created_at, embedding
                 """,
                 (
                     roundtrip_id,
@@ -83,6 +86,8 @@ class ConversationRepository:
                     Jsonb(bounded_json_value(payload or {}, max_bytes=256_000)),
                     Jsonb(bounded_json_value(metadata or {}, max_bytes=16_000)),
                     parent_message_id,
+                    is_subagent,
+                    subagent_name,
                     message_embedding,
                     roundtrip_id,
                 ),
@@ -178,17 +183,21 @@ class ConversationRepository:
         roundtrip_id: UUID,
         *,
         include_internal: bool = True,
+        exclude_subagents: bool = False,
     ) -> list[ConversationMessage]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             query = """
                 SELECT id, roundtrip_id, sequence, kind, visibility, role,
-                       content, payload, metadata, parent_message_id, created_at, embedding
+                       content, payload, metadata, parent_message_id, is_subagent,
+                       subagent_name, created_at, embedding
                 FROM conversation_message
                 WHERE roundtrip_id = %s
             """
             params: list[Any] = [roundtrip_id]
             if not include_internal:
                 query += " AND visibility = 'visible'"
+            if exclude_subagents:
+                query += " AND NOT is_subagent"
             query += " ORDER BY sequence ASC"
             cur.execute(query, params)
             return [ConversationMessage(**row) for row in cur.fetchall()]
@@ -198,17 +207,20 @@ class ConversationRepository:
         conversation_id: UUID,
         *,
         include_internal: bool = True,
+        exclude_subagents: bool = False,
     ) -> list[ConversationMessage]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             visibility_clause = "" if include_internal else " AND cm.visibility = 'visible'"
+            subagent_clause = "" if not exclude_subagents else " AND NOT cm.is_subagent"
             cur.execute(
                 f"""
                 SELECT cm.id, cm.roundtrip_id, cm.sequence, cm.kind, cm.visibility,
                        cm.role, cm.content, cm.payload, cm.metadata,
-                       cm.parent_message_id, cm.created_at, cm.embedding
+                       cm.parent_message_id, cm.is_subagent, cm.subagent_name,
+                       cm.created_at, cm.embedding
                 FROM conversation_message cm
                 JOIN conversation_roundtrip rt ON rt.id = cm.roundtrip_id
-                WHERE rt.conversation_id = %s{visibility_clause}
+                WHERE rt.conversation_id = %s{visibility_clause}{subagent_clause}
                 ORDER BY rt.message_index ASC, cm.sequence ASC
                 """,
                 (conversation_id,),

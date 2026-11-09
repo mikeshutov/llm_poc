@@ -47,13 +47,15 @@ class MessageToolRepository:
         return result
 
     def append_tool_call(self, roundtrip_id: UUID, plan: Plan | None, step: PlanStep, *, input_payload=None,
-                         output_payload=None, evidence=None, status=None, error_message=None, duration_ms=None) -> UUID:
+                         output_payload=None, evidence=None, status=None, error_message=None, duration_ms=None,
+                         is_subagent: bool = False) -> UUID:
         sanitized_input = self._sanitize_for_storage(step.args if input_payload is None else input_payload)
         output = self._sanitize_for_storage(output_payload) if output_payload is not None else None
         if isinstance(output, dict):
             output.pop("evidence", None)
             output.pop("raw_payload", None)
         request_hash = build_signature({"tool_name": step.tool, "input": sanitized_input})
+        message_metadata = {"tool_name": step.tool}
         request_message = self._repo.append_message(
             roundtrip_id, kind="tool_call", role=ROLE_ASSISTANT, visibility="internal",
             content=f"{step.tool}: {step.hypothesis or step.plan}".strip(),
@@ -66,7 +68,9 @@ class MessageToolRepository:
                 "step_index": step.step_index,
                 "goal": step.plan, "hypothesis": step.hypothesis,
                 "call_metadata": self._sanitize_for_storage(step.metadata),
-            }, metadata={"tool_name": step.tool},
+            }, metadata=message_metadata,
+            is_subagent=is_subagent,
+            subagent_name=step.tool if is_subagent else None,
         )
         result_message = self._repo.append_message(
             roundtrip_id, kind="tool_result", role=ROLE_TOOL, visibility="internal",
@@ -85,7 +89,9 @@ class MessageToolRepository:
                 "provider_tool_call_id": step.id,
                 "step_index": step.step_index, "goal": step.plan, "hypothesis": step.hypothesis,
                 "call_metadata": self._sanitize_for_storage(step.metadata),
-            }, metadata={"tool_name": step.tool}, parent_message_id=request_message.id,
+            }, metadata=message_metadata, parent_message_id=request_message.id,
+            is_subagent=is_subagent,
+            subagent_name=step.tool if is_subagent else None,
         )
         return result_message.id
 
@@ -119,6 +125,13 @@ class MessageToolRepository:
     def has_request_hash(self, roundtrip_id: UUID, request_hash: str) -> bool:
         return any(message.payload.get("request_hash") == request_hash
                    for message in self._repo.list_messages(roundtrip_id) if message.kind == "tool_result")
+
+    def count_request_hash(self, roundtrip_id: UUID, request_hash: str) -> int:
+        return sum(
+            message.payload.get("request_hash") == request_hash
+            for message in self._repo.list_messages(roundtrip_id)
+            if message.kind == "tool_result"
+        )
 
     def get_tool_calls(self, tool_call_ids: list[UUID]) -> list[ToolCall]:
         return [self._tool_call_from_message(message) for message in self._tool_messages_for_ids(tool_call_ids)]

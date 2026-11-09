@@ -168,6 +168,19 @@ class ToolMetadata(BaseModel):
     ruling_source: str | None = None
 
 
+class ToolOutcomeStatus(StrEnum):
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    NEEDS_INPUT = "needs_input"
+    FAILED = "failed"
+
+
+class ToolOutcome(BaseModel):
+    status: ToolOutcomeStatus
+    reason: str | None = None
+    missing_inputs: list[str] = Field(default_factory=list)
+
+
 class ToolResult(BaseModel):
     tool_call_id: UUID | None = None
     plan_step_id: UUID | None = None
@@ -178,6 +191,7 @@ class ToolResult(BaseModel):
     result: Any = None
     tool_metadata: ToolMetadata = Field(default_factory=ToolMetadata)
     evidence: list[EvidenceView] = Field(default_factory=list)
+    state: ToolOutcome | None = None
 
     @classmethod
     def error(cls, error: str, **extra_result: Any) -> "ToolResult":

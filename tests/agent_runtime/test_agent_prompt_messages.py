@@ -73,7 +73,7 @@ def test_agent_prompt_sends_tool_result_as_native_tool_messages() -> None:
         '{\n  "tool_name": "search_products",\n  "status": "completed",\n'
         '  "error_message": null,\n  "duration_ms": null,\n'
         '  "result": {\n    "raw": "do not send this"\n  },\n'
-        '  "evidence": [\n    {\n      "id": "evidence-1",\n'
+            '  "evidence": [\n    {\n      "evidence_id": "evidence-1",\n'
         '      "title": "Boots",\n      "summary": "Waterproof boots"\n'
         '    }\n  ],\n  "tool_metadata": {}\n}'
     )

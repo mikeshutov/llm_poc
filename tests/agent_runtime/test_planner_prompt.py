@@ -65,6 +65,9 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
     assert evidence_section[0]["evidence"][0]["metadata"] == {"kind": "web"}
     assert "secret" not in str(evidence_section)
 
+    messages = prompt.build_messages()
+    assert all("Example Result" not in message.content for message in messages)
+
 
 def test_planner_prompt_explains_an_empty_execution_retry() -> None:
     state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
@@ -81,6 +84,14 @@ def test_top_level_planner_prompt_includes_shared_rules() -> None:
     prompt, _ = build_planner_prompt(state)
 
     assert "Each tool call must include an affirmative, factual, testable hypothesis" in prompt.build()
+
+
+def test_plan_execute_evaluate_planner_batches_independent_tools() -> None:
+    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
+
+    prompt, _ = build_planner_prompt(state)
+
+    assert "include all of them in the same plan" in prompt.build()
 
 
 def test_planner_prompt_includes_evaluator_missing_information() -> None:
