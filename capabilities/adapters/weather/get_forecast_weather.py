@@ -30,17 +30,16 @@ def _tool_result(location, daily: DailyWeather) -> ToolResult:
     location_name = (location.name or "").strip()
     summary = f"{location_name} forecast for {daily.date[0]} through {daily.date[-1]}."
     evidence = EvidenceView(
-        item_id=location_name,
-        tool_name=TOOL_NAME_GET_WEATHER,
-        title="Weather Forecast",
         summary=summary,
-        urls=[EvidenceUrl(url=OPEN_METEO_WEBSITE_URL, url_type=EvidenceUrlType.WEBSITE)],
-        location_name=location_name,
         source=TOOL_NAME_GET_WEATHER,
-        entity_type=TOOL_RESULT_TYPE_WEATHER,
-        llm_metadata={"daily": daily.model_dump(mode="json"), "country": location.country, "timezone": location.timezone},
-        raw_payload={"location": location.model_dump(mode="json"), "daily": daily.model_dump(mode="json")},
-    )
+        type=TOOL_RESULT_TYPE_WEATHER,
+        metadata={"daily": daily.model_dump(mode="json"), "country": location.country, "timezone": location.timezone},
+        data={
+            "item_id": location_name,
+            "title": "Weather Forecast",
+            "urls": [EvidenceUrl(url=OPEN_METEO_WEBSITE_URL, url_type=EvidenceUrlType.WEBSITE)],
+            "location_name": location_name,
+        })
     return ToolResult(result={"location": location.model_dump(mode="json"), "daily": daily.model_dump(mode="json")}, evidence=[evidence])
 
 
@@ -74,3 +73,7 @@ def get_forecast_weather(
 __all__ = [
     "get_forecast_weather",
 ]
+
+
+
+

@@ -15,16 +15,17 @@ MAX_CONTEXT_BYTES = 120_000
 def _project_context_message(message: ConversationMessage) -> dict:
     kind = str(message.kind)
     visibility = str(message.visibility)
+    if message.is_subagent:
+        return {}
     if visibility != "visible" and kind not in {"tool_call", "tool_result"}:
         return {}
     if kind in {"tool_call", "tool_result"}:
         payload = dict(message.payload or {})
         payload.pop("output_payload", None)
-        payload.pop("raw_payload", None)
         if isinstance(payload.get("evidence"), list):
             payload["evidence"] = [
                 bounded_json_value(
-                    {key: value for key, value in item.items() if key != "raw_payload"},
+                    item,
                     max_bytes=8_000,
                 ) if isinstance(item, dict) else item
                 for item in payload["evidence"]
@@ -70,16 +71,16 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
     # Keep the complete ordered message stream for model callers.  The
     # visible subset is derived separately for summaries and chat history.
     messages: list[dict] = []
-    # ConversationRepository returns this result in chronological order even
+    # list_roundtrips returns only completed roundtrips. ConversationRepository
+    # returns this result in chronological order even
     # when newest_first=True is used to select the most recent window. Keep
     # the selected window in oldest-to-newest order for the LLM message list.
     for roundtrip in conversation_roundtrips:
-        # The request service creates the pending roundtrip before building
-        # context and separately appends the current task as the final user
-        # message. Do not load that in-progress turn into prior history.
-        if roundtrip.status != "completed":
-            continue
-        roundtrip_messages = conversation_repository.list_messages(roundtrip.id, include_internal=True)
+        roundtrip_messages = conversation_repository.list_messages(
+            roundtrip.id,
+            include_internal=True,
+            exclude_subagents=True,
+        )
         for message in roundtrip_messages:
             if not message.content.strip() and not message.payload:
                 continue

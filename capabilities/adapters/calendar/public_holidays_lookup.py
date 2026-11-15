@@ -55,16 +55,15 @@ def _tool_result(result: PublicHolidaysResult) -> ToolResult:
             types=list(holiday.types),
         )
         evidence_view = EvidenceView(
-            item_id=f"{result.country_code}:{holiday.date}:{holiday.name}",
-            tool_name=TOOL_NAME_PUBLIC_HOLIDAYS_LOOKUP,
-            title=(holiday.name or "").strip() or "Public Holiday",
             summary=f"{holiday.date} in {result.country_code}",
-            published_at=str(holiday.date),
             source=TOOL_NAME_PUBLIC_HOLIDAYS_LOOKUP,
-            entity_type=TOOL_RESULT_TYPE_CALENDAR,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=holiday,
-        )
+        type=TOOL_RESULT_TYPE_CALENDAR,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": f"{result.country_code}:{holiday.date}:{holiday.name}",
+            "title": (holiday.name or "").strip() or "Public Holiday",
+            "published_at": str(holiday.date),
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -102,3 +101,7 @@ def public_holidays_lookup(year: int, country_code: str, region_code: str | None
             holidays=holidays,
         )
     )
+
+
+
+

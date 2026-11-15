@@ -10,8 +10,8 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from agent_runtime.context import get_current_conversation_id, get_current_user_id
+from assets.files.storage import conversation_workspace_path
 from common.config import ANONYMOUS_OWNER
-from common.config import FILES_DIR
 from capabilities.registry.constants import (
     TOOL_NAME_CODE_EXECUTE,
     TOOL_RESULT_TYPE_CODE_EXECUTION,
@@ -75,7 +75,7 @@ def _conversation_workspace() -> Path | None:
         or any(char in conversation_id for char in "/\\")
     ):
         return None
-    workspace = (Path(FILES_DIR) / user_id / conversation_id).resolve()
+    workspace = conversation_workspace_path(conversation_id, user_id=user_id).resolve()
     workspace.mkdir(parents=True, exist_ok=True)
     return workspace
 
@@ -169,14 +169,14 @@ def code_execute(code: str, timeout_seconds: int = 10) -> ToolResult:
         or f"Python sandbox exited with code {result.exit_code}."
     )
     evidence = EvidenceView(
-        item_id=f"python-execution-{result.exit_code}-{result.timed_out}",
-        tool_name=TOOL_NAME_CODE_EXECUTE,
-        title="Sandboxed Python execution",
         summary=summary,
         source=TOOL_NAME_CODE_EXECUTE,
-        entity_type=TOOL_RESULT_TYPE_CODE_EXECUTION,
-        llm_metadata=result.model_dump(mode="json"),
-    )
+        type=TOOL_RESULT_TYPE_CODE_EXECUTION,
+        metadata=result.model_dump(mode="json"),
+        data={
+            "item_id": f"python-execution-{result.exit_code}-{result.timed_out}",
+            "title": "Sandboxed Python execution",
+        })
     return ToolResult(result=result, evidence=[evidence])
 
 
@@ -185,3 +185,7 @@ __all__ = [
     "CodeExecuteArgs",
     "code_execute",
 ]
+
+
+
+

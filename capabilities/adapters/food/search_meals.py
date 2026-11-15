@@ -66,17 +66,16 @@ def _tool_result(result: MealSearchResult) -> ToolResult:
             ],
         )
         evidence_view = EvidenceView(
-            item_id=meal.id,
-            tool_name=TOOL_NAME_SEARCH_RECIPES,
-            title=meal.name,
             summary=summary,
-            urls=urls,
-            image_url=(meal.thumbnail or "").strip(),
             source=TOOL_NAME_SEARCH_RECIPES,
-            entity_type=TOOL_RESULT_TYPE_MEAL_RESULTS,
-            llm_metadata=metadata.model_dump(mode="json", exclude_none=True),
-            raw_payload=meal,
-        )
+        type=TOOL_RESULT_TYPE_MEAL_RESULTS,
+        metadata=metadata.model_dump(mode="json", exclude_none=True),
+        data={
+            "item_id": meal.id,
+            "title": meal.name,
+            "urls": urls,
+            "image_url": (meal.thumbnail or "").strip(),
+        })
         evidence.append(evidence_view)
     return ToolResult(
         result=result,
@@ -108,3 +107,7 @@ def search_meals(query: str) -> ToolResult:
         return _tool_result(rerank_meal_search_result(response, goal=query, limit=DEFAULT_MEAL_RERANK_LIMIT))
     except RequestException as e:
         return ToolResult.error(f"MealDB service unavailable: {e}")
+
+
+
+

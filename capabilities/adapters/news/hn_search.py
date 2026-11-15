@@ -48,17 +48,16 @@ def _tool_result(result: HnSearchResult) -> ToolResult:
             tags=list(hit.tags or []),
         )
         evidence_view = EvidenceView(
-            item_id=hit.object_id,
-            tool_name=TOOL_NAME_HN_SEARCH,
-            title=(hit.title or hit.url or hit.object_id or "").strip(),
             summary=_hit_summary(hit),
-            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
-            published_at=(hit.created_at or "").strip(),
             source=TOOL_NAME_HN_SEARCH,
-            entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=hit,
-        )
+        type=TOOL_RESULT_TYPE_NEWS_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": hit.object_id,
+            "title": (hit.title or hit.url or hit.object_id or "").strip(),
+            "urls": [EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
+            "published_at": (hit.created_at or "").strip(),
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -94,3 +93,7 @@ def hn_search(query: str, sort_by: str = "relevance") -> ToolResult:
         return _tool_result(rerank_hn_search_result(response, goal=query))
     except RequestException as e:
         return ToolResult.error(f"Hacker News search unavailable: {e}")
+
+
+
+

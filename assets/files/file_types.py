@@ -33,6 +33,24 @@ TEXT_FILE_TYPES = frozenset({
     FileType.DOCX,
 })
 
+TEXT_CONTENT_FILE_TYPES = frozenset({
+    FileType.TXT,
+    FileType.MARKDOWN,
+    FileType.CSV,
+    FileType.JSON,
+    FileType.PYTHON,
+    FileType.JAVASCRIPT,
+    FileType.TYPESCRIPT,
+    FileType.HTML,
+    FileType.CSS,
+    FileType.YAML,
+    FileType.YML,
+    FileType.XML,
+    FileType.SQL,
+    FileType.SHELL,
+    FileType.SVG,
+})
+
 IMAGE_FILE_TYPES = frozenset({
     FileType.PNG,
     FileType.JPG,
@@ -66,6 +84,7 @@ __all__ = [
     "FileType",
     "IMAGE_FILE_TYPES",
     "TEXT_FILE_TYPES",
+    "TEXT_CONTENT_FILE_TYPES",
     "WORKSPACE_FILE_TYPES",
     "WORKSPACE_FILE_TYPES_DESCRIPTION",
     "describe_file_types",

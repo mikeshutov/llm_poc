@@ -26,16 +26,15 @@ def _tool_result(result: GeocodedLocation | None) -> ToolResult:
         timezone=result.timezone,
     )
     evidence_view = EvidenceView(
-        item_id=(result.name or "").strip(),
-        tool_name=TOOL_NAME_GET_WEATHER,
-        title=(result.name or "").strip() or "Resolved City",
         summary=f"{(result.name or '').strip()}, {(result.country or '').strip()}",
-        location_name=(result.name or "").strip(),
         source=TOOL_NAME_GET_WEATHER,
-        entity_type=TOOL_RESULT_TYPE_LOCATION,
-        llm_metadata=metadata.model_dump(exclude_none=True),
-        raw_payload=result,
-    )
+        type=TOOL_RESULT_TYPE_LOCATION,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": (result.name or "").strip(),
+            "title": (result.name or "").strip() or "Resolved City",
+            "location_name": (result.name or "").strip(),
+        })
     return ToolResult(
         result=result,
         evidence=[evidence_view],
@@ -45,3 +44,7 @@ def _tool_result(result: GeocodedLocation | None) -> ToolResult:
 def resolve_city_location(city: str) -> ToolResult:
     """Resolve a city internally for workflows that need normalized location data."""
     return _tool_result(_weather_client.geocode_city(city))
+
+
+
+

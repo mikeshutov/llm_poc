@@ -36,10 +36,11 @@ from agents.main.request import TOP_LEVEL_PROFILE
 
 def test_normalize_generated_file_links_uses_file_evidence_url() -> None:
     evidence = EvidenceView(
-        title="report.pdf",
-        entity_type="file",
-        urls=[EvidenceUrl(url="/app/static/files/anonymous/report.pdf")],
-    )
+        type="file",
+        data={
+            "title": "report.pdf",
+            "urls": [EvidenceUrl(url="/app/static/files/anonymous/report.pdf")],
+        })
     blocks = _normalize_generated_file_links(
         [SynthesisResultBlock(content="[Download](sandbox:/mnt/data/report.pdf)")],
         [EvidenceStep(type="file", evidence=[evidence])],
@@ -50,16 +51,26 @@ def test_normalize_generated_file_links_uses_file_evidence_url() -> None:
 
 def test_normalize_generated_file_links_replaces_app_static_file_links() -> None:
     evidence = EvidenceView(
-        title="chart.png",
-        entity_type="file",
-        urls=[EvidenceUrl(url="/app/static/files/user-123/chart.png")],
-    )
+        type="file",
+        data={
+            "title": "chart.png",
+            "urls": [EvidenceUrl(url="/app/static/files/user-123/chart.png")],
+        })
     blocks = _normalize_generated_file_links(
         [SynthesisResultBlock(content="[Download](sandbox:/app/static/files/user-123/chart.png)")],
         [EvidenceStep(type="file", evidence=[evidence])],
     )
 
     assert blocks[0].content == "[Download](/app/static/files/user-123/chart.png)"
+
+
+def test_normalize_generated_file_links_removes_unverified_sandbox_urls() -> None:
+    blocks = _normalize_generated_file_links(
+        [SynthesisResultBlock(content="[Download](sandbox:/mnt/data/report.html)")],
+        [],
+    )
+
+    assert blocks[0].content == "[Download]"
 
 
 def test_main_reasoner_loops_until_final_structured_answer(monkeypatch) -> None:
@@ -385,3 +396,7 @@ def test_user_management_static_tool_runs_profile_agent(monkeypatch) -> None:
     assert captured == ["Remember that I like spicy food."]
     assert output.agent == "profile_management"
     assert output.status.value == "pending"
+
+
+
+

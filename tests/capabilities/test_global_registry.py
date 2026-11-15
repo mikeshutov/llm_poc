@@ -248,13 +248,13 @@ def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence() -> None
     cache = _FakeCacheRepository()
     calls = 0
     evidence = EvidenceView(
-        item_id="meal-1",
-        tool_name="search_meals",
-        title="Chicken soup",
         summary="A chicken soup recipe.",
         source="search_meals",
-        entity_type="meal_results",
-    )
+        type="meal_results",
+        data={
+            "item_id": "meal-1",
+            "title": "Chicken soup",
+        })
 
     def callback(_tool_input):
         nonlocal calls
@@ -269,7 +269,7 @@ def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence() -> None
 
     assert isinstance(first, ToolResult)
     assert isinstance(second, ToolResult)
-    assert second.evidence[0].title == "Chicken soup"
+    assert second.evidence[0].data["title"] == "Chicken soup"
     assert calls == 1
 
 
@@ -416,3 +416,9 @@ def test_cache_policy_controls_cacheability() -> None:
     assert ToolCachePolicy(60, is_user_specific=True).is_cache_allowed_for_user(None) is False
     with pytest.raises(ValueError, match="cache_ttl_seconds must be positive"):
         ToolCachePolicy(0)
+
+
+
+
+
+

@@ -164,17 +164,18 @@ def _build_evidence(card: ScryfallCard, pricing: list[MagicCardPriceEntry]) -> E
     )
     url = _card_url(card)
     return EvidenceView(
-        item_id=card.id,
-        tool_name=TOOL_NAME_SEARCH_MAGIC_CARDS,
-        title=card.name.strip(),
         summary=_card_summary(card),
-        urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
-        image_url=_card_image_url(card) or "",
         source=TOOL_NAME_SEARCH_MAGIC_CARDS,
-        entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
-        llm_metadata=metadata.model_dump(exclude_none=True),
-        raw_payload=card,
-    )
+        type=TOOL_RESULT_TYPE_CARD_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": card.id,
+            "title": card.name.strip(),
+            "urls": [EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
+            "image_url": _card_image_url(card) or "",
+            "cmc": card.cmc,
+            "oracle_text": card.oracle_text,
+        })
 
 
 def _build_search_query(query: str, commander_color_identity: str) -> str:
@@ -232,3 +233,7 @@ def search_magic_cards(
 
         evidence=evidence,
     )
+
+
+
+

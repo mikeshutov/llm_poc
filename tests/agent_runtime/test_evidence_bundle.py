@@ -46,7 +46,7 @@ def _call_id(step_id: str) -> UUID:
 
 
 def _record_for_item(bundle, item_id: str):
-    return next(record for record in bundle.evidence_by_id.values() if record.item_id == item_id)
+    return next(record for record in bundle.evidence_by_id.values() if record.data["item_id"] == item_id)
 
 
 def _tool_result(result, tool_name: str) -> ToolResult:
@@ -64,14 +64,13 @@ def _tool_result(result, tool_name: str) -> ToolResult:
         return wikipedia_tool_result(result)
     if tool_name == "custom_lookup":
         hydrated = EvidenceView(
-            item_id="fallback-1",
-            tool_name="custom_lookup",
-            title="Custom Lookup",
             summary="A generic fallback record.",
             source="custom_lookup",
-            entity_type="generic",
-            raw_payload=result,
-        )
+        type="generic",
+        data={
+            "item_id": "fallback-1",
+            "title": "Custom Lookup",
+        })
         return ToolResult(
             result=result,
             evidence=[hydrated],
@@ -96,7 +95,7 @@ def _gather_tool_results(iterations: list[IterationState]) -> list[ToolResult]:
                     update={
                         "tool_call_id": tool_result.tool_call_id or _call_id(step_id),
                         "plan_step_id": tool_result.plan_step_id or (step.db_id if step else None),
-                        "tool_name": tool_result.tool_name or (step.tool if step else ""),
+            "tool_name": tool_result.tool_name or (step.tool if step else ""),
                     }
                 )
             )
@@ -173,23 +172,23 @@ def test_build_evidence_bundle_creates_canonical_news_records() -> None:
     bundle = build_evidence_bundle([iteration])
 
     assert len(bundle.evidence_by_id) == 2
-    assert {view.title for view in bundle.evidence_views_by_tool_call_id[_call_id("P1E1")]} == {
+    assert {view.data["title"] for view in bundle.evidence_views_by_tool_call_id[_call_id("P1E1")]} == {
         "Toronto sees clear skies",
         "Humidity rises in Toronto",
     }
 
     first = _record_for_item(bundle, "https://example.com/news-1")
-    assert first.tool_call_id == _call_id("P1E1")
-    assert first.item_id == "https://example.com/news-1"
-    assert first.url == "https://example.com/news-1"
-    assert [(entry.url_type, entry.url) for entry in first.urls] == [
+    assert _call_id("P1E1") in bundle.evidence_views_by_tool_call_id
+    assert first.data["item_id"] == "https://example.com/news-1"
+    assert first.data["urls"][0]["url"] == "https://example.com/news-1"
+    assert [(entry["url_type"], entry["url"]) for entry in first.data["urls"]] == [
         ("website", "https://example.com/news-1"),
     ]
-    assert first.title == "Toronto sees clear skies"
+    assert first.data["title"] == "Toronto sees clear skies"
     assert first.summary == "Sunny conditions continue."
-    assert first.image_url == "https://example.com/news-1.jpg"
+    assert first.data["image_url"] == "https://example.com/news-1.jpg"
     assert first.source == "search_news"
-    assert first.entity_type == "news_results"
+    assert first.type == "news_results"
 
 
 def test_build_evidence_bundle_preserves_item_id_separately_from_evidence_id() -> None:
@@ -227,14 +226,14 @@ def test_build_evidence_bundle_preserves_item_id_separately_from_evidence_id() -
     bundle = build_evidence_bundle([iteration])
 
     record = _record_for_item(bundle, "Q172")
-    assert record.item_id == "Q172"
-    assert record.url == "https://www.wikidata.org/wiki/Q172"
-    assert [(entry.url_type, entry.url) for entry in record.urls] == [
+    assert record.data["item_id"] == "Q172"
+    assert record.data["urls"][0]["url"] == "https://www.wikidata.org/wiki/Q172"
+    assert [(entry["url_type"], entry["url"]) for entry in record.data["urls"]] == [
         ("website", "https://www.wikidata.org/wiki/Q172"),
     ]
-    assert record.title == "Toronto"
+    assert record.data["title"] == "Toronto"
     assert record.summary == "qid=Q172, itemLabel=Toronto, url=https://www.wikidata.org/wiki/Q172"
-    assert bundle.evidence_views_by_tool_call_id[_call_id("P1E1")][0].item_id == "Q172"
+    assert bundle.evidence_views_by_tool_call_id[_call_id("P1E1")][0].data["item_id"] == "Q172"
 
 
 def test_build_evidence_bundle_unwraps_nested_structured_fact_values() -> None:
@@ -271,8 +270,8 @@ def test_build_evidence_bundle_unwraps_nested_structured_fact_values() -> None:
     bundle = build_evidence_bundle([iteration])
 
     record = _record_for_item(bundle, "Toronto")
-    assert record.item_id == "Toronto"
-    assert record.title == "Toronto"
+    assert record.data["item_id"] == "Toronto"
+    assert record.data["title"] == "Toronto"
     assert record.summary == "item=http://www.wikidata.org/entity/Q172, itemLabel=Toronto"
 
 
@@ -321,10 +320,10 @@ def test_build_evidence_bundle_normalizes_weather_to_single_record() -> None:
     bundle = build_evidence_bundle([iteration])
 
     record = _record_for_item(bundle, "Toronto")
-    assert record.title == "Get Current Weather"
-    assert record.item_id == "Toronto"
-    assert record.location_name == "Toronto"
-    assert record.url == "https://open-meteo.com/"
+    assert record.data["title"] == "Get Current Weather"
+    assert record.data["item_id"] == "Toronto"
+    assert record.data["location_name"] == "Toronto"
+    assert record.data["urls"][0]["url"] == "https://open-meteo.com/"
     assert record.source == "weather_lookup"
     assert record.summary == "21.2 C in Toronto, Canada, wind 4.3 km/h, at 2026-08-12T11:15"
 
@@ -373,20 +372,19 @@ def test_build_evidence_bundle_normalizes_generic_lists_and_singletons() -> None
     bundle = build_evidence_bundle([iteration])
 
     web_record = _record_for_item(bundle, "https://example.com/ramen")
-    assert web_record.item_id == "https://example.com/ramen"
-    assert web_record.title == "Ramen spot"
+    assert web_record.data["item_id"] == "https://example.com/ramen"
+    assert web_record.data["title"] == "Ramen spot"
     assert web_record.summary == "Popular local ramen shop."
-    assert web_record.image_url == "https://example.com/ramen.jpg"
+    assert web_record.data["image_url"] == "https://example.com/ramen.jpg"
     assert web_record.source == "web_search"
-    assert web_record.entity_type == "web_search_results"
-    assert web_record.llm_metadata == {}
+    assert web_record.type == "web_search_results"
+    assert web_record.metadata == {}
 
     fallback_record = _record_for_item(bundle, "fallback-1")
-    assert fallback_record.item_id == "fallback-1"
-    assert fallback_record.title == "Custom Lookup"
+    assert fallback_record.data["item_id"] == "fallback-1"
+    assert fallback_record.data["title"] == "Custom Lookup"
     assert fallback_record.summary == "A generic fallback record."
-    assert fallback_record.url == ""
-    assert fallback_record.urls == []
+    assert fallback_record.data.get("urls", []) == []
 
 
 def test_build_evidence_bundle_uses_pre_normalized_tool_evidence_when_present() -> None:
@@ -417,15 +415,15 @@ def test_build_evidence_bundle_uses_pre_normalized_tool_evidence_when_present() 
                     },
                     "evidence": [
                         {
-                            "item_id": "ramen-1",
-                            "tool_name": "web_search",
-                            "title": "Pre-normalized Ramen Spot",
                             "summary": "Normalized by the tool layer.",
-                            "url": "https://example.com/ramen",
-                            "urls": [{"url": "https://example.com/ramen", "url_type": "website"}],
                             "source": "web_search",
-                            "entity_type": "web_search_results",
-                            "llm_metadata": {"quality": "high"},
+                            "type": "web_search_results",
+                            "data": {
+                                "item_id": "ramen-1",
+                                "title": "Pre-normalized Ramen Spot",
+                                "urls": [{"url": "https://example.com/ramen", "url_type": "website"}],
+                            },
+                            "metadata": {"quality": "high"},
                         }
                     ],
                 }
@@ -436,12 +434,12 @@ def test_build_evidence_bundle_uses_pre_normalized_tool_evidence_when_present() 
     bundle = build_evidence_bundle([iteration])
 
     record = _record_for_item(bundle, "ramen-1")
-    assert record.tool_call_id == _call_id("P1E1")
-    assert record.item_id == "ramen-1"
-    assert record.title == "Pre-normalized Ramen Spot"
+    assert _call_id("P1E1") in bundle.evidence_views_by_tool_call_id
+    assert record.data["item_id"] == "ramen-1"
+    assert record.data["title"] == "Pre-normalized Ramen Spot"
     assert record.summary == "Normalized by the tool layer."
-    assert record.url == "https://example.com/ramen"
-    assert record.llm_metadata == {"quality": "high"}
+    assert record.data["urls"][0]["url"] == "https://example.com/ramen"
+    assert record.metadata == {"quality": "high"}
 
 
 def test_build_evidence_bundle_prefers_tool_result_step_context_when_present() -> None:
@@ -467,11 +465,10 @@ def test_build_evidence_bundle_prefers_tool_result_step_context_when_present() -
                     "result": {"results": [{"title": "Ramen spot"}]},
                     "evidence": [
                         {
-                            "item_id": "ramen-1",
-                            "title": "Prepared Ramen Spot",
                             "summary": "Prepared on write.",
                             "source": "web_search",
-                            "entity_type": "web_search_results",
+                            "type": "web_search_results",
+                            "data": {"item_id": "ramen-1", "title": "Prepared Ramen Spot"},
                         }
                     ],
                 }
@@ -483,9 +480,9 @@ def test_build_evidence_bundle_prefers_tool_result_step_context_when_present() -
     evidence_steps = build_evidence_steps([iteration], bundle.evidence_views_by_tool_call_id)
 
     assert len(bundle.evidence_by_id) == 1
-    assert bundle.evidence_views_by_tool_call_id[_call_id("P9E3")][0].item_id == "ramen-1"
+    assert bundle.evidence_views_by_tool_call_id[_call_id("P9E3")][0].data["item_id"] == "ramen-1"
     assert evidence_steps[0].type == "web_search_results"
-    assert [evidence.item_id for evidence in evidence_steps[0].evidence] == ["ramen-1"]
+    assert [evidence.data["item_id"] for evidence in evidence_steps[0].evidence] == ["ramen-1"]
 
 
 def test_build_evidence_bundle_uses_canonical_evidence_when_present() -> None:
@@ -508,10 +505,10 @@ def test_build_evidence_bundle_uses_canonical_evidence_when_present() -> None:
                     "result": {"results": [{"title": "Ramen spot"}]},
                     "evidence": [
                         {
-                            "item_id": "ramen-1",
-                            "title": "View-only Ramen Spot",
                             "summary": "Evidence survived as a view only.",
-                            "llm_metadata": {"quality": "high"},
+                            "type": "web_search_results",
+                            "data": {"item_id": "ramen-1", "title": "View-only Ramen Spot"},
+                            "metadata": {"quality": "high"},
                         }
                     ],
                 }
@@ -522,17 +519,17 @@ def test_build_evidence_bundle_uses_canonical_evidence_when_present() -> None:
     bundle = build_evidence_bundle([iteration])
     evidence_steps = build_evidence_steps([iteration], bundle.evidence_views_by_tool_call_id)
 
-    assert [view.item_id for view in bundle.evidence_views_by_tool_call_id[_call_id("P1E1")]] == ["ramen-1"]
+    assert [view.data["item_id"] for view in bundle.evidence_views_by_tool_call_id[_call_id("P1E1")]] == ["ramen-1"]
     record = _record_for_item(bundle, "ramen-1")
-    assert record.item_id == "ramen-1"
-    assert record.title == "View-only Ramen Spot"
+    assert record.data["item_id"] == "ramen-1"
+    assert record.data["title"] == "View-only Ramen Spot"
     assert record.summary == "Evidence survived as a view only."
     assert record.source == "web_search"
-    assert record.entity_type == "web_search_results"
-    assert record.llm_metadata == {"quality": "high"}
+    assert record.type == "web_search_results"
+    assert record.metadata == {"quality": "high"}
     assert len(evidence_steps) == 1
     assert evidence_steps[0].type == "web_search_results"
-    assert [evidence.title for evidence in evidence_steps[0].evidence] == ["View-only Ramen Spot"]
+    assert [evidence.data["title"] for evidence in evidence_steps[0].evidence] == ["View-only Ramen Spot"]
 
 
 def test_build_evidence_bundle_uses_meal_entry_description_instead_of_wrapper_metadata() -> None:
@@ -580,16 +577,16 @@ def test_build_evidence_bundle_uses_meal_entry_description_instead_of_wrapper_me
     evidence_steps = build_evidence_steps([iteration], bundle.evidence_views_by_tool_call_id)
 
     record = _record_for_item(bundle, "meal-1")
-    assert record.item_id == "meal-1"
-    assert record.title == "Butter Tart"
+    assert record.data["item_id"] == "meal-1"
+    assert record.data["title"] == "Butter Tart"
     assert record.summary == "Bake the tart shells, fill with butter tart filling, and bake until set."
-    assert record.url == "https://example.com/butter-tart-recipe"
-    assert [(entry.url_type, entry.url) for entry in record.urls] == [
+    assert record.data["urls"][0]["url"] == "https://example.com/butter-tart-recipe"
+    assert [(entry["url_type"], entry["url"]) for entry in record.data["urls"]] == [
         ("website", "https://example.com/butter-tart-recipe"),
         ("youtube", "https://youtube.com/watch?v=butter-tart"),
     ]
-    assert record.image_url == "https://example.com/butter-tart.jpg"
-    assert record.llm_metadata == {
+    assert record.data["image_url"] == "https://example.com/butter-tart.jpg"
+    assert record.metadata == {
         "tags": [],
         "instructions": "Bake the tart shells, fill with butter tart filling, and bake until set.",
         "ingredients": [
@@ -597,7 +594,7 @@ def test_build_evidence_bundle_uses_meal_entry_description_instead_of_wrapper_me
             {"name": "Sugar", "measure": "1 cup"},
         ],
     }
-    assert bundle.evidence_views_by_tool_call_id[_call_id("P1E4")][0].llm_metadata == record.llm_metadata
+    assert bundle.evidence_views_by_tool_call_id[_call_id("P1E4")][0].metadata == record.metadata
     assert evidence_steps[0].metadata == {
         "retrieved_count": 1,
         "reranked": True,
@@ -644,10 +641,10 @@ def test_build_evidence_bundle_normalizes_wikipedia_results_per_page() -> None:
     bundle = build_evidence_bundle([iteration])
 
     record = _record_for_item(bundle, "https://en.wikipedia.org/wiki/British_cuisine")
-    assert record.item_id == "https://en.wikipedia.org/wiki/British_cuisine"
-    assert record.title == "British cuisine"
+    assert record.data["item_id"] == "https://en.wikipedia.org/wiki/British_cuisine"
+    assert record.data["title"] == "British cuisine"
     assert record.summary == "British cuisine covers the cooking traditions of the United Kingdom."
-    assert record.url == "https://en.wikipedia.org/wiki/British_cuisine"
+    assert record.data["urls"][0]["url"] == "https://en.wikipedia.org/wiki/British_cuisine"
 
 
 def test_build_evidence_bundle_uses_wikipedia_top_result_summary_when_results_are_empty() -> None:
@@ -684,9 +681,9 @@ def test_build_evidence_bundle_uses_wikipedia_top_result_summary_when_results_ar
     bundle = build_evidence_bundle([iteration])
 
     record = _record_for_item(bundle, "https://en.wikipedia.org/wiki/British_cuisine")
-    assert record.title == "British cuisine"
+    assert record.data["title"] == "British cuisine"
     assert record.summary == "British cuisine covers the cooking traditions of the United Kingdom."
-    assert record.url == "https://en.wikipedia.org/wiki/British_cuisine"
+    assert record.data["urls"][0]["url"] == "https://en.wikipedia.org/wiki/British_cuisine"
 
 
 def test_build_evidence_bundle_skips_empty_wikipedia_wrapper_without_results() -> None:
@@ -742,13 +739,11 @@ def test_build_evidence_steps_merges_deck_results_into_one_group() -> None:
                         "result": {"commander_name": "Uril, the Miststalker"},
                             "evidence": [
                             {
-                                "item_id": "uril-the-miststalker",
-                            "tool_name": "games_commander_details",
-                                "title": "Uril, the Miststalker (Commander)",
                                 "summary": "Aura-focused Naya Voltron commander.",
                                 "source": "games_commander_details",
-                                    "entity_type": "decks",
-                                    "llm_metadata": {"top_themes": "Auras, Voltron"},
+                                "type": "decks",
+                                "data": {"item_id": "uril-the-miststalker", "title": "Uril, the Miststalker (Commander)"},
+                                "metadata": {"top_themes": "Auras, Voltron"},
                             }
                         ],
                     }
@@ -774,13 +769,11 @@ def test_build_evidence_steps_merges_deck_results_into_one_group() -> None:
                         "result": {"commander_name": "Sigarda, Host of Herons"},
                             "evidence": [
                             {
-                                "item_id": "sigarda-host-of-herons",
-                            "tool_name": "games_commander_details",
-                                "title": "Sigarda, Host of Herons (Commander)",
                                 "summary": "Hexproof Selesnya aura commander.",
                                 "source": "games_commander_details",
-                                    "entity_type": "decks",
-                                    "llm_metadata": {"top_themes": "Auras, Enchantress"},
+                                "type": "decks",
+                                "data": {"item_id": "sigarda-host-of-herons", "title": "Sigarda, Host of Herons (Commander)"},
+                                "metadata": {"top_themes": "Auras, Enchantress"},
                             }
                         ],
                     }
@@ -795,7 +788,7 @@ def test_build_evidence_steps_merges_deck_results_into_one_group() -> None:
     assert len(evidence_steps) == 1
     assert evidence_steps[0].type == "decks"
     assert evidence_steps[0].metadata == {}
-    assert [evidence.item_id for evidence in evidence_steps[0].evidence] == [
+    assert [evidence.data["item_id"] for evidence in evidence_steps[0].evidence] == [
         "uril-the-miststalker",
         "sigarda-host-of-herons",
     ]
@@ -847,4 +840,10 @@ def test_build_evidence_steps_puts_wrapper_search_metadata_on_parent_step() -> N
         "reranked": True,
         "search_type": "web_search",
     }
-    assert evidence_steps[0].evidence[0].llm_metadata == {}
+    assert evidence_steps[0].evidence[0].metadata == {}
+
+
+
+
+
+

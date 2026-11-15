@@ -33,16 +33,15 @@ def _tool_result(result: IpLocation) -> ToolResult:
         timezone=result.timezone,
     )
     evidence_view = EvidenceView(
-        item_id=(result.query or result.city or result.country or "").strip(),
-        tool_name=TOOL_NAME_GET_CALLER_LOCATION,
-        title=location_name or "Caller Location",
         summary=f"{location_name} ({result.timezone})" if result.timezone and location_name else location_name or "Approximate caller location.",
-        location_name=(result.city or "").strip(),
         source=TOOL_NAME_GET_CALLER_LOCATION,
-        entity_type=TOOL_RESULT_TYPE_LOCATION,
-        llm_metadata=metadata.model_dump(exclude_none=True),
-        raw_payload=result,
-    )
+        type=TOOL_RESULT_TYPE_LOCATION,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": (result.query or result.city or result.country or "").strip(),
+            "title": location_name or "Caller Location",
+            "location_name": (result.city or "").strip(),
+        })
     return ToolResult(
         result=result,
         evidence=[evidence_view],
@@ -65,3 +64,7 @@ def get_caller_location() -> ToolResult:
         return _tool_result(_ip_api_client.get_location())
     except RequestException as e:
         return ToolResult.error(f"Location service unavailable: {e}")
+
+
+
+

@@ -30,16 +30,15 @@ def _tool_result(result: list[AssetChunkResult]) -> ToolResult:
     for asset_result in result:
         metadata = SearchAssetsMetadata(top_chunk=asset_result.content)
         evidence_view = EvidenceView(
-            item_id=str(asset_result.asset_id),
-            tool_name=TOOL_NAME_SEARCH_ASSETS,
-            title=asset_result.asset_name.strip() or "Asset Search Result",
             summary=asset_result.content.strip() or "Matched asset.",
-            urls=[EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)] if (file_url := static_file_url(asset_result.storage_path or "")) else ([EvidenceUrl(url=asset_result.url, url_type=EvidenceUrlType.WEBSITE)] if asset_result.url else []),
             source=TOOL_NAME_SEARCH_ASSETS,
-            entity_type=TOOL_RESULT_TYPE_ASSET_RESULTS,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=asset_result,
-        )
+        type=TOOL_RESULT_TYPE_ASSET_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": str(asset_result.asset_id),
+            "title": asset_result.asset_name.strip() or "Asset Search Result",
+            "urls": [EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)] if (file_url := static_file_url(asset_result.storage_path or "")) else ([EvidenceUrl(url=asset_result.url, url_type=EvidenceUrlType.WEBSITE)] if asset_result.url else []),
+        })
         evidence.append(evidence_view)
 
     return ToolResult(
@@ -67,3 +66,7 @@ def search_assets(query: str, asset_type: Optional[AssetType] = None, content_ty
         user_id=get_current_user_id(),
     )
     return _tool_result([AssetChunkResult.model_validate(result) for result in results])
+
+
+
+

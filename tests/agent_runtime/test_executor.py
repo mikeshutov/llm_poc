@@ -189,4 +189,46 @@ def test_run_executor_returns_standardized_subagent_result_without_merging_state
     assert delegated.inputs.task == ""
     assert len(parent.direct_tool_results) == 1
     assert parent.direct_tool_results[0].tool_name == "document_writing"
+
+
+def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch) -> None:
+    parent = _state_for_plan(Plan.model_validate({
+        "steps": [{
+            "id": "E1",
+            "plan": "Research the data.",
+            "agent": "research",
+            "args": {"task": "Research the data."},
+        }],
+    }))
+    delegated = AgentState.new(
+        task="",
+        agent_profile=AgentProfile(name="research", scope=MAIN_AGENT_MODEL_SCOPE),
+        execution_context=parent.execution_context,
+        llm=object(),
+    )
+    parent.available_agent_states = {"research": delegated}
+
+    completed = AgentState.new(
+        task="",
+        agent_profile=delegated.agent_profile,
+        execution_context=parent.execution_context,
+        llm=object(),
+    )
+    completed.node_states.evaluator.evaluation_status = "RETRYABLE"
+    completed.node_states.evaluator.missing_information = ["The annual wage series."]
+
+    class Registry:
+        @staticmethod
+        def get(profile):
+            return lambda state: completed
+
+    monkeypatch.setattr("agents.registry.agent_registry", Registry())
+
+    run_executor(parent)
+
+    outcome = parent.direct_tool_results[0].state
+    assert outcome is not None
+    assert outcome.status == "needs_input"
+    assert outcome.reason == "The annual wage series."
+    assert outcome.missing_inputs == ["The annual wage series."]
     assert parent.direct_tool_results[0].result["status"] == "pending"

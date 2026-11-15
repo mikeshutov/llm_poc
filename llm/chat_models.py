@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
@@ -18,9 +18,7 @@ from llm.conversation_model_config import (
     XAI_PROVIDER,
 )
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
-
-if TYPE_CHECKING:
-    from agent_runtime.models.agent_profile import AgentProfile
+from agent_runtime.models.agent_profile import AgentProfile
 
 
 def default_planner_model_for_agent_scope(agent_scope: str) -> str:

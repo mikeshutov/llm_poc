@@ -6,6 +6,9 @@ from common.config import FILES_DIR
 
 _STATIC_FILES_PATH = PurePosixPath(FILES_DIR.replace("\\", "/"))
 _STREAMLIT_STATIC_PREFIX = PurePosixPath("app")
+STATIC_FILES_URL_PREFIX = (
+    f"/{_STREAMLIT_STATIC_PREFIX.as_posix()}/{_STATIC_FILES_PATH.as_posix()}/"
+)
 
 
 def static_file_url(file_path: str) -> str:
@@ -21,3 +24,9 @@ def static_file_url(file_path: str) -> str:
         return ""
 
     return quote((PurePosixPath("/") / _STREAMLIT_STATIC_PREFIX / path).as_posix(), safe="/")
+
+
+__all__ = [
+    "STATIC_FILES_URL_PREFIX",
+    "static_file_url",
+]

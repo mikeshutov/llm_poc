@@ -87,6 +87,8 @@ class ConversationMessage:
     parent_message_id: UUID | None
     created_at: str
     embedding: list[float] | None = None
+    is_subagent: bool = False
+    subagent_name: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "payload", dict(self.payload) if isinstance(self.payload, dict) else {})

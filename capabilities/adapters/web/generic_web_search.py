@@ -64,17 +64,16 @@ def _web_search_tool_result(result: WebSearchResponse) -> ToolResult:
         url = (item.url or "").strip()
         metadata = GenericWebResultMetadata()
         evidence_view = EvidenceView(
-            item_id=url or item.title.strip(),
-            tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
-            title=item.title.strip(),
             summary=html_to_plain_text(item.description) or "Web search result.",
-            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
-            image_url=(item.image_url or "").strip(),
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
-            entity_type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=item,
-        )
+        type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": url or item.title.strip(),
+            "title": item.title.strip(),
+            "urls": [EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
+            "image_url": (item.image_url or "").strip(),
+        })
         evidence.append(evidence_view)
     return ToolResult(
         result=result,
@@ -94,17 +93,16 @@ def _news_search_tool_result(result: NewsSearchResponse) -> ToolResult:
         url = (item.url or "").strip()
         metadata = GenericNewsSearchMetadata(age=item.age)
         evidence_view = EvidenceView(
-            item_id=url or item.title.strip(),
-            tool_name=TOOL_NAME_GENERIC_WEB_SEARCH,
-            title=item.title.strip(),
             summary=html_to_plain_text(item.description) or (item.age or "").strip() or "News search result.",
-            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
-            image_url=(item.thumbnail_url or "").strip(),
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
-            entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=item,
-        )
+        type=TOOL_RESULT_TYPE_NEWS_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": url or item.title.strip(),
+            "title": item.title.strip(),
+            "urls": [EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
+            "image_url": (item.thumbnail_url or "").strip(),
+        })
         evidence.append(evidence_view)
     return ToolResult(
         result=result,
@@ -157,3 +155,7 @@ def generic_web_search(
                 )
             )
             return _web_search_tool_result(rerank_web_search_response(response, goal=normalized_query, limit=DEFAULT_TOP_K))
+
+
+
+

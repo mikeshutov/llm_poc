@@ -46,16 +46,15 @@ def _tool_result(result: StockPrice) -> ToolResult:
         market_cap=result.market_cap,
     )
     evidence_view = EvidenceView(
-        item_id=result.ticker,
-        tool_name=TOOL_NAME_GET_STOCK_PRICE,
-        title=result.ticker,
         summary=summary,
-        urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
         source=TOOL_NAME_GET_STOCK_PRICE,
-        entity_type=TOOL_RESULT_TYPE_FINANCE,
-        llm_metadata=metadata.model_dump(exclude_none=True),
-        raw_payload=result,
-    )
+        type=TOOL_RESULT_TYPE_FINANCE,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": result.ticker,
+            "title": result.ticker,
+            "urls": [EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
+        })
     return ToolResult(
         result=result,
         evidence=[evidence_view],
@@ -86,3 +85,7 @@ def get_stock_price(ticker: str) -> ToolResult:
         ))
     except Exception as e:
         return ToolResult.error(f"Could not retrieve stock price for {ticker}: {e}")
+
+
+
+

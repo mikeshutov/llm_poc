@@ -54,17 +54,16 @@ def _tool_result(result: BookSearchResult) -> ToolResult:
             languages=list(book.language or []),
         )
         evidence_view = EvidenceView(
-            item_id=book.key,
-            tool_name=TOOL_NAME_SEARCH_BOOKS,
-            title=book.title,
             summary=_book_summary(book),
-            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
-            image_url=image_url,
             source=TOOL_NAME_SEARCH_BOOKS,
-            entity_type=TOOL_RESULT_TYPE_BOOK_RESULTS,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=book,
-        )
+        type=TOOL_RESULT_TYPE_BOOK_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": book.key,
+            "title": book.title,
+            "urls": [EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
+            "image_url": image_url,
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -88,3 +87,7 @@ def search_books(query: str) -> ToolResult:
         return _tool_result(rerank_book_search_result(response, goal=query))
     except RequestException as e:
         return ToolResult.error(f"Open Library service unavailable: {e}")
+
+
+
+

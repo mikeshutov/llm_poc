@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any, Literal, TypeAlias
+from typing import Any
 
 from pydantic import BaseModel, Field
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -15,10 +15,6 @@ from personalization.profile.models import UserProfile
 from conversation.models.conversation_models import ConversationContext
 from retrieval.evidence import EvidenceView
 from capabilities.discovery.models import AvailableTool
-
-EVIDENCE_VIEW_COMPACT = "compact"
-EVIDENCE_VIEW_EVALUATOR = "evaluator"
-EvidenceViewMode: TypeAlias = Literal["compact", "evaluator"]
 
 MESSAGE_TYPES_BY_ROLE = {
     ROLE_USER: HumanMessage,
@@ -108,7 +104,6 @@ class AgentPrompt:
     evidence: list[EvidenceStep] | None = None
     missing_information: list[str] = field(default_factory=list)
     evidence_ids: list[str] = field(default_factory=list)
-    evidence_view: EvidenceViewMode = EVIDENCE_VIEW_COMPACT
     _enabled_sections: dict[str, dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
 
     def include_section(
@@ -231,6 +226,9 @@ class AgentPrompt:
             if key in raw_sections
             and key not in {
                 PromptSectionKeys.CONVERSATION_CONTEXT,
+                # Current tool results are emitted as native tool messages by
+                # the execution loop. Do not duplicate them as system JSON.
+                PromptSectionKeys.EVIDENCE,
                 # Tool definitions are supplied through bind_tools() by the
                 # caller. Do not duplicate the catalog as JSON system text.
                 PromptSectionKeys.AVAILABLE_TOOLS,
@@ -293,20 +291,21 @@ class AgentPrompt:
                         continue
                     evidence.append({
                         key: item.get(key)
-                        for key in (
-                            "id", "title", "summary",
-                            "urls", "image_url", "published_at", "source",
-                            "entity_type", "location_name", "llm_metadata",
-                        )
+                        for key in ("id", "type", "source", "summary", "data", "metadata")
                         if item.get(key) not in (None, "", [], {})
                     })
+                raw_output = payload.get("output_payload")
+                if isinstance(raw_output, dict) and "result" in raw_output:
+                    model_result = raw_output.get("result")
+                else:
+                    model_result = raw_output
                 result_payload = {
                     "tool_name": payload.get("tool_name", ""),
                     "status": payload.get("status", ""),
                     "error_message": payload.get("error_message"),
                     "duration_ms": payload.get("duration_ms"),
                     "result": bounded_json_value(
-                        payload.get("output_payload"), max_bytes=12_000
+                        model_result, max_bytes=12_000
                     ),
                     "evidence": evidence,
                     "tool_metadata": payload.get("tool_metadata", {}),
@@ -365,10 +364,12 @@ class AgentPrompt:
                     existing_evidence_ids = {
                         str(item.get("id"))
                         for item in aggregate["evidence"]
-                        if isinstance(item, dict) and item.get("id") is not None
+                        if isinstance(item, dict)
+                        and item.get("id") is not None
                     }
                     for item in result_payload["evidence"]:
-                        item_id = str(item.get("id")) if item.get("id") is not None else None
+                        item_id_value = item.get("id")
+                        item_id = str(item_id_value) if item_id_value is not None else None
                         if item_id is not None and item_id in existing_evidence_ids:
                             continue
                         aggregate["evidence"].append(item)
@@ -479,14 +480,7 @@ class AgentPrompt:
                         "evaluation_fields": list(step.evaluation_fields),
                         "metadata": dict(step.metadata),
                         "no_results": step.no_results,
-                        "evidence": [
-                            (
-                                evidence.to_evaluator_view()
-                                if self.evidence_view == EVIDENCE_VIEW_EVALUATOR
-                                else evidence.compact_view()
-                            )
-                            for evidence in step.evidence
-                        ],
+                        "evidence": [evidence.model_dump(mode="json") for evidence in step.evidence],
                     }
                 )
             )

@@ -23,7 +23,9 @@ def _build_premise(evidence_steps: list[EvidenceStep]) -> str:
     for step in evidence_steps:
         for evidence in step.evidence:
             fields = evidence.to_candidate().fields
-            name = evidence.title.strip() or evidence.item_id.strip() or str(evidence.id)
+            name = str(evidence.data.get("title", "")).strip() or str(
+                evidence.data.get("item_id", "")
+            ).strip() or evidence.id
             available_fields = [
                 key
                 for key, value in fields.items()

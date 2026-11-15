@@ -27,35 +27,39 @@ def test_html_to_plain_text_normalizes_entities_and_whitespace() -> None:
 
 def test_evidence_view_normalizes_llm_facing_text() -> None:
     evidence = EvidenceView(
-        title="<b>DEWALT</b>&#x20;20V",
         summary="<p>Brushless&nbsp;drill.</p>",
-        llm_metadata={"seller": "<em>Amazon</em>&#x20;Store"},
-    )
+        metadata={"seller": "<em>Amazon</em>&#x20;Store"},
+        data={
+            "title": "<b>DEWALT</b>&#x20;20V",
+        })
 
-    compact_view = evidence.compact_view()
+    compact_view = evidence.model_dump(mode="json")
 
-    assert compact_view["title"] == "DEWALT 20V"
+    assert compact_view["data"]["title"] == "DEWALT 20V"
     assert compact_view["summary"] == "Brushless drill."
     assert compact_view["metadata"] == {"seller": "Amazon Store"}
 
 
 def test_evidence_view_projects_semantic_fields_to_reranker_candidate() -> None:
     evidence = EvidenceView(
-        item_id="drill-1",
-        title="DEWALT 20V",
         summary="Brushless drill.",
-        urls=[{"url": "https://example.com/drill"}],
-        image_url="https://example.com/drill.jpg",
         source="product-search",
-        llm_metadata={"category": "Tools", "color": "Yellow"},
-    )
+        metadata={"category": "Tools", "color": "Yellow"},
+        data={
+            "item_id": "drill-1",
+            "title": "DEWALT 20V",
+            "urls": [{"url": "https://example.com/drill"}],
+            "image_url": "https://example.com/drill.jpg",
+        })
 
     candidate = evidence.to_candidate()
 
     assert candidate.id == "drill-1"
     assert candidate.fields == {
+        "item_id": "drill-1",
         "title": "DEWALT 20V",
-        "summary": "Brushless drill.",
+        "urls": [{"url": "https://example.com/drill"}],
+        "image_url": "https://example.com/drill.jpg",
         "category": "Tools",
         "color": "Yellow",
     }
@@ -169,4 +173,10 @@ def test_product_result_metadata_is_not_repeated_on_each_evidence_item() -> None
         "reranked": True,
         "product_source": "web",
     }
-    assert result.evidence[0].llm_metadata == {}
+    assert result.evidence[0].metadata == {}
+
+
+
+
+
+

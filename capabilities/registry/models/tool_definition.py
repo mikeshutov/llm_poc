@@ -11,14 +11,12 @@ from capabilities.registry.result_schemas import RESULT_SCHEMAS
 from capabilities.retry.policy import RetryPolicy
 
 DEFAULT_RESULT_FIELDS = (
-    "summary",
-    "url",
-    "image_url",
-    "published_at",
+    "id",
+    "type",
     "source",
-    "entity_type",
-    "location_name",
+    "summary",
     "metadata",
+    "data",
 )
 
 

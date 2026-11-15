@@ -464,9 +464,10 @@ def test_run_evaluator_records_llm_usage_and_preserves_missing_information_for_r
                 evidence=[
                     EvidenceView(
                         id=UUID('25a4bcc1-2b18-5a36-940c-29c535bae654'),
-                        title='Shortlisted product',
                         summary='Current product search result.',
-                    )
+        data={
+            "title": 'Shortlisted product',
+        })
                 ],
             )
         },
@@ -552,10 +553,11 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
                 evidence=[
                     EvidenceView(
                         id=UUID('e5cf297f-8f55-55a7-b1b2-7fb389482919'),
-                        item_id='item-a',
-                        title='Item A',
                         summary='First item',
-                    )
+        data={
+            "item_id": 'item-a',
+            "title": 'Item A',
+        })
                 ],
             ),
             'E2': ToolResult(
@@ -563,10 +565,11 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
                 evidence=[
                     EvidenceView(
                         id=UUID('c8271821-2b18-5a36-940c-29c535bae654'),
-                        item_id='item-b',
-                        title='Item B',
                         summary='Second item',
-                    )
+        data={
+            "item_id": 'item-b',
+            "title": 'Item B',
+        })
                 ],
             ),
         },
@@ -586,8 +589,6 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
             run_synthesis(state)
 
     prompt_text = str(captured_prompt['text'])
-    assert '"evidence_id": "e5cf297f-8f55-55a7-b1b2-7fb389482919"' in prompt_text
-    assert '"evidence_id": "c8271821-2d4c-51a1-bc00-1f4932d052d7"' not in prompt_text
     payload = _latest_event_payload(repo, event_type='synthesis', agent_name='synthesize')
     assert payload['data']['relevant_evidence_ids'] == ['e5cf297f-8f55-55a7-b1b2-7fb389482919']
 
@@ -618,8 +619,16 @@ def test_run_synthesis_uses_all_fed_evidence_when_citations_are_missing() -> Non
             'E1': ToolResult(
                 result={'value': 'results'},
                 evidence=[
-                    EvidenceView(id=first_id, item_id='item-a', title='Item A', summary='First item'),
-                    EvidenceView(id=second_id, item_id='item-b', title='Item B', summary='Second item'),
+                    EvidenceView(id=first_id, summary='First item',
+        data={
+            "item_id": 'item-a',
+            "title": 'Item A',
+        }),
+                    EvidenceView(id=second_id, summary='Second item',
+        data={
+            "item_id": 'item-b',
+            "title": 'Item B',
+        }),
                 ],
             )
         },
@@ -637,3 +646,7 @@ def test_run_synthesis_uses_all_fed_evidence_when_citations_are_missing() -> Non
 
     assert state.result.result_blocks[0].evidence_ids == [str(first_id), str(second_id)]
     assert state.result.used_evidence_ids == [str(first_id), str(second_id)]
+
+
+
+

@@ -31,16 +31,15 @@ def _tool_result(result: WorldTime) -> ToolResult:
         abbreviation=result.abbreviation,
     )
     evidence_view = EvidenceView(
-        item_id=result.timezone,
-        tool_name=TOOL_NAME_GET_WORLD_TIME,
-        title=result.timezone,
         summary=f"{result.datetime} ({result.utc_offset}, {result.abbreviation})",
-        published_at=result.datetime,
         source=TOOL_NAME_GET_WORLD_TIME,
-        entity_type=TOOL_RESULT_TYPE_TIME,
-        llm_metadata=metadata.model_dump(exclude_none=True),
-        raw_payload=result,
-    )
+        type=TOOL_RESULT_TYPE_TIME,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": result.timezone,
+            "title": result.timezone,
+            "published_at": result.datetime,
+        })
     return ToolResult(
         result=result,
         evidence=[evidence_view],
@@ -65,3 +64,7 @@ def get_world_time(timezone: str) -> ToolResult:
         return _tool_result(_client.get_time(timezone))
     except Exception as e:
         return ToolResult.error(f"World Time API error: {e}")
+
+
+
+

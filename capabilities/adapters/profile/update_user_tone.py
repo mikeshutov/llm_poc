@@ -104,15 +104,14 @@ def _tool_result(result: UpdateUserToneResult) -> ToolResult:
     )
     summary = result.reason.strip() or f"Tone preferences {status_text}."
     evidence_view = EvidenceView(
-        item_id=(result.user_id or "").strip() or "current-user",
-        tool_name=TOOL_NAME_UPDATE_USER_TONE,
-        title="User Tone Preferences",
         summary=summary,
         source=TOOL_NAME_UPDATE_USER_TONE,
-        entity_type=TOOL_RESULT_TYPE_TONE,
-        llm_metadata=metadata.model_dump(exclude_none=True),
-        raw_payload=result,
-    )
+        type=TOOL_RESULT_TYPE_TONE,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": (result.user_id or "").strip() or "current-user",
+            "title": "User Tone Preferences",
+        })
     return ToolResult(
         result=result,
         evidence=[evidence_view],
@@ -232,3 +231,7 @@ def update_user_tone(
             tone=_tone_result_value(updated_profile.tone),
         ),
     )
+
+
+
+

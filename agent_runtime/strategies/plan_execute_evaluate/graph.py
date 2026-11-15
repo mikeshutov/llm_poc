@@ -29,6 +29,7 @@ class PlannerExecutorEvaluatorStrategy:
         builder.set_entry_point(PLAN_EDGE)
         builder.add_conditional_edges(PLAN_EDGE, validator, {
             EXECUTE_TOOLS_EDGE: EXECUTE_TOOLS_EDGE,
+            EVALUATE_EDGE: EVALUATE_EDGE,
             SYNTHESIZE_EDGE: END,
         })
         builder.add_conditional_edges(EVALUATE_EDGE, evaluator_router, {

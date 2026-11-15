@@ -55,16 +55,15 @@ def _tool_result(result: CocktailSearchResult) -> ToolResult:
             reranked=result.reranked,
         )
         evidence_view = EvidenceView(
-            item_id=cocktail.id,
-            tool_name=TOOL_NAME_SEARCH_COCKTAILS,
-            title=cocktail.name,
             summary=summary,
-            image_url=(cocktail.thumbnail or "").strip(),
             source=TOOL_NAME_SEARCH_COCKTAILS,
-            entity_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=cocktail,
-        )
+        type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": cocktail.id,
+            "title": cocktail.name,
+            "image_url": (cocktail.thumbnail or "").strip(),
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -88,3 +87,7 @@ def search_cocktails(query: str) -> ToolResult:
         return _tool_result(rerank_cocktail_search_result(response, goal=query, limit=DEFAULT_MEAL_RERANK_LIMIT))
     except RequestException as e:
         return ToolResult.error(f"CocktailDB service unavailable: {e}")
+
+
+
+

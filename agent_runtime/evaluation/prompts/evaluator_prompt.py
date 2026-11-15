@@ -3,7 +3,6 @@ from __future__ import annotations
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.main_state import MainState
 from agent_runtime.models.agent_prompt import (
-    EVIDENCE_VIEW_EVALUATOR,
     AgentPrompt,
     EvidenceStep,
     PromptSectionKeys,
@@ -27,7 +26,6 @@ def build_evaluator_prompt(state: AgentState | MainState, evidence: list[Evidenc
         user_profile=state.execution_context.user_profile,
         task=(state.inputs.task if isinstance(state, AgentState) else state.task).strip(),
         evidence=evidence,
-        evidence_view=EVIDENCE_VIEW_EVALUATOR,
         schema=EVALUATOR_SCHEMA,
     )
     prompt.include_section(PromptSectionKeys.USER_PROFILE)

@@ -1,3 +1,6 @@
 FILES_DIR = "static/files"
+ARTIFACTS_DIR = "artifacts"
+WORKSPACE_DIR = "workspace"
+WORKSPACES_DIR = "workspaces"
 IMAGE_MIME_PREFIX = "image/"
 ANONYMOUS_OWNER = "anonymous"

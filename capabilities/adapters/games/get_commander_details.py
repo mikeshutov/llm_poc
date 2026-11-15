@@ -85,16 +85,15 @@ def _tool_result(result: CommanderDetailsResult) -> ToolResult:
         similar_commanders=list(result.similar_commanders),
     )
     evidence_view = EvidenceView(
-        item_id=result.commander_slug,
-        tool_name=TOOL_NAME_GET_COMMANDER_DETAILS,
-        title=result.title.strip() or result.commander_name,
         summary=_summary(result.commander_name),
-        urls=[EvidenceUrl(url=result.page_url, url_type=EvidenceUrlType.WEBSITE)] if result.page_url else [],
         source=TOOL_NAME_GET_COMMANDER_DETAILS,
-        entity_type=TOOL_RESULT_TYPE_DECKS,
-        llm_metadata=metadata.model_dump(exclude_none=True),
-        raw_payload=result,
-    )
+        type=TOOL_RESULT_TYPE_DECKS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": result.commander_slug,
+            "title": result.title.strip() or result.commander_name,
+            "urls": [EvidenceUrl(url=result.page_url, url_type=EvidenceUrlType.WEBSITE)] if result.page_url else [],
+        })
     return ToolResult(
         result=result,
         evidence=[evidence_view],
@@ -131,3 +130,7 @@ def get_commander_details(commander_name: str, theme_limit: int = 5, combo_limit
             similar_commanders=list(page.similar),
         )
     )
+
+
+
+

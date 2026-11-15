@@ -25,7 +25,7 @@ class OrchestratorPayloadToolSummary(BaseModel):
         seen_evidence_ids: set[UUID] = set()
 
         for evidence in evidence_by_id.values():
-            tool_name = evidence.tool_name.strip()
+            tool_name = evidence.source.strip()
             if not tool_name or evidence.id in seen_evidence_ids:
                 continue
             seen_evidence_ids.add(evidence.id)

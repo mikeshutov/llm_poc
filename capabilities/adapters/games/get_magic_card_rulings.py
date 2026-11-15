@@ -70,16 +70,15 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
 
     if not result.rulings:
         evidence_view = EvidenceView(
-            item_id=result.resolved_card.id,
-            tool_name=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
-            title=f"{result.resolved_card.name} Rulings",
             summary=f"No published rulings found for {result.resolved_card.name}.",
-            urls=[EvidenceUrl(url=card_url, url_type=EvidenceUrlType.WEBSITE)] if card_url else [],
             source=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
-            entity_type=TOOL_RESULT_TYPE_RULES,
-            llm_metadata=_build_metadata(result).model_dump(exclude_none=True),
-            raw_payload=result.resolved_card,
-        )
+        type=TOOL_RESULT_TYPE_RULES,
+        metadata=_build_metadata(result).model_dump(exclude_none=True),
+        data={
+            "item_id": result.resolved_card.id,
+            "title": f"{result.resolved_card.name} Rulings",
+            "urls": [EvidenceUrl(url=card_url, url_type=EvidenceUrlType.WEBSITE)] if card_url else [],
+        })
         return ToolResult(
             result=result,
             tool_metadata=_tool_metadata(result),
@@ -88,17 +87,16 @@ def _tool_result(result: MagicCardRulingsResult) -> ToolResult:
 
     for index, ruling in enumerate(result.rulings, start=1):
         evidence_view = EvidenceView(
-            item_id=f"{result.resolved_card.id}:ruling:{index}",
-            tool_name=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
-            title=f"{result.resolved_card.name} Ruling {index}",
             summary=ruling.comment.strip() or f"Ruling {index} for {result.resolved_card.name}.",
-            urls=[EvidenceUrl(url=card_url, url_type=EvidenceUrlType.WEBSITE)] if card_url else [],
-            published_at=ruling.published_at,
             source=TOOL_NAME_GET_MAGIC_CARD_RULINGS,
-            entity_type=TOOL_RESULT_TYPE_RULES,
-            llm_metadata=_build_metadata(result, ruling).model_dump(exclude_none=True),
-            raw_payload=ruling,
-        )
+        type=TOOL_RESULT_TYPE_RULES,
+        metadata=_build_metadata(result, ruling).model_dump(exclude_none=True),
+        data={
+            "item_id": f"{result.resolved_card.id}:ruling:{index}",
+            "title": f"{result.resolved_card.name} Ruling {index}",
+            "urls": [EvidenceUrl(url=card_url, url_type=EvidenceUrlType.WEBSITE)] if card_url else [],
+            "published_at": ruling.published_at,
+        })
         evidence.append(evidence_view)
 
     return ToolResult(
@@ -142,3 +140,7 @@ def get_magic_card_rulings(card_name: str, fuzzy: bool = True) -> ToolResult:
             rulings=list(rulings_response.data),
         )
     )
+
+
+
+

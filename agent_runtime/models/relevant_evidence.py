@@ -26,7 +26,7 @@ class RelevantEvidenceByTool(RootModel[dict[str, list[UUID]]]):
                 continue
             seen_evidence_ids.add(evidence_id)
             evidence = evidence_by_id.get(str(evidence_id))
-            tool_name = evidence.tool_name.strip() if evidence is not None else ""
+            tool_name = evidence.source.strip() if evidence is not None else ""
             if tool_name:
                 evidence_ids_by_tool.setdefault(tool_name, []).append(evidence_id)
 

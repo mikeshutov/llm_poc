@@ -52,16 +52,15 @@ def _tool_result(result: ExchangeRatesSnapshot) -> ToolResult:
             date=result.date,
         )
         evidence_view = EvidenceView(
-            item_id=currency_code,
-            tool_name=TOOL_NAME_EXCHANGE_RATES_LOOKUP,
-            title=f"{result.base} to {currency_code}",
             summary=f"Exchange rate on {result.date}: 1 {result.base} = {rate} {currency_code}.",
-            published_at=result.date,
             source=TOOL_NAME_EXCHANGE_RATES_LOOKUP,
-            entity_type=TOOL_RESULT_TYPE_FINANCE,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload={"currency": currency_code, "rate": rate, "snapshot": result},
-        )
+        type=TOOL_RESULT_TYPE_FINANCE,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": currency_code,
+            "title": f"{result.base} to {currency_code}",
+            "published_at": result.date,
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -78,16 +77,15 @@ def _series_tool_result(result: ExchangeRatesSeries) -> ToolResult:
             )
             evidence.append(
                 EvidenceView(
-                    item_id=f"{date_key}:{currency_code}",
-                    tool_name=TOOL_NAME_EXCHANGE_RATES_LOOKUP,
-                    title=f"{result.base} to {currency_code}",
                     summary=f"Exchange rate on {date_key}: 1 {result.base} = {rate} {currency_code}.",
-                    published_at=date_key,
                     source=TOOL_NAME_EXCHANGE_RATES_LOOKUP,
-                    entity_type=TOOL_RESULT_TYPE_FINANCE,
-                    llm_metadata=metadata.model_dump(exclude_none=True),
-                    raw_payload={"date": date_key, "currency": currency_code, "rate": rate, "series": result},
-                )
+        type=TOOL_RESULT_TYPE_FINANCE,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": f"{date_key}:{currency_code}",
+            "title": f"{result.base} to {currency_code}",
+            "published_at": date_key,
+        })
             )
     return ToolResult(result=result, evidence=evidence)
 
@@ -129,3 +127,7 @@ def exchange_rates_lookup(
     if date:
         return _tool_result(_exchange_rates_client.get_historical_rates(date=date, base=base, symbols=symbols))
     return _tool_result(_exchange_rates_client.get_latest_rates(base=base, symbols=symbols))
+
+
+
+

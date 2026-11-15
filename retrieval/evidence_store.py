@@ -21,8 +21,6 @@ def _resolve_tool_name(
     if tool_result.tool_name.strip():
         return tool_result.tool_name.strip()
     for evidence in tool_result.evidence:
-        if evidence.tool_name.strip():
-            return evidence.tool_name.strip()
         if evidence.source.strip():
             return evidence.source.strip()
     return fallback_tool_name
@@ -155,7 +153,6 @@ def _rehydrate_tool_result_records(
     evidence = [
         _rehydrate_evidence_item(
             evidence,
-            tool_call_id=tool_result.tool_call_id,
             tool_name=tool_name,
         )
         for evidence in tool_result.evidence
@@ -166,17 +163,13 @@ def _rehydrate_tool_result_records(
 def _rehydrate_evidence_item(
     evidence: EvidenceView,
     *,
-    tool_call_id: UUID | None,
     tool_name: str,
 ) -> EvidenceView:
     merged = EvidenceView.model_validate(evidence.model_dump(mode="json"))
-    merged.tool_call_id = tool_call_id
-    if not merged.tool_name:
-        merged.tool_name = tool_name
     if not merged.source:
         merged.source = tool_name
-    if not merged.entity_type:
-        merged.entity_type = get_tool_result_type(tool_name)
+    if not merged.type or merged.type == "generic":
+        merged.type = get_tool_result_type(tool_name)
     return merged
 
 

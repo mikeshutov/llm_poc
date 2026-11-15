@@ -46,12 +46,13 @@ def test_main_state_gathers_typed_child_results_without_rebasing_ids() -> None:
         tool_name="get_current_weather",
         evidence=[
             EvidenceView(
-                item_id="Toronto",
-                title="Weather Result",
                 summary="21.2 C in Toronto.",
                 source="get_current_weather",
-                entity_type="weather",
-            )
+        type="weather",
+        data={
+            "item_id": "Toronto",
+            "title": "Weather Result",
+        })
         ],
     )
     profile_state.gather_tool_results = lambda: [profile_result]
@@ -64,12 +65,13 @@ def test_main_state_gathers_typed_child_results_without_rebasing_ids() -> None:
         tool_name="generic_web_search",
         evidence=[
             EvidenceView(
-                item_id="ramen-1",
-                title="Ramen Result",
                 summary="Popular ramen shop.",
                 source="generic_web_search",
-                entity_type="web_search_results",
-            )
+        type="web_search_results",
+        data={
+            "item_id": "ramen-1",
+            "title": "Ramen Result",
+        })
         ],
     )
     main_agent_state.gather_tool_results = lambda: [main_result]
@@ -103,7 +105,10 @@ def test_main_state_gathers_top_level_main_agent_results() -> None:
     top_level_state.direct_tool_results = [
         ToolResult(
             tool_name="generic_web_search",
-            evidence=[EvidenceView(id=evidence_id, title="Selected result", summary="Relevant")],
+            evidence=[EvidenceView(id=evidence_id, summary="Relevant",
+        data={
+            "title": "Selected result",
+        })],
         )
     ]
     top_level_state.result = top_level_state.result.copy(relevant_evidence_ids=[evidence_id])
@@ -111,3 +116,7 @@ def test_main_state_gathers_top_level_main_agent_results() -> None:
 
     assert main_state.gather_tool_results() == top_level_state.direct_tool_results
     assert main_state.gather_relevant_evidence_ids() == [evidence_id]
+
+
+
+

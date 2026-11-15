@@ -35,10 +35,11 @@ from retrieval.evidence_store import (
     filter_evidence_steps,
 )
 from agent_runtime.synthesis.synthesis import _build_result_blocks
+from assets.files.urls import STATIC_FILES_URL_PREFIX
 
 
 _GENERATED_FILE_LINK = re.compile(
-    r"\]\(\s*(?:(?:sandbox:)?/app/static/files/|sandbox:/mnt/data/)"
+    rf"\]\(\s*(?:(?:sandbox:)?{re.escape(STATIC_FILES_URL_PREFIX)}|sandbox:/mnt/data/)"
     r"(?P<path>[^)\s]+)\s*\)",
     re.IGNORECASE,
 )
@@ -56,18 +57,20 @@ def _normalize_generated_file_links(
     file_urls: dict[str, str] = {}
     for step in evidence_steps:
         for evidence in step.evidence:
-            if evidence.entity_type != "file" or not evidence.url:
+            urls = evidence.data.get("urls", [])
+            evidence_url = next((entry.get("url", "") for entry in urls if isinstance(entry, dict) and entry.get("url")), "")
+            if evidence.type != "file" or not evidence_url:
                 continue
-            file_urls[_file_name_key(evidence.title)] = evidence.url
+            file_urls[_file_name_key(str(evidence.data.get("title", "")))] = evidence_url
 
-    if not file_urls:
-        return result_blocks
     fallback_url = next(iter(file_urls.values())) if len(file_urls) == 1 else ""
 
     def replace_link(match: re.Match[str]) -> str:
         filename = PurePosixPath(unquote(match.group("path"))).name
         canonical_url = file_urls.get(_file_name_key(filename), fallback_url)
-        return f"]({canonical_url})" if canonical_url else match.group(0)
+        # Never expose model- or sandbox-generated filesystem links. A
+        # downloadable link is valid only when it came from file evidence.
+        return f"]({canonical_url})" if canonical_url else "]"
 
     return [
         block.model_copy(update={"content": _GENERATED_FILE_LINK.sub(replace_link, block.content)})

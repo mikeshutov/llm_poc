@@ -32,12 +32,12 @@ def test_orchestrator_payload_derives_tool_summary_from_evidence() -> None:
             tool_name="get_current_weather",
             evidence=[
                 EvidenceView(
-                    tool_call_id=tool_call_id,
-                    item_id="Toronto",
-                    entity_type="weather",
-                    title="Weather Result",
+        type="weather",
                     summary="21 C in Toronto.",
-                )
+        data={
+            "item_id": "Toronto",
+            "title": "Weather Result",
+        })
             ],
         )
     ]
@@ -64,8 +64,8 @@ def test_orchestrator_payload_derives_tool_summary_from_evidence() -> None:
 
 
 def test_tool_summary_builds_from_canonical_evidence() -> None:
-    product_evidence = EvidenceView(tool_name="find_products")
-    ignored_evidence = EvidenceView(tool_name="")
+    product_evidence = EvidenceView(source="find_products", type="product_results")
+    ignored_evidence = EvidenceView()
 
     tool_summary = OrchestratorPayloadToolSummary.build(
         {
@@ -90,10 +90,9 @@ def test_orchestrator_result_groups_relevant_evidence_by_tool() -> None:
             evidence=[
                 EvidenceView(
                     id=evidence_id,
-                    tool_call_id=tool_call_id,
-                    tool_name="search_products",
-                    title="Product",
-                )
+        data={
+            "title": "Product",
+        })
             ],
         )
     ]
@@ -113,8 +112,8 @@ def test_orchestrator_result_groups_relevant_evidence_by_tool() -> None:
 
 
 def test_relevant_evidence_by_tool_builds_from_canonical_evidence() -> None:
-    product_evidence = EvidenceView(tool_name="find_products")
-    ignored_evidence = EvidenceView(tool_name="")
+    product_evidence = EvidenceView(source="find_products", type="product_results")
+    ignored_evidence = EvidenceView()
 
     relevant_evidence = RelevantEvidenceByTool.build(
         [product_evidence.id, product_evidence.id, ignored_evidence.id, uuid4()],
@@ -133,15 +132,13 @@ def test_excluded_tool_evidence_is_not_persisted() -> None:
     lookup_tool_call_id = uuid4()
     product_tool_call_id = uuid4()
     lookup_evidence = EvidenceView(
-        tool_call_id=lookup_tool_call_id,
-        tool_name=TOOL_NAME_LOOKUP_EVIDENCE,
-        title="Historical product",
-    )
+        data={
+            "title": "Historical product",
+        })
     product_evidence = EvidenceView(
-        tool_call_id=product_tool_call_id,
-        tool_name="find_products",
-        title="Current product",
-    )
+        data={
+            "title": "Current product",
+        })
     tool_results = [
         ToolResult(
             tool_call_id=lookup_tool_call_id,
@@ -179,3 +176,7 @@ def test_excluded_tool_evidence_is_not_persisted() -> None:
     assert relevant_evidence.model_dump(mode="json") == {
         "find_products": [str(product_evidence.id)]
     }
+
+
+
+

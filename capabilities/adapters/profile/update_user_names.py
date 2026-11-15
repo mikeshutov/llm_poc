@@ -64,13 +64,16 @@ def update_user_names(
         display_name=updated_profile.display_name,
     )
     evidence_view = EvidenceView(
-        item_id=str(result.user_id or ""),
-        tool_name=TOOL_NAME_UPDATE_USER_NAMES,
-        title="User Profile",
         summary="Updated supplied user name fields; empty fields were left unchanged.",
         source=TOOL_NAME_UPDATE_USER_NAMES,
-        entity_type=TOOL_RESULT_TYPE_PROFILE,
-        llm_metadata={},
-        raw_payload=result,
-    )
+        type=TOOL_RESULT_TYPE_PROFILE,
+        metadata={},
+        data={
+            "item_id": str(result.user_id or ""),
+            "title": "User Profile",
+        })
     return ToolResult(result=result, evidence=[evidence_view])
+
+
+
+

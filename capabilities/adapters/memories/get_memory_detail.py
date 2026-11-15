@@ -135,16 +135,15 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         model=result.model,
     )
     evidence_view = EvidenceView(
-        item_id=result.roundtrip_id,
-        tool_name=TOOL_NAME_GET_MEMORY_DETAIL,
-        title=result.title.strip() or "Memory Detail",
         summary=result.summary.strip() or "Retrieved prior conversation memory detail.",
-        published_at=result.created_at.strip(),
         source=TOOL_NAME_GET_MEMORY_DETAIL,
-        entity_type=TOOL_RESULT_TYPE_MEMORY_DETAIL,
-        llm_metadata=metadata.model_dump(mode="json", exclude_none=True),
-        raw_payload=result,
-    )
+        type=TOOL_RESULT_TYPE_MEMORY_DETAIL,
+        metadata=metadata.model_dump(mode="json", exclude_none=True),
+        data={
+            "item_id": result.roundtrip_id,
+            "title": result.title.strip() or "Memory Detail",
+            "published_at": result.created_at.strip(),
+        })
     return ToolResult(
         result=result,
         evidence=[evidence_view],
@@ -154,3 +153,7 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
 def _resolved_model_config(metadata: dict[str, Any]) -> ConversationModelConfig | None:
     value = metadata.get("resolved_model_config")
     return ConversationModelConfig.model_validate(value) if isinstance(value, dict) else None
+
+
+
+

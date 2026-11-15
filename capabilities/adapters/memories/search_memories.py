@@ -88,16 +88,15 @@ def search_memories(
             )
             evidence.append(
                 EvidenceView(
-                    item_id=str(memory.roundtrip_id),
-                    tool_name=TOOL_NAME_SEARCH_MEMORIES,
-                    title=f"Memory from message {memory.message_index}",
                     summary=(memory.roundtrip_summary or "Retrieved prior conversation memory.").strip(),
-                    published_at=memory.created_at,
                     source=TOOL_NAME_SEARCH_MEMORIES,
-                    entity_type=TOOL_RESULT_TYPE_MEMORY_RESULTS,
-                    llm_metadata=metadata.model_dump(exclude_none=True),
-                    raw_payload=memory,
-                )
+        type=TOOL_RESULT_TYPE_MEMORY_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": str(memory.roundtrip_id),
+            "title": f"Memory from message {memory.message_index}",
+            "published_at": memory.created_at,
+        })
             )
         return ToolResult(result=memories, evidence=evidence)
 
@@ -129,15 +128,18 @@ def search_memories(
             relevance_score=memory.relevance_score,
         )
         evidence_view = EvidenceView(
-            item_id=str(memory.conversation_id),
-            tool_name=TOOL_NAME_SEARCH_MEMORIES,
-            title="Conversation Memory",
             summary=memory.summary,
-            published_at=memory.last_used_date,
             source=TOOL_NAME_SEARCH_MEMORIES,
-            entity_type=TOOL_RESULT_TYPE_MEMORY_RESULTS,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=memory,
-        )
+        type=TOOL_RESULT_TYPE_MEMORY_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": str(memory.conversation_id),
+            "title": "Conversation Memory",
+            "published_at": memory.last_used_date,
+        })
         evidence.append(evidence_view)
     return ToolResult(result=memories, evidence=evidence)
+
+
+
+

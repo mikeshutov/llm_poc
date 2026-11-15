@@ -7,14 +7,16 @@ from agent_runtime.strategies.react.subagent_prompt import build_subagent_decisi
 def test_document_writing_agent_exposes_safe_file_tools() -> None:
     assert DOCUMENT_WRITING_PROFILE.name == "document_writing"
     assert DOCUMENT_WRITING_PROFILE.tool_names == {
-        "file_create",
         "file_read",
-        "file_edit",
         "file_list",
-        "file_move",
         "memory_lookup_evidence",
         "web_fetch",
         "writing_templates",
+        "workspace_file_write",
+        "workspace_file_read",
+        "workspace_file_edit",
+        "workspace_file_list",
+        "workspace_file_promote",
     }
     assert "file_delete" not in DOCUMENT_WRITING_PROFILE.tool_names
 
@@ -32,9 +34,9 @@ def test_document_writing_react_prompt_exposes_file_creation_rules() -> None:
 
     prompt, tools = build_subagent_decision_prompt(state)
 
-    assert "file_create" in {tool.name for tool in tools}
-    assert "file_create for new documents" in prompt.build()
-    assert "select a writing template before calling file_create" in prompt.build()
+    assert "workspace_file_write" in {tool.name for tool in tools}
+    assert "workspace_file_promote" in {tool.name for tool in tools}
+    assert "select a writing template before calling workspace_file_write" in prompt.build()
     assert "required_fields" in prompt.build()
     assert "OUTPUT CONTRACT" in prompt.build()
     assert '"status"' in prompt.build()

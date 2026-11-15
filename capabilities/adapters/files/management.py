@@ -108,22 +108,21 @@ def _index(file_id: UUID, content: str) -> None:
 def _file_evidence(file: FileAsset, *, tool_name: str, summary: str) -> EvidenceView:
     file_url = static_file_url(file.storage_path)
     return EvidenceView(
-        item_id=str(file.id),
-        tool_name=tool_name,
-        title=file.name,
         summary=summary,
-        urls=[EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)] if file_url else [],
         source=tool_name,
-        entity_type=TOOL_RESULT_TYPE_FILE,
-        llm_metadata={
+        type=TOOL_RESULT_TYPE_FILE,
+        metadata={
             "file_id": str(file.id),
             "filename": file.name,
             "mime_type": file.mime_type,
             "storage_path": file.storage_path,
             "size_bytes": file.size_bytes,
         },
-        raw_payload=file,
-    )
+        data={
+            "item_id": str(file.id),
+            "title": file.name,
+            "urls": [EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)] if file_url else [],
+        })
 
 
 def _file_result(file: FileAsset, message: str, *, tool_name: str) -> ToolResult:
@@ -275,7 +274,13 @@ def file_move(file_id: str, destination: str) -> ToolResult:
         raise ValueError(f"No file found with id '{file_id}'.")
     file = row
     source = _safe_path(file.storage_path)
-    target = _safe_path(os.path.join(FILES_DIR, destination))
+    artifacts_root = scoped_file_path(
+        ".managed-file-root",
+        user_id=get_current_user_id(),
+    ).parent.resolve()
+    target = (artifacts_root / destination).resolve()
+    if target != artifacts_root and artifacts_root not in target.parents:
+        raise ValueError("File destination must remain inside the managed artifacts directory.")
     if target.exists():
         raise ValueError(f"A file already exists at '{destination}'.")
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -297,3 +302,7 @@ def file_move(file_id: str, destination: str) -> ToolResult:
         "File moved.",
         tool_name=TOOL_NAME_FILE_MOVE,
     )
+
+
+
+

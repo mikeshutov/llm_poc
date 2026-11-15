@@ -74,6 +74,7 @@ class AgentProfile:
     stage_model_selections: dict[str, ModelSelection] = field(default_factory=dict)
     delegatable: bool = True
     max_turns: int = DEFAULT_MAX_TURNS
+    required_completion_tools: set[str] = field(default_factory=set)
     planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
     synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION
     delegation_args_schema: type[BaseModel] = AgentDelegationArgs

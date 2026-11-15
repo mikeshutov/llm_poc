@@ -22,6 +22,7 @@ from rendering.debug import debug_render_message, render_agent_logs
 from rendering.feedback import render_feedback_controls
 from rendering.replay import render_replay_control
 from retrieval.evidence import EvidenceUrl, EvidenceView
+from assets.files.urls import STATIC_FILES_URL_PREFIX
 from agent_runtime.models.orchestrator_payload import OrchestratorPayload
 from agent_runtime.models.synthesized_result import SynthesisResultBlock
 from capabilities.registry.constants import TOOL_NAME_GENERIC_WEB_SEARCH
@@ -53,7 +54,7 @@ class EvidenceCard:
     url: str
     image_url: str
     source: str
-    entity_type: str
+    type: str
 
 
 CARD_LAYOUTS_BY_EVIDENCE_TYPE: dict[str, dict[str, int]] = {
@@ -82,23 +83,20 @@ INLINE_EVIDENCE_TOOL_NAMES: set[str] = {
 
 
 def _is_inline_link_evidence(evidence: EvidenceView) -> bool:
-    return (
-        evidence.tool_name.strip() in INLINE_EVIDENCE_TOOL_NAMES
-        or evidence.source.strip() in INLINE_EVIDENCE_TOOL_NAMES
-    )
+    return evidence.source.strip() in INLINE_EVIDENCE_TOOL_NAMES
 
 
 def _is_inline_label_evidence(evidence: EvidenceView) -> bool:
-    return evidence.entity_type.strip() in INLINE_EVIDENCE_TYPES
+    return evidence.type.strip() in INLINE_EVIDENCE_TYPES
 
 
 def _is_svg_file_evidence(evidence: EvidenceView, url: str) -> bool:
-    if evidence.entity_type.strip() not in FILE_EVIDENCE_TYPES:
+    if evidence.type.strip() not in FILE_EVIDENCE_TYPES:
         return False
-    mime_type = str(evidence.llm_metadata.get("mime_type", "")).casefold()
+    mime_type = str(evidence.metadata.get("mime_type", "")).casefold()
     if mime_type == "image/svg+xml":
         return True
-    filename = evidence.title.strip().casefold()
+    filename = str(evidence.data.get("title", "")).strip().casefold()
     return filename.endswith(".svg") or url.split("?", 1)[0].casefold().endswith(".svg")
 
 
@@ -112,16 +110,11 @@ def _browser_file_url(url: str) -> str:
 
 def _render_svg_preview(label: str, url: str) -> None:
     """Render a managed SVG inline while retaining its normal evidence link.
-
-    Streamlit's application static-file handler intentionally serves extensions
-    outside its safe allowlist (including ``.svg``) as ``text/plain``.  Using
-    the URL directly in an ``img`` tag therefore displays the SVG source.  For
-    managed files, embed the local SVG as a data URI instead; the evidence URL
-    remains available separately as the file link.
+       Kinda hacky for now but ensures the result shows up for now.
     """
     image_src = url
     parsed_path = unquote(urlparse(url).path)
-    static_prefix = "/app/static/files/"
+    static_prefix = STATIC_FILES_URL_PREFIX
     if parsed_path.startswith(static_prefix):
         relative_path = Path(parsed_path[len(static_prefix):])
         files_root = Path(FILES_DIR).resolve()
@@ -151,24 +144,24 @@ def _is_inline_evidence(evidence: EvidenceView) -> bool:
 
 
 def _inline_evidence_label(evidence: EvidenceView) -> str:
-    if evidence.entity_type.strip() in FILE_EVIDENCE_TYPES:
-        return evidence.title.strip() or str(evidence.id)
-    return evidence.summary.strip() or evidence.title.strip() or str(evidence.id)
+    if evidence.type.strip() in FILE_EVIDENCE_TYPES:
+        return str(evidence.data.get("title", "")).strip() or str(evidence.id)
+    return evidence.summary.strip() or str(evidence.data.get("title", "")).strip() or str(evidence.id)
 
 
 def _is_magic_card_evidence(evidence: EvidenceView) -> bool:
     return (
-        evidence.tool_name.strip() in {TOOL_NAME_SEARCH_MAGIC_CARDS, TOOL_NAME_GET_COMMANDER_CARDS}
-        and evidence.entity_type.strip() == TOOL_RESULT_TYPE_CARD_RESULTS
+        evidence.source.strip() in {TOOL_NAME_SEARCH_MAGIC_CARDS, TOOL_NAME_GET_COMMANDER_CARDS}
+        and evidence.type.strip() == TOOL_RESULT_TYPE_CARD_RESULTS
     )
 
 
 def _is_magic_card_ruling_evidence(evidence: EvidenceView) -> bool:
-    return evidence.entity_type.strip() == TOOL_RESULT_TYPE_RULES
+    return evidence.type.strip() == TOOL_RESULT_TYPE_RULES
 
 
 def _is_meal_evidence(evidence: EvidenceView) -> bool:
-    return evidence.entity_type.strip() == TOOL_RESULT_TYPE_MEAL_RESULTS
+    return evidence.type.strip() == TOOL_RESULT_TYPE_MEAL_RESULTS
 
 
 def format_timestamp(ts) -> str | None:
@@ -320,7 +313,7 @@ def _build_inline_evidence(
         inline_evidence.append(
             InlineEvidenceReference(
                 evidence_id=evidence_id,
-                title=evidence.title,
+                title=str(evidence.data.get("title", "")),
                 source=evidence.source,
             )
         )
@@ -343,9 +336,9 @@ def _build_block_cards(
             or _is_meal_evidence(evidence)
         ):
             continue
-        url = _primary_card_url(evidence.urls)
-        image_url = evidence.image_url.strip()
-        title = evidence.title.strip()
+        url = _primary_card_url(evidence.data.get("urls", []))
+        image_url = str(evidence.data.get("image_url", "")).strip()
+        title = str(evidence.data.get("title", "")).strip()
         summary = evidence.summary.strip()
         if not title or not (url or image_url):
             continue
@@ -357,17 +350,18 @@ def _build_block_cards(
                 url=url,
                 image_url=image_url,
                 source=evidence.source.strip(),
-                entity_type=evidence.entity_type.strip(),
+                type=evidence.type.strip(),
             )
         )
     return cards
 
 
-def _primary_card_url(urls: list[EvidenceUrl]) -> str:
+def _primary_card_url(urls: list[EvidenceUrl | dict]) -> str:
     for preferred_type in ("website", "youtube"):
         for entry in urls:
-            cleaned_url = entry.url.strip()
-            if entry.url_type == preferred_type and cleaned_url:
+            cleaned_url = entry.url.strip() if isinstance(entry, EvidenceUrl) else str(entry.get("url", "")).strip()
+            entry_type = entry.url_type if isinstance(entry, EvidenceUrl) else entry.get("url_type", "website")
+            if entry_type == preferred_type and cleaned_url:
                 return cleaned_url
     return ""
 
@@ -399,12 +393,12 @@ def _render_result_block(
         evidence = evidence_by_id.get(evidence.evidence_id)
         if evidence is None:
             continue
-        evidence_url = _primary_card_url(evidence.urls)
+        evidence_url = _primary_card_url(evidence.data.get("urls", []))
         if evidence_url:
-            label = evidence.title.strip() or evidence.source.strip() or str(evidence.id)
+            label = str(evidence.data.get("title", "")).strip() or evidence.source.strip() or str(evidence.id)
             browser_url = (
                 _browser_file_url(evidence_url)
-                if evidence.entity_type.strip() in FILE_EVIDENCE_TYPES
+                if evidence.type.strip() in FILE_EVIDENCE_TYPES
                 else evidence_url
             )
             inline_links.append((label, browser_url))
@@ -414,7 +408,7 @@ def _render_result_block(
         label = _inline_evidence_label(evidence)
         source = evidence.source.strip()
         rendered_label = f"{label} ({source})" if source else label
-        if evidence.entity_type.strip() in FILE_EVIDENCE_TYPES:
+        if evidence.type.strip() in FILE_EVIDENCE_TYPES:
             inline_file_labels.append(rendered_label)
         else:
             inline_labels.append(rendered_label)
@@ -480,7 +474,7 @@ def render_assistant_content(
             deduped_cards.append(card)
         cards_by_layout: dict[int, list[EvidenceCard]] = {}
         for card in deduped_cards:
-            layout = CARD_LAYOUTS_BY_EVIDENCE_TYPE.get(card.entity_type, {})
+            layout = CARD_LAYOUTS_BY_EVIDENCE_TYPE.get(card.type, {})
             per_row = layout.get("per_row", 3)
             cards_by_layout.setdefault(per_row, []).append(card)
 

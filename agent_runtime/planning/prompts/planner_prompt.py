@@ -22,6 +22,11 @@ MISSING_INFORMATION_REPLAN_RULE = (
     "as the goal, use existing evidence as context, and plan only tool calls that directly "
     "resolve those gaps."
 )
+BATCH_INDEPENDENT_TOOLS_RULE = (
+    "When multiple independent tools can materially advance the task, include all of them "
+    "in the same plan and call them in one planning turn instead of requesting them one at a time. "
+    "Only sequence calls when a later call needs the result of an earlier call."
+)
 
 def _is_profile_management_agent(state: AgentState) -> bool:
     return state.agent_profile.name == AgentName.PROFILE_MANAGEMENT
@@ -151,7 +156,7 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
             available_tools=(
                 [] if capabilities is None else list(capabilities.tools)
             ) + _prompt_tools(list(state.agent_profile.static_tools)),
-            rules=build_planner_rules(context.rules),
+            rules=f"{build_planner_rules(context.rules)}\n\n{BATCH_INDEPENDENT_TOOLS_RULE}",
         )
         for section in (
             PromptSectionKeys.USER_PROFILE,
@@ -170,7 +175,7 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
         evidence_bundle.evidence_views_by_tool_call_id,
     )
 
-    compiled_rules = build_planner_rules(context.rules)
+    compiled_rules = f"{build_planner_rules(context.rules)}\n\n{BATCH_INDEPENDENT_TOOLS_RULE}"
     if state.node_states.planner.no_result_attempts:
         compiled_rules = f"{compiled_rules}\n\nExecution Feedback:\n- {EMPTY_EXECUTION_REPLAN_RULE}"
     if state.node_states.evaluator.missing_information:
