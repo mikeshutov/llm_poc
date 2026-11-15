@@ -7,25 +7,18 @@ from retrieval.evidence import EvidenceUrl, EvidenceView, ToolMetadata, ToolResu
 from common.signatures import build_signature
 
 
-def test_compact_evidence_view_excludes_hydrated_fields() -> None:
+def test_evidence_view_serializes_the_canonical_envelope() -> None:
     evidence = EvidenceView(
         id=UUID("c8271821-2d4c-51a1-bc00-1f4932d052d7"),
-        item_id="card-1",
-        tool_name="search_magic_cards",
-        title="Knight of the Reliquary",
         summary="A creature card.",
-        urls=[EvidenceUrl(url="https://example.com/card")],
-        raw_payload={"oracle_text": "Grows with lands."},
-        llm_metadata={"rarity": "mythic", "legal_formats": ["commander"]},
-    )
-    assert evidence.compact_view() == {
-        "evidence_id": "c8271821-2d4c-51a1-bc00-1f4932d052d7",
-        "title": "Knight of the Reliquary",
-        "summary": "A creature card.",
-        "metadata": {"rarity": "mythic", "legal_formats": ["commander"]},
-    }
-    assert "metadata" not in evidence.model_dump()
-    assert evidence.model_dump()["llm_metadata"] == {"rarity": "mythic", "legal_formats": ["commander"]}
+        metadata={"rarity": "mythic", "legal_formats": ["commander"]},
+        data={
+            "item_id": "card-1",
+            "title": "Knight of the Reliquary",
+            "urls": [EvidenceUrl(url="https://example.com/card")],
+        })
+    assert set(evidence.model_dump(mode="json")) == {"id", "type", "source", "summary", "data", "metadata"}
+    assert evidence.model_dump()["metadata"] == {"rarity": "mythic", "legal_formats": ["commander"]}
 
 
 def test_tool_result_uses_a_typed_tool_metadata_object() -> None:
@@ -70,3 +63,7 @@ def test_signature_is_stable_for_equivalent_domain_data() -> None:
     assert build_signature({"title": "Black Lotus", "metadata": {"set": "LEA"}}) == build_signature(
         {"metadata": {"set": "LEA"}, "title": "Black Lotus"}
     )
+
+
+
+

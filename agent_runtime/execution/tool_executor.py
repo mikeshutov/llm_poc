@@ -539,7 +539,7 @@ def _agent_completion_result(
             "summary": summary,
             "evidence": [
                 bounded_json_value(
-                    item.model_dump(mode="json", exclude={"raw_payload"}),
+                    item.model_dump(mode="json"),
                     max_bytes=8_000,
                 )
                 for item in evidence

@@ -12,14 +12,13 @@ from capabilities.registry.constants import TOOL_RESULT_TYPE_CALCULATION
 
 def _tool_result(result: str) -> ToolResult:
     evidence_view = EvidenceView(
-        item_id=result,
-        tool_name=TOOL_NAME_CALCULATE,
-        title="Calculation Result",
         summary=result,
         source=TOOL_NAME_CALCULATE,
-        entity_type=TOOL_RESULT_TYPE_CALCULATION,
-        raw_payload=result,
-    )
+        type=TOOL_RESULT_TYPE_CALCULATION,
+        data={
+            "item_id": result,
+            "title": "Calculation Result",
+        })
     return ToolResult(
         result=result,
         evidence=[evidence_view],
@@ -52,3 +51,7 @@ def calculate(expression: str) -> ToolResult:
         return _tool_result(str(result))
     except Exception as e:
         return ToolResult.error(f"Could not evaluate expression: {e}")
+
+
+
+

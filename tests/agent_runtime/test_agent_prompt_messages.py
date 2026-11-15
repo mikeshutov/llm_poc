@@ -52,9 +52,8 @@ def test_agent_prompt_sends_tool_result_as_native_tool_messages() -> None:
                         "output_payload": {"raw": "do not send this"},
                         "evidence": [{
                             "id": "evidence-1",
-                            "title": "Boots",
                             "summary": "Waterproof boots",
-                            "raw_payload": {"large": "raw response"},
+                                "data": {"title": "Boots"},
                         }],
                     }, {}, None, "",
                 ),
@@ -73,8 +72,8 @@ def test_agent_prompt_sends_tool_result_as_native_tool_messages() -> None:
         '{\n  "tool_name": "search_products",\n  "status": "completed",\n'
         '  "error_message": null,\n  "duration_ms": null,\n'
         '  "result": {\n    "raw": "do not send this"\n  },\n'
-            '  "evidence": [\n    {\n      "evidence_id": "evidence-1",\n'
-        '      "title": "Boots",\n      "summary": "Waterproof boots"\n'
+            '  "evidence": [\n    {\n      "id": "evidence-1",\n'
+        '      "summary": "Waterproof boots",\n      "data": {\n        "title": "Boots"\n      }\n'
         '    }\n  ],\n  "tool_metadata": {}\n}'
     )
 

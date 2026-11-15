@@ -36,20 +36,15 @@ def test_get_by_ids_reads_canonical_evidence_views() -> None:
     evidence_id = uuid4()
     row = {
         "id": evidence_id,
-        "tool_call_id": uuid4(),
-        "item_id": "product-1",
-        "tool_name": "find_products",
-        "title": "Product",
         "summary": "A product.",
-        "urls": [{"url": "https://example.com", "url_type": "website"}],
-        "image_url": "",
-        "published_at": "",
         "source": "catalog",
-        "entity_type": "product_results",
-        "location_name": "",
-        "hash": "hash",
-        "llm_metadata": {"price": 25.0},
-        "raw_payload": {"internal_id": "product-1"},
+        "type": "product_results",
+        "data": {
+            "item_id": "product-1",
+            "title": "Product",
+            "urls": [{"url": "https://example.com", "url_type": "website"}],
+        },
+        "metadata": {"price": 25.0},
     }
     cursor = FakeCursor(fetchall_rows=[{"payload": {"evidence": [row]}}])
     repository = EvidenceRepository(conn=FakeConnection(cursor))
@@ -67,16 +62,17 @@ def test_get_by_ids_reads_canonical_evidence_views() -> None:
     assert evidence_by_id == {
         str(evidence_id): EvidenceView(
             id=evidence_id,
-            tool_call_id=row["tool_call_id"],
-            item_id="product-1",
-            tool_name="find_products",
-            title="Product",
             summary="A product.",
-            urls=[{"url": "https://example.com", "url_type": "website"}],
             source="catalog",
-            entity_type="product_results",
-            hash="hash",
-            llm_metadata={"price": 25.0},
-            raw_payload={"internal_id": "product-1"},
-        )
+        type="product_results",
+        metadata={"price": 25.0},
+        data={
+            "item_id": "product-1",
+            "title": "Product",
+            "urls": [{"url": "https://example.com", "url_type": "website"}],
+        })
     }
+
+
+
+

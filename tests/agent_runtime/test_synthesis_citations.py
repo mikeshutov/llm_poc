@@ -19,7 +19,10 @@ def test_synthesis_drops_citations_not_present_in_supplied_evidence() -> None:
         ),
         [EvidenceStep(
             type="search",
-            evidence=[EvidenceView(id=supplied_id, title="Supported result")],
+            evidence=[EvidenceView(id=supplied_id,
+        data={
+            "title": "Supported result",
+        })],
         )],
     )
 
@@ -38,7 +41,10 @@ def test_synthesis_does_not_fallback_to_all_evidence_after_invalid_citations() -
         ),
         [EvidenceStep(
             type="search",
-            evidence=[EvidenceView(id=supplied_id, title="Supported result")],
+            evidence=[EvidenceView(id=supplied_id,
+        data={
+            "title": "Supported result",
+        })],
         )],
     )
 
@@ -56,14 +62,16 @@ def test_synthesis_fallback_deduplicates_evidence_with_same_url() -> None:
             evidence=[
                 EvidenceView(
                     id=first_id,
-                    title="First result",
-                    urls=[EvidenceUrl(url="https://example.com/page")],
-                ),
+        data={
+            "title": "First result",
+            "urls": [EvidenceUrl(url="https://example.com/page")],
+        }),
                 EvidenceView(
                     id=second_id,
-                    title="Duplicate result",
-                    urls=[EvidenceUrl(url="https://example.com/page")],
-                ),
+        data={
+            "title": "Duplicate result",
+            "urls": [EvidenceUrl(url="https://example.com/page")],
+        }),
             ],
         )],
     )
@@ -83,11 +91,21 @@ def test_synthesis_deduplicates_explicit_citations_with_same_url() -> None:
         [EvidenceStep(
             type="search",
             evidence=[
-                EvidenceView(id=first_id, urls=[EvidenceUrl(url="https://example.com/page")]),
-                EvidenceView(id=second_id, urls=[EvidenceUrl(url="https://example.com/page")]),
+                EvidenceView(id=first_id,
+        data={
+            "urls": [EvidenceUrl(url="https://example.com/page")],
+        }),
+                EvidenceView(id=second_id,
+        data={
+            "urls": [EvidenceUrl(url="https://example.com/page")],
+        }),
             ],
         )],
     )
 
     assert result[0].evidence_ids == [str(first_id)]
     assert used_ids == [str(first_id)]
+
+
+
+

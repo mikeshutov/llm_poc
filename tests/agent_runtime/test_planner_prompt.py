@@ -44,14 +44,14 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
             result={"secret": "raw payload should not be in planner prompt"},
             evidence=[
                 EvidenceView(
-                    item_id="item-1",
-                        tool_name="web_search",
-                    title="Example Result",
                     summary="Short evidence summary.",
                         source="web_search",
-                    entity_type="web_search_results",
-                    llm_metadata={"kind": "web"},
-                )
+        type="web_search_results",
+        metadata={"kind": "web"},
+        data={
+            "item_id": "item-1",
+            "title": "Example Result",
+        })
             ],
         )
     ]
@@ -60,7 +60,7 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
     evidence_section = prompt.sections_raw[PromptSectionKeys.EVIDENCE]
 
     assert evidence_section[0]["type"] == "web_search_results"
-    assert evidence_section[0]["evidence"][0]["title"] == "Example Result"
+    assert evidence_section[0]["evidence"][0]["data"]["title"] == "Example Result"
     assert evidence_section[0]["evidence"][0]["summary"] == "Short evidence summary."
     assert evidence_section[0]["evidence"][0]["metadata"] == {"kind": "web"}
     assert "secret" not in str(evidence_section)
@@ -113,3 +113,7 @@ def test_planner_prompt_omits_missing_information_guidance_without_evaluator_fee
     prompt, _ = build_planner_prompt(state)
 
     assert "The evaluator identified unresolved missing_information below." not in prompt.build()
+
+
+
+

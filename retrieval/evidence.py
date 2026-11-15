@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Mapping, TypeVar
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
-from common.data import prune_empty_prompt_values
 from common.html_text import html_to_plain_text, normalize_html_values
 from retrieval.reranker_models.reranker import Candidate
 
@@ -21,130 +20,69 @@ class EvidenceUrl(BaseModel):
     url_type: EvidenceUrlType = EvidenceUrlType.WEBSITE
 
 
-class CompactEvidenceView(BaseModel):
-    evidence_id: UUID
-    title: str = ""
-    summary: str = ""
-    metadata: dict[str, JsonValue] = Field(default_factory=dict)
-
-
-class HydratedEvidenceView(CompactEvidenceView):
-    item_id: str = ""
-    tool_name: str = ""
-    urls: list[EvidenceUrl] = Field(default_factory=list)
-    image_url: str = ""
-    published_at: str = ""
-    source: str = ""
-    entity_type: str = ""
-    location_name: str = ""
-
-
-class EvaluatorEvidenceView(BaseModel):
-    evidence_id: UUID
-    summary: str = ""
-    present_data: dict[str, Any] = Field(default_factory=dict)
-
-
 class EvidenceView(BaseModel):
-    id: UUID = Field(default_factory=uuid4)
-    tool_call_id: UUID | None = None
-    hash: str = ""
-    item_id: str = ""
-    tool_name: str = ""
-    title: str = ""
-    summary: str = ""
-    urls: list[EvidenceUrl] = Field(default_factory=list)
-    image_url: str = ""
-    published_at: str = ""
-    source: str = ""
-    entity_type: str = ""
-    location_name: str = ""
-    llm_metadata: dict[str, JsonValue] = Field(default_factory=dict)
-    raw_payload: Any = None
+    """Stable envelope carrying a tool-defined, typed data payload."""
 
-    @field_validator("title", "summary", mode="before")
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    type: str = "generic"
+    source: str = ""
+    summary: str | None = None
+    data: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("data", "metadata", mode="before")
     @classmethod
-    def normalize_llm_text(cls, value: object) -> object:
+    def normalize_mapping(cls, value: object) -> dict[str, Any]:
+        if isinstance(value, BaseModel):
+            value = value.model_dump(mode="json")
+        normalized = normalize_html_values(dict(value or {}))
+        return TypeAdapter(dict[str, Any]).dump_python(normalized, mode="json")
+
+    @field_validator("id", "type", "source", mode="before")
+    @classmethod
+    def normalize_text(cls, value: object) -> str:
+        return str(value or "")
+
+    @field_validator("summary", mode="before")
+    @classmethod
+    def normalize_summary(cls, value: object) -> object:
         return html_to_plain_text(value) if isinstance(value, str) else value
 
-    @field_validator("llm_metadata", mode="before")
+    @field_validator("metadata", mode="before")
     @classmethod
-    def normalize_llm_metadata(cls, value: object) -> object:
-        return normalize_html_values(value)
+    def normalize_metadata(cls, value: object) -> dict[str, Any]:
+        return normalize_html_values(value or {})
 
-    @property
-    def url(self) -> str:
-        for preferred_type in (EvidenceUrlType.WEBSITE, EvidenceUrlType.YOUTUBE):
-            for entry in self.urls:
-                cleaned_url = entry.url.strip()
-                if entry.url_type == preferred_type and cleaned_url:
-                    return cleaned_url
-        for entry in self.urls:
-            cleaned_url = entry.url.strip()
-            if cleaned_url:
-                return cleaned_url
-        return ""
-
-    def compact_view(self) -> dict[str, Any]:
-        return CompactEvidenceView(
-            evidence_id=self.id,
-            title=self.title,
-            summary=self.summary,
-            metadata=self.llm_metadata,
-        ).model_dump(mode="json")
-
-    def to_candidate(self):
-        """Project this evidence into the semantic input used by the reranker."""
-        fields: dict[str, Any] = {
-            "title": self.title,
-            "summary": self.summary,
-            **self.llm_metadata,
-        }
+    def to_candidate(self) -> Candidate:
+        fields = {**self.data, **self.metadata}
         return Candidate(
-            id=self.item_id or str(self.id),
+            id=str(self.data.get("item_id") or self.id),
             fields={
-                name: value
-                for name, value in fields.items()
+                name: value for name, value in fields.items()
                 if value is not None and value != "" and value != [] and value != {}
             },
         )
 
-    def hydrated_view(self) -> dict[str, Any]:
-        return HydratedEvidenceView(
-            evidence_id=self.id,
-            item_id=self.item_id,
-            tool_name=self.tool_name,
-            title=self.title,
-            summary=self.summary,
-            urls=self.urls,
-            image_url=self.image_url,
-            published_at=self.published_at,
-            source=self.source,
-            entity_type=self.entity_type,
-            location_name=self.location_name,
-            metadata=self.llm_metadata,
-        ).model_dump(mode="json")
+EVIDENCE_TYPES: dict[str, type[BaseModel]] = {}
+EvidenceModel = TypeVar("EvidenceModel", bound=BaseModel)
 
-    def to_evaluator_view(self) -> dict[str, Any]:
-        hydrated_data = {
-            "title": self.title,
-            "summary": self.summary,
-            "urls": self.urls,
-            "image_url": self.image_url,
-            "published_at": self.published_at,
-            "source": self.source,
-            "entity_type": self.entity_type,
-            "location_name": self.location_name,
-        }
-        present_data = prune_empty_prompt_values({
-            **hydrated_data,
-            "metadata": self.llm_metadata,
-        })
-        return EvaluatorEvidenceView(
-            evidence_id=self.id,
-            summary=self.summary,
-            present_data=present_data,
-        ).model_dump(mode="json")
+
+def register_evidence_type(type_name: str, model: type[EvidenceModel]) -> type[EvidenceModel]:
+    EVIDENCE_TYPES[type_name] = model
+    return model
+
+
+def reconstruct_evidence_data(type_name: str, data: Mapping[str, Any]) -> Any:
+    model = EVIDENCE_TYPES.get(type_name)
+    return model.model_validate(data) if model is not None else dict(data)
+
+
+def from_evidence(view: EvidenceView) -> BaseModel:
+    """Reconstruct a registered typed payload from an evidence envelope."""
+    model_type = EVIDENCE_TYPES[view.type]
+    return model_type.model_validate(view.data)
 
 
 class EvidenceBundle(BaseModel):

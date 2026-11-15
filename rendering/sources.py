@@ -56,7 +56,7 @@ def render_sources_panel() -> None:
         return
 
     for source in sources:
-        label = source.title or source.evidence_id
+        label = str(source.data.get("title", "")) or source.id
         with st.expander(label, expanded=False):
             st.json(source.model_dump(), expanded=False)
 

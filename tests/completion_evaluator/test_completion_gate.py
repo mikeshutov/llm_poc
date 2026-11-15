@@ -50,10 +50,11 @@ def test_completion_gate_returns_satisfied_for_high_confidence_entailment() -> N
 def test_completion_gate_uses_compact_named_records_and_tool_hypothesis() -> None:
     evidence = EvidenceView(
         id=uuid4(),
-        title="Chicken soup",
         summary="A warm soup recipe.",
-        llm_metadata={"servings": 4, "diet": "vegetarian"},
-    )
+        metadata={"servings": 4, "diet": "vegetarian"},
+        data={
+            "title": "Chicken soup",
+        })
     steps = [
         EvidenceStep(
             type="meal_results",
@@ -66,7 +67,7 @@ def test_completion_gate_uses_compact_named_records_and_tool_hypothesis() -> Non
     )
 
     assert _build_premise(steps) == (
-        "Chicken soup with summary, servings, diet"
+        "Chicken soup with servings, diet"
     )
     assert try_completion_evaluation(_state(), steps, client=client) is True
     assert client.calls[0][1] == "Find a vegetarian soup recipe."
@@ -75,10 +76,11 @@ def test_completion_gate_uses_compact_named_records_and_tool_hypothesis() -> Non
 def test_completion_gate_includes_values_only_for_evaluation_fields() -> None:
     evidence = EvidenceView(
         id=uuid4(),
-        title="Kenyan Beef Curry",
         summary="A spicy curry.",
-        llm_metadata={"area": "Kenyan", "category": "Beef", "ingredients": ["beef", "onion"]},
-    )
+        metadata={"area": "Kenyan", "category": "Beef", "ingredients": ["beef", "onion"]},
+        data={
+            "title": "Kenyan Beef Curry",
+        })
     steps = [
         EvidenceStep(
             type="meal_results",
@@ -88,7 +90,7 @@ def test_completion_gate_includes_values_only_for_evaluation_fields() -> None:
     ]
 
     assert _build_premise(steps) == (
-        'Kenyan Beef Curry with summary, area, category, ingredients=["beef", "onion"]'
+        'Kenyan Beef Curry with area, category, ingredients=["beef", "onion"]'
     )
 
 
@@ -111,3 +113,7 @@ def test_completion_gate_returns_none_without_evidence() -> None:
 
     assert result is False
     assert client.calls == []
+
+
+
+

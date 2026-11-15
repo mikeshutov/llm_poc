@@ -258,7 +258,10 @@ def test_execution_result_router_replans_before_evaluation_when_results_exist() 
             plan_step_id=state.node_states.planner.plan.steps[0].db_id,
             tool_name="generic_web_search",
             result={"results": ["evidence"]},
-            evidence=[EvidenceView(title="Evidence")],
+            evidence=[EvidenceView(
+        data={
+            "title": "Evidence",
+        })],
         )
     ]
 
@@ -316,3 +319,7 @@ def test_evaluator_router_synthesizes_after_profile_completion_tool() -> None:
     ]
 
     assert evaluator_router(state) == SYNTHESIZE_EDGE
+
+
+
+

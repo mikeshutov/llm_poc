@@ -32,17 +32,16 @@ def _tool_result(result: NewsSearchResponse) -> ToolResult:
         url = (news_item.url or "").strip()
         metadata = BraveNewsSearchMetadata(age=news_item.age)
         evidence_view = EvidenceView(
-            item_id=url or (news_item.title or "").strip(),
-            tool_name=TOOL_NAME_NEWS_SEARCH,
-            title=(news_item.title or "").strip(),
             summary=html_to_plain_text(news_item.description or "") or (news_item.age or "").strip(),
-            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
-            image_url=(news_item.thumbnail_url or "").strip(),
             source=TOOL_NAME_NEWS_SEARCH,
-            entity_type=TOOL_RESULT_TYPE_NEWS_RESULTS,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=news_item,
-        )
+        type=TOOL_RESULT_TYPE_NEWS_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": url or (news_item.title or "").strip(),
+            "title": (news_item.title or "").strip(),
+            "urls": [EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
+            "image_url": (news_item.thumbnail_url or "").strip(),
+        })
         evidence.append(evidence_view)
 
     return ToolResult(
@@ -71,3 +70,7 @@ Do not answer current-news questions from conversation summaries or older tool r
 def news_search(q: str) -> ToolResult:
     response = BraveSearchClient().news_search(q)
     return _tool_result(rerank_news_search_response(response, goal=q, limit=DEFAULT_TOP_K))
+
+
+
+

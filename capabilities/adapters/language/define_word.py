@@ -40,16 +40,15 @@ def _tool_result(result: list[DictionaryEntry]) -> ToolResult:
             meaning_count=len(entry.meanings),
         )
         evidence_view = EvidenceView(
-            item_id=entry.word.strip(),
-            tool_name=TOOL_NAME_DEFINE_WORD,
-            title=entry.word.strip(),
             summary=_entry_summary(entry),
-            urls=[EvidenceUrl(url=source_url, url_type=EvidenceUrlType.WEBSITE)] if source_url else [],
             source=TOOL_NAME_DEFINE_WORD,
-            entity_type=TOOL_RESULT_TYPE_DEFINITION,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=entry,
-        )
+        type=TOOL_RESULT_TYPE_DEFINITION,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": entry.word.strip(),
+            "title": entry.word.strip(),
+            "urls": [EvidenceUrl(url=source_url, url_type=EvidenceUrlType.WEBSITE)] if source_url else [],
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -70,3 +69,7 @@ def define_word(word: str) -> ToolResult:
         return _tool_result(_dictionary_client.define(word))
     except RequestException as e:
         return ToolResult.error(f"Dictionary service unavailable: {e}")
+
+
+
+

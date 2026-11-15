@@ -42,17 +42,16 @@ def _tool_result(result) -> ToolResult:
         is_day=weather.is_day,
     )
     evidence_view = EvidenceView(
-        item_id=location_name,
-        tool_name=TOOL_NAME_GET_WEATHER,
-        title="Get Current Weather",
         summary=summary,
-        urls=[EvidenceUrl(url=OPEN_METEO_WEBSITE_URL, url_type=EvidenceUrlType.WEBSITE)],
-        location_name=location_name,
         source=TOOL_NAME_GET_WEATHER,
-        entity_type=TOOL_RESULT_TYPE_WEATHER,
-        llm_metadata=metadata.model_dump(exclude_none=True),
-        raw_payload=result,
-    )
+        type=TOOL_RESULT_TYPE_WEATHER,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": location_name,
+            "title": "Get Current Weather",
+            "urls": [EvidenceUrl(url=OPEN_METEO_WEBSITE_URL, url_type=EvidenceUrlType.WEBSITE)],
+            "location_name": location_name,
+        })
     return ToolResult(
         result=result,
         evidence=[evidence_view],
@@ -95,3 +94,7 @@ def get_current_weather(location: str) -> ToolResult:
         return _tool_result(CurrentWeatherResult(location=loc, weather=weather))
     except RequestException as e:
         return ToolResult.error(f"Weather service unavailable: {e}")
+
+
+
+

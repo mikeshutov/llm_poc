@@ -24,15 +24,14 @@ def _tool_result(result: list[AssetChunkResult]) -> ToolResult:
     evidence: list[EvidenceView] = []
     for file_result in result:
         evidence_view = EvidenceView(
-            item_id=str(file_result.asset_id),
-            tool_name=TOOL_NAME_SEARCH_ASSET_DETAILS,
-            title=file_result.asset_name.strip() or "Asset Detail",
             summary=file_result.content.strip() or "Matched asset content.",
-            urls=[EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)] if (file_url := static_file_url(file_result.storage_path or "")) else ([EvidenceUrl(url=file_result.url, url_type=EvidenceUrlType.WEBSITE)] if file_result.url else []),
             source=TOOL_NAME_SEARCH_ASSET_DETAILS,
-            entity_type=TOOL_RESULT_TYPE_ASSET_DETAILS,
-            raw_payload=file_result,
-        )
+        type=TOOL_RESULT_TYPE_ASSET_DETAILS,
+        data={
+            "item_id": str(file_result.asset_id),
+            "title": file_result.asset_name.strip() or "Asset Detail",
+            "urls": [EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)] if (file_url := static_file_url(file_result.storage_path or "")) else ([EvidenceUrl(url=file_result.url, url_type=EvidenceUrlType.WEBSITE)] if file_result.url else []),
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -63,3 +62,7 @@ def search_asset_details(asset_id: str, query: str, asset_type: AssetType = Asse
         user_id=get_current_user_id(),
     )
     return _tool_result([AssetChunkResult.model_validate(result) for result in results])
+
+
+
+

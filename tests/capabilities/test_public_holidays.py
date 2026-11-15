@@ -45,4 +45,4 @@ def test_public_holidays_lookup_filters_to_region(monkeypatch) -> None:
         "region_code": "CA-ON",
     })
 
-    assert [entry.title for entry in result.evidence] == ["Family Day", "New Year's Day"]
+    assert [entry.data["title"] for entry in result.evidence] == ["Family Day", "New Year's Day"]

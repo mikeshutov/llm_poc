@@ -27,13 +27,16 @@ def web_fetch(url: str) -> ToolResult:
         return ToolResult.error(str(exc))
 
     evidence = EvidenceView(
-        item_id=page.url,
-        tool_name=TOOL_NAME_WEB_FETCH,
-        title=page.title or page.url,
         summary=page.description or page.text[:500],
-        urls=[EvidenceUrl(url=page.url, url_type=EvidenceUrlType.WEBSITE)],
         source=TOOL_NAME_WEB_FETCH,
-        entity_type=TOOL_RESULT_TYPE_WEB_PAGE,
-        raw_payload=page,
-    )
+        type=TOOL_RESULT_TYPE_WEB_PAGE,
+        data={
+            "item_id": page.url,
+            "title": page.title or page.url,
+            "urls": [EvidenceUrl(url=page.url, url_type=EvidenceUrlType.WEBSITE)],
+        })
     return ToolResult(result=page, evidence=[evidence])
+
+
+
+

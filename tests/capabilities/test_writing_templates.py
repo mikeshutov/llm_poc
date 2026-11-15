@@ -142,8 +142,8 @@ def test_writing_templates_filters_and_returns_metadata_only(monkeypatch, tmp_pa
 
     assert [template.id for template in result.result.templates] == ["essay"]
     assert len(result.evidence) == 1
-    assert result.evidence[0].item_id == "essay"
-    assert "content" not in result.evidence[0].llm_metadata
+    assert result.evidence[0].data["item_id"] == "essay"
+    assert "content" not in result.evidence[0].metadata
     assert "private essay body" not in str(result)
 
 
@@ -203,7 +203,7 @@ def test_research_paper_template_contains_required_baseline_sections() -> None:
     assert "## 5. Limitations" in body
     assert "## 6. Conclusion" in body
     assert "## References" in body
-    assert "150–250-word" in body
+    assert "150â€“250-word" in body
 
 
 def test_essay_template_contains_required_baseline_sections() -> None:
@@ -226,3 +226,5 @@ def test_essay_template_contains_required_baseline_sections() -> None:
     assert "## Conclusion" in body
     assert "## References" in body
     assert "{{ section_heading }}" not in body
+
+

@@ -39,10 +39,9 @@ class MessageToolRepository:
         result = []
         for item in evidence or []:
             if isinstance(item, BaseModel):
-                item = item.model_dump(exclude={"raw_payload"})
+                item = item.model_dump(mode="json")
             elif isinstance(item, dict):
                 item = dict(item)
-                item.pop("raw_payload", None)
             result.append(cls._sanitize_for_storage(item))
         return result
 
@@ -53,7 +52,6 @@ class MessageToolRepository:
         output = self._sanitize_for_storage(output_payload) if output_payload is not None else None
         if isinstance(output, dict):
             output.pop("evidence", None)
-            output.pop("raw_payload", None)
         request_hash = build_signature({"tool_name": step.tool, "input": sanitized_input})
         message_metadata = {"tool_name": step.tool}
         request_message = self._repo.append_message(

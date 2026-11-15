@@ -58,16 +58,15 @@ def _tool_result(result: SparqlResult) -> ToolResult:
         url = _binding_value(binding.get("url"))
         metadata = StructuredFactsMetadata(vars=list(result.vars))
         evidence_view = EvidenceView(
-            item_id=item_id,
-            tool_name=TOOL_NAME_STRUCTURED_FACTS_LOOKUP,
-            title=title,
             summary=summary,
-            urls=[{"url": url, "url_type": "website"}] if url else [],
             source=TOOL_NAME_STRUCTURED_FACTS_LOOKUP,
-            entity_type=TOOL_RESULT_TYPE_STRUCTURED_FACTS,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=binding,
-        )
+        type=TOOL_RESULT_TYPE_STRUCTURED_FACTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": item_id,
+            "title": title,
+            "urls": [{"url": url, "url_type": "website"}] if url else [],
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -92,3 +91,7 @@ Important:
 )
 def structured_facts_lookup(sparql: str) -> ToolResult:
     return _tool_result(_wikidata_client.query(sparql))
+
+
+
+

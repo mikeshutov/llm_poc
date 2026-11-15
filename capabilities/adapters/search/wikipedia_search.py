@@ -49,16 +49,15 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
             top_result_summary=result.top_result_summary.model_dump(),
         )
         evidence_view = EvidenceView(
-            item_id=summary_url or result.top_result_summary.title.strip(),
-            tool_name=TOOL_NAME_WIKIPEDIA_SEARCH,
-            title=result.top_result_summary.title.strip(),
             summary=result.top_result_summary.summary.strip() or "Wikipedia result.",
-            urls=[EvidenceUrl(url=summary_url, url_type=EvidenceUrlType.WEBSITE)] if summary_url else [],
             source=TOOL_NAME_WIKIPEDIA_SEARCH,
-            entity_type=TOOL_RESULT_TYPE_KNOWLEDGE,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=result.top_result_summary,
-        )
+        type=TOOL_RESULT_TYPE_KNOWLEDGE,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": summary_url or result.top_result_summary.title.strip(),
+            "title": result.top_result_summary.title.strip(),
+            "urls": [EvidenceUrl(url=summary_url, url_type=EvidenceUrlType.WEBSITE)] if summary_url else [],
+        })
         return ToolResult(
             result=result,
             evidence=[evidence_view],
@@ -77,16 +76,15 @@ def _tool_result(result: WikipediaSearchResponse) -> ToolResult:
             ),
         )
         evidence_view = EvidenceView(
-            item_id=url or item.title.strip(),
-            tool_name=TOOL_NAME_WIKIPEDIA_SEARCH,
-            title=item.title.strip(),
             summary=summary_text or "Wikipedia result.",
-            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
             source=TOOL_NAME_WIKIPEDIA_SEARCH,
-            entity_type=TOOL_RESULT_TYPE_KNOWLEDGE,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=item,
-        )
+        type=TOOL_RESULT_TYPE_KNOWLEDGE,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": url or item.title.strip(),
+            "title": item.title.strip(),
+            "urls": [EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -114,3 +112,7 @@ def wikipedia_search(
         except Exception:
             pass
     return _tool_result(WikipediaSearchResponse(query=query, results=results, top_result_summary=summary))
+
+
+
+

@@ -35,9 +35,9 @@ def test_created_file_result_contains_download_evidence() -> None:
 
     assert len(result.evidence) == 1
     evidence = result.evidence[0]
-    assert evidence.item_id == str(file.id)
-    assert evidence.title == "report.pdf"
-    assert evidence.entity_type == "file"
-    assert evidence.url == "/app/static/files/user-123/report.pdf"
-    assert evidence.llm_metadata["filename"] == "report.pdf"
-    assert evidence.llm_metadata["mime_type"] == "application/pdf"
+    assert evidence.data["item_id"] == str(file.id)
+    assert evidence.data["title"] == "report.pdf"
+    assert evidence.type == "file"
+    assert evidence.data["urls"][0]["url"] == "/app/static/files/user-123/report.pdf"
+    assert evidence.metadata["filename"] == "report.pdf"
+    assert evidence.metadata["mime_type"] == "application/pdf"

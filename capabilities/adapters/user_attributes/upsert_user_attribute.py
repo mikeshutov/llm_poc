@@ -59,14 +59,17 @@ def upsert_user_attribute(
         attribute_values=list(result.value),
     )
     evidence = EvidenceView(
-        item_id=str(result.id),
-        tool_name=TOOL_NAME_UPSERT_USER_ATTRIBUTE,
-        title=result.attribute_type,
         summary="Stored and composed user attribute.",
-        published_at=result.updated_at,
         source=TOOL_NAME_UPSERT_USER_ATTRIBUTE,
-        entity_type=TOOL_RESULT_TYPE_USER_ATTRIBUTE,
-        llm_metadata=metadata.model_dump(exclude_none=True),
-        raw_payload=result,
-    )
+        type=TOOL_RESULT_TYPE_USER_ATTRIBUTE,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": str(result.id),
+            "title": result.attribute_type,
+            "published_at": result.updated_at,
+        })
     return ToolResult(result=result, evidence=[evidence])
+
+
+
+

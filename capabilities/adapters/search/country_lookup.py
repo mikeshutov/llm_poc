@@ -46,15 +46,14 @@ def _tool_result(result: list[Country]) -> ToolResult:
             flag=country.flag,
         )
         evidence_view = EvidenceView(
-            item_id=country.common_name,
-            tool_name=TOOL_NAME_COUNTRY_LOOKUP,
-            title=country.common_name,
             summary=summary,
             source=TOOL_NAME_COUNTRY_LOOKUP,
-            entity_type=TOOL_RESULT_TYPE_COUNTRY,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=country,
-        )
+        type=TOOL_RESULT_TYPE_COUNTRY,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": country.common_name,
+            "title": country.common_name,
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -77,3 +76,7 @@ def country_lookup(country_name: str) -> ToolResult:
         return _tool_result(_client.search(country_name))
     except Exception as e:
         return ToolResult.error(f"REST Countries API error: {e}")
+
+
+
+

@@ -8,8 +8,14 @@ from capabilities.adapters.memories.lookup_evidence import lookup_evidence
 
 
 def test_lookup_evidence_returns_a_batch_in_request_order() -> None:
-    first = EvidenceView(title="First evidence", summary="First summary")
-    second = EvidenceView(title="Second evidence", summary="Second summary")
+    first = EvidenceView( summary="First summary",
+        data={
+            "title": "First evidence",
+        })
+    second = EvidenceView( summary="Second summary",
+        data={
+            "title": "Second evidence",
+        })
 
     class FakeEvidenceRepository:
         def get_by_ids(self, evidence_ids, *, user_id=None):
@@ -35,6 +41,10 @@ def test_lookup_evidence_returns_a_batch_in_request_order() -> None:
     finally:
         module.EvidenceRepository = original_evidence_repository
 
-    assert [evidence.evidence_id for evidence in result.result.evidence] == [second.id, first.id]
+    assert [evidence.id for evidence in result.result.evidence] == [second.id, first.id]
     assert all(not hasattr(evidence, "raw_payload") for evidence in result.result.evidence)
     assert result.evidence == [second, first]
+
+
+
+

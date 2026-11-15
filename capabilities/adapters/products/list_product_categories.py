@@ -20,15 +20,14 @@ def _tool_result(result: list[str]) -> ToolResult:
     for category in result:
         title = category.strip()
         evidence_view = EvidenceView(
-            item_id=title,
-            tool_name=TOOL_NAME_LIST_PRODUCT_CATEGORIES,
-            title=title,
             summary=f"Available product category: {title}.",
             source=TOOL_NAME_LIST_PRODUCT_CATEGORIES,
-            entity_type=TOOL_RESULT_TYPE_PRODUCT_CATEGORIES,
-            llm_metadata={},
-            raw_payload=category,
-        )
+        type=TOOL_RESULT_TYPE_PRODUCT_CATEGORIES,
+        metadata={},
+        data={
+            "item_id": title,
+            "title": title,
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -44,3 +43,7 @@ Return available product categories from the internal catalog.
 )
 def list_product_categories(limit: int = 200) -> ToolResult:
     return _tool_result(ProductRepository().list_categories(limit=limit))
+
+
+
+

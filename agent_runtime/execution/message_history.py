@@ -23,7 +23,7 @@ def _model_facing_tool_result(result: ToolResult) -> dict:
         "hypothesis": result.hypothesis,
         "result": bounded_json_value(result.result, max_bytes=12_000),
         "tool_metadata": result.tool_metadata.model_dump(mode="json", exclude_none=True),
-        "evidence": [evidence.compact_view() for evidence in result.evidence],
+        "evidence": [evidence.model_dump(mode="json") for evidence in result.evidence],
     }
     if result.state is not None:
         payload["state"] = result.state.model_dump(mode="json", exclude_none=True)

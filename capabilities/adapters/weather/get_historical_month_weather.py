@@ -34,17 +34,16 @@ def _tool_result(result: MonthlyWeatherSummary | None) -> ToolResult:
         precipitation_sum=result.precipitation_sum,
     )
     evidence_view = EvidenceView(
-        item_id=location_name or f"{result.year}-{result.month:02d}",
-        tool_name=TOOL_NAME_GET_WEATHER,
-        title="Historical Monthly Weather",
         summary=summary,
-        urls=[EvidenceUrl(url=OPEN_METEO_WEBSITE_URL, url_type=EvidenceUrlType.WEBSITE)],
-        location_name=location_name,
         source=TOOL_NAME_GET_WEATHER,
-        entity_type=TOOL_RESULT_TYPE_WEATHER,
-        llm_metadata=metadata.model_dump(exclude_none=True),
-        raw_payload=result,
-    )
+        type=TOOL_RESULT_TYPE_WEATHER,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": location_name or f"{result.year}-{result.month:02d}",
+            "title": "Historical Monthly Weather",
+            "urls": [EvidenceUrl(url=OPEN_METEO_WEBSITE_URL, url_type=EvidenceUrlType.WEBSITE)],
+            "location_name": location_name,
+        })
     return ToolResult(
         result=result,
         evidence=[evidence_view],
@@ -82,3 +81,7 @@ Do NOT combine year and month into the city field.
 def get_historical_month_weather(city: str, year: int, month: int) -> ToolResult:
     result = _weather_client.get_historical_month(city, year, month)
     return _tool_result(result.model_copy(update={"daily": None}))
+
+
+
+

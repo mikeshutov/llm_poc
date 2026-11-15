@@ -108,22 +108,21 @@ def _index(file_id: UUID, content: str) -> None:
 def _file_evidence(file: FileAsset, *, tool_name: str, summary: str) -> EvidenceView:
     file_url = static_file_url(file.storage_path)
     return EvidenceView(
-        item_id=str(file.id),
-        tool_name=tool_name,
-        title=file.name,
         summary=summary,
-        urls=[EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)] if file_url else [],
         source=tool_name,
-        entity_type=TOOL_RESULT_TYPE_FILE,
-        llm_metadata={
+        type=TOOL_RESULT_TYPE_FILE,
+        metadata={
             "file_id": str(file.id),
             "filename": file.name,
             "mime_type": file.mime_type,
             "storage_path": file.storage_path,
             "size_bytes": file.size_bytes,
         },
-        raw_payload=file,
-    )
+        data={
+            "item_id": str(file.id),
+            "title": file.name,
+            "urls": [EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)] if file_url else [],
+        })
 
 
 def _file_result(file: FileAsset, message: str, *, tool_name: str) -> ToolResult:
@@ -303,3 +302,7 @@ def file_move(file_id: str, destination: str) -> ToolResult:
         "File moved.",
         tool_name=TOOL_NAME_FILE_MOVE,
     )
+
+
+
+

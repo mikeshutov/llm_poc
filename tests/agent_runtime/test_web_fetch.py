@@ -44,6 +44,8 @@ def test_web_fetch_returns_typed_tool_result(monkeypatch) -> None:
 
     result = web_fetch.invoke({"url": "https://example.com/article"})
 
-    assert result.evidence[0].tool_name == "web_fetch"
-    assert result.evidence[0].entity_type == "web_page"
-    assert result.evidence[0].urls[0].url == "https://example.com/article"
+    assert result.evidence[0].source == "web_fetch"
+    assert result.evidence[0].type == "web_page"
+    assert result.evidence[0].data["urls"][0]["url"] == "https://example.com/article"
+
+

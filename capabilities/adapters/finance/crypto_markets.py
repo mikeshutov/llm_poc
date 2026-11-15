@@ -60,17 +60,16 @@ def _tool_result(result: list[CoinMarket]) -> ToolResult:
             price_change_percentage_24h=market.price_change_percentage_24h,
         )
         evidence_view = EvidenceView(
-            item_id=market.id,
-            tool_name=TOOL_NAME_GET_CRYPTO_MARKETS,
-            title=market.name,
             summary=summary,
-            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
-            image_url=(market.image or "").strip(),
             source=TOOL_NAME_GET_CRYPTO_MARKETS,
-            entity_type=TOOL_RESULT_TYPE_CRYPTO_MARKET,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=market,
-        )
+        type=TOOL_RESULT_TYPE_CRYPTO_MARKET,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": market.id,
+            "title": market.name,
+            "urls": [EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
+            "image_url": (market.image or "").strip(),
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -113,14 +112,10 @@ def get_crypto_historical_prices(
     return ToolResult(
         result=[{"timestamp": timestamp.isoformat(), "price": price, "coin_id": coin_id, "currency": vs_currency} for timestamp, price in prices],
         evidence=[EvidenceView(
-            item_id=f"{coin_id}:{start_date}:{end_date}",
-            tool_name=TOOL_NAME_GET_CRYPTO_HISTORICAL_PRICES,
-            title=f"Historical {coin_id} prices",
             summary=f"Retrieved {len(prices)} historical {vs_currency.upper()} price observations for {coin_id}.",
-            urls=[EvidenceUrl(url=f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart/range", url_type=EvidenceUrlType.WEBSITE)],
             source=TOOL_NAME_GET_CRYPTO_HISTORICAL_PRICES,
-            entity_type=TOOL_RESULT_TYPE_CRYPTO_MARKET,
-            llm_metadata={
+        type=TOOL_RESULT_TYPE_CRYPTO_MARKET,
+        metadata={
                 "coin_id": coin_id,
                 "currency": vs_currency,
                 "start_date": str(start_date),
@@ -131,6 +126,13 @@ def get_crypto_historical_prices(
                     for timestamp, price in prices
                 ],
             },
-            raw_payload={"count": len(prices), "start_date": str(start_date), "end_date": str(end_date)},
-        )],
+        data={
+            "item_id": f"{coin_id}:{start_date}:{end_date}",
+            "title": f"Historical {coin_id} prices",
+            "urls": [EvidenceUrl(url=f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart/range", url_type=EvidenceUrlType.WEBSITE)],
+        })],
     )
+
+
+
+

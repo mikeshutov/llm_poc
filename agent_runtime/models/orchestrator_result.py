@@ -37,21 +37,20 @@ def _normalize_evidence_ids(
 
 
 def _is_evidence_excluded_from_persistence(evidence: EvidenceView) -> bool:
-    return evidence.tool_name.strip() in EVIDENCE_PERSISTENCE_EXCLUDED_TOOL_NAMES
+    return evidence.source.strip() in EVIDENCE_PERSISTENCE_EXCLUDED_TOOL_NAMES
 
 
 def _project_evidence_for_persistence(evidence: EvidenceView) -> EvidenceView:
-    data = evidence.model_dump(mode="json", exclude={"raw_payload"})
+    data = evidence.model_dump(mode="json")
     projected = bounded_json_value(data, max_bytes=12_000)
     if isinstance(projected, dict) and projected.get("_truncated"):
         return EvidenceView(
             id=evidence.id,
-            tool_call_id=evidence.tool_call_id,
-            hash=evidence.hash,
-            item_id=evidence.item_id,
-            tool_name=evidence.tool_name,
-            title=evidence.title[:2_000],
-            summary=evidence.summary[:4_000],
+            type=evidence.type,
+            source=evidence.source,
+            summary=(evidence.summary or "")[:4_000],
+            data={"title": str(evidence.data.get("title", ""))[:2_000]},
+            metadata=evidence.metadata,
         )
     return EvidenceView.model_validate(projected)
 

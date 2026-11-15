@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from retrieval.evidence import HydratedEvidenceView, ToolResult
+from retrieval.evidence import EvidenceView, ToolResult
 from agent_runtime.context import get_current_user_id
 from capabilities.registry.constants import TOOL_NAME_LOOKUP_EVIDENCE
 from capabilities.registry.repository.evidence_repository import EvidenceRepository
@@ -18,7 +18,7 @@ class LookupEvidenceArgs(BaseModel):
 
 
 class EvidenceLookupResult(BaseModel):
-    evidence: list[HydratedEvidenceView] = Field(default_factory=list)
+    evidence: list[EvidenceView] = Field(default_factory=list)
 
 
 @tool(
@@ -45,7 +45,7 @@ def lookup_evidence(evidence_ids: list[str]) -> ToolResult:
     evidence = [evidence_by_id[evidence_id] for evidence_id in normalized_ids if evidence_id in evidence_by_id]
     return ToolResult(
         result=EvidenceLookupResult(
-            evidence=[evidence_view.hydrated_view() for evidence_view in evidence],
+            evidence=evidence,
         ),
         evidence=evidence,
     )

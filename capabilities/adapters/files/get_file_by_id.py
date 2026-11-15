@@ -30,18 +30,17 @@ def _tool_result(result: GetFileByIdResult) -> ToolResult:
         uploaded_at=result.uploaded_at,
     )
     evidence_view = EvidenceView(
-        item_id=(result.file_id or "").strip(),
-        tool_name=TOOL_NAME_GET_FILE_BY_ID,
-        title=(result.file_name or "").strip() or "File",
         summary=(result.first_chunk or "").strip() or "Retrieved file metadata and preview.",
-        urls=[EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)]
+        source=TOOL_NAME_GET_FILE_BY_ID,
+        type=TOOL_RESULT_TYPE_FILE,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": (result.file_id or "").strip(),
+            "title": (result.file_name or "").strip() or "File",
+            "urls": [EvidenceUrl(url=file_url, url_type=EvidenceUrlType.WEBSITE)]
         if (file_url := static_file_url(result.file_path or ""))
         else [],
-        source=TOOL_NAME_GET_FILE_BY_ID,
-        entity_type=TOOL_RESULT_TYPE_FILE,
-        llm_metadata=metadata.model_dump(exclude_none=True),
-        raw_payload=result,
-    )
+        })
     return ToolResult(
         result=result,
         evidence=[evidence_view],
@@ -78,3 +77,7 @@ def get_file_by_id(file_id: str) -> ToolResult:
             first_chunk=AssetChunkRepository().get_first(file.id, user_id=get_current_user_id()),
         )
     )
+
+
+
+

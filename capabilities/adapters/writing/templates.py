@@ -206,14 +206,14 @@ def writing_templates(
     result = WritingTemplateListResult(templates=metadata)
     evidence = [
         EvidenceView(
-            item_id=template.id,
-            tool_name=TOOL_NAME_WRITING_TEMPLATES,
-            title=template.name,
             summary=template.description,
             source=TOOL_NAME_WRITING_TEMPLATES,
-            entity_type=TOOL_RESULT_TYPE_WRITING_TEMPLATES,
-            llm_metadata=WritingTemplateMetadata.from_template(template).model_dump(mode="json"),
-        )
+        type=TOOL_RESULT_TYPE_WRITING_TEMPLATES,
+        metadata=WritingTemplateMetadata.from_template(template).model_dump(mode="json"),
+        data={
+            "item_id": template.id,
+            "title": template.name,
+        })
         for template in matches
     ]
     return ToolResult(result=result, evidence=evidence)
@@ -229,3 +229,7 @@ __all__ = [
     "load_writing_template_content",
     "writing_templates",
 ]
+
+
+
+

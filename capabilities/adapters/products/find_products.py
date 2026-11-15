@@ -88,17 +88,16 @@ def _tool_result(result: ProductSearchResults) -> ToolResult:
             price=product.price,
         )
         evidence_view = EvidenceView(
-            item_id=product.id,
-            tool_name=TOOL_NAME_FIND_PRODUCTS,
-            title=product.name,
             summary=_product_summary(product),
-            urls=[EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
-            image_url=(product.image_url or "").strip(),
             source=TOOL_NAME_FIND_PRODUCTS,
-            entity_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=product,
-        )
+        type=TOOL_RESULT_TYPE_PRODUCT_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": product.id,
+            "title": product.name,
+            "urls": [EvidenceUrl(url=url, url_type=EvidenceUrlType.WEBSITE)] if url else [],
+            "image_url": (product.image_url or "").strip(),
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, tool_metadata=tool_metadata, evidence=evidence)
 
@@ -153,3 +152,7 @@ def search_products(
             reranked=True,
         )
     )
+
+
+
+

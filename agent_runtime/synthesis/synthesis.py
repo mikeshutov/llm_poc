@@ -21,6 +21,14 @@ from retrieval.evidence_store import (
 )
 from llm.chat_models import build_llm_for_stage, resolve_stage_model_name, resolve_stage_provider_name
 from agent_runtime.synthesis.prompts.synthesis_prompt import build_synthesis_prompt
+
+
+def _evidence_url(evidence) -> str:
+    for entry in evidence.data.get("urls", []):
+        url = entry.get("url", "") if isinstance(entry, dict) else ""
+        if isinstance(url, str) and url.strip():
+            return url.strip()
+    return ""
 def _resolve_relevant_evidence_ids(state: MainState) -> set[str]:
     return {
         str(evidence_id)
@@ -55,7 +63,7 @@ def _build_result_blocks(
             evidence_id = str(evidence.id)
             supplied_evidence_ids.add(evidence_id)
             supplied_evidence_by_id[evidence_id] = evidence
-            evidence_url = evidence.url.strip()
+            evidence_url = _evidence_url(evidence)
             dedupe_key = f"url:{evidence_url}" if evidence_url else f"id:{evidence_id}"
             if evidence_id in seen or dedupe_key in seen_urls:
                 continue
@@ -74,7 +82,7 @@ def _build_result_blocks(
             if evidence_id not in supplied_evidence_ids:
                 continue
             evidence = supplied_evidence_by_id[evidence_id]
-            evidence_url = evidence.url.strip()
+            evidence_url = _evidence_url(evidence)
             dedupe_key = f"url:{evidence_url}" if evidence_url else f"id:{evidence_id}"
             if dedupe_key in seen_block_keys:
                 continue

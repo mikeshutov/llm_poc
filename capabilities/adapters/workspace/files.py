@@ -166,13 +166,13 @@ def _result(path: Path, operation: str, *, content: str | None = None, items: li
     if items is not None:
         payload["files"] = items
     evidence = EvidenceView(
-        tool_name=operation,
-        title=relative or "Workspace files",
         summary=summary,
         source=operation,
-        entity_type=TOOL_RESULT_TYPE_WORKSPACE_FILE,
-        llm_metadata={"path": relative, "workspace": str(_workspace_root()), "operation": operation},
-    )
+        type=TOOL_RESULT_TYPE_WORKSPACE_FILE,
+        metadata={"path": relative, "workspace": str(_workspace_root()), "operation": operation},
+        data={
+            "title": relative or "Workspace files",
+        })
     return ToolResult(result=payload, evidence=[evidence])
 
 
@@ -341,20 +341,20 @@ def workspace_file_promote(file_names: list[str]) -> ToolResult:
         files.append(file)
         file_url = static_file_url(file.storage_path)
         evidence.append(EvidenceView(
-            item_id=str(file.id),
-            tool_name=TOOL_NAME_WORKSPACE_FILE_PROMOTE,
-            title=file.name,
             summary="Workspace file copied to managed files and is available for download.",
-            urls=[{"url": file_url}] if file_url else [],
             source=TOOL_NAME_WORKSPACE_FILE_PROMOTE,
-            entity_type="file",
-            llm_metadata={
+        type="file",
+        metadata={
                 "file_id": str(file.id),
                 "filename": file.name,
                 "mime_type": file.mime_type,
                 "storage_path": file.storage_path,
             },
-        ))
+        data={
+            "item_id": str(file.id),
+            "title": file.name,
+            "urls": [{"url": file_url}] if file_url else [],
+        }))
     return ToolResult(
         result=FileListResult(files=files),
         evidence=evidence,
@@ -370,3 +370,7 @@ __all__ = [
     "workspace_file_complete",
     "workspace_file_promote",
 ]
+
+
+
+

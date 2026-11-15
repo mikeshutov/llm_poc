@@ -57,6 +57,10 @@ class EvidenceRepository:
                         evidence = EvidenceView.model_validate(raw)
                     except Exception:
                         continue
-                    if evidence.id in parsed_ids and str(evidence.id) not in evidence_by_id:
+                    try:
+                        evidence_uuid = UUID(evidence.id)
+                    except ValueError:
+                        continue
+                    if evidence_uuid in parsed_ids and str(evidence.id) not in evidence_by_id:
                         evidence_by_id[str(evidence.id)] = evidence
         return evidence_by_id

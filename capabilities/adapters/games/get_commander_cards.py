@@ -143,23 +143,19 @@ def _tool_result(result: CommanderCardsResult) -> ToolResult:
         scryfall_url = scryfall_card.scryfall_uri.strip() if scryfall_card is not None else ""
         edhrec_url = card.card_url.strip()
         evidence_view = EvidenceView(
-            item_id=scryfall_card.id if scryfall_card is not None else card.slug or card.name,
-            tool_name=TOOL_NAME_GET_COMMANDER_CARDS,
-            title=card.name,
             summary=_card_summary(card, scryfall_card),
-            urls=[
+            source=TOOL_NAME_GET_COMMANDER_CARDS,
+        type=TOOL_RESULT_TYPE_CARD_RESULTS,
+        metadata=metadata.model_dump(exclude_none=True),
+        data={
+            "item_id": scryfall_card.id if scryfall_card is not None else card.slug or card.name,
+            "title": card.name,
+            "urls": [
                 *([EvidenceUrl(url=scryfall_url, url_type=EvidenceUrlType.WEBSITE)] if scryfall_url else []),
                 *([EvidenceUrl(url=edhrec_url, url_type=EvidenceUrlType.WEBSITE)] if edhrec_url else []),
             ],
-            image_url=scryfall_card.image_url() or "" if scryfall_card is not None else "",
-            source=TOOL_NAME_GET_COMMANDER_CARDS,
-            entity_type=TOOL_RESULT_TYPE_CARD_RESULTS,
-            llm_metadata=metadata.model_dump(exclude_none=True),
-            raw_payload=CommanderCardReference(
-                cmc=scryfall_card.cmc if scryfall_card is not None else None,
-                oracle_text=_card_oracle_text(scryfall_card) if scryfall_card is not None else None,
-            ),
-        )
+            "image_url": scryfall_card.image_url() or "" if scryfall_card is not None else "",
+        })
         evidence.append(evidence_view)
     return ToolResult(result=result, evidence=evidence)
 
@@ -189,3 +185,7 @@ def get_commander_cards(commander_name: str, limit: int = 6) -> ToolResult:
             cards=[_card_result(section, card) for section, card in ranked_cards],
         )
     )
+
+
+
+

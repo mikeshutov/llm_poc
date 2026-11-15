@@ -169,14 +169,14 @@ def code_execute(code: str, timeout_seconds: int = 10) -> ToolResult:
         or f"Python sandbox exited with code {result.exit_code}."
     )
     evidence = EvidenceView(
-        item_id=f"python-execution-{result.exit_code}-{result.timed_out}",
-        tool_name=TOOL_NAME_CODE_EXECUTE,
-        title="Sandboxed Python execution",
         summary=summary,
         source=TOOL_NAME_CODE_EXECUTE,
-        entity_type=TOOL_RESULT_TYPE_CODE_EXECUTION,
-        llm_metadata=result.model_dump(mode="json"),
-    )
+        type=TOOL_RESULT_TYPE_CODE_EXECUTION,
+        metadata=result.model_dump(mode="json"),
+        data={
+            "item_id": f"python-execution-{result.exit_code}-{result.timed_out}",
+            "title": "Sandboxed Python execution",
+        })
     return ToolResult(result=result, evidence=[evidence])
 
 
@@ -185,3 +185,7 @@ __all__ = [
     "CodeExecuteArgs",
     "code_execute",
 ]
+
+
+
+

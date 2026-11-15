@@ -13,7 +13,6 @@ if "pycountry" not in sys.modules:
     sys.modules["pycountry"] = pycountry_module
 
 from agent_runtime.models.agent_prompt import (
-    EVIDENCE_VIEW_EVALUATOR,
     AgentPrompt,
     EvidenceStep,
     PromptSectionKeys,
@@ -27,96 +26,89 @@ from langchain_core.messages import SystemMessage
 def test_evidence_views_exclude_internal_and_raw_fields() -> None:
     evidence = EvidenceView(
         id=uuid4(),
-        tool_call_id=uuid4(),
-        hash="internal-hash",
-        item_id="item-1",
-        tool_name="search_products",
-        title="Product",
         summary="A product.",
-        urls=[{"url": "https://example.com"}],
-        image_url="https://example.com/image.jpg",
         source="catalog",
-        entity_type="product_results",
-        location_name="Toronto",
-        llm_metadata={"price": 25.0},
-        raw_payload={"internal": "value"},
-    )
+        type="product_results",
+        metadata={"price": 25.0},
+        data={
+            "item_id": "item-1",
+            "title": "Product",
+            "urls": [{"url": "https://example.com"}],
+            "image_url": "https://example.com/image.jpg",
+            "location_name": "Toronto",
+        })
 
-    assert evidence.compact_view() == {
-        "evidence_id": str(evidence.id),
-        "title": "Product",
-        "summary": "A product.",
-        "metadata": {"price": 25.0},
-    }
-    assert evidence.hydrated_view() == {
-        "evidence_id": str(evidence.id),
-        "title": "Product",
-        "summary": "A product.",
-        "metadata": {"price": 25.0},
-        "item_id": "item-1",
-        "tool_name": "search_products",
-        "urls": [{"url": "https://example.com", "url_type": "website"}],
-        "image_url": "https://example.com/image.jpg",
-        "published_at": "",
+    assert evidence.model_dump(mode="json") == {
+        "id": str(evidence.id),
+        "type": "product_results",
         "source": "catalog",
-        "entity_type": "product_results",
-        "location_name": "Toronto",
+        "summary": "A product.",
+        "data": {
+            "item_id": "item-1",
+            "title": "Product",
+            "urls": [{"url": "https://example.com"}],
+            "image_url": "https://example.com/image.jpg",
+            "location_name": "Toronto",
+        },
+        "metadata": {"price": 25.0},
     }
 
 
 def test_agent_prompt_serializes_compact_evidence_view() -> None:
     evidence = EvidenceView(
-        title="Product",
+        source="catalog",
         summary="A product.",
-        llm_metadata={"price": 25.0},
-        raw_payload={"internal": "value"},
-    )
+        metadata={"price": 25.0},
+        data={
+            "title": "Product",
+        })
     prompt = AgentPrompt(
         instruction="Use the evidence.",
         evidence=[EvidenceStep(type="product_results", evidence=[evidence])],
     )
     prompt.include_section(PromptSectionKeys.EVIDENCE)
 
-    assert prompt.sections_raw[PromptSectionKeys.EVIDENCE][0]["evidence"] == [evidence.compact_view()]
+    assert prompt.sections_raw[PromptSectionKeys.EVIDENCE][0]["evidence"] == [evidence.model_dump(mode="json")]
 
 
 def test_agent_prompt_serializes_evaluator_evidence_view() -> None:
     evidence = EvidenceView(
-        title="Product",
         summary="A product with current pricing.",
-        urls=[{"url": "https://example.com"}],
-        image_url="https://example.com/image.jpg",
         source="catalog",
-        entity_type="product_results",
-        llm_metadata={"price": 25.0, "currency": "CAD"},
-        raw_payload={"internal": "value"},
-    )
+        type="product_results",
+        metadata={"price": 25.0, "currency": "CAD"},
+        data={
+            "title": "Product",
+            "urls": [{"url": "https://example.com"}],
+            "image_url": "https://example.com/image.jpg",
+        })
     prompt = AgentPrompt(
         instruction="Evaluate the evidence.",
         evidence=[EvidenceStep(type="product_results", evidence=[evidence])],
-        evidence_view=EVIDENCE_VIEW_EVALUATOR,
     )
     prompt.include_section(PromptSectionKeys.EVIDENCE)
 
     assert prompt.sections_raw[PromptSectionKeys.EVIDENCE][0]["evidence"] == [
         {
-            "evidence_id": str(evidence.id),
+            "id": str(evidence.id),
+            "type": "product_results",
+            "source": "catalog",
             "summary": "A product with current pricing.",
-            "present_data": {
+            "data": {
                 "title": "Product",
-                "summary": "A product with current pricing.",
-                "urls": [{"url": "https://example.com", "url_type": "website"}],
+                "urls": [{"url": "https://example.com"}],
                 "image_url": "https://example.com/image.jpg",
-                "source": "catalog",
-                "entity_type": "product_results",
-                "metadata": {"price": 25.0, "currency": "CAD"},
             },
+            "metadata": {"price": 25.0, "currency": "CAD"},
         }
     ]
 
 
 def test_evaluator_evidence_is_not_duplicated_into_prompt_messages() -> None:
-    evidence = EvidenceView(title="Current result", summary="Useful evidence.")
+    evidence = EvidenceView( summary="Useful evidence.",
+        data={
+            "title": "Current result",
+        })
     state = SimpleNamespace(
         execution_context=SimpleNamespace(user_profile=None),
         task="Evaluate the current result.",
@@ -167,3 +159,7 @@ def test_evidence_steps_do_not_label_tool_errors_as_no_results() -> None:
     assert prompt.sections_raw[PromptSectionKeys.EVIDENCE] == [
         {"type": "web_search_results"}
     ]
+
+
+
+

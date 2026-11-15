@@ -57,9 +57,11 @@ def _normalize_generated_file_links(
     file_urls: dict[str, str] = {}
     for step in evidence_steps:
         for evidence in step.evidence:
-            if evidence.entity_type != "file" or not evidence.url:
+            urls = evidence.data.get("urls", [])
+            evidence_url = next((entry.get("url", "") for entry in urls if isinstance(entry, dict) and entry.get("url")), "")
+            if evidence.type != "file" or not evidence_url:
                 continue
-            file_urls[_file_name_key(evidence.title)] = evidence.url
+            file_urls[_file_name_key(str(evidence.data.get("title", "")))] = evidence_url
 
     fallback_url = next(iter(file_urls.values())) if len(file_urls) == 1 else ""
 
