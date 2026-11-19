@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any
 
-from langchain_core.tools import BaseTool, StructuredTool
+from langchain_core.tools import BaseTool
 
 from common.data import sanitize_for_json_storage
 from common.logging import record_node_log
@@ -18,7 +18,6 @@ from agent_runtime.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_profile import (
     AgentExecutionStrategy,
-    AgentName,
 )
 from agent_runtime.models.decision import DecisionResponse, DecisionStatus
 from agent_runtime.models.plan import Plan
@@ -30,7 +29,11 @@ from agent_runtime.planning.prompts.planner_prompt import _compile_tools_rules_f
 from agent_runtime.planning.prompts.planner_rules import build_planner_rules
 from agent_runtime.planning.tool_call_parser import parse_tool_calls_to_plan_steps
 from agent_runtime.planning.tool_wrapper import build_tools
-from capabilities.discovery.models import AvailableAgent, AvailableTool
+from agent_runtime.planning.agent_delegation import (
+    build_agent_delegation_tools,
+    delegated_agent_states,
+)
+from capabilities.discovery.models import AvailableTool
 
 
 @dataclass(frozen=True)
@@ -44,33 +47,7 @@ class DecisionResult:
 DecisionPromptBuilder = Callable[[AgentState], tuple[AgentPrompt, list[BaseTool]]]
 
 
-def _build_agent_delegation_tools(agent_states) -> list[BaseTool]:
-    delegation_tools: list[BaseTool] = []
-    for agent_state in agent_states:
-        profile = agent_state.agent_profile
-        args_schema = profile.delegation_args_schema
-
-        def delegate(*, agent_name=profile.name, **kwargs):
-            payload = dict(kwargs)
-            evidence_ids = payload.get("evidence_ids")
-            if isinstance(evidence_ids, list):
-                payload["evidence_ids"] = list(dict.fromkeys(
-                    evidence_id.strip()
-                    for evidence_id in evidence_ids
-                    if isinstance(evidence_id, str) and evidence_id.strip()
-                ))
-            return {"agent": agent_name, **payload}
-
-        delegation_tools.append(
-            StructuredTool.from_function(
-                func=delegate,
-                name=profile.name,
-                description=profile.description,
-                args_schema=args_schema,
-                metadata={"agent_delegation": True},
-            )
-        )
-    return delegation_tools
+_build_agent_delegation_tools = build_agent_delegation_tools
 
 
 def build_decision_prompt(
@@ -89,51 +66,20 @@ def build_decision_prompt(
             tool_results,
             build_evidence_bundle_from_tool_results(tool_results).evidence_views_by_tool_call_id,
         )
-    available_capabilities: list[AvailableTool] = [
-        AvailableTool.from_tool(tool)
-        for tool in context.tools
-    ]
-    delegation_tools: list[BaseTool] = []
-    if state.available_agent_states is not None:
-        capabilities = state.inputs.discovered_capabilities
-        allowed_capability_names = {tool.name for tool in context.tools}
-        discovered_agent_names = {
-            agent.agent
-            for agent in ([] if capabilities is None else capabilities.agents)
-        }
-        delegated_states = [
-            delegated
-            for delegated in state.available_agent_states.values()
-            if delegated.agent_profile.delegatable
-            and delegated.agent_profile.name != AgentName.PROFILE_MANAGEMENT
-            and (
-                capabilities is None
-                or delegated.agent_profile.name in discovered_agent_names
+    delegated_states = delegated_agent_states(state)
+    delegation_tools = build_agent_delegation_tools(delegated_states)
+    available_capabilities = [
+        *(AvailableTool.from_tool(tool) for tool in context.tools),
+        *(
+            AvailableTool(
+                name=delegated.agent_profile.name,
+                title="Agent capability",
+                category="agents",
+                description=delegated.agent_profile.description,
             )
-        ]
-        delegation_tools = _build_agent_delegation_tools(delegated_states)
-        available_capabilities = [
-            *[
-                tool
-                for tool in (
-                    []
-                    if capabilities is None
-                    else capabilities.as_available_tools(include_agents=False)
-                )
-                if tool.name in allowed_capability_names
-            ],
-            *[
-                    AvailableAgent(
-                        agent=delegated.agent_profile.name,
-                        description=delegated.agent_profile.description,
-                    ).as_available_tool()
-                for delegated in delegated_states
-            ],
-            *[
-                AvailableTool.from_tool(tool)
-                for tool in state.agent_profile.static_tools
-            ],
-        ]
+            for delegated in delegated_states
+        ),
+    ]
     prompt = AgentPrompt(
         instruction=instruction,
         schema=schema,
@@ -145,6 +91,7 @@ def build_decision_prompt(
         rules=f"{build_planner_rules(context.rules)}\n\n{rules}",
         evidence=evidence,
         missing_information=state.node_states.evaluator.missing_information,
+        working_memory=state.render_working_memory(),
     )
     sections = (
         PromptSectionKeys.USER_PROFILE,
@@ -155,6 +102,7 @@ def build_decision_prompt(
         PromptSectionKeys.MISSING_INFORMATION,
         PromptSectionKeys.TASK,
         PromptSectionKeys.EVIDENCE_IDS,
+        PromptSectionKeys.WORKING_MEMORY,
     )
     if include_evidence:
         sections = (*sections[:4], PromptSectionKeys.EVIDENCE, *sections[4:])
@@ -197,16 +145,7 @@ def run_decision(
     prompt, tools = prompt_builder(state)
     agent_names = {
         delegated.agent_profile.name
-        for delegated in (state.available_agent_states or {}).values()
-        if delegated.agent_profile.delegatable
-        and delegated.agent_profile.name != AgentName.PROFILE_MANAGEMENT
-        and (
-            state.inputs.discovered_capabilities is None
-            or delegated.agent_profile.name in {
-                agent.agent
-                for agent in state.inputs.discovered_capabilities.agents
-            }
-        )
+        for delegated in delegated_agent_states(state)
     }
     prompt_messages = prompt.build_messages()
     if message_history:

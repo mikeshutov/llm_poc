@@ -16,6 +16,19 @@ from agent_runtime.strategies.react.subagent_prompt import build_subagent_decisi
 from common.logging import record_node_log
 
 
+def _missing_completion_tools(state: AgentState) -> set[str]:
+    required_tools = state.agent_profile.required_completion_tools
+    if not required_tools:
+        return set()
+    completed_tools = {
+        result.tool_name
+        for result in state.gather_tool_results()
+        if result.tool_name
+        and not (isinstance(result.result, dict) and result.result.get("error"))
+    }
+    return required_tools - completed_tools
+
+
 def _plan_was_entirely_duplicate_rejected(state: AgentState) -> bool:
     """Return true when every step in the latest plan was an exact duplicate.
     """
@@ -102,6 +115,8 @@ class ReactStrategy:
         if decision_status == DecisionStatus.BLOCKED:
             return END
         if decision_status == DecisionStatus.SATISFIED:
+            if _missing_completion_tools(state):
+                return NodeName.REASONER.value
             return END
         if state.node_states.planner.plan_count > state.max_turns:
             if not plan or not plan.steps:
@@ -116,6 +131,10 @@ class ReactStrategy:
                 answer_status=AnswerStatus.FAILED,
                 execution_status=ExecutionStatus.NO_NEW_WORK,
             )
+            return END
+        if state.agent_profile.required_completion_tools and not _missing_completion_tools(state):
+            state.node_states.planner.decision_status = DecisionStatus.SATISFIED
+            state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
             return END
         if state.node_states.planner.plan_count >= state.max_turns:
             state.node_states.planner.decision_status = DecisionStatus.BLOCKED

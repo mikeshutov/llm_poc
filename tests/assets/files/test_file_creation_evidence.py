@@ -38,6 +38,6 @@ def test_created_file_result_contains_download_evidence() -> None:
     assert evidence.data["item_id"] == str(file.id)
     assert evidence.data["title"] == "report.pdf"
     assert evidence.type == "file"
-    assert evidence.data["urls"][0]["url"] == "/app/static/files/user-123/report.pdf"
+    assert evidence.data["urls"][0]["url"] == "/api/files/user-123/report.pdf"
     assert evidence.metadata["filename"] == "report.pdf"
     assert evidence.metadata["mime_type"] == "application/pdf"

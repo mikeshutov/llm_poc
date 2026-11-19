@@ -24,6 +24,36 @@ from agent_runtime.models.synthesized_result import SynthesisResultBlock
 from capabilities.registry.constants import TOOL_NAME_LOOKUP_EVIDENCE
 
 
+def test_persistence_caps_evidence_without_invalid_truncation_marker() -> None:
+    tool_call_id = uuid4()
+    evidence = [
+        EvidenceView(source="research", data={"title": str(index)})
+        for index in range(101)
+    ]
+    tool_result = ToolResult(
+        tool_call_id=tool_call_id,
+        tool_name="delegate",
+        evidence=evidence,
+    )
+    result = OrchestratorResult(
+        agent_result=AgentResult(tool_call_ids=[tool_call_id]),
+        result_blocks=[SynthesisResultBlock(
+            content="findings",
+            evidence_ids=[evidence[-1].id],
+        )],
+    )
+
+    with patch(
+        "agent_runtime.models.orchestrator_result.message_repository.MessageToolRepository"
+    ) as repository:
+        repository.return_value.get_tool_results.return_value = [tool_result]
+        payload, _ = result.to_persistence_models()
+
+    assert len(payload.evidence_by_id) == 100
+    assert evidence[-1].id in payload.evidence_by_id
+    assert "_truncated_items" not in payload.evidence_by_id
+
+
 def test_orchestrator_payload_derives_tool_summary_from_evidence() -> None:
     tool_call_id = uuid4()
     tool_results = [

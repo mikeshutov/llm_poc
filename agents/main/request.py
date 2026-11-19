@@ -13,6 +13,7 @@ from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agent_runtime.models.synthesized_result import SynthesisResult, SynthesisResultBlock
 from agents.main.agent import MainReasonerStrategy
 from agents.profile_management.profile import build_profile_management_profile
+from agents.delegate.profile import DELEGATE_PROFILE
 from capabilities.adapters.math import calculate
 from capabilities.adapters.profile import (
     USER_MANAGEMENT_TOOL,
@@ -161,8 +162,11 @@ def _is_uuid(value: str) -> bool:
 
 
 def _ensure_static_agents(main_state: MainState) -> None:
-    if AgentName.PROFILE_MANAGEMENT in main_state.agent_states:
-        return
-    profile = build_profile_management_profile(main_state.execution_context.user_profile)
-    main_state.agent_profiles.append(profile)
+    existing_names = set(main_state.agent_states)
+    if AgentName.PROFILE_MANAGEMENT not in existing_names:
+        main_state.agent_profiles.append(
+            build_profile_management_profile(main_state.execution_context.user_profile)
+        )
+    if AgentName.DELEGATE not in existing_names:
+        main_state.agent_profiles.append(DELEGATE_PROFILE)
     main_state.initialize_agent_states()

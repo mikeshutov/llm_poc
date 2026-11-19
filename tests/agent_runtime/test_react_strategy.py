@@ -96,6 +96,29 @@ def test_react_stops_when_latest_plan_is_entirely_duplicate_rejected() -> None:
     assert state.result.execution_status.value == "no_new_work"
 
 
+def test_react_stops_immediately_after_required_handoff() -> None:
+    strategy = ReactStrategy()
+    state = _state()
+    state.agent_profile.required_completion_tools = {"workspace_file_handoff"}
+    state.node_states.planner.plan = Plan(
+        steps=[PlanStep(
+            id="E1",
+            plan="handoff",
+            tool="workspace_file_handoff",
+            args={"file_name": "findings.md", "reasoning": "The findings are complete."},
+        )]
+    )
+    state.direct_tool_results.append(
+        ToolResult(tool_name="workspace_file_handoff", result={"operation": "handed_off"})
+    )
+
+    route = strategy._route_after_execute(state)
+
+    assert route == "__end__"
+    assert state.node_states.planner.decision_status == DecisionStatus.SATISFIED
+    assert state.result.answer_status.value == "success"
+
+
 def test_react_records_explicit_blocked_decision(monkeypatch) -> None:
     strategy = ReactStrategy()
     state = _state()

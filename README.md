@@ -123,6 +123,8 @@ python scripts/seed_products.py
 Product images are stored in `db/images/` for now.
 Uploaded files (PDFs, DOCX, images, etc.) are stored in `static/files/`.
 
+Generated and uploaded files are served through the generic FastAPI application service so browser-renderable files such as HTML, SVG, and images are returned with their correct content type. Start both services from any platform with `python scripts/start.py`. This starts Streamlit and the API on port `8090`, setting `API_SERVER_URL=http://localhost:8090`. To start them separately, use `uvicorn services.api.server:app --host 0.0.0.0 --port 8090` and `streamlit run main.py`.
+
 ## Notes
 ### Product Catalog
 Initially the repo was just about searching a product catalog with an LLM. That is why the catalog still has a central place in the project history.

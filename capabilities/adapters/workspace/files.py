@@ -23,6 +23,7 @@ from capabilities.registry.constants import (
     TOOL_NAME_WORKSPACE_FILE_DELETE,
     TOOL_NAME_WORKSPACE_FILE_EDIT,
     TOOL_NAME_WORKSPACE_FILE_COMPLETE,
+    TOOL_NAME_WORKSPACE_FILE_HANDOFF,
     TOOL_NAME_WORKSPACE_FILE_LIST,
     TOOL_NAME_WORKSPACE_FILE_READ,
     TOOL_NAME_WORKSPACE_FILE_WRITE,
@@ -42,6 +43,31 @@ class WorkspaceFileNameArgs(BaseModel):
 class WorkspaceWriteArgs(WorkspaceFileNameArgs):
     content: str = Field(default="", description="UTF-8 text content to write. Known document formats and arbitrary source-code extensions are supported.")
     overwrite: bool = Field(default=False, description="Whether to replace an existing file.")
+    source_evidence_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Evidence IDs from the source tool calls summarized by this file. These IDs "
+            "are excluded from later conversation context after the write."
+        ),
+    )
+
+
+class WorkspaceHandoffArgs(WorkspaceFileNameArgs):
+    reasoning: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "A concise explanation of what completed work the file contains and why it is "
+            "ready for the parent agent."
+        ),
+    )
+    source_evidence_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Evidence IDs from the source tool calls summarized by this file. These IDs "
+            "are excluded from later conversation context after the handoff."
+        ),
+    )
 
 
 class WorkspaceReadOptions(BaseModel):
@@ -74,6 +100,13 @@ class WorkspaceEditArgs(WorkspaceFileNameArgs):
     find: str = Field(..., min_length=1, description="Exact text to replace.")
     replace: str = ""
     replace_all: bool = False
+    source_evidence_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Evidence IDs from the source tool calls summarized by this edit. These IDs "
+            "are excluded from later conversation context after the edit."
+        ),
+    )
 
 
 class WorkspaceListArgs(BaseModel):
@@ -157,7 +190,15 @@ def _read_searchable_text(path: Path) -> str | None:
         return None
 
 
-def _result(path: Path, operation: str, *, content: str | None = None, items: list[str] | None = None) -> ToolResult:
+def _result(
+    path: Path,
+    operation: str,
+    *,
+    content: str | None = None,
+    items: list[str] | None = None,
+    source_evidence_ids: list[str] | None = None,
+    reasoning: str | None = None,
+) -> ToolResult:
     relative = _relative(path) if path != _workspace_root() else ""
     summary = f"Workspace file {operation}: {relative}" if relative else f"Workspace files {operation}."
     payload = {"path": relative, "workspace": str(path.parent if path != _workspace_root() else path), "operation": operation}
@@ -165,6 +206,10 @@ def _result(path: Path, operation: str, *, content: str | None = None, items: li
         payload["content"] = content
     if items is not None:
         payload["files"] = items
+    if source_evidence_ids:
+        payload["source_evidence_ids"] = source_evidence_ids
+    if reasoning:
+        payload["reasoning"] = reasoning
     evidence = EvidenceView(
         summary=summary,
         source=operation,
@@ -172,12 +217,18 @@ def _result(path: Path, operation: str, *, content: str | None = None, items: li
         metadata={"path": relative, "workspace": str(_workspace_root()), "operation": operation},
         data={
             "title": relative or "Workspace files",
+            **({"reasoning": reasoning} if reasoning else {}),
         })
     return ToolResult(result=payload, evidence=[evidence])
 
 
 @tool(TOOL_NAME_WORKSPACE_FILE_WRITE, args_schema=WorkspaceWriteArgs, description="Write UTF-8 text to a file in the current conversation workspace, including arbitrary source-code extensions.")
-def workspace_file_write(file_name: str, content: str = "", overwrite: bool = False) -> ToolResult:
+def workspace_file_write(
+    file_name: str,
+    content: str = "",
+    overwrite: bool = False,
+    source_evidence_ids: list[str] | None = None,
+) -> ToolResult:
     target = _safe_file_name(file_name)
     if target.exists() and not overwrite:
         raise ValueError(f"Workspace file already exists: '{file_name}'. Set overwrite=true to replace it.")
@@ -193,7 +244,48 @@ def workspace_file_write(file_name: str, content: str = "", overwrite: bool = Fa
             # language; unknown extensions such as .go remain UTF-8 text.
             file_format = FileType.TXT
     write_file(target, content, file_format)
-    return _result(target, "written")
+    normalized_source_evidence_ids = list(dict.fromkeys(
+        evidence_id.strip()
+        for evidence_id in (source_evidence_ids or [])
+        if isinstance(evidence_id, str) and evidence_id.strip()
+    ))
+    return _result(
+        target,
+        "written",
+        source_evidence_ids=normalized_source_evidence_ids,
+    )
+
+
+@tool(
+    TOOL_NAME_WORKSPACE_FILE_HANDOFF,
+    args_schema=WorkspaceHandoffArgs,
+    description=(
+        "Hand off an existing Markdown or state-management workspace file to a parent agent. "
+        "This creates no artifact and does not promote the file; it returns a compact evidence "
+        "record identifying the available workspace file."
+    ),
+)
+def workspace_file_handoff(
+    file_name: str,
+    reasoning: str,
+    source_evidence_ids: list[str] | None = None,
+) -> ToolResult:
+    target = _safe_file_name(file_name)
+    if not target.is_file():
+        raise ValueError(f"Workspace file does not exist: '{file_name}'.")
+    if not target.read_text(encoding="utf-8").strip():
+        raise ValueError(f"Workspace file is empty: '{file_name}'.")
+    normalized_source_evidence_ids = list(dict.fromkeys(
+        evidence_id.strip()
+        for evidence_id in (source_evidence_ids or [])
+        if isinstance(evidence_id, str) and evidence_id.strip()
+    ))
+    return _result(
+        target,
+        "handed_off",
+        source_evidence_ids=normalized_source_evidence_ids,
+        reasoning=reasoning.strip(),
+    )
 
 
 @tool(TOOL_NAME_WORKSPACE_FILE_READ, args_schema=WorkspaceReadArgs, description="Read UTF-8 text from a file in the current conversation workspace.")
@@ -219,7 +311,13 @@ def workspace_file_read(
 
 
 @tool(TOOL_NAME_WORKSPACE_FILE_EDIT, args_schema=WorkspaceEditArgs, description="Apply an exact text replacement to a named file in the root of the current conversation workspace.")
-def workspace_file_edit(file_name: str, find: str, replace: str = "", replace_all: bool = False) -> ToolResult:
+def workspace_file_edit(
+    file_name: str,
+    find: str,
+    replace: str = "",
+    replace_all: bool = False,
+    source_evidence_ids: list[str] | None = None,
+) -> ToolResult:
     target = _safe_file_name(file_name)
     if not target.is_file():
         raise ValueError(f"Workspace file does not exist: '{file_name}'.")
@@ -230,7 +328,16 @@ def workspace_file_edit(file_name: str, find: str, replace: str = "", replace_al
     if occurrences > 1 and not replace_all:
         raise ValueError("The requested text occurs multiple times; set replace_all=true to edit all matches.")
     target.write_text(original.replace(find, replace, -1 if replace_all else 1), encoding="utf-8")
-    return _result(target, "edited")
+    normalized_source_evidence_ids = list(dict.fromkeys(
+        evidence_id.strip()
+        for evidence_id in (source_evidence_ids or [])
+        if isinstance(evidence_id, str) and evidence_id.strip()
+    ))
+    return _result(
+        target,
+        "edited",
+        source_evidence_ids=normalized_source_evidence_ids,
+    )
 
 
 @tool(TOOL_NAME_WORKSPACE_FILE_LIST, args_schema=WorkspaceListArgs, description="Search and list files in the current conversation workspace using a name query or regular expression, with optional text-content search.")

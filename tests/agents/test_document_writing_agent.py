@@ -25,6 +25,11 @@ def test_document_writing_agent_is_react() -> None:
     assert DOCUMENT_WRITING_PROFILE.execution_strategy.value == "react"
 
 
+def test_document_writing_description_distinguishes_supported_formats() -> None:
+    assert "TXT, Markdown (.md), DOCX, and PDF" in DOCUMENT_WRITING_PROFILE.description
+    assert "Do not use it for HTML pages, CSS, JavaScript" in DOCUMENT_WRITING_PROFILE.description
+
+
 def test_document_writing_react_prompt_exposes_file_creation_rules() -> None:
     state = AgentState.new(
         agent_profile=DOCUMENT_WRITING_PROFILE,

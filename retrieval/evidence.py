@@ -131,6 +131,22 @@ class ToolResult(BaseModel):
     evidence: list[EvidenceView] = Field(default_factory=list)
     state: ToolOutcome | None = None
 
+    @field_validator("evidence", mode="before")
+    @classmethod
+    def normalize_evidence(cls, value: object) -> list[object]:
+        """Rehydrate evidence created by an older Streamlit module generation."""
+        if value is None:
+            return []
+        if not isinstance(value, (list, tuple)):
+            return value  # Let Pydantic produce the appropriate validation error.
+        normalized: list[object] = []
+        for item in value:
+            if isinstance(item, BaseModel) and not isinstance(item, EvidenceView):
+                normalized.append(item.model_dump(mode="json"))
+            else:
+                normalized.append(item)
+        return normalized
+
     @classmethod
     def error(cls, error: str, **extra_result: Any) -> "ToolResult":
         payload: dict[str, Any] = {"error": error}

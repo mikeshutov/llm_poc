@@ -60,9 +60,11 @@ def build_document_writing_profile() -> AgentProfile:
         version=6,
         description=(
             "Create and update documents in the conversation workspace, then promote completed "
-            "documents into managed artifacts. Use this agent "
-            "for explicit requests to write, create, edit, rename, or otherwise maintain "
-            "document files. Make sure to provide this agent with an array of Evidence ID's "
+            "documents into managed artifacts. This agent supports document formats only: "
+            "TXT, Markdown (.md), DOCX, and PDF. Use it for explicit requests to write, "
+            "create, edit, rename, or otherwise maintain those document files. Do not use it "
+            "for HTML pages, CSS, JavaScript, or other source-code artifacts; route those to "
+            "the coding agent. Make sure to provide this agent with an array of Evidence ID's "
             "whenever those are available as well as the goal. The delegation parameters "
             "are task and evidence_ids."
         ),

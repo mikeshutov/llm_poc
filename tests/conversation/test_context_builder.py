@@ -66,3 +66,65 @@ def test_context_excludes_subagent_tool_entries() -> None:
         context = build_roundtrip_context(str(repository.roundtrip.conversation_id))
 
     assert all(message.is_subagent is not True for message in context.messages)
+
+
+def test_workspace_write_suppresses_declared_source_evidence_from_future_context() -> None:
+    repository = FakeConversationRepository()
+    repository.messages = [
+        ConversationMessage(
+            uuid4(), repository.roundtrip.id, 0, "tool_result", "internal", "tool", "",
+            {"tool_name": "web_search", "evidence": [{"id": "ev_12", "summary": "source"}]},
+            {}, None, "",
+        ),
+        ConversationMessage(
+            uuid4(), repository.roundtrip.id, 1, "tool_call", "internal", "assistant", "",
+            {
+                "tool_name": "workspace_file_write",
+                "input_payload": {
+                    "file_name": "delegate-result.md",
+                    "source_evidence_ids": ["ev_12"],
+                },
+            },
+            {}, None, "",
+        ),
+        ConversationMessage(
+            uuid4(), repository.roundtrip.id, 2, "tool_result", "internal", "tool", "",
+            {"tool_name": "web_search", "evidence": [{"id": "ev_12", "summary": "source"}]},
+            {}, None, "",
+        ),
+    ]
+
+    with patch("conversation.context_builder.get_conversation_repo", return_value=repository):
+        context = build_roundtrip_context(str(repository.roundtrip.conversation_id))
+
+    assert context.messages[0].payload["evidence"] == []
+    assert context.messages[2].payload["evidence"] == []
+
+
+def test_non_compactable_discovery_results_remain_in_context() -> None:
+    repository = FakeConversationRepository()
+    repository.messages = [
+        ConversationMessage(
+            uuid4(), repository.roundtrip.id, 0, "tool_result", "internal", "tool", "",
+            {
+                "tool_name": "discover_capabilities",
+                "compactable": False,
+                "evidence": [{"id": "discovery-1", "summary": "Discovered tools"}],
+            }, {}, None, "",
+        ),
+        ConversationMessage(
+            uuid4(), repository.roundtrip.id, 1, "tool_call", "internal", "assistant", "",
+            {
+                "tool_name": "workspace_file_write",
+                "input_payload": {
+                    "file_name": "delegate-state.md",
+                    "source_evidence_ids": ["discovery-1"],
+                },
+            }, {}, None, "",
+        ),
+    ]
+
+    with patch("conversation.context_builder.get_conversation_repo", return_value=repository):
+        context = build_roundtrip_context(str(repository.roundtrip.conversation_id))
+
+    assert context.messages[0].payload["evidence"][0]["id"] == "discovery-1"

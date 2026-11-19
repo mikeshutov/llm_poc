@@ -21,6 +21,7 @@ from retrieval.evidence import EvidenceView, ToolResult
 from retrieval.evidence_store import build_evidence_steps_from_tool_results
 from agent_runtime.evaluation.prompts.evaluator_prompt import build_evaluator_prompt
 from langchain_core.messages import SystemMessage
+from pydantic import BaseModel
 
 
 def test_evidence_views_exclude_internal_and_raw_fields() -> None:
@@ -159,6 +160,27 @@ def test_evidence_steps_do_not_label_tool_errors_as_no_results() -> None:
     assert prompt.sections_raw[PromptSectionKeys.EVIDENCE] == [
         {"type": "web_search_results"}
     ]
+
+
+def test_tool_result_rehydrates_evidence_from_an_older_model_generation() -> None:
+    class LegacyEvidenceView(BaseModel):
+        id: str
+        type: str = "generic"
+        source: str = ""
+        summary: str | None = None
+        data: dict = {}
+        metadata: dict = {}
+
+    legacy = LegacyEvidenceView(
+        id="legacy-evidence",
+        source="test",
+        summary="Legacy evidence",
+    )
+
+    result = ToolResult(evidence=[legacy])
+
+    assert isinstance(result.evidence[0], EvidenceView)
+    assert result.evidence[0].id == "legacy-evidence"
 
 
 

@@ -58,6 +58,7 @@ from capabilities.adapters.workspace import (
     workspace_file_delete,
     workspace_file_edit,
     workspace_file_complete,
+    workspace_file_handoff,
     workspace_file_list,
     workspace_file_promote,
     workspace_file_read,
@@ -180,21 +181,35 @@ WRITING_TOOLS = [
         cache_policy=ToolCachePolicy(3600),
     ),
 ]
-WORKSPACE_TOOLS = [
-    Tool(workspace_file_write, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
-    Tool(workspace_file_read, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=2),
-    Tool(workspace_file_edit, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
-    Tool(workspace_file_list, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=3),
-    Tool(workspace_file_delete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
-    Tool(workspace_file_complete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
-    Tool(workspace_file_promote, result_type=TOOL_RESULT_TYPE_FILE, version=2),
-]
 WORKSPACE_READ_TOOLS = [
     Tool(workspace_file_read, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=2),
     Tool(workspace_file_list, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=3),
 ]
+
+# Ordinary workspace operations are safe for agents that need to inspect,
+# maintain, or hand off task state. Promotion is intentionally kept out of
+# this group because it converts a workspace file into a managed artifact.
+WORKSPACE_COMMON_TOOLS = [
+    Tool(workspace_file_write, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+    *WORKSPACE_READ_TOOLS,
+    Tool(workspace_file_edit, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+    Tool(workspace_file_delete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+    Tool(workspace_file_complete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+    Tool(workspace_file_handoff, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+]
+# Runtime state files can be read and updated by agents without being treated
+# as completed artifacts or parent-agent handoffs.
+WORKSPACE_MEMORY_TOOLS = [
+    Tool(workspace_file_write, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+    *WORKSPACE_READ_TOOLS,
+    Tool(workspace_file_edit, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
+]
+WORKSPACE_PROMOTION_TOOLS = [
+    Tool(workspace_file_promote, result_type=TOOL_RESULT_TYPE_FILE, version=2),
+]
+WORKSPACE_TOOLS = [*WORKSPACE_COMMON_TOOLS, *WORKSPACE_PROMOTION_TOOLS]
 WORKSPACE_MUTATION_TOOLS = [
-    tool for tool in WORKSPACE_TOOLS if tool.name not in {item.name for item in WORKSPACE_READ_TOOLS}
+    tool for tool in WORKSPACE_COMMON_TOOLS if tool.name not in {item.name for item in WORKSPACE_READ_TOOLS}
 ]
 PROFILE_TOOLS = [
     Tool(

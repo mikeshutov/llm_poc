@@ -14,6 +14,21 @@ from agent_runtime.models.plan import Plan, PlanStep
 from capabilities.registry.repository.models import ToolCall
 
 
+def _tool_is_compactable(tool_name: str) -> bool:
+    # Keep registry imports lazy: the tool registry imports memory adapters,
+    # which import this repository during application startup.
+    from capabilities.registry.tools import TOOLS_BY_NAME
+
+    registered_tool = TOOLS_BY_NAME.get(tool_name)
+    if registered_tool is not None:
+        return bool(registered_tool.compactable)
+    if tool_name == "discover_capabilities":
+        from capabilities.discovery.discover_capabilities_tool import CAPABILITY_DISCOVERY_TOOL
+
+        return bool((getattr(CAPABILITY_DISCOVERY_TOOL, "metadata", {}) or {}).get("compactable", True))
+    return True
+
+
 def _optional_uuid(value: Any) -> UUID | None:
     if value is None:
         return None
@@ -52,6 +67,7 @@ class MessageToolRepository:
         output = self._sanitize_for_storage(output_payload) if output_payload is not None else None
         if isinstance(output, dict):
             output.pop("evidence", None)
+        compactable = _tool_is_compactable(step.tool)
         request_hash = build_signature({"tool_name": step.tool, "input": sanitized_input})
         message_metadata = {"tool_name": step.tool}
         request_message = self._repo.append_message(
@@ -66,6 +82,7 @@ class MessageToolRepository:
                 "step_index": step.step_index,
                 "goal": step.plan, "hypothesis": step.hypothesis,
                 "call_metadata": self._sanitize_for_storage(step.metadata),
+                "compactable": compactable,
             }, metadata=message_metadata,
             is_subagent=is_subagent,
             subagent_name=step.tool if is_subagent else None,
@@ -87,6 +104,7 @@ class MessageToolRepository:
                 "provider_tool_call_id": step.id,
                 "step_index": step.step_index, "goal": step.plan, "hypothesis": step.hypothesis,
                 "call_metadata": self._sanitize_for_storage(step.metadata),
+                "compactable": compactable,
             }, metadata=message_metadata, parent_message_id=request_message.id,
             is_subagent=is_subagent,
             subagent_name=step.tool if is_subagent else None,

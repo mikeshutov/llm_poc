@@ -61,7 +61,6 @@ _DISCOVERY_METADATA: dict[str, ToolDiscoveryMetadata] = {
     "writing_templates": ToolDiscoveryMetadata("Writing templates", "writing", "Discover reusable writing template metadata and supported output formats. Returns metadata only, not template content.", ("document template", "essay template", "report template", "meeting notes"), version=1),
     "workspace_file_read": ToolDiscoveryMetadata("Read workspace file", "workspace", "Read text or source content from a file in the current conversation workspace without modifying it.", ("workspace", "file contents", "source code"), version=2),
     "workspace_file_list": ToolDiscoveryMetadata("Search workspace files", "workspace", "List or search files in the current conversation workspace by name, regular expression, or text content without modifying them.", ("workspace", "find files", "search file contents"), version=3),
-    "workspace_file_complete": ToolDiscoveryMetadata("Complete workspace file", "workspace", "Validate and mark a completed workspace file as the final artifact produced by the current agent.", ("workspace", "final report", "completed artifact")),
     "user_update_names": ToolDiscoveryMetadata("Update user names", "persistent user profile", "Update any explicitly provided display, first, or last name fields; empty fields remain unchanged."),
     "user_update_tone": ToolDiscoveryMetadata("Update user tone preferences", "persistent user profile", "Store durable preferences for response tone, directness, humor, and technical depth."),
 }
