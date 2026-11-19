@@ -163,7 +163,7 @@ def test_delegate_prompt_requires_periodic_concise_working_memory_updates() -> N
 
 
 def test_delegate_prompt_injects_runtime_working_memory_contents(tmp_path, monkeypatch) -> None:
-    from agents.delegate.memory import initialize_working_memory_file
+    from agent_runtime.working_memory import initialize_working_memory_file
     from agents.delegate.profile import DELEGATE_PROFILE
 
     state = AgentState.new(
@@ -173,7 +173,7 @@ def test_delegate_prompt_injects_runtime_working_memory_contents(tmp_path, monke
         execution_context=AgentExecutionContext.new(conversation_id="conversation-1"),
     )
     monkeypatch.setattr(
-        "agents.delegate.memory.conversation_workspace_path",
+        "agent_runtime.working_memory.conversation_workspace_path",
         lambda conversation_id, user_id=None: tmp_path,
     )
     monkeypatch.setattr(

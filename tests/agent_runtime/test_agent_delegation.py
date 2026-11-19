@@ -15,7 +15,7 @@ from agent_runtime.runner import AgentRunner
 from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE, DocumentWritingDelegationArgs
 from agents.research.profile import RESEARCH_PROFILE
 from agents.delegate.profile import DELEGATE_PROFILE
-from agents.delegate.memory import initialize_working_memory_file
+from agent_runtime.working_memory import initialize_working_memory_file
 from capabilities.discovery.discover_capabilities_tool import CAPABILITY_DISCOVERY_TOOL
 from retrieval.evidence import EvidenceView, ToolResult
 
@@ -127,7 +127,7 @@ def test_runtime_creates_delegate_working_memory_file_before_execution(tmp_path,
         llm=object(),
     )
     monkeypatch.setattr(
-        "agents.delegate.memory.conversation_workspace_path",
+        "agent_runtime.working_memory.conversation_workspace_path",
         lambda conversation_id, user_id=None: tmp_path,
     )
 
@@ -151,7 +151,7 @@ def test_delegate_reinjects_modified_runtime_working_memory(tmp_path, monkeypatc
         llm=object(),
     )
     monkeypatch.setattr(
-        "agents.delegate.memory.conversation_workspace_path",
+        "agent_runtime.working_memory.conversation_workspace_path",
         lambda conversation_id, user_id=None: tmp_path,
     )
     monkeypatch.setattr(
@@ -277,10 +277,9 @@ def test_non_research_delegation_preserves_child_permission() -> None:
     assert child_profile is RESEARCH_PROFILE
 
 
-def test_runner_can_preserve_a_restricted_delegated_profile() -> None:
-    restricted_profile = _profile_for_delegated_run(RESEARCH_PROFILE, DELEGATE_PROFILE)
+def test_runner_applies_its_configured_profile() -> None:
     state = AgentState.new(
-        agent_profile=restricted_profile,
+        agent_profile=RESEARCH_PROFILE,
         execution_context=AgentExecutionContext.new(),
         llm=object(),
     )
@@ -290,8 +289,7 @@ def test_runner_can_preserve_a_restricted_delegated_profile() -> None:
 
     runner = AgentRunner(DELEGATE_PROFILE, strategy=IdentityStrategy())
 
-    preserved = runner.run(state, preserve_agent_profile=True)
-    assert preserved.agent_profile.can_delegate_agents is False
+    result = runner.run(state)
 
-    replaced = runner.run(state)
-    assert replaced.agent_profile.can_delegate_agents is False
+    assert result.agent_profile is DELEGATE_PROFILE
+    assert result.agent_profile.can_delegate_agents is False

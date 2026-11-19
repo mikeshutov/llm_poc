@@ -13,4 +13,4 @@ RUNNER = AgentRunner(CODING_PROFILE, ReactStrategy())
 
 @traceable(name=CODING_PROFILE.name)
 def run_agent(agent_state: AgentState) -> AgentState:
-    return RUNNER.run(agent_state, preserve_agent_profile=True)
+    return RUNNER.run(agent_state)

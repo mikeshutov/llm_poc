@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from uuid import uuid4
 
 from assets.files.storage import conversation_workspace_path
@@ -7,15 +8,18 @@ from agent_runtime.models.agent_state import AgentState
 
 
 def initialize_working_memory_file(state: AgentState) -> None:
-    """Create the delegate's private runtime memory file before it runs."""
+    """Create a profile-driven private working-memory file before an agent runs."""
+    template = state.agent_profile.working_memory_template
     conversation_id = state.execution_context.conversation_id
-    if not conversation_id:
+    if not template or not conversation_id:
         return
+
     user_id = state.execution_context.user_profile.user_id
-    file_name = f".delegate-working-memory-{uuid4().hex}.md"
+    profile_slug = re.sub(r"[^a-z0-9]+", "-", state.agent_profile.name.lower()).strip("-") or "agent"
+    file_name = f".agent-working-memory-{profile_slug}-{uuid4().hex}.md"
     directory = conversation_workspace_path(conversation_id, user_id=user_id)
     directory.mkdir(parents=True, exist_ok=True)
-    content = state.agent_profile.working_memory_template.replace(
+    content = template.replace(
         "{{ objective }}",
         state.inputs.task or state.inputs.request_task,
     ).replace("{memory_path}", file_name)

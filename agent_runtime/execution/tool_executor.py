@@ -378,8 +378,8 @@ def _execute_top_level_step(
                 evidence_ids=step.args.get("evidence_ids", []),
             ),
         )
-        if delegated_profile.name == AgentName.DELEGATE:
-            from agents.delegate.memory import initialize_working_memory_file
+        if delegated_profile.working_memory_template:
+            from agent_runtime.working_memory import initialize_working_memory_file
 
             initialize_working_memory_file(delegated_run)
         delegated_run.available_agent_states = (

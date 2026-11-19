@@ -29,7 +29,6 @@ class AgentRunner:
         user_query: str | None = None,
         execution_context: AgentExecutionContext | None = None,
         llm: Any | None = None,
-        preserve_agent_profile: bool = False,
     ) -> AgentState:
         if agent_state is None:
             if user_query is None:
@@ -42,11 +41,7 @@ class AgentRunner:
                 execution_context=execution_context,
                 llm=llm,
             )
-        prepared_state = (
-            agent_state
-            if preserve_agent_profile
-            else self._prepare_state(agent_state)
-        )
+        prepared_state = self._prepare_state(agent_state)
         return self.strategy.run(
             prepared_state,
             thread_id=prepared_state.execution_context.conversation_id or "",
