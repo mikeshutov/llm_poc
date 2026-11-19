@@ -15,18 +15,22 @@ from capabilities.registry.repository.models import ToolCall
 
 
 def _tool_is_compactable(tool_name: str) -> bool:
-    # Keep registry imports lazy: the tool registry imports memory adapters,
-    # which import this repository during application startup.
-    from capabilities.registry.tools import TOOLS_BY_NAME
+    # Resolve the canonical runtime tool by name. Keep this import lazy because
+    # the global registry imports adapters that depend on this repository.
+    from capabilities.registry.global_registry import (
+        GLOBAL_TOOL_REGISTRY,
+        UnknownToolError,
+        register_default_tools,
+    )
 
-    registered_tool = TOOLS_BY_NAME.get(tool_name)
-    if registered_tool is not None:
-        return bool(registered_tool.compactable)
-    if tool_name == "discover_capabilities":
-        from capabilities.discovery.discover_capabilities_tool import CAPABILITY_DISCOVERY_TOOL
-
-        return bool((getattr(CAPABILITY_DISCOVERY_TOOL, "metadata", {}) or {}).get("compactable", True))
-    return True
+    register_default_tools()
+    try:
+        tool = GLOBAL_TOOL_REGISTRY.get(tool_name)
+    except UnknownToolError:
+        return True
+    if hasattr(tool, "compactable"):
+        return bool(tool.compactable)
+    return bool((getattr(tool, "metadata", {}) or {}).get("compactable", True))
 
 
 def _optional_uuid(value: Any) -> UUID | None:

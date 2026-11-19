@@ -13,7 +13,7 @@ STATIC_FILES_URL_PREFIX = (
 _FILES_ROUTE = "/api/files"
 
 
-def artifact_file_url(file_path: str) -> str:
+def static_file_url(file_path: str) -> str:
     """Return a browser URL served by the application API."""
     normalized_path = file_path.replace("\\", "/").strip()
     while normalized_path.startswith("./"):
@@ -32,13 +32,7 @@ def artifact_file_url(file_path: str) -> str:
     return quote(f"{base_url}{_FILES_ROUTE}/{relative_path.as_posix()}", safe="/:")
 
 
-def static_file_url(file_path: str) -> str:
-    """Backward-compatible name for the browser-facing file URL."""
-    return artifact_file_url(file_path)
-
-
 __all__ = [
     "STATIC_FILES_URL_PREFIX",
-    "artifact_file_url",
     "static_file_url",
 ]
