@@ -17,6 +17,9 @@ from capabilities.registry.constants import EVIDENCE_PERSISTENCE_EXCLUDED_TOOL_N
 from capabilities.registry.repository import message_repository
 
 
+MAX_PERSISTED_EVIDENCE = 100
+
+
 def _normalize_evidence_ids(
     evidence_ids: list[str],
     evidence_by_id: dict[str, EvidenceView],
@@ -119,7 +122,7 @@ class OrchestratorResult:
     def to_persistence_models(self) -> tuple[OrchestratorPayload, RelevantEvidenceByTool]:
         tool_results = message_repository.MessageToolRepository().get_tool_results(self.agent_result.tool_call_ids)
         evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
-        evidence_by_id = {
+        all_evidence_by_id = {
             evidence_id: _project_evidence_for_persistence(evidence)
             for evidence_id, evidence in evidence_bundle.evidence_by_id.items()
             if not _is_evidence_excluded_from_persistence(evidence)
@@ -131,6 +134,20 @@ class OrchestratorResult:
                 for paragraph in self.answer
                 if isinstance(paragraph, str) and paragraph.strip()
             ]
+        preferred_evidence_ids = [
+            evidence_id
+            for block in result_blocks
+            for evidence_id in block.evidence_ids
+            if evidence_id in all_evidence_by_id
+        ]
+        ordered_evidence_ids = list(dict.fromkeys([
+            *preferred_evidence_ids,
+            *all_evidence_by_id,
+        ]))
+        evidence_by_id = {
+            evidence_id: all_evidence_by_id[evidence_id]
+            for evidence_id in ordered_evidence_ids[:MAX_PERSISTED_EVIDENCE]
+        }
         normalized_result_blocks = [
             SynthesisResultBlock(
                 content=block.content,

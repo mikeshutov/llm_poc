@@ -27,6 +27,7 @@ class AgentState:
     result: AgentResult = field(default_factory=AgentResult)
     reasoner_result: SynthesisResult | None = None
     reasoner_message_history: list[Any] = field(default_factory=list)
+    working_memory_file_name: str | None = None
     llm: Any = field(
         default_factory=lambda: build_chat_model(
             provider=ConversationModelConfig.build_default().main_agent.planner.provider,
@@ -85,6 +86,26 @@ class AgentState:
 
     def resolve_agent_scope(self) -> str:
         return self.agent_profile.scope
+
+    def render_working_memory(self) -> str:
+        """Render the profile's runtime memory template for this task."""
+        memory = self.agent_profile.working_memory_template.replace(
+            "{{ objective }}",
+            self.inputs.task or self.inputs.request_task,
+        ).replace("{memory_path}", self.working_memory_file_name or "(runtime file not initialized)")
+        if self.working_memory_file_name:
+            from assets.files.storage import conversation_workspace_path
+
+            conversation_id = self.execution_context.conversation_id
+            user_id = self.execution_context.user_profile.user_id
+            if conversation_id:
+                path = conversation_workspace_path(conversation_id, user_id=user_id) / self.working_memory_file_name
+                try:
+                    memory = path.read_text(encoding="utf-8").strip()
+                except (FileNotFoundError, OSError, UnicodeError):
+                    pass
+                memory += f"\n\n<!-- Runtime working memory file: {self.working_memory_file_name} -->"
+        return memory
 
     def gather_tool_results(self) -> list[ToolResult]:
         gathered = list(self.direct_tool_results)

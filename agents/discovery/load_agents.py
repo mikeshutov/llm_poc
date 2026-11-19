@@ -8,6 +8,7 @@ from common.logging import compact_trace_inputs, compact_trace_outputs, record_n
 from llm.clients.embeddings import embed_text
 from agents.repository.repo_factory import get_agent_repo
 from agents.seeder import SYSTEM_AGENT_PROFILES
+from agents.delegate.profile import DELEGATE_PROFILE
 from agent_runtime.models.main_state import MainState
 from agents.discovery.agent_selection_query import build_agent_selection_query
 from agent_runtime.constants import NodeName
@@ -21,7 +22,7 @@ def load_agents(main_state: MainState) -> MainState:
         conversation_context=main_state.execution_context.conversation_context,
     )
     existing_names = {profile.name for profile in main_state.agent_profiles}
-    for profile in SYSTEM_AGENT_PROFILES:
+    for profile in (*SYSTEM_AGENT_PROFILES, DELEGATE_PROFILE):
         if profile.name in existing_names:
             continue
         main_state.agent_profiles.append(profile)

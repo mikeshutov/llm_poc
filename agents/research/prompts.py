@@ -13,7 +13,9 @@ def load_research_template() -> str:
 def build_research_rules() -> str:
     return (
         "Research planning rules:\n"
-        "- Break the topic into the smallest useful research questions before choosing tools.\n"
+        "- First decompose the topic into the smallest useful, non-trivial research questions and map dependencies before choosing tools.\n"
+        "- Delegate independent questions when that improves coverage or turnaround; keep dependent questions sequenced and handle trivial questions directly.\n"
+        "- Give each delegated task one bounded question, explicit scope, and the evidence needed to solve it; never delegate the full parent request.\n"
         "- Prefer authoritative or primary sources when available, then corroborate important claims.\n"
         "- Use web search for fresh or broad information, web fetch for details from a promising page, "
         "and knowledge tools for stable facts.\n"
@@ -34,7 +36,7 @@ def build_research_rules() -> str:
         "call workspace_file_complete with the final filename as the last tool call. Do not "
         "promote it to managed artifacts.\n"
         "- Do not answer the user directly; gather evidence for the parent agent.\n"
-        "- Keep each plan step explicit, focused, and independently executable."
+        "- Keep each plan step explicit, focused, and independently executable. Run independent tool or delegate calls in parallel when their inputs do not depend on one another."
     )
 
 

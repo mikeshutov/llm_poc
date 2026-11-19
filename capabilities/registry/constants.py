@@ -46,6 +46,7 @@ TOOL_NAME_WORKSPACE_FILE_LIST = "workspace_file_list"
 TOOL_NAME_WORKSPACE_FILE_DELETE = "workspace_file_delete"
 TOOL_NAME_WORKSPACE_FILE_PROMOTE = "workspace_file_promote"
 TOOL_NAME_WORKSPACE_FILE_COMPLETE = "workspace_file_complete"
+TOOL_NAME_WORKSPACE_FILE_HANDOFF = "workspace_file_handoff"
 TOOL_NAME_UPDATE_USER_NAMES = "user_update_names"
 TOOL_NAME_UPDATE_USER_TONE = "user_update_tone"
 

@@ -77,4 +77,5 @@ CAPABILITY_DISCOVERY_TOOL = StructuredTool.from_function(
         "Describe the needed capability in the prompt argument."
     ),
     args_schema=CapabilityDiscoveryArgs,
+    metadata={"compactable": False},
 )

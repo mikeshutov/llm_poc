@@ -1,5 +1,6 @@
 from agents.research.profile import RESEARCH_PROFILE
 from agents.research.prompts import build_research_rules, load_research_template
+from agent_runtime.models.agent_profile import AgentDelegationRole
 
 
 def test_research_agent_can_research_and_write_a_workspace_report() -> None:
@@ -17,12 +18,14 @@ def test_research_agent_can_research_and_write_a_workspace_report() -> None:
         "workspace_file_read",
         "workspace_file_list",
         "workspace_file_complete",
+        "workspace_file_handoff",
     }
 
 
 def test_research_agent_is_planner_executor_evaluator() -> None:
     assert RESEARCH_PROFILE.execution_strategy.value == "planner_executor_evaluator"
     assert RESEARCH_PROFILE.max_turns == 8
+    assert RESEARCH_PROFILE.delegation_role == AgentDelegationRole.COORDINATOR
 
 
 def test_research_rules_use_web_search_query_text_argument() -> None:

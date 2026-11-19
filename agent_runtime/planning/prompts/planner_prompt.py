@@ -1,6 +1,6 @@
 from langchain_core.tools import BaseTool
 
-from agent_runtime.models.agent_profile import AgentName
+from agent_runtime.models.agent_profile import AgentDelegationRole, AgentName
 from agent_runtime.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from agent_runtime.models.agent_state import AgentState
 from retrieval.evidence_store import (
@@ -11,6 +11,10 @@ from agent_runtime.planning.models.compiled_planner_context import CompiledPlann
 from agent_runtime.planning.prompts.planner_rules import build_planner_rules
 from capabilities.registry.tools import TOOLS_BY_NAME
 from capabilities.discovery.models import AvailableTool
+from agent_runtime.planning.agent_delegation import (
+    build_agent_delegation_tools,
+    delegated_agent_states,
+)
 
 
 EMPTY_EXECUTION_REPLAN_RULE = (
@@ -26,6 +30,22 @@ BATCH_INDEPENDENT_TOOLS_RULE = (
     "When multiple independent tools can materially advance the task, include all of them "
     "in the same plan and call them in one planning turn instead of requesting them one at a time. "
     "Only sequence calls when a later call needs the result of an earlier call."
+)
+RESEARCH_COORDINATOR_RULE = (
+    "You are coordinating a research task. First decompose the request into named, substantial "
+    "subproblems and map which ones are independent versus dependent. Delegate only bounded, "
+    "non-trivial independent subproblems to the available delegate agent, then reconcile the "
+    "returned evidence. Run independent delegations in parallel and sequence dependent "
+    "work. Every delegated task must be narrower than the parent request and identify one concrete "
+    "scope such as a source family, date range, metric definition, historical period, or "
+    "comparability issue. Solve small or synthesis-heavy work directly. Never send the entire user "
+    "request, or a near-identical paraphrase of it, to a delegate agent."
+)
+RESEARCH_LEAF_RULE = (
+    "You are a leaf delegate agent. Focus only on the assigned task, gather and evaluate "
+    "evidence, and return the completed findings and evidence to the parent. Use the provided "
+    "Working Memory template instead of creating a workspace file. Do not delegate further "
+    "or attempt to own the full parent task."
 )
 
 def _is_profile_management_agent(state: AgentState) -> bool:
@@ -143,31 +163,6 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     return CompiledPlannerContext(tools=list(deduped_tools.values()), compiled_tools=compiled_tools, rules=rules)
 def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]]:
     context = _compile_tools_rules_from_state(state)
-    if state.available_agent_states is not None:
-        capabilities = state.inputs.discovered_capabilities
-        prompt = AgentPrompt(
-            instruction=(
-                "You are the top-level planner. Use the available tools to complete the task. "
-                "Do not invent capabilities."
-            ),
-            user_profile=state.execution_context.user_profile,
-            conversation_context=state.execution_context.conversation_context,
-            task=state.inputs.task,
-            available_tools=(
-                [] if capabilities is None else list(capabilities.tools)
-            ) + _prompt_tools(list(state.agent_profile.static_tools)),
-            rules=f"{build_planner_rules(context.rules)}\n\n{BATCH_INDEPENDENT_TOOLS_RULE}",
-        )
-        for section in (
-            PromptSectionKeys.USER_PROFILE,
-            PromptSectionKeys.CONVERSATION_CONTEXT,
-            PromptSectionKeys.AVAILABLE_TOOLS,
-            PromptSectionKeys.RULES,
-            PromptSectionKeys.TASK,
-        ):
-            prompt.include_section(section)
-        return prompt, context.tools
-
     tool_results = state.gather_tool_results()
     evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
     evidence_steps = build_evidence_steps_from_tool_results(
@@ -190,15 +185,35 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
             f"- {', '.join(discovered_attribute_types)}"
         )
 
+    delegated_states = delegated_agent_states(state)
+    delegation_tools = build_agent_delegation_tools(delegated_states)
+    planner_instruction = state.agent_profile.planner_instruction
+    if state.agent_profile.delegation_role == AgentDelegationRole.COORDINATOR:
+        planner_instruction = f"{planner_instruction}\n\n{RESEARCH_COORDINATOR_RULE}"
+    elif state.agent_profile.delegation_role == AgentDelegationRole.LEAF:
+        planner_instruction = f"{planner_instruction}\n\n{RESEARCH_LEAF_RULE}"
+
     prompt = AgentPrompt(
-        instruction=state.agent_profile.planner_instruction,
+        instruction=planner_instruction,
         user_profile=state.execution_context.user_profile,
         conversation_context=state.execution_context.conversation_context,
         task=state.inputs.task,
-        available_tools=_prompt_tools(context.tools),
+        available_tools=[
+            *_prompt_tools(context.tools),
+            *(
+                AvailableTool(
+                    name=delegated.agent_profile.name,
+                    title="Agent capability",
+                    category="agents",
+                    description=delegated.agent_profile.description,
+                )
+                for delegated in delegated_states
+            ),
+        ],
         rules=compiled_rules,
         evidence=evidence_steps,
         missing_information=state.node_states.evaluator.missing_information,
+        working_memory=state.render_working_memory(),
     )
     prompt.include_section(
         PromptSectionKeys.USER_PROFILE,
@@ -213,4 +228,6 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
     prompt.include_section(PromptSectionKeys.EVIDENCE)
     prompt.include_section(PromptSectionKeys.MISSING_INFORMATION)
     prompt.include_section(PromptSectionKeys.TASK)
-    return prompt, context.tools
+    if state.agent_profile.working_memory_template:
+        prompt.include_section(PromptSectionKeys.WORKING_MEMORY)
+    return prompt, [*context.tools, *delegation_tools]

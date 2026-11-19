@@ -15,6 +15,7 @@ class AgentName(StrEnum):
     PROFILE_MANAGEMENT = "profile_management"
     DOCUMENT_WRITING = "document_writing"
     RESEARCH = "research"
+    DELEGATE = "delegate"
     CODING = "coding"
 
 
@@ -58,6 +59,12 @@ class AgentExecutionStrategy(StrEnum):
         raise KeyError(f"Unsupported agent execution strategy: {self}")
 
 
+class AgentDelegationRole(StrEnum):
+    ROOT = "root"
+    COORDINATOR = "coordinator"
+    LEAF = "leaf"
+
+
 @dataclass
 class AgentProfile:
     name: str
@@ -73,10 +80,14 @@ class AgentProfile:
     tool_categories: dict[str, Any] = field(init=False, default_factory=dict)
     stage_model_selections: dict[str, ModelSelection] = field(default_factory=dict)
     delegatable: bool = True
+    can_delegate_agents: bool = True
+    default_available_agent_names: set[str] = field(default_factory=set)
+    delegation_role: AgentDelegationRole = AgentDelegationRole.ROOT
     max_turns: int = DEFAULT_MAX_TURNS
     required_completion_tools: set[str] = field(default_factory=set)
     planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
     synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION
+    working_memory_template: str = ""
     delegation_args_schema: type[BaseModel] = AgentDelegationArgs
 
     def __post_init__(self) -> None:

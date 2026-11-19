@@ -1,4 +1,13 @@
 services:
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./static/files:/app/static/files:ro
+
   db:
     image: pgvector/pgvector:pg16
     environment:

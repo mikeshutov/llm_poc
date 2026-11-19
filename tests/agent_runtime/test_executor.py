@@ -191,6 +191,50 @@ def test_run_executor_returns_standardized_subagent_result_without_merging_state
     assert parent.direct_tool_results[0].tool_name == "document_writing"
 
 
+def test_run_executor_parallelizes_independent_agent_steps(monkeypatch) -> None:
+    plan = Plan.model_validate({
+        "steps": [
+            {"id": "E1", "plan": "Research A", "agent": "delegate", "args": {"task": "Research A"}},
+            {"id": "E2", "plan": "Research B", "agent": "delegate", "args": {"task": "Research B"}},
+        ],
+    })
+    parent = _state_for_plan(plan)
+    delegated = AgentState.new(
+        task="",
+        agent_profile=AgentProfile(name="delegate", scope=MAIN_AGENT_MODEL_SCOPE),
+        execution_context=parent.execution_context,
+        llm=object(),
+    )
+    parent.available_agent_states = {"delegate": delegated}
+    started_count = 0
+    both_started = threading.Event()
+    lock = threading.Lock()
+
+    def run_subagent(state):
+        nonlocal started_count
+        with lock:
+            started_count += 1
+            if started_count == 2:
+                both_started.set()
+        assert both_started.wait(timeout=1)
+        return state
+
+    class Registry:
+        @staticmethod
+        def get(profile):
+            return run_subagent
+
+    monkeypatch.setattr("agents.registry.agent_registry", Registry())
+
+    run_executor(parent)
+
+    assert started_count == 2
+    assert [result.tool_name for result in parent.direct_tool_results] == [
+        "delegate",
+        "delegate",
+    ]
+
+
 def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch) -> None:
     parent = _state_for_plan(Plan.model_validate({
         "steps": [{
@@ -232,3 +276,54 @@ def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch) -> Non
     assert outcome.reason == "The annual wage series."
     assert outcome.missing_inputs == ["The annual wage series."]
     assert parent.direct_tool_results[0].result["status"] == "pending"
+
+
+def test_delegated_agent_response_is_persisted_as_parent_tool_result(monkeypatch) -> None:
+    roundtrip_id = uuid4()
+    parent = _state_for_plan(Plan.model_validate({
+        "steps": [{
+            "id": "E1",
+            "plan": "Delegate research.",
+            "agent": "delegate",
+            "args": {"task": "Research the data."},
+        }],
+    }))
+    parent.execution_context = AgentExecutionContext.new(roundtrip_id=roundtrip_id)
+    delegated = AgentState.new(
+        task="",
+        agent_profile=AgentProfile(name="delegate", scope=MAIN_AGENT_MODEL_SCOPE),
+        execution_context=parent.execution_context,
+        llm=object(),
+    )
+    parent.available_agent_states = {"delegate": delegated}
+    completed = AgentState.new(
+        task="",
+        agent_profile=delegated.agent_profile,
+        execution_context=parent.execution_context,
+        llm=object(),
+    )
+    completed.direct_tool_results = [ToolResult(result={"ok": True})]
+
+    class Registry:
+        @staticmethod
+        def get(profile):
+            return lambda state: completed
+
+    persisted: dict[str, object] = {}
+
+    class FakeToolRepository:
+        def count_request_hash(self, *args, **kwargs):
+            return 0
+
+        def append_tool_call(self, *args, **kwargs):
+            persisted.update(kwargs)
+            return uuid4()
+
+    monkeypatch.setattr("agents.registry.agent_registry", Registry())
+    monkeypatch.setattr("agent_runtime.execution.tool_executor.MessageToolRepository", FakeToolRepository)
+
+    run_executor(parent)
+
+    assert persisted["is_subagent"] is True
+    assert persisted["output_payload"].result["agent"] == "delegate"
+    assert parent.result.tool_call_ids

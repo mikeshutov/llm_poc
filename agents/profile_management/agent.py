@@ -15,6 +15,4 @@ RUNNER = AgentRunner(
 
 @traceable(name=PROFILE_MANAGEMENT_PROFILE.name)
 def run_agent(agent_state: AgentState) -> AgentState:
-    return RUNNER.run(
-        agent_state,
-    )
+    return RUNNER.run(agent_state)

@@ -12,7 +12,26 @@ MAX_CONTEXT_MESSAGES = 120
 MAX_CONTEXT_BYTES = 120_000
 
 
-def _project_context_message(message: ConversationMessage) -> dict:
+def _source_evidence_ids_from_message(message: ConversationMessage) -> set[str]:
+    payload = message.payload if isinstance(message.payload, dict) else {}
+    input_payload = payload.get("input_payload")
+    if not isinstance(input_payload, dict):
+        return set()
+    source_evidence_ids = input_payload.get("source_evidence_ids", [])
+    if not isinstance(source_evidence_ids, list):
+        return set()
+    return {
+        evidence_id.strip()
+        for evidence_id in source_evidence_ids
+        if isinstance(evidence_id, str) and evidence_id.strip()
+    }
+
+
+def _project_context_message(
+    message: ConversationMessage,
+    *,
+    suppressed_evidence_ids: set[str] | None = None,
+) -> dict:
     kind = str(message.kind)
     visibility = str(message.visibility)
     if message.is_subagent:
@@ -23,12 +42,18 @@ def _project_context_message(message: ConversationMessage) -> dict:
         payload = dict(message.payload or {})
         payload.pop("output_payload", None)
         if isinstance(payload.get("evidence"), list):
+            compactable = payload.get("compactable", True) is not False
             payload["evidence"] = [
                 bounded_json_value(
                     item,
                     max_bytes=8_000,
                 ) if isinstance(item, dict) else item
                 for item in payload["evidence"]
+                if not compactable or not (
+                    suppressed_evidence_ids
+                    and isinstance(item, dict)
+                    and str(item.get("id", "")).strip() in suppressed_evidence_ids
+                )
             ]
     else:
         payload = {
@@ -75,6 +100,7 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
     # returns this result in chronological order even
     # when newest_first=True is used to select the most recent window. Keep
     # the selected window in oldest-to-newest order for the LLM message list.
+    selected_messages: list[ConversationMessage] = []
     for roundtrip in conversation_roundtrips:
         roundtrip_messages = conversation_repository.list_messages(
             roundtrip.id,
@@ -84,9 +110,23 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
         for message in roundtrip_messages:
             if not message.content.strip() and not message.payload:
                 continue
-            projected = _project_context_message(message)
-            if projected:
-                messages.append(projected)
+            selected_messages.append(message)
+
+    # A workspace write/edit records which evidence it has condensed into the
+    # file. Collect those links before projecting messages so source evidence is
+    # suppressed even when its tool result appears before the write/edit.
+    suppressed_evidence_ids = {
+        evidence_id
+        for message in selected_messages
+        for evidence_id in _source_evidence_ids_from_message(message)
+    }
+    for message in selected_messages:
+        projected = _project_context_message(
+            message,
+            suppressed_evidence_ids=suppressed_evidence_ids,
+        )
+        if projected:
+            messages.append(projected)
 
     while len(messages) > MAX_CONTEXT_MESSAGES:
         messages.pop(0)

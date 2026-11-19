@@ -2,6 +2,7 @@ from capabilities.adapters.workspace.files import (
     workspace_file_delete,
     workspace_file_edit,
     workspace_file_complete,
+    workspace_file_handoff,
     workspace_file_list,
     workspace_file_read,
     workspace_file_promote,
@@ -15,5 +16,6 @@ __all__ = [
     "workspace_file_list",
     "workspace_file_delete",
     "workspace_file_complete",
+    "workspace_file_handoff",
     "workspace_file_promote",
 ]

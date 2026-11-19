@@ -254,8 +254,6 @@ def _discover_agent_profiles(
 def _build_agent_candidates(agent_profiles: list[Any]) -> list[tuple[str, str, AvailableAgent]]:
     candidates: list[tuple[str, str, AvailableAgent]] = []
     for profile in agent_profiles:
-        if profile.name == "profile_management":
-            continue
         if not profile.delegatable:
             continue
         available_agent = AvailableAgent(
@@ -282,8 +280,8 @@ def capability_discovery(
 ) -> CapabilityDiscoveryResult:
     """Find concrete capabilities relevant to the current request.
 
-    Agent discovery is only enabled for the top-level request. Agent planner
-    iterations discover tools and attributes, but cannot delegate to agents.
+    Agent discovery is only enabled for the top-level request. Agent profiles
+    may additionally expose configured default agent capabilities.
     """
     query = (query or main_state.discovery_query or build_agent_selection_query(
         current_user_request=main_state.task,

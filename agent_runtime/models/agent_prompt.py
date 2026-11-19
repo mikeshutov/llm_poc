@@ -43,6 +43,7 @@ class PromptSectionKeys:
     TASK = "task"
     SCHEMA = "schema"
     EVIDENCE_IDS = "evidence_ids"
+    WORKING_MEMORY = "working_memory"
 
 
 BUILTIN_SECTION_KEYS = (
@@ -56,6 +57,7 @@ BUILTIN_SECTION_KEYS = (
     PromptSectionKeys.TASK,
     PromptSectionKeys.SCHEMA,
     PromptSectionKeys.EVIDENCE_IDS,
+    PromptSectionKeys.WORKING_MEMORY,
 )
 
 ROLE_RULES_SECTION_KEYS = (PromptSectionKeys.RULES,)
@@ -68,6 +70,7 @@ INPUT_SECTION_KEYS = (
     PromptSectionKeys.MISSING_INFORMATION,
     PromptSectionKeys.TASK,
     PromptSectionKeys.EVIDENCE_IDS,
+    PromptSectionKeys.WORKING_MEMORY,
 )
 OUTPUT_CONTRACT_SECTION_KEYS = (PromptSectionKeys.SCHEMA,)
 
@@ -104,6 +107,7 @@ class AgentPrompt:
     evidence: list[EvidenceStep] | None = None
     missing_information: list[str] = field(default_factory=list)
     evidence_ids: list[str] = field(default_factory=list)
+    working_memory: str = ""
     _enabled_sections: dict[str, dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
 
     def include_section(
@@ -145,6 +149,8 @@ class AgentPrompt:
                 value = self.task
             elif key == PromptSectionKeys.EVIDENCE_IDS:
                 value = self.evidence_ids
+            elif key == PromptSectionKeys.WORKING_MEMORY:
+                value = self.working_memory
             elif key == PromptSectionKeys.SCHEMA:
                 value = self.schema.strip()
             if is_meaningful_prompt_value(value):
