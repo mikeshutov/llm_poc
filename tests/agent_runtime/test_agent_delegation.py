@@ -7,7 +7,6 @@ from agent_runtime.execution.tool_executor import execute_step
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_profile import AgentProfile
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
-from agent_runtime.models.agent_profile import AgentExecutionStrategy
 from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE, DocumentWritingDelegationArgs
 from capabilities.discovery.models import AvailableAgent, CapabilityDiscoveryResult
 
@@ -15,7 +14,7 @@ from capabilities.discovery.models import AvailableAgent, CapabilityDiscoveryRes
 def test_delegated_agent_receives_explicit_task_instead_of_hypothesis() -> None:
     step = PlanStep(
         id="E1",
-        agent="document_writing",
+        tool="document_writing",
         plan="The document will be created successfully.",
         hypothesis="The document will be created successfully.",
         args={"task": "Create short_computer_joke.docx as a DOCX containing the supplied joke."},
@@ -120,7 +119,7 @@ def test_delegated_agent_execution_rejects_self_delegation() -> None:
     parent.available_agent_states = {"coordinator": parent}
     step = PlanStep(
         id="E1",
-        agent="coordinator",
+        tool="coordinator",
         plan="Delegate this task.",
         args={"task": "Delegate this task."},
     )

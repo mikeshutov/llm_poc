@@ -157,7 +157,7 @@ def test_run_executor_returns_standardized_subagent_result_without_merging_state
         "steps": [{
             "id": "E1",
             "plan": "Create the document.",
-            "agent": "document_writing",
+            "tool": "document_writing",
             "args": {"task": "Create the document."},
         }],
     }))
@@ -196,7 +196,7 @@ def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch) -> Non
         "steps": [{
             "id": "E1",
             "plan": "Research the data.",
-            "agent": "research",
+            "tool": "research",
             "args": {"task": "Research the data."},
         }],
     }))

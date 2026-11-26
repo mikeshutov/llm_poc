@@ -310,7 +310,7 @@ def test_main_reasoner_appends_subagent_result_to_next_llm_message_history() -> 
     state.node_states.planner.plan = Plan(steps=[PlanStep(
         id="E1",
         plan="Create the document.",
-        agent="document_writing",
+        tool="document_writing",
         args={"task": "Create the document."},
     )])
     state.direct_tool_results.append(ToolResult(
@@ -329,8 +329,8 @@ def test_main_reasoner_appends_subagent_result_to_next_llm_message_history() -> 
     assert len(state.reasoner_message_history) == 2
     assert state.reasoner_message_history[0].tool_calls[0]["name"] == "document_writing"
     assert state.reasoner_message_history[0].tool_calls[0]["args"] == {
-        "task": "Create the document.",
-        "evidence_ids": [],
+        "parameters": {"task": "Create the document."},
+        "hypothesis": "",
     }
     assert "File created." in state.reasoner_message_history[1].content
 

@@ -32,13 +32,12 @@ class PlanStep(BaseModel):
     hypothesis: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
     tool: str = ""
-    agent: str = ""
     args: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_execution_target(self) -> "PlanStep":
-        if bool(self.tool.strip()) == bool(self.agent.strip()):
-            raise ValueError("A plan step must specify exactly one of 'tool' or 'agent'.")
+        if not self.tool.strip():
+            raise ValueError("A plan step must specify a tool.")
         return self
 
 

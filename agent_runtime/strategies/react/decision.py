@@ -125,12 +125,10 @@ def build_decision_prompt(
 def _parse_response(
     response: Any,
     tools: list[BaseTool],
-    agent_names: set[str] | None = None,
 ) -> tuple[Plan, DecisionResponse]:
     plan = Plan(steps=parse_tool_calls_to_plan_steps(
         getattr(response, "tool_calls", None) or [],
         tools,
-        agent_names=agent_names,
     ))
     content = getattr(response, "content", "")
     if isinstance(content, str) and content.strip():
@@ -154,10 +152,6 @@ def run_decision(
     tool_choice: str | None = None,
 ) -> DecisionResult:
     prompt, tools = prompt_builder(state)
-    agent_names = {
-        delegated.agent_profile.name
-        for delegated in delegated_agent_states(state)
-    }
     prompt_messages = prompt.build_messages()
     if message_history:
         prompt_messages = [*prompt_messages, *message_history]
@@ -195,7 +189,7 @@ def run_decision(
     )
     response = llm.bind_tools(bound_tools, **bind_kwargs).invoke(prompt_messages)
     latency_ms = int((perf_counter() - started_at) * 1000)
-    plan, decision_response = _parse_response(response, tools, agent_names=agent_names)
+    plan, decision_response = _parse_response(response, tools)
     record_llm_call(
         raw_response=response,
         model_name=model_name,

@@ -42,6 +42,7 @@ class StepExecutionResult:
     error_text: str = ""
     rejection_reason: str = ""
     latency_ms: int = 0
+    is_delegated: bool = False
 
 
 def _substitute_refs(obj, results: dict):
@@ -139,8 +140,8 @@ def _execute_agent_step(
             output=ToolResult.error(message, status="error"),
             error_text=message,
         )
-    if step.agent == agent_state.agent_profile.name:
-        message = f"Agent '{step.agent}' cannot delegate to itself."
+    if step.tool == agent_state.agent_profile.name:
+        message = f"Agent '{step.tool}' cannot delegate to itself."
         return StepExecutionResult(
             step=step,
             args=resolved_args,
@@ -148,9 +149,9 @@ def _execute_agent_step(
             error_text=message,
         )
 
-    delegated = (agent_state.available_agent_states or {}).get(step.agent)
+    delegated = (agent_state.available_agent_states or {}).get(step.tool)
     if delegated is None:
-        message = f"Delegated agent '{step.agent}' is not available."
+        message = f"Delegated agent '{step.tool}' is not available."
         return StepExecutionResult(
             step=step,
             args=resolved_args,
@@ -179,7 +180,7 @@ def _execute_agent_step(
     delegated_run.available_agent_states = delegated.available_agent_states
     completed = agent_registry.get(delegated.agent_profile)(delegated_run)
     output = _agent_completion_result(
-        agent_name=step.agent,
+        agent_name=step.tool,
         state=completed,
         plan_step_id=step.db_id,
         task=delegated_task,
@@ -189,6 +190,7 @@ def _execute_agent_step(
         args=resolved_args,
         output=output,
         latency_ms=int((perf_counter() - started_at) * 1000),
+        is_delegated=True,
     )
 
 
@@ -212,9 +214,13 @@ def execute_step(
         step.args,
         tool_results_by_step_id or {},
     )
-    if step.agent:
+    is_delegated_tool = (
+        agent_state is not None
+        and step.tool in (agent_state.available_agent_states or {})
+    )
+    if is_delegated_tool:
         if agent_state is None:
-            message = f"Delegated agent '{step.agent}' requires an execution state."
+            message = f"Delegated agent '{step.tool}' requires an execution state."
             return StepExecutionResult(
                 step=step,
                 args=args,
@@ -303,7 +309,10 @@ def _record_step_result(
             error_message=execution_result.error_text or None,
             duration_ms=execution_result.latency_ms,
             status="rejected" if execution_result.rejection_reason else None,
-            is_subagent=agent_state.agent_profile.name != AgentName.REQUEST_ORCHESTRATOR,
+            is_subagent=(
+                execution_result.is_delegated
+                or agent_state.agent_profile.name != AgentName.REQUEST_ORCHESTRATOR
+            ),
         )
         agent_state.result = agent_state.result.with_recorded_tool_call(tool_call_id)
 
@@ -403,65 +412,6 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
     tool_repo = MessageToolRepository() if isinstance(agent_state.execution_context.roundtrip_id, UUID) else None
     iteration_number = agent_state.node_states.planner.plan_count
     for step in plan.steps:
-        if step.agent:
-            delegated_task = _delegated_task(step)
-            request_signature = build_signature({
-                "agent_name": step.agent,
-                "task": delegated_task,
-                "evidence_ids": step.args.get("evidence_ids", []),
-            })
-            if agent_state.executed_request_signatures.count(request_signature) >= MAX_IDENTICAL_TOOL_CALLS:
-                record_node_log(
-                    roundtrip_id=agent_state.execution_context.roundtrip_id,
-                    node_name=NodeName.EXECUTOR,
-                    stage="deduplication",
-                    event_type="tool_execution",
-                    level="warning",
-                    message="Delegated request skipped as duplicate",
-                    payload={"agent": step.agent, "step_id": step.id, "status": "duplicate"},
-                )
-                agent_state.direct_tool_results.append(
-                    _duplicate_result(
-                        capability_name=step.agent,
-                        plan_step_id=step.db_id,
-                    )
-                )
-                continue
-            agent_state.executed_request_signatures.append(request_signature)
-            execution_result = execute_step(
-                step,
-                agent_state=agent_state,
-                resolved_args=_substitute_refs(step.args, {}),
-                execution_context=agent_state.execution_context,
-            )
-            output = execution_result.output
-            if not isinstance(output, ToolResult):
-                output = ToolResult(result=output, evidence=[])
-            if tool_repo is not None and agent_state.execution_context.roundtrip_id is not None:
-                # Persist the delegated agent as a tool-like call so its
-                # evidence, especially generated-file URLs, survives into the
-                # parent result and UI payload.
-                persisted_step = step.model_copy(update={"tool": step.agent, "agent": ""})
-                tool_call_id = tool_repo.append_tool_call(
-                    agent_state.execution_context.roundtrip_id,
-                    plan,
-                    persisted_step,
-                    input_payload=step.args,
-                    output_payload=output,
-                    evidence=output.evidence,
-                    duration_ms=execution_result.latency_ms,
-                    is_subagent=True,
-                )
-                agent_state.result = agent_state.result.with_recorded_tool_call(tool_call_id)
-            else:
-                agent_state.direct_tool_results.append(
-                    output.model_copy(update={
-                        "tool_name": step.agent,
-                        "plan_step_id": step.db_id,
-                    })
-                )
-            continue
-
         resolved_args = _substitute_refs(step.args, {})
         request_signature = build_signature({
             "tool_name": step.tool,
@@ -513,6 +463,7 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
             step,
             tool_results_by_step_id={},
             resolved_args=resolved_args,
+            agent_state=agent_state,
             execution_context=agent_state.execution_context,
         )
         output = execution_result.output
