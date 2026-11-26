@@ -7,6 +7,7 @@ from typing import Any, Iterable
 from uuid import UUID
 
 from common.data import bounded_json_value, sanitize_for_json_storage
+from common.config import UTF8_ENCODING
 from conversation.models.conversation_models import LlmCallRecord, LlmUsage
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.conversation_model_config import ConversationModelConfig
@@ -58,8 +59,8 @@ def _trace_object_summary(value: Any) -> dict[str, Any]:
     normalized = bounded_json_value(value, max_bytes=32_000)
     rendered = json.dumps(normalized, ensure_ascii=True, sort_keys=True, default=str)
     summary: dict[str, Any] = {
-        "hash": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
-        "bytes": len(rendered.encode("utf-8")),
+        "hash": hashlib.sha256(rendered.encode(UTF8_ENCODING)).hexdigest(),
+        "bytes": len(rendered.encode(UTF8_ENCODING)),
         # Keep a human-readable diagnostic projection without persisting the
         # complete prompt/tool payload. The hash remains useful for identity;
         # this bounded preview makes the call inspectable in the debug UI.

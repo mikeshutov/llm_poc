@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
+from common.config import UTF8_ENCODING
 
 
 def _normalize_external_scalar(value: Any) -> Any:
@@ -122,7 +123,7 @@ def bounded_json_value(
 
     projected = project(value, 0)
     rendered = json.dumps(projected, ensure_ascii=True, separators=(",", ":"), default=str)
-    if len(rendered.encode("utf-8")) <= max_bytes:
+    if len(rendered.encode(UTF8_ENCODING)) <= max_bytes:
         return projected
-    preview = rendered.encode("utf-8")[: max_bytes - 80].decode("utf-8", errors="ignore")
+    preview = rendered.encode(UTF8_ENCODING)[: max_bytes - 80].decode(UTF8_ENCODING, errors="ignore")
     return {"_truncated": True, "_preview": preview}

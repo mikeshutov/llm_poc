@@ -18,7 +18,7 @@ from common.config.message_constants import (
     SUMMARY_BATCH_SIZE,
     SUMMARY_TRIGGER_SIZE,
 )
-from common.config.model_constants import CHUNK_ENCODING, EMBEDDING_MODEL
+from common.config.model_constants import CHUNK_ENCODING, EMBEDDING_MODEL, UTF8_ENCODING
 
 __all__ = [
     "ANONYMOUS_OWNER",
@@ -26,6 +26,7 @@ __all__ = [
     "CHUNK_ENCODING",
     "CONTENT_KEY",
     "EMBEDDING_MODEL",
+    "UTF8_ENCODING",
     "FILES_DIR",
     "IMAGE_MIME_PREFIX",
     "WORKSPACE_DIR",

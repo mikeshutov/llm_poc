@@ -7,6 +7,7 @@ from collections.abc import Collection
 
 from docx import Document
 
+from common.config import UTF8_ENCODING
 from assets.files.file_types import (
     DOCUMENT_FILE_TYPES,
     DOCUMENT_FILE_TYPES_DESCRIPTION,
@@ -97,7 +98,7 @@ def _document_paragraphs(content: str) -> list[str]:
 
 def write_file(path: Path, content: str, file_format: FileType, title: str | None = None) -> None:
     if file_format not in {FileType.DOCX, FileType.PDF}:
-        path.write_text(content, encoding="utf-8")
+        path.write_text(content, encoding=UTF8_ENCODING)
         return
     if file_format == FileType.PDF:
         try:

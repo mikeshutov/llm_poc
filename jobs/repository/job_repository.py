@@ -9,6 +9,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from db.connection import get_connection
+from common.config import UTF8_ENCODING
 from jobs.models import Job, JobPlanStatus, JobRun, JobRunStatus, JobSchedule
 from agent_runtime.models.plan import Plan
 from capabilities.registry.repository.plan_repository import PlanRepository
@@ -63,7 +64,7 @@ class JobRepository:
 
     @staticmethod
     def _prompt_hash(prompt: str) -> str:
-        return sha256(prompt.encode("utf-8")).hexdigest()
+        return sha256(prompt.encode(UTF8_ENCODING)).hexdigest()
 
     def create_job(
         self,

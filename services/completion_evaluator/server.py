@@ -9,6 +9,7 @@ from typing import Any
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 from serviceclients.completion_evaluator.models import CompletionEvaluatorResult
+from common.config import UTF8_ENCODING
 
 DEFAULT_MODEL_NAME = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"
 MODEL_NAME = os.getenv("COMPLETION_EVALUATOR_MODEL", DEFAULT_MODEL_NAME)
@@ -54,7 +55,7 @@ def evaluate_pair(premise: str, hypothesis: str) -> CompletionEvaluatorResult:
 
 class Handler(BaseHTTPRequestHandler):
     def _send_response(self, status: int, payload: dict[str, Any]) -> None:
-        body = json.dumps(payload).encode("utf-8")
+        body = json.dumps(payload).encode(UTF8_ENCODING)
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))

@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_VALUES
+from common.config import UTF8_ENCODING
 
 
 def load_source_examples(path: Path) -> list[dict[str, Any]]:
     examples: list[dict[str, Any]] = []
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+    for line_number, line in enumerate(path.read_text(encoding=UTF8_ENCODING).splitlines(), start=1):
         if not line.strip():
             continue
         record = json.loads(line)

@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
-from common.config import ANONYMOUS_OWNER
+from common.config import ANONYMOUS_OWNER, UTF8_ENCODING
 from llm.repository.repo_factory import get_conversation_model_config_repo
 from llm.conversation_model_config import CONVERSATION_MODEL_CONFIG_SPECS, ConversationModelConfig, EVALUATOR_STAGE, PLANNER_STAGE
 from conversation.constants import SOURCE_STREAMLIT
@@ -905,7 +905,7 @@ def render_jobs_dialog(user_id: str) -> None:
                 next_execution_at = _next_execution_at(schedule, datetime.now(timezone.utc))
                 if is_editing:
                     requested_prompt = st.session_state[f"{prefix}::prompt"].strip()
-                    prompt_changed = sha256(requested_prompt.encode("utf-8")).hexdigest() != form_job.plan_prompt_hash
+                    prompt_changed = sha256(requested_prompt.encode(UTF8_ENCODING)).hexdigest() != form_job.plan_prompt_hash
                     needs_generation = prompt_changed or form_job.plan_status.value != "ready" or form_job.current_plan_id is None
                     updated_job = job_repository.update_job(
                         form_job.id,

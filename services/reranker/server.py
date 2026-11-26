@@ -8,6 +8,7 @@ from typing import Any
 
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from common.config import UTF8_ENCODING
 from retrieval.reranker_models import RerankerRequest, RerankerRequestCandidate, RerankerScore
 
 DEFAULT_MODEL_NAME = "BAAI/bge-reranker-v2-m3"
@@ -50,7 +51,7 @@ def score_pairs(query: str, candidates: list[RerankerRequestCandidate]) -> list[
 
 class Handler(BaseHTTPRequestHandler):
     def _send_response(self, status: int, payload: dict[str, Any]) -> None:
-        body = json.dumps(payload).encode("utf-8")
+        body = json.dumps(payload).encode(UTF8_ENCODING)
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))

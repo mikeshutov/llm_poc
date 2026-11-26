@@ -7,6 +7,7 @@ import yaml
 from langchain_core.tools import tool
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from common.config import UTF8_ENCODING
 from assets.files.file_types import (
     DOCUMENT_FILE_TYPES,
     DOCUMENT_FILE_TYPES_DESCRIPTION,
@@ -113,7 +114,7 @@ def load_writing_templates(directory: Path | None = None) -> list[WritingTemplat
     if not definitions_path.is_file():
         raise FileNotFoundError(f"Writing template definitions file does not exist: {definitions_path}")
     try:
-        with definitions_path.open("r", encoding="utf-8") as stream:
+        with definitions_path.open("r", encoding=UTF8_ENCODING) as stream:
             payload = yaml.safe_load(stream)
     except yaml.YAMLError as exc:
         raise ValueError(f"Invalid YAML in writing template definitions: {exc}") from exc
@@ -166,7 +167,7 @@ def load_writing_template_content(
         raise ValueError(f"Unknown writing template '{template_id}'.")
     template_path = (directory / template.template_file).resolve()
     try:
-        return template_path.read_text(encoding="utf-8")
+        return template_path.read_text(encoding=UTF8_ENCODING)
     except OSError as exc:
         raise ValueError(f"Unable to read writing template '{template.template_file}'.") from exc
 

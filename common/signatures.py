@@ -4,6 +4,8 @@ from hashlib import sha256
 import json
 from typing import Any
 
+from common.config import UTF8_ENCODING
+
 
 def build_signature(value: Any) -> str:
     """Return a stable SHA-256 signature for JSON-compatible domain data."""
@@ -14,4 +16,4 @@ def build_signature(value: Any) -> str:
         ensure_ascii=True,
         default=str,
     )
-    return sha256(serialized.encode("utf-8")).hexdigest()
+    return sha256(serialized.encode(UTF8_ENCODING)).hexdigest()

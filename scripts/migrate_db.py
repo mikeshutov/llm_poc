@@ -9,6 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
 import psycopg
 
 from db.constants import DB_URL, MIGRATIONS_DIR, MIGRATION_TABLE
+from common.config import UTF8_ENCODING
 
 
 def wait_for_db(timeout_s: int = 30) -> None:
@@ -43,7 +44,7 @@ def get_applied_versions(conn: psycopg.Connection) -> set[str]:
 
 
 def apply_migration(conn: psycopg.Connection, path: Path) -> None:
-    sql = path.read_text(encoding="utf-8")
+    sql = path.read_text(encoding=UTF8_ENCODING)
     with conn.cursor() as cur:
         cur.execute(sql)
         cur.execute(

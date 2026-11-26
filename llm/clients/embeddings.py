@@ -3,7 +3,7 @@ from __future__ import annotations
 from hashlib import sha256
 from time import perf_counter
 
-from common.config import EMBEDDING_MODEL
+from common.config import EMBEDDING_MODEL, UTF8_ENCODING
 from llm.clients.llm_client import get_openai_client
 
 
@@ -66,7 +66,7 @@ def _record_embedding_log(
             "purpose": purpose,
             "input_preview": text[:500],
             "input_length": len(text),
-            "input_hash": sha256(text.encode("utf-8")).hexdigest(),
+            "input_hash": sha256(text.encode(UTF8_ENCODING)).hexdigest(),
             "dimensions": dimensions,
             "error": error[:2_000],
         },
