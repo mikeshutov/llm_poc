@@ -4,6 +4,7 @@ from typing import Any, Optional, Sequence
 
 from openai import OpenAI
 
+from common.config import UTF8_ENCODING
 from common.config import CONTENT_KEY, ROLE_KEY, ROLE_SYSTEM, ROLE_USER
 from llm.clients.tool_response_parser import parse_tool_args
 from llm.conversation_model_config import DEFAULT_MINI_MODEL, OPENAI_PROVIDER
@@ -94,7 +95,7 @@ class LlmClient:
 
     def generate_caption_from_image_file(self, path: str) -> str:
         with open(path, "rb") as f:
-            base64_image = base64.b64encode(f.read()).decode("utf-8")
+            base64_image = base64.b64encode(f.read()).decode(UTF8_ENCODING)
 
         started_at = perf_counter()
         response = self.client.chat.completions.create(

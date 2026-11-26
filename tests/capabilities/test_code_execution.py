@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from capabilities.adapters.code.execution import _run_python_in_docker
+from common.config import UTF8_ENCODING
 
 
 def test_code_execution_uses_restricted_docker_invocation(monkeypatch) -> None:
@@ -24,3 +25,5 @@ def test_code_execution_uses_restricted_docker_invocation(monkeypatch) -> None:
     assert "--cpus" in command and command[command.index("--cpus") + 1] == "0.5"
     assert captured["kwargs"]["timeout"] == 7
     assert captured["kwargs"]["check"] is False
+    assert captured["kwargs"]["encoding"] == UTF8_ENCODING
+    assert captured["kwargs"]["errors"] == "replace"

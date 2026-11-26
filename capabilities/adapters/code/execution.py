@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from agent_runtime.context import get_current_conversation_id, get_current_user_id
 from assets.files.storage import conversation_workspace_path
-from common.config import ANONYMOUS_OWNER
+from common.config import ANONYMOUS_OWNER, UTF8_ENCODING
 from capabilities.registry.constants import (
     TOOL_NAME_CODE_EXECUTE,
     TOOL_RESULT_TYPE_CODE_EXECUTION,
@@ -52,7 +52,7 @@ class CodeExecutionResult(BaseModel):
 
 def _truncate(value: str | bytes) -> str:
     if isinstance(value, bytes):
-        value = value.decode("utf-8", errors="replace")
+        value = value.decode(UTF8_ENCODING, errors="replace")
     if len(value) <= MAX_OUTPUT_LENGTH:
         return value
     return value[:MAX_OUTPUT_LENGTH] + "\n[output truncated]"
@@ -89,7 +89,7 @@ def _run_python_in_docker(
     with tempfile.TemporaryDirectory(prefix="code-execution-") as sandbox:
         sandbox_path = Path(sandbox)
         script_path = sandbox_path / "main.py"
-        script_path.write_text(code, encoding="utf-8")
+        script_path.write_text(code, encoding=UTF8_ENCODING)
         execution_workspace = workspace_path or sandbox_path
         command = [
             "docker",
@@ -129,6 +129,8 @@ def _run_python_in_docker(
                 command,
                 capture_output=True,
                 text=True,
+                encoding=UTF8_ENCODING,
+                errors="replace",
                 timeout=timeout_seconds,
                 check=False,
             )

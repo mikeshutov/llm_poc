@@ -10,7 +10,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from common.config import CHUNK_ENCODING, FILES_DIR
+from common.config import CHUNK_ENCODING, FILES_DIR, UTF8_ENCODING
 from assets.models import FileAsset
 from assets.files.models import FileContentResult, FileListResult, FileOperationResult
 from assets.models import AssetOrigin
@@ -155,7 +155,7 @@ def _read_document(path: Path) -> str:
                 return "\n\n".join(page.extract_text() or "" for page in pdf.pages)
         except ImportError as exc:
             raise ValueError("PDF reading requires the pdfplumber package.") from exc
-    return path.read_text(encoding="utf-8")
+    return path.read_text(encoding=UTF8_ENCODING)
 
 
 @tool(TOOL_NAME_FILE_CREATE, args_schema=FileCreateArgs, description=f"Create a new managed document. Supported formats: {DOCUMENT_FILE_TYPES_DESCRIPTION}.")

@@ -9,7 +9,7 @@ import pdfplumber
 from docx import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from common.config import CHUNK_ENCODING, FILES_DIR, IMAGE_MIME_PREFIX
+from common.config import CHUNK_ENCODING, FILES_DIR, IMAGE_MIME_PREFIX, UTF8_ENCODING
 from assets.repository.asset_chunk_repository import AssetChunkRepository
 from assets.repository.asset_repository import AssetRepository
 from assets.files.storage import scoped_file_path
@@ -36,7 +36,7 @@ def _extract_text(file: UploadedFile) -> str:
     if extension == FileType.DOCX:
         doc = Document(io.BytesIO(file.raw_bytes))
         return "\n".join(para.text for para in doc.paragraphs)
-    return file.raw_bytes.decode("utf-8", errors="replace")
+    return file.raw_bytes.decode(UTF8_ENCODING, errors="replace")
 
 
 def process_uploaded_file(
@@ -64,7 +64,7 @@ def process_uploaded_file(
             chunk_overlap=CHUNK_OVERLAP,
         ).split_text(raw_text)
     else:
-        chunks = [file.raw_bytes.decode("utf-8", errors="replace")]
+        chunks = [file.raw_bytes.decode(UTF8_ENCODING, errors="replace")]
 
     stored_name = os.path.basename(file_path)
     saved_file = AssetRepository().create_file(
