@@ -21,6 +21,7 @@ from llm.usage import record_llm_call
 from rendering.debug import PLAN_KIND
 from agent_runtime.planning.tool_call_parser import parse_tool_calls_to_plan_steps
 from agent_runtime.planning.tool_wrapper import build_tools
+from agent_runtime.planning.agent_delegation import delegated_agent_states
 
 def invoke_planner(
     agent_state: AgentState,
@@ -91,6 +92,10 @@ def invoke_planner(
     steps = parse_tool_calls_to_plan_steps(
         getattr(response, "tool_calls", None) or [],
         tools,
+        agent_names={
+            delegated.agent_profile.name
+            for delegated in delegated_agent_states(agent_state)
+        },
     )
     return PlanningResult(steps=steps), llm_call
 

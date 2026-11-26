@@ -11,6 +11,10 @@ from agent_runtime.planning.models.compiled_planner_context import CompiledPlann
 from agent_runtime.planning.prompts.planner_rules import build_planner_rules
 from capabilities.registry.tools import TOOLS_BY_NAME
 from capabilities.discovery.models import AvailableTool
+from agent_runtime.planning.agent_delegation import (
+    build_agent_delegation_tools,
+    delegated_agent_states,
+)
 
 
 EMPTY_EXECUTION_REPLAN_RULE = (
@@ -143,6 +147,17 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     return CompiledPlannerContext(tools=list(deduped_tools.values()), compiled_tools=compiled_tools, rules=rules)
 def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]]:
     context = _compile_tools_rules_from_state(state)
+    delegated_states = delegated_agent_states(state)
+    delegation_tools = build_agent_delegation_tools(delegated_states)
+    delegated_capabilities = [
+        AvailableTool(
+            name=delegated.agent_profile.name,
+            title="Agent capability",
+            category="agents",
+            description=delegated.agent_profile.description,
+        )
+        for delegated in delegated_states
+    ]
     if state.available_agent_states is not None:
         capabilities = state.inputs.discovered_capabilities
         prompt = AgentPrompt(
@@ -155,7 +170,7 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
             task=state.inputs.task,
             available_tools=(
                 [] if capabilities is None else list(capabilities.tools)
-            ) + _prompt_tools(list(state.agent_profile.static_tools)),
+            ) + _prompt_tools(list(state.agent_profile.static_tools)) + delegated_capabilities,
             rules=f"{build_planner_rules(context.rules)}\n\n{BATCH_INDEPENDENT_TOOLS_RULE}",
         )
         for section in (
@@ -166,7 +181,7 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
             PromptSectionKeys.TASK,
         ):
             prompt.include_section(section)
-        return prompt, context.tools
+        return prompt, [*context.tools, *delegation_tools]
 
     tool_results = state.gather_tool_results()
     evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
@@ -195,7 +210,7 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
         user_profile=state.execution_context.user_profile,
         conversation_context=state.execution_context.conversation_context,
         task=state.inputs.task,
-        available_tools=_prompt_tools(context.tools),
+        available_tools=[*_prompt_tools(context.tools), *delegated_capabilities],
         rules=compiled_rules,
         evidence=evidence_steps,
         missing_information=state.node_states.evaluator.missing_information,
@@ -213,4 +228,4 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
     prompt.include_section(PromptSectionKeys.EVIDENCE)
     prompt.include_section(PromptSectionKeys.MISSING_INFORMATION)
     prompt.include_section(PromptSectionKeys.TASK)
-    return prompt, context.tools
+    return prompt, [*context.tools, *delegation_tools]

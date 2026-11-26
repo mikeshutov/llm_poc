@@ -314,6 +314,14 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
     iteration_number = agent_state.node_states.planner.plan_count
     for step in plan.steps:
         if step.agent:
+            if not agent_state.agent_profile.can_delegate_agents:
+                agent_state.direct_tool_results.append(
+                    ToolResult.error(
+                        f"Agent '{agent_state.agent_profile.name}' is not allowed to delegate agents.",
+                        status="error",
+                    ).model_copy(update={"tool_name": step.agent, "plan_step_id": step.db_id})
+                )
+                continue
             delegated_task = _delegated_task(step)
             request_signature = build_signature({
                 "agent_name": step.agent,

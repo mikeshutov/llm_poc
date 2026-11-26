@@ -73,6 +73,8 @@ class AgentProfile:
     tool_categories: dict[str, Any] = field(init=False, default_factory=dict)
     stage_model_selections: dict[str, ModelSelection] = field(default_factory=dict)
     delegatable: bool = True
+    can_delegate_agents: bool = True
+    default_available_agent_names: set[str] = field(default_factory=set)
     max_turns: int = DEFAULT_MAX_TURNS
     required_completion_tools: set[str] = field(default_factory=set)
     planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
