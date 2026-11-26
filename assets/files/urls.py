@@ -1,5 +1,6 @@
 from pathlib import PurePosixPath
 from urllib.parse import quote
+import os
 
 from common.config import FILES_DIR
 
@@ -9,10 +10,11 @@ _STREAMLIT_STATIC_PREFIX = PurePosixPath("app")
 STATIC_FILES_URL_PREFIX = (
     f"/{_STREAMLIT_STATIC_PREFIX.as_posix()}/{_STATIC_FILES_PATH.as_posix()}/"
 )
+_FILES_ROUTE = "/api/files"
 
 
 def static_file_url(file_path: str) -> str:
-    """Return a relative static URL only for files in the configured served directory."""
+    """Return a browser URL served by the application API."""
     normalized_path = file_path.replace("\\", "/").strip()
     while normalized_path.startswith("./"):
         normalized_path = normalized_path[2:]
@@ -23,7 +25,11 @@ def static_file_url(file_path: str) -> str:
     if path.parts[: len(_STATIC_FILES_PATH.parts)] != _STATIC_FILES_PATH.parts:
         return ""
 
-    return quote((PurePosixPath("/") / _STREAMLIT_STATIC_PREFIX / path).as_posix(), safe="/")
+    relative_path = PurePosixPath(*path.parts[len(_STATIC_FILES_PATH.parts):])
+    if not relative_path.parts:
+        return ""
+    base_url = (os.getenv("API_SERVER_URL") or os.getenv("ARTIFACT_SERVER_URL", "")).strip().rstrip("/")
+    return quote(f"{base_url}{_FILES_ROUTE}/{relative_path.as_posix()}", safe="/:")
 
 
 __all__ = [
