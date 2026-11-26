@@ -123,21 +123,114 @@ def _execute_step(
     )
 
 
+def _execute_agent_step(
+    agent_state: AgentState,
+    step: PlanStep,
+    *,
+    resolved_args: dict[str, Any],
+) -> StepExecutionResult:
+    """Run a delegated agent as an execution step."""
+    started_at = perf_counter()
+    if not agent_state.agent_profile.can_delegate_agents:
+        message = f"Agent '{agent_state.agent_profile.name}' is not allowed to delegate agents."
+        return StepExecutionResult(
+            step=step,
+            args=resolved_args,
+            output=ToolResult.error(message, status="error"),
+            error_text=message,
+        )
+    if step.agent == agent_state.agent_profile.name:
+        message = f"Agent '{step.agent}' cannot delegate to itself."
+        return StepExecutionResult(
+            step=step,
+            args=resolved_args,
+            output=ToolResult.error(message, status="rejected"),
+            error_text=message,
+        )
+
+    delegated = (agent_state.available_agent_states or {}).get(step.agent)
+    if delegated is None:
+        message = f"Delegated agent '{step.agent}' is not available."
+        return StepExecutionResult(
+            step=step,
+            args=resolved_args,
+            output=ToolResult.error(message, status="error"),
+            error_text=message,
+        )
+
+    from agents.registry import agent_registry
+    from agent_runtime.models.agent_inputs import AgentInputs
+
+    delegated_task = _delegated_task(step)
+    delegated_run = AgentState.new(
+        agent_profile=delegated.agent_profile,
+        execution_context=delegated.execution_context,
+        llm=delegated.llm,
+        inputs=AgentInputs.new(
+            task=delegated_task,
+            request_task=delegated.inputs.request_task,
+            tool_names=delegated.inputs.tool_names,
+            tool_category_names=delegated.inputs.tool_category_names,
+            discovered_capabilities=delegated.inputs.discovered_capabilities,
+            discovered_attribute_types=delegated.inputs.discovered_attribute_types,
+            evidence_ids=step.args.get("evidence_ids", []),
+        ),
+    )
+    delegated_run.available_agent_states = delegated.available_agent_states
+    completed = agent_registry.get(delegated.agent_profile)(delegated_run)
+    output = _agent_completion_result(
+        agent_name=step.agent,
+        state=completed,
+        plan_step_id=step.db_id,
+        task=delegated_task,
+    )
+    return StepExecutionResult(
+        step=step,
+        args=resolved_args,
+        output=output,
+        latency_ms=int((perf_counter() - started_at) * 1000),
+    )
+
+
 def execute_step(
     step: PlanStep,
     *,
     tool_results_by_step_id: dict[str, ToolResult] | None = None,
     agent_profile: AgentProfile | None = None,
+    agent_state: AgentState | None = None,
     execution_context=None,
     resolved_args: dict[str, Any] | None = None,
 ) -> StepExecutionResult:
-    """Execute one step with optional agent authorization.
+    """Execute one tool or delegated-agent step.
 
     Top-level planner execution may omit an agent profile. In that case the
     tool registry performs normal existence and input validation without an
     agent-specific allowlist. Subagents should pass their profile so the
     allowlist remains enforced.
     """
+    args = resolved_args if resolved_args is not None else _substitute_refs(
+        step.args,
+        tool_results_by_step_id or {},
+    )
+    if step.agent:
+        if agent_state is None:
+            message = f"Delegated agent '{step.agent}' requires an execution state."
+            return StepExecutionResult(
+                step=step,
+                args=args,
+                output=ToolResult.error(message, status="error"),
+                error_text=message,
+            )
+        if execution_context is None:
+            return _execute_agent_step(agent_state, step, resolved_args=args)
+        with bind_runtime_context(
+            conversation_id=execution_context.conversation_id,
+            conversation_model_config=execution_context.model_config,
+            roundtrip_id=str(execution_context.roundtrip_id) if execution_context.roundtrip_id else None,
+            user_id=execution_context.user_profile.user_id,
+        ):
+            return _execute_agent_step(agent_state, step, resolved_args=args)
+
     allowed_tool_names = None if agent_profile is None else set(agent_profile.tool_names)
     kwargs = {
         "tool_results_by_step_id": tool_results_by_step_id or {},
@@ -304,9 +397,6 @@ def run_executor(agent_state: AgentState) -> AgentState:
 
 def _run_top_level_executor(agent_state: AgentState) -> AgentState:
     """Execute a common-strategy plan as either a tool call or agent call."""
-    from agents.registry import agent_registry
-    from agent_runtime.models.agent_inputs import AgentInputs
-
     plan = agent_state.node_states.planner.plan
     if plan is None:
         return agent_state
@@ -314,14 +404,6 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
     iteration_number = agent_state.node_states.planner.plan_count
     for step in plan.steps:
         if step.agent:
-            if not agent_state.agent_profile.can_delegate_agents:
-                agent_state.direct_tool_results.append(
-                    ToolResult.error(
-                        f"Agent '{agent_state.agent_profile.name}' is not allowed to delegate agents.",
-                        status="error",
-                    ).model_copy(update={"tool_name": step.agent, "plan_step_id": step.db_id})
-                )
-                continue
             delegated_task = _delegated_task(step)
             request_signature = build_signature({
                 "agent_name": step.agent,
@@ -346,41 +428,15 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
                 )
                 continue
             agent_state.executed_request_signatures.append(request_signature)
-            delegated = agent_state.available_agent_states.get(step.agent)
-            if delegated is None:
-                agent_state.direct_tool_results.append(
-                    ToolResult.error(
-                        f"Delegated agent '{step.agent}' is not available.",
-                        status="error",
-                    ).model_copy(update={
-                        "tool_name": step.agent,
-                        "plan_step_id": step.db_id,
-                    })
-                )
-                continue
-            delegated_run = AgentState.new(
-                agent_profile=delegated.agent_profile,
-                execution_context=delegated.execution_context,
-                llm=delegated.llm,
-                inputs=AgentInputs.new(
-                    task=delegated_task,
-                    request_task=delegated.inputs.request_task,
-                    tool_names=delegated.inputs.tool_names,
-                    tool_category_names=delegated.inputs.tool_category_names,
-                    discovered_capabilities=delegated.inputs.discovered_capabilities,
-                    discovered_attribute_types=delegated.inputs.discovered_attribute_types,
-                    evidence_ids=step.args.get("evidence_ids", []),
-                ),
+            execution_result = execute_step(
+                step,
+                agent_state=agent_state,
+                resolved_args=_substitute_refs(step.args, {}),
+                execution_context=agent_state.execution_context,
             )
-            delegated_run.available_agent_states = delegated.available_agent_states
-            runner = agent_registry.get(delegated.agent_profile)
-            completed = runner(delegated_run)
-            completion_result = _agent_completion_result(
-                agent_name=step.agent,
-                state=completed,
-                plan_step_id=step.db_id,
-                task=delegated_task,
-            )
+            output = execution_result.output
+            if not isinstance(output, ToolResult):
+                output = ToolResult(result=output, evidence=[])
             if tool_repo is not None and agent_state.execution_context.roundtrip_id is not None:
                 # Persist the delegated agent as a tool-like call so its
                 # evidence, especially generated-file URLs, survives into the
@@ -391,14 +447,19 @@ def _run_top_level_executor(agent_state: AgentState) -> AgentState:
                     plan,
                     persisted_step,
                     input_payload=step.args,
-                    output_payload=completion_result,
-                    evidence=completion_result.evidence,
-                    duration_ms=0,
+                    output_payload=output,
+                    evidence=output.evidence,
+                    duration_ms=execution_result.latency_ms,
                     is_subagent=True,
                 )
                 agent_state.result = agent_state.result.with_recorded_tool_call(tool_call_id)
             else:
-                agent_state.direct_tool_results.append(completion_result)
+                agent_state.direct_tool_results.append(
+                    output.model_copy(update={
+                        "tool_name": step.agent,
+                        "plan_step_id": step.db_id,
+                    })
+                )
             continue
 
         resolved_args = _substitute_refs(step.args, {})

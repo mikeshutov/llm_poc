@@ -3,6 +3,7 @@ from agent_runtime.models.plan import PlanStep
 from agent_runtime.planning.tool_wrapper import build_tools
 from agent_runtime.planning.agent_delegation import build_agent_delegation_tools
 from agent_runtime.planning.agent_delegation import delegated_agent_states
+from agent_runtime.execution.tool_executor import execute_step
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_profile import AgentProfile
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
@@ -109,3 +110,22 @@ def test_non_delegating_agent_exposes_no_delegation_targets() -> None:
     }
 
     assert delegated_agent_states(parent) == []
+
+
+def test_delegated_agent_execution_rejects_self_delegation() -> None:
+    parent = AgentState.new(
+        agent_profile=AgentProfile(name="coordinator", scope="main_agent"),
+        llm=object(),
+    )
+    parent.available_agent_states = {"coordinator": parent}
+    step = PlanStep(
+        id="E1",
+        agent="coordinator",
+        plan="Delegate this task.",
+        args={"task": "Delegate this task."},
+    )
+
+    result = execute_step(step, agent_state=parent)
+
+    assert result.output.result["status"] == "rejected"
+    assert "cannot delegate to itself" in result.output.result["error"]
