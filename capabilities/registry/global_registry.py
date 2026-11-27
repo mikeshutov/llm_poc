@@ -6,6 +6,8 @@ from threading import Lock, RLock
 from time import monotonic, sleep
 from typing import Any
 
+from langchain_core.tools import StructuredTool
+
 from common.http import HttpClientError
 from common.logging import record_node_log
 from agent_runtime.constants import NodeName
@@ -18,7 +20,8 @@ from capabilities.adapters.profile import (
 )
 from capabilities.adapters.user_attributes import upsert_user_attribute
 from common.cache.repository import InvalidCachePayloadError, ToolCacheRepository
-from agent_runtime.context import get_current_user_id
+from agent_runtime.context import get_current_agent_state, get_current_user_id
+from agent_runtime.models.agent_profile import AgentKind
 from requests.exceptions import Timeout
 
 
@@ -36,10 +39,6 @@ class DisallowedToolError(ToolRegistryError):
 
 def build_agent_tool(profile):
     """Build the registry tool whose implementation runs one agent."""
-    from langchain_core.tools import StructuredTool
-
-    from agent_runtime.context import get_current_agent_state
-
     def invoke_agent(**kwargs):
         agent_state = get_current_agent_state()
         if agent_state is None:
@@ -271,8 +270,6 @@ def register_default_tools() -> None:
 
 def register_agent_tools(profiles, *, user_id: str | None = None) -> None:
     with _REGISTRATION_LOCK:
-        from agent_runtime.models.agent_profile import AgentKind
-
         register_default_tools()
         for profile in profiles:
             owner = user_id if profile.kind == AgentKind.USER_AGENT else None

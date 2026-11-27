@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from agent_runtime.models.agent_profile import (
     AgentExecutionStrategy,
+    AgentKind,
     AgentProfile,
 )
 from agents.registry import AgentRegistry
@@ -158,23 +159,24 @@ def test_direct_return_classifies_in_memory_results(payload, expected) -> None:
 
 
 @pytest.mark.parametrize("kind", ["builtin", "user_agent"])
-def test_agent_runner_uses_profile_strategy_for_all_agent_kinds(monkeypatch, kind) -> None:
-    from agent_runtime.models.agent_profile import AgentKind
-
+@pytest.mark.parametrize("conversation_id", [None, "conversation-123"])
+def test_agent_registry_runs_profile_strategy_with_conversation_thread(monkeypatch, kind, conversation_id) -> None:
     profile = AgentProfile(
         name="custom_agent", scope="main_agent", kind=AgentKind(kind),
         execution_strategy=AgentExecutionStrategy.REACT,
         planner_instruction="Use this exact instruction.",
     )
     state = AgentState.new(agent_profile=profile, llm=object())
+    state.execution_context.conversation_id = conversation_id
     seen = []
 
     def fake_run(self, current, *, thread_id):
-        seen.append(current.agent_profile)
+        seen.append((current, thread_id))
         return current
 
     monkeypatch.setattr(ReactStrategy, "run", fake_run)
     result = AgentRegistry().get(profile)(state)
 
     assert result is state
-    assert seen == [profile]
+    assert seen == [(state, conversation_id or "")]
+    assert state.agent_profile is profile

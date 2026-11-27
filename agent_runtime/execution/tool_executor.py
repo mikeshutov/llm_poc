@@ -14,6 +14,7 @@ from common.data import bounded_json_value
 from common.signatures import build_signature
 from common.logging import compact_trace_inputs, compact_trace_outputs, record_node_log
 from agent_runtime.constants import NodeName
+from agent_runtime.models.agent_inputs import AgentInputs
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentName
 from agent_runtime.models.evaluation_result import (
@@ -174,7 +175,6 @@ def execute_agent_tool(
         return ToolResult.error(f"Delegated agent '{agent_name}' is not available.", status="rejected")
 
     from agents.registry import agent_registry
-    from agent_runtime.models.agent_inputs import AgentInputs
 
     delegated_run = AgentState.new(
         agent_profile=delegated.agent_profile,
