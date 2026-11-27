@@ -11,6 +11,8 @@ from agent_runtime.constants import (
 from agent_runtime.models.orchestrator_graph_state import OrchestratorGraphState
 from agent_runtime.models.main_state import MainState
 from agent_runtime.models.agent_profile import AgentName
+from agent_runtime.context import bind_agent_context
+from agents.main.request import initialize_request_agent_state
 from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agents.main.orchestration import (
     enrich_state_node,
@@ -53,4 +55,5 @@ _ORCHESTRATOR = OrchestratorGraph()
     process_outputs=compact_trace_outputs,
 )
 def run_agent(main_state: MainState) -> OrchestratorResult:
-    return _ORCHESTRATOR.run(main_state)
+    with bind_agent_context(initialize_request_agent_state(main_state)):
+        return _ORCHESTRATOR.run(main_state)

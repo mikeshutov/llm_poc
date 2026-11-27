@@ -23,6 +23,7 @@ from common.cache.repository import InvalidCachePayloadError, ToolCacheRepositor
 from agent_runtime.context import get_current_agent_state, get_current_user_id
 from agent_runtime.models.agent_profile import AgentKind, AgentProfile
 from agents.coding.profile import CODING_PROFILE
+from agents.delegate.profile import DELEGATE_PROFILE
 from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
 from agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from agents.research.profile import RESEARCH_PROFILE
@@ -256,6 +257,7 @@ REGISTERED_AGENTS: list[AgentProfile] = [
     DOCUMENT_WRITING_PROFILE,
     RESEARCH_PROFILE,
     CODING_PROFILE,
+    DELEGATE_PROFILE,
 ]
 _REGISTERED_DEFAULTS = False
 _REGISTRATION_LOCK = RLock()

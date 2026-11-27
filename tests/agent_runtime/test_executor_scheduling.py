@@ -3,7 +3,7 @@ import threading
 import pytest
 from langchain_core.tools import StructuredTool
 
-from agent_runtime.context import bind_runtime_context, get_current_conversation_id
+from agent_runtime.context import bind_agent_context, get_current_conversation_id
 from agent_runtime.execution.tool_executor import run_executor
 from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY
 from capabilities.registry.models import Tool
@@ -99,16 +99,10 @@ def test_registry_concurrency_policy_respects_user_scope(agent_state_factory):
     GLOBAL_TOOL_REGISTRY.register(tool, user_id="alice")
     state = agent_state_factory()
     state.execution_context.user_profile.user_id = "alice"
-    with bind_runtime_context(
-        conversation_id=None, conversation_model_config=None,
-        user_id=state.execution_context.user_profile.user_id,
-    ):
+    with bind_agent_context(state):
         assert GLOBAL_TOOL_REGISTRY.can_run_concurrently(tool.name)
     state.execution_context.user_profile.user_id = "bob"
-    with bind_runtime_context(
-        conversation_id=None, conversation_model_config=None,
-        user_id=state.execution_context.user_profile.user_id,
-    ):
+    with bind_agent_context(state):
         assert not GLOBAL_TOOL_REGISTRY.can_run_concurrently(tool.name)
 
 

@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
+from agent_runtime.context import bind_agent_context
 from capabilities.discovery.models import AvailableAgent, AvailableTool, CapabilityDiscoveryResult
 from capabilities.discovery.discover_capabilities_tool import (
     CAPABILITY_DISCOVERY_TOOL,
-    bind_capability_discovery_agent_state,
-    bind_capability_discovery_state,
-    reset_capability_discovery_agent_state,
-    reset_capability_discovery_state,
 )
 from agents.profile_management.profile import build_profile_management_profile
 from agents.main.agent import MainReasonerStrategy
@@ -62,7 +59,13 @@ def test_normalize_generated_file_links_removes_unverified_sandbox_urls() -> Non
     assert blocks[0].content == "[Download]"
 
 
-def test_main_reasoner_loops_until_final_structured_answer(agent_state_factory, plan_factory, plan_step_factory, agent_profile_factory, monkeypatch) -> None:
+def test_main_reasoner_loops_until_final_structured_answer(
+    plan_factory,
+    plan_step_factory,
+    agent_profile_factory,
+    agent_state_factory,
+    monkeypatch,
+) -> None:
     state = agent_state_factory(
         profile=agent_profile_factory(name="request_orchestrator", scope="main_agent", max_turns=3),
         task="Find the answer",
@@ -93,7 +96,12 @@ def test_main_reasoner_loops_until_final_structured_answer(agent_state_factory, 
     assert result.node_states.planner.plan_count == 2
 
 
-def test_main_reasoner_does_not_force_a_tool_on_the_first_turn(agent_state_factory, plan_factory, agent_profile_factory, monkeypatch) -> None:
+def test_main_reasoner_does_not_force_a_tool_on_the_first_turn(
+    plan_factory,
+    agent_profile_factory,
+    agent_state_factory,
+    monkeypatch,
+) -> None:
     state = agent_state_factory(
         profile=agent_profile_factory(name="request_orchestrator", scope="main_agent", max_turns=1),
         task="Who wrote The Three-Body Problem?",
@@ -114,7 +122,10 @@ def test_main_reasoner_does_not_force_a_tool_on_the_first_turn(agent_state_facto
     assert captured.get("tool_choice") is None
 
 
-def test_main_reasoner_does_not_receive_planner_only_tool_constraints(agent_state_factory, agent_profile_factory) -> None:
+def test_main_reasoner_does_not_receive_planner_only_tool_constraints(
+    agent_profile_factory,
+    agent_state_factory,
+) -> None:
     state = agent_state_factory(
         profile=agent_profile_factory(name="request_orchestrator", scope="main_agent"),
         task="Research this topic",
@@ -131,7 +142,10 @@ def test_main_reasoner_does_not_receive_planner_only_tool_constraints(agent_stat
     assert "Ground factual claims, citations, URLs, and generated document content" in rendered
 
 
-def test_main_reasoner_represents_agents_as_tool_shaped_capabilities(agent_state_factory, agent_profile_factory) -> None:
+def test_main_reasoner_represents_agents_as_tool_shaped_capabilities(
+    agent_profile_factory,
+    agent_state_factory,
+) -> None:
     from capabilities.registry.global_registry import register_default_tools
 
     register_default_tools()
@@ -222,7 +236,9 @@ def test_top_level_reasoner_exposes_memory_detail_with_search_guidance(agent_sta
     assert "memory_detail" in {tool.name for tool in tools}
 
 
-def test_main_reasoner_prompt_prefers_research_agent_for_multi_source_comparisons(agent_state_factory) -> None:
+def test_main_reasoner_prompt_prefers_research_agent_for_multi_source_comparisons(
+    agent_state_factory,
+) -> None:
     state = agent_state_factory(
         profile=TOP_LEVEL_PROFILE,
         task="Compare LangGraph and CrewAI for multi-agent orchestration.",
@@ -293,7 +309,12 @@ def test_main_reasoner_uses_safe_default_for_unspecified_multiplication_table(ag
     assert "Ask a clarifying question only when" in prompt.rules
 
 
-def test_main_reasoner_appends_subagent_result_to_next_llm_message_history(agent_state_factory, plan_factory, plan_step_factory, agent_profile_factory) -> None:
+def test_main_reasoner_appends_subagent_result_to_next_llm_message_history(
+    plan_factory,
+    plan_step_factory,
+    agent_profile_factory,
+    agent_state_factory,
+) -> None:
     state = agent_state_factory(
         profile=agent_profile_factory(name="request_orchestrator", scope="main_agent"),
         execution_context=AgentExecutionContext.new(),
@@ -327,7 +348,12 @@ def test_main_reasoner_appends_subagent_result_to_next_llm_message_history(agent
     assert "File created." in state.reasoner_message_history[1].content
 
 
-def test_runtime_discovery_tool_is_static_and_updates_active_capabilities(main_state_factory, agent_state_factory, agent_profile_factory, monkeypatch) -> None:
+def test_runtime_discovery_tool_is_static_and_updates_active_capabilities(
+    agent_profile_factory,
+    main_state_factory,
+    agent_state_factory,
+    monkeypatch,
+) -> None:
     main_state = main_state_factory(
         task="Find a meal",
         execution_context=AgentExecutionContext.new(),
@@ -344,21 +370,22 @@ def test_runtime_discovery_tool_is_static_and_updates_active_capabilities(main_s
         agents=[AvailableAgent(agent="meal_agent", description="Find meals")],
     )
     monkeypatch.setattr("capabilities.discovery.discover_capabilities_tool.capability_discovery", lambda *args, **kwargs: expected)
-    state_token = bind_capability_discovery_state(main_state)
-    agent_token = bind_capability_discovery_agent_state(agent_state)
-    try:
+    with bind_agent_context(agent_state):
         output = CAPABILITY_DISCOVERY_TOOL.invoke({"prompt": "a recipe search tool"})
-    finally:
-        reset_capability_discovery_agent_state(agent_token)
-        reset_capability_discovery_state(state_token)
 
     assert CAPABILITY_DISCOVERY_TOOL.name == "discover_capabilities"
     assert output["tools"][0]["name"] == "food_search"
-    assert main_state.discovered_capabilities == expected
     assert agent_state.inputs.discovered_capabilities == expected
 
 
-def test_user_management_static_tool_runs_profile_agent(main_state_factory, agent_state_factory, plan_factory, plan_step_factory, agent_profile_factory, monkeypatch) -> None:
+def test_user_management_static_tool_runs_profile_agent(
+    plan_factory,
+    plan_step_factory,
+    agent_profile_factory,
+    main_state_factory,
+    agent_state_factory,
+    monkeypatch,
+) -> None:
     main_state = main_state_factory(
         task="Remember my preference",
         execution_context=AgentExecutionContext.new(),

@@ -10,12 +10,17 @@ import pytest
 
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 from agent_runtime.models.agent_profile import AgentExecutionStrategy
+from capabilities.registry.constants import (
+    TOOL_CATEGORY_FILE_MANAGEMENT,
+    TOOL_CATEGORY_MATH,
+)
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
-from retrieval.evidence import ToolResult
+from retrieval.evidence import EvidenceView, ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.execution.tool_executor import _agent_completion_result, _substitute_refs, run_executor
 from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY, build_agent_tool
+from capabilities.discovery.models import AvailableTool, CapabilityDiscoveryResult
 from langchain_core.tools import StructuredTool
 from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
 from agent_runtime.strategies.single_pass.graph import DirectReturnStrategy
@@ -35,7 +40,10 @@ def test_substitute_refs_uses_typed_tool_results() -> None:
     assert _substitute_refs({"value": "#E2"}, {}) == {"value": "#E2"}
 
 
-def test_subagent_execution_appends_tool_exchange_to_local_message_history(monkeypatch, agent_state_factory) -> None:
+def test_subagent_execution_appends_tool_exchange_to_local_message_history(
+    monkeypatch,
+    agent_state_factory,
+) -> None:
     plan = Plan.model_validate({
         "steps": [{"id": "E1", "plan": "Run tool", "tool": "tool_a", "args": {}}]
     })
@@ -99,7 +107,10 @@ def test_run_executor_parallelizes_typed_plan_steps(agent_state_factory) -> None
     ]
 
 
-def test_run_executor_propagates_runtime_context_to_worker_threads(agent_state_factory) -> None:
+def test_run_executor_propagates_runtime_context_to_worker_threads(
+    agent_state_factory,
+    recording_tool_repository,
+) -> None:
     GLOBAL_TOOL_REGISTRY.register(StructuredTool.from_function(
         lambda: None, name="tool_a", description="Concurrent read", metadata={"can_run_concurrently": True},
     ))
@@ -135,7 +146,11 @@ def test_run_executor_propagates_runtime_context_to_worker_threads(agent_state_f
     }
 
 
-def test_run_executor_returns_standardized_subagent_result_without_merging_state(agent_profile_factory, monkeypatch, agent_state_factory) -> None:
+def test_run_executor_returns_standardized_subagent_result_without_merging_state(
+    agent_profile_factory,
+    monkeypatch,
+    agent_state_factory,
+) -> None:
     parent = agent_state_factory(plan=Plan.model_validate({
         "steps": [{
             "id": "E1",
@@ -165,7 +180,11 @@ def test_run_executor_returns_standardized_subagent_result_without_merging_state
     assert parent.direct_tool_results[0].tool_name == "document_writing"
 
 
-def test_run_executor_exposes_only_final_subagent_evaluation(agent_profile_factory, monkeypatch, agent_state_factory) -> None:
+def test_run_executor_exposes_only_final_subagent_evaluation(
+    agent_profile_factory,
+    monkeypatch,
+    agent_state_factory,
+) -> None:
     parent = agent_state_factory(plan=Plan.model_validate({
         "steps": [{
             "id": "E1",
@@ -199,7 +218,10 @@ def test_run_executor_exposes_only_final_subagent_evaluation(agent_profile_facto
     assert parent.direct_tool_results[0].result["status"] == "pending"
 
 
-def test_executor_runs_explicitly_concurrent_tools_and_agents_together(monkeypatch, agent_state_factory) -> None:
+def test_executor_runs_explicitly_concurrent_tools_and_agents_together(
+    monkeypatch,
+    agent_state_factory,
+) -> None:
     plan = Plan.model_validate({"steps": [
         {"id": "E1", "plan": "Run a function", "tool": "batch_function", "args": {}},
         {"id": "E2", "plan": "Run an agent", "tool": "document_writing", "args": {"task": "Create a document."}},
@@ -259,7 +281,48 @@ def test_executor_preserves_failures_and_duplicate_results(monkeypatch, agent_st
     assert "Provider unavailable" in state.reasoner_message_history[1].content
 
 
-def test_executor_persists_agent_result_with_original_step_and_evidence(evidence_factory, monkeypatch, agent_state_factory, recording_tool_repository) -> None:
+def test_discovery_cannot_grant_permissions_at_execution(
+    agent_profile_factory,
+    monkeypatch,
+    agent_state_factory,
+):
+    state = agent_state_factory(
+        profile=agent_profile_factory(
+            name="restricted",
+            scope="main_agent",
+            allowed_categories={TOOL_CATEGORY_MATH, TOOL_CATEGORY_FILE_MANAGEMENT},
+            excluded_categories={TOOL_CATEGORY_FILE_MANAGEMENT},
+        ),
+        plan=Plan.model_validate({"steps": [
+            {"id": "E1", "plan": "Calculate", "tool": "math_calculate", "args": {}},
+            {"id": "E2", "plan": "Delete", "tool": "file_delete", "args": {}},
+        ]}),
+    )
+    state.inputs.discovered_capabilities = CapabilityDiscoveryResult(tools=[
+        AvailableTool(name="math_calculate", category="math"),
+        AvailableTool(name="file_delete", category="math"),
+    ])
+    called = []
+
+    def call_tool(**kwargs):
+        called.append(kwargs["name"])
+        assert kwargs["allowed_tool_names"] == state.agent_profile.tool_names
+        return ToolResult(result={"ok": True})
+
+    monkeypatch.setattr("agent_runtime.execution.tool_executor.call_tool", call_tool)
+    run_executor(state)
+
+    assert called == ["math_calculate"]
+    assert state.direct_tool_results[0].result == {"ok": True}
+    assert state.direct_tool_results[1].result["status"] == "rejected"
+    assert "not allowed" in state.direct_tool_results[1].result["error"]
+
+
+def test_executor_persists_agent_result_with_original_step_and_evidence(
+    monkeypatch,
+    agent_state_factory,
+    recording_tool_repository,
+) -> None:
     plan = Plan.model_validate({"steps": [{
         "id": "E1", "plan": "Write a document", "tool": "document_writing",
         "args": {"task": "Write a document"},
@@ -269,7 +332,7 @@ def test_executor_persists_agent_result_with_original_step_and_evidence(evidence
     parent.agent_profile.name = "request_orchestrator"
     child = agent_state_factory(profile=DOCUMENT_WRITING_PROFILE)
     parent.available_agent_states = {"document_writing": child}
-    evidence = evidence_factory(id=str(uuid4()), type="file", source="test", summary="Document saved")
+    evidence = EvidenceView(id=str(uuid4()), type="file", source="test", summary="Document saved")
 
     def run_child(state):
         state.direct_tool_results.append(ToolResult(result={"saved": True}, evidence=[evidence]))
@@ -290,7 +353,11 @@ def test_executor_persists_agent_result_with_original_step_and_evidence(evidence
     assert "Document saved" in parent.reasoner_message_history[1].content
 
 
-def test_executor_persists_failure_status_and_direct_return_does_not_report_success(monkeypatch, agent_state_factory, recording_tool_repository) -> None:
+def test_executor_persists_failure_status_and_direct_return_does_not_report_success(
+    monkeypatch,
+    agent_state_factory,
+    recording_tool_repository,
+) -> None:
     plan = Plan.model_validate({"steps": [{
         "id": "E1", "plan": "Run tool", "tool": "broken", "args": {},
     }]})
@@ -318,12 +385,18 @@ def test_executor_persists_failure_status_and_direct_return_does_not_report_succ
     (AnswerStatus.FAILED, ExecutionStatus.FAILED, "failed to complete the delegated task"),
     (AnswerStatus.PENDING, ExecutionStatus.PENDING, "has not completed the delegated task"),
 ])
-def test_delegated_summary_reflects_status(evidence_factory, agent_profile_factory, agent_state_factory, answer_status, execution_status, expected):
+def test_delegated_summary_reflects_status(
+    agent_profile_factory,
+    agent_state_factory,
+    answer_status,
+    execution_status,
+    expected,
+):
     child = agent_state_factory(profile=agent_profile_factory(
         name="child", scope="main_agent", execution_strategy=AgentExecutionStrategy.REACT,
     ))
     child.result = child.result.copy(answer_status=answer_status, execution_status=execution_status)
-    evidence = evidence_factory(id="ev-1", type="test", source="test", summary="Supporting finding")
+    evidence = EvidenceView(id="ev-1", type="test", source="test", summary="Supporting finding")
     child.direct_tool_results = [ToolResult(evidence=[evidence, evidence])]
 
     result = _agent_completion_result(agent_name="child", state=child, task="Do the task")

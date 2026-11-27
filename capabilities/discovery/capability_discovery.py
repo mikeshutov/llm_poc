@@ -9,7 +9,8 @@ from functools import lru_cache
 from typing import Any
 
 from llm.clients.embeddings import embed_text
-from agent_runtime.models.main_state import MainState
+from agent_runtime.models.agent_state import AgentState
+from agent_runtime.models.agent_inputs import AgentInputs
 from capabilities.discovery.models import (
     AvailableAgent,
     AvailableTool,
@@ -173,6 +174,7 @@ def _build_tool_candidates() -> list[tuple[str, str, AvailableTool]]:
 def _discover_persisted_tools(
     query: str,
     query_embedding: list[float] | None,
+    allowed_tool_names: set[str] | None = None,
 ) -> list[tuple[float, AvailableTool]]:
     if query_embedding is None:
         return []
@@ -182,6 +184,8 @@ def _discover_persisted_tools(
     )
     candidates: list[tuple[str, str, AvailableTool]] = []
     for tool in registered_tools:
+        if allowed_tool_names is not None and tool.name not in allowed_tool_names:
+            continue
         if tool.name in STATIC_CAPABILITY_TOOL_NAMES:
             continue
         metadata = getattr(tool, "metadata", {}) or {}
@@ -218,20 +222,20 @@ def _discover_persisted_tools(
 
 
 def _discover_agent_profiles(
-    main_state: MainState,
+    state: AgentState,
     query_embedding: list[float] | None,
 ) -> list[Any]:
     from capabilities.registry.global_registry import REGISTERED_AGENTS
 
     profiles_by_name = {profile.name: profile for profile in REGISTERED_AGENTS}
-    profiles_by_name.update({profile.name: profile for profile in main_state.agent_profiles})
+    profiles_by_name.update({name: target.agent_profile for name, target in (state.available_agent_states or {}).items()})
     try:
         repository = get_agent_repo()
         for agent in repository.list_system_agents():
             profile = profiles_by_name.get(agent.name) or agent.to_agent_profile()
             profiles_by_name[profile.name] = profile
 
-        user_id = (main_state.execution_context.user_profile.user_id or "").strip()
+        user_id = (state.execution_context.user_profile.user_id or "").strip()
         if user_id and query_embedding is not None:
             for agent in repository.list_relevant_for_user(
                 user_id,
@@ -245,7 +249,7 @@ def _discover_agent_profiles(
             event_type="capability_discovery",
             level="warning",
             message="Persisted agent capability lookup failed; using built-in candidates",
-            roundtrip_id=main_state.execution_context.roundtrip_id,
+            roundtrip_id=state.execution_context.roundtrip_id,
             payload={"error": str(exc), "fallback": True},
         )
     return list(profiles_by_name.values())
@@ -254,8 +258,6 @@ def _discover_agent_profiles(
 def _build_agent_candidates(agent_profiles: list[Any]) -> list[tuple[str, str, AvailableAgent]]:
     candidates: list[tuple[str, str, AvailableAgent]] = []
     for profile in agent_profiles:
-        if profile.name == "profile_management":
-            continue
         if not profile.delegatable:
             continue
         available_agent = AvailableAgent(
@@ -275,51 +277,44 @@ def _build_agent_candidates(agent_profiles: list[Any]) -> list[tuple[str, str, A
 
 
 def capability_discovery(
-    main_state: MainState,
+    state: AgentState,
     *,
     include_agents: bool = True,
     query: str | None = None,
+    allowed_tool_names: set[str] | None = None,
 ) -> CapabilityDiscoveryResult:
     """Find concrete capabilities relevant to the current request.
 
-    Agent discovery is only enabled for the top-level request. Agent planner
-    iterations discover tools and attributes, but cannot delegate to agents.
+    Discovery uses the active agent's permissions and execution context.
     """
-    query = (query or main_state.discovery_query or build_agent_selection_query(
-        current_user_request=main_state.task,
-        conversation_context=main_state.execution_context.conversation_context,
+    query = (query or build_agent_selection_query(
+        current_user_request=state.inputs.task,
+        conversation_context=state.execution_context.conversation_context,
     )).strip()
-    query_embedding = (
-        main_state.discovery_query_embedding
-        if query == main_state.discovery_query
-        else None
-    )
-    embedding_reused = query_embedding is not None
     embedding_started_at = perf_counter()
-    if query_embedding is None:
-        try:
-            query_embedding = embed_text(query)
-            if query == main_state.discovery_query:
-                main_state.discovery_query_embedding = query_embedding
-        except Exception as exc:
-            query_embedding = None
-            record_node_log(
-                node_name=NodeName.CAPABILITY_DISCOVERY,
-                stage="embedding",
-                event_type="capability_discovery",
-                level="warning",
-                message="Capability discovery embedding failed",
-                roundtrip_id=main_state.execution_context.roundtrip_id,
-                payload={"query": query, "error": str(exc)},
-                duration_ms=int((perf_counter() - embedding_started_at) * 1000),
-            )
+    try:
+        query_embedding = embed_text(query)
+    except Exception as exc:
+        query_embedding = None
+        record_node_log(
+            node_name=NodeName.CAPABILITY_DISCOVERY,
+            stage="embedding",
+            event_type="capability_discovery",
+            level="warning",
+            message="Capability discovery embedding failed",
+            roundtrip_id=state.execution_context.roundtrip_id,
+            payload={"query": query, "error": str(exc)},
+            duration_ms=int((perf_counter() - embedding_started_at) * 1000),
+        )
 
     tool_candidates = _build_tool_candidates()
+    if allowed_tool_names is not None:
+        tool_candidates = [candidate for candidate in tool_candidates if candidate[0] in allowed_tool_names]
     with ThreadPoolExecutor(max_workers=2, thread_name_prefix="capability-discovery") as executor:
-        tool_future = executor.submit(_discover_persisted_tools, query, query_embedding)
+        tool_future = executor.submit(_discover_persisted_tools, query, query_embedding, allowed_tool_names)
         agent_future = executor.submit(
             _discover_agent_profiles,
-            main_state,
+            state,
             query_embedding,
         ) if include_agents else None
         try:
@@ -331,7 +326,7 @@ def capability_discovery(
                 event_type="capability_discovery",
                 level="warning",
                 message="Persisted tool capability lookup failed; using fallback",
-                roundtrip_id=main_state.execution_context.roundtrip_id,
+                roundtrip_id=state.execution_context.roundtrip_id,
                 payload={"query": query, "error": str(exc), "fallback": True},
             )
             tool_matches = []
@@ -352,22 +347,29 @@ def capability_discovery(
     )
     if include_agents:
         selected_agent_names = {agent.agent for agent in result.agents}
-        existing_names = {profile.name for profile in main_state.agent_profiles}
-        for profile in agent_profiles:
-            if profile.name not in selected_agent_names or profile.name in existing_names:
+        from capabilities.registry.global_registry import register_agent_tools
+
+        if state.available_agent_states is None:
+            state.available_agent_states = {}
+        selected_profiles = [profile for profile in agent_profiles if profile.name in selected_agent_names]
+        register_agent_tools(selected_profiles, user_id=state.execution_context.user_profile.user_id)
+        for profile in selected_profiles:
+            if profile.name in state.available_agent_states:
                 continue
-            main_state.agent_profiles.append(profile)
-            existing_names.add(profile.name)
-        main_state.initialize_agent_states()
+            state.available_agent_states[profile.name] = AgentState.new(
+                agent_profile=profile,
+                inputs=AgentInputs.new(request_task=state.inputs.request_task),
+                execution_context=state.execution_context,
+                llm=state.llm,
+            )
     record_node_log(
         node_name=NodeName.CAPABILITY_DISCOVERY,
         stage="enrich_state",
         event_type="capability_discovery",
         message="Capability discovery completed",
-        roundtrip_id=main_state.execution_context.roundtrip_id,
+        roundtrip_id=state.execution_context.roundtrip_id,
         payload={
             "query": query,
-            "embedding_reused": embedding_reused,
             "discovered_tools": [tool.name for tool in result.tools],
             "discovered_agents": [agent.agent for agent in result.agents],
             "tool_count": len(result.tools),

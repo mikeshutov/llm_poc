@@ -11,7 +11,6 @@ from agent_runtime.models.agent_execution_context import AgentExecutionContext
 from agent_runtime.models.main_state import MainState
 from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agent_runtime.orchestrator import run_agent
-from agent_runtime.context import bind_runtime_context
 from conversation.context_builder import build_roundtrip_context
 from conversation.models.conversation_models import ConversationRoundtrip
 from conversation.repository.repo_factory import get_conversation_repo
@@ -72,13 +71,7 @@ def run_request_orchestrator_for_query(
         ],
     )
 
-    with bind_runtime_context(
-        conversation_id=conversation_id,
-        conversation_model_config=resolved_model_config,
-        roundtrip_id=str(roundtrip.id),
-        user_id=user_profile.user_id,
-    ):
-        orchestrator_result = run_agent(main_state)
+    orchestrator_result = run_agent(main_state)
 
     roundtrip_latency_ms = int((perf_counter() - started_at) * 1000)
     orchestrator_result = orchestrator_result.with_roundtrip_latency(roundtrip_latency_ms)

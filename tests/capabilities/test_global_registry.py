@@ -7,16 +7,18 @@ from unittest.mock import patch
 import pytest
 
 
-from agent_runtime.context import bind_runtime_context
+from agent_runtime.context import bind_agent_context
 from agent_runtime.models.agent_profile import AgentKind
+from agent_runtime.models.agent_execution_context import AgentExecutionContext
+from personalization.profile.models import UserProfile
 from capabilities.registry import global_registry
 from common.http import HttpClientError
 from requests.exceptions import Timeout
-from capabilities.registry.global_registry import ToolRegistry, ToolRegistryError, UnknownToolError
+from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY, ToolRegistry, ToolRegistryError, UnknownToolError, register_default_tools
 from common.cache.policy import ToolCachePolicy
 from capabilities.registry.models import RateLimitPolicy, Tool
 from capabilities.retry.policy import RetryPolicy
-from retrieval.evidence import ToolResult
+from retrieval.evidence import EvidenceView, ToolResult
 from capabilities.adapters.profile import USER_MANAGEMENT_TOOL
 
 
@@ -41,14 +43,19 @@ def test_registry_rejects_overwriting_an_existing_tool(tool_factory) -> None:
     assert registry.call_tool("shared") == "original"
 
 
-def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins(tool_factory) -> None:
+def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins(
+    tool_factory,
+    agent_state_factory,
+) -> None:
     registry = ToolRegistry()
     registry.register(tool_factory("assistant", lambda args: "Alice"), user_id="alice")
     registry.register(tool_factory("assistant", lambda args: "Bob"), user_id="bob")
     registry.register(tool_factory("builtin", lambda args: "shared"))
 
     for owner, expected in [("alice", "Alice"), ("bob", "Bob")]:
-        with bind_runtime_context(conversation_id=None, conversation_model_config=None, user_id=owner):
+        with bind_agent_context(agent_state_factory(
+            execution_context=AgentExecutionContext.new(user_profile=UserProfile(user_id=owner)),
+        )):
             assert registry.call_tool("assistant") == expected
             assert registry.call_tool("builtin") == "shared"
 
@@ -56,14 +63,27 @@ def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins(tool_fac
         registry.register(tool_factory("builtin", lambda args: "replacement"), user_id="alice")
 
 
-def test_agent_registration_is_idempotent_and_preserves_other_users(agent_profile_factory, registered_tool_registry) -> None:
+def test_agent_registration_is_idempotent_and_preserves_other_users(
+    agent_profile_factory,
+    registered_tool_registry,
+) -> None:
     registry = registered_tool_registry
     original = registry.get("coding")
     global_registry.register_default_tools()
     assert registry.get("coding") is original
 
-    alice = agent_profile_factory(name="assistant", scope="main_agent", kind=AgentKind.USER_AGENT, description="Alice's agent")
-    bob = agent_profile_factory(name="assistant", scope="main_agent", kind=AgentKind.USER_AGENT, description="Bob's agent")
+    alice = agent_profile_factory(
+        name="assistant",
+        scope="main_agent",
+        kind=AgentKind.USER_AGENT,
+        description="Alice's agent",
+    )
+    bob = agent_profile_factory(
+        name="assistant",
+        scope="main_agent",
+        kind=AgentKind.USER_AGENT,
+        description="Bob's agent",
+    )
     global_registry.register_agent_tools([alice], user_id="alice")
     alice_tool = registry.get("assistant", user_id="alice")
     global_registry.register_agent_tools([alice], user_id="alice")
@@ -186,7 +206,10 @@ def test_tool_registry_retries_wrapped_http_429_when_policy_allows(tool_factory)
     assert attempts == 2
 
 
-def test_tool_registry_cache_miss_invokes_tool_and_stores_result(cache_repository_factory, tool_factory) -> None:
+def test_tool_registry_cache_miss_invokes_tool_and_stores_result(
+    cache_repository_factory,
+    tool_factory,
+) -> None:
     cache = cache_repository_factory()
     calls = 0
 
@@ -228,10 +251,13 @@ def test_tool_registry_cache_hit_skips_tool_invocation(cache_repository_factory,
     assert cache.put_calls == 1
 
 
-def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence(cache_repository_factory, tool_factory, evidence_factory) -> None:
+def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence(
+    cache_repository_factory,
+    tool_factory,
+) -> None:
     cache = cache_repository_factory()
     calls = 0
-    evidence = evidence_factory(
+    evidence = EvidenceView(
         summary="A chicken soup recipe.",
         source="search_meals",
         type="meal_results",
@@ -257,7 +283,10 @@ def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence(cache_rep
     assert calls == 1
 
 
-def test_tool_registry_legacy_cache_payload_is_treated_as_miss(cache_repository_factory, tool_factory) -> None:
+def test_tool_registry_legacy_cache_payload_is_treated_as_miss(
+    cache_repository_factory,
+    tool_factory,
+) -> None:
     cache = cache_repository_factory()
     calls = 0
 
@@ -283,7 +312,10 @@ def test_tool_registry_legacy_cache_payload_is_treated_as_miss(cache_repository_
     assert calls == 1
 
 
-def test_tool_registry_malformed_cache_envelope_is_treated_as_miss(cache_repository_factory, tool_factory) -> None:
+def test_tool_registry_malformed_cache_envelope_is_treated_as_miss(
+    cache_repository_factory,
+    tool_factory,
+) -> None:
     cache = cache_repository_factory()
     calls = 0
 
@@ -326,7 +358,10 @@ def test_tool_registry_cache_lookup_error_falls_back_to_tool(cache_repository_fa
     assert calls == 1
 
 
-def test_tool_registry_cache_store_error_does_not_fail_tool_request(cache_repository_factory, tool_factory) -> None:
+def test_tool_registry_cache_store_error_does_not_fail_tool_request(
+    cache_repository_factory,
+    tool_factory,
+) -> None:
     cache = cache_repository_factory(fail_put=True)
     calls = 0
 
@@ -400,5 +435,4 @@ def test_cache_policy_controls_cacheability() -> None:
     assert ToolCachePolicy(60, is_user_specific=True).is_cache_allowed_for_user(None) is False
     with pytest.raises(ValueError, match="cache_ttl_seconds must be positive"):
         ToolCachePolicy(0)
-
 
