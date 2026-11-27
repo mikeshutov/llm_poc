@@ -6,18 +6,20 @@ import pytest
 from common.config import UTF8_ENCODING
 from llm.clients import embeddings
 from llm.repository import embedding_cache_repository as repository
+from llm.repository.repo_factory import get_embedding_cache_repo
 
 
 @pytest.fixture
 def embedding_dependencies(monkeypatch, embedding_client_factory):
     client = embedding_client_factory()
     provider = Mock(return_value=client)
-    lookup = Mock(return_value=None)
-    store = Mock()
+    cache = Mock(spec=repository.EmbeddingCacheRepository)
+    lookup = cache.get
+    lookup.return_value = None
+    store = cache.put
     log = Mock()
     monkeypatch.setattr(embeddings, "get_openai_client", provider)
-    monkeypatch.setattr(embeddings, "get_cached_embedding", lookup)
-    monkeypatch.setattr(embeddings, "cache_embedding", store)
+    monkeypatch.setattr(embeddings, "get_embedding_cache_repo", lambda: cache)
     monkeypatch.setattr(embeddings, "_record_embedding_log", log)
     return client, provider, lookup, store, log
 
@@ -85,7 +87,7 @@ def test_failed_embedding_is_not_cached(embedding_dependencies):
 def test_repository_lookup(monkeypatch, database_connection_factory, row, expected):
     connection, cursor = database_connection_factory(row=row)
     monkeypatch.setattr(repository, "get_connection", lambda: connection)
-    assert repository.get_cached_embedding(model="model", input_hash="hash") == expected
+    assert repository.EmbeddingCacheRepository().get(model="model", input_hash="hash") == expected
     sql, params = cursor.execute.call_args.args
     assert "WHERE model = %s AND input_hash = %s" in sql
     assert "created_at" not in sql
@@ -96,7 +98,7 @@ def test_repository_lookup(monkeypatch, database_connection_factory, row, expect
 def test_repository_insert_is_conflict_safe(monkeypatch, database_connection_factory):
     connection, cursor = database_connection_factory()
     monkeypatch.setattr(repository, "get_connection", lambda: connection)
-    repository.cache_embedding(model="model", input_hash="hash", embedding=[0.25, 0.75])
+    repository.EmbeddingCacheRepository().put(model="model", input_hash="hash", embedding=[0.25, 0.75])
     sql, params = cursor.execute.call_args.args
     assert "ON CONFLICT (model, input_hash) DO NOTHING" in sql
     assert params == ("model", "hash", [0.25, 0.75])
@@ -110,7 +112,33 @@ def test_repository_closes_connection_on_error(monkeypatch, database_connection_
     monkeypatch.setattr(repository, "get_connection", lambda: connection)
     with pytest.raises(RuntimeError, match="query failed"):
         if operation == "get":
-            repository.get_cached_embedding(model="model", input_hash="hash")
+            repository.EmbeddingCacheRepository().get(model="model", input_hash="hash")
         else:
-            repository.cache_embedding(model="model", input_hash="hash", embedding=[1.0])
+            repository.EmbeddingCacheRepository().put(model="model", input_hash="hash", embedding=[1.0])
     connection.close.assert_called_once()
+
+
+def test_repository_factory_does_not_open_connection(monkeypatch):
+    connect = Mock()
+    monkeypatch.setattr(repository, "get_connection", connect)
+    assert isinstance(get_embedding_cache_repo(), repository.EmbeddingCacheRepository)
+    connect.assert_not_called()
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_repository_uses_but_does_not_close_injected_connection(
+    monkeypatch, database_connection_factory, fail,
+):
+    connection, cursor = database_connection_factory(row={"embedding": [1.0]})
+    connect = Mock()
+    monkeypatch.setattr(repository, "get_connection", connect)
+    cache = repository.EmbeddingCacheRepository(conn=connection)
+    if fail:
+        cursor.execute.side_effect = RuntimeError("query failed")
+        with pytest.raises(RuntimeError, match="query failed"):
+            cache.get(model="model", input_hash="hash")
+    else:
+        assert cache.get(model="model", input_hash="hash") == [1.0]
+        cache.put(model="model", input_hash="hash", embedding=[1.0])
+    connect.assert_not_called()
+    connection.close.assert_not_called()

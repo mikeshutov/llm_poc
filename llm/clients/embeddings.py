@@ -5,7 +5,7 @@ from time import perf_counter
 
 from common.config import EMBEDDING_MODEL, UTF8_ENCODING
 from llm.clients.llm_client import get_openai_client
-from llm.repository.embedding_cache_repository import cache_embedding, get_cached_embedding
+from llm.repository.repo_factory import get_embedding_cache_repo
 
 
 def embed_text(
@@ -18,8 +18,9 @@ def embed_text(
     input_hash = sha256(text.encode(UTF8_ENCODING)).hexdigest()
     started_at = perf_counter()
     cache_error = ""
+    repository = get_embedding_cache_repo()
     try:
-        embedding = get_cached_embedding(model=EMBEDDING_MODEL, input_hash=input_hash)
+        embedding = repository.get(model=EMBEDDING_MODEL, input_hash=input_hash)
     except Exception as exc:
         embedding = None
         cache_error = str(exc)
@@ -50,7 +51,7 @@ def embed_text(
 
     if not cache_error:
         try:
-            cache_embedding(model=EMBEDDING_MODEL, input_hash=input_hash, embedding=embedding)
+            repository.put(model=EMBEDDING_MODEL, input_hash=input_hash, embedding=embedding)
         except Exception as exc:
             cache_error = str(exc)
 
