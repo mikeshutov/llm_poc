@@ -1,23 +1,14 @@
 from __future__ import annotations
 
-from agent_runtime.models.main_state import MainState
 from capabilities.discovery.attribute_discovery import attribute_discovery
 
 
-class FakeAttributeClassifier:
-    def __init__(self) -> None:
-        self.context = ""
-        self.attributes = []
-
-    def relevant_attributes(self, context: str, attributes: list[str]) -> list[str]:
-        self.context = context
-        self.attributes = attributes
-        return ["food.preference", "not-a-valid-attribute"]
-
-
-def test_attribute_discovery_sends_context_and_all_available_attributes() -> None:
-    state = MainState.new(task="Find a dinner recipe", agent_profiles=[])
-    client = FakeAttributeClassifier()
+def test_attribute_discovery_sends_context_and_all_available_attributes(
+    attribute_classifier_factory,
+    main_state_factory,
+) -> None:
+    state = main_state_factory(task="Find a dinner recipe", agent_profiles=[])
+    client = attribute_classifier_factory(result=["food.preference", "not-a-valid-attribute"])
 
     result = attribute_discovery(state, client=client)
 
@@ -28,13 +19,10 @@ def test_attribute_discovery_sends_context_and_all_available_attributes() -> Non
     assert result == ["food.preference"]
 
 
-def test_attribute_discovery_limits_results_to_ten() -> None:
-    state = MainState.new(task="food", agent_profiles=[])
+def test_attribute_discovery_limits_results_to_ten(attribute_classifier_factory, main_state_factory) -> None:
+    state = main_state_factory(task="food", agent_profiles=[])
 
-    class FakeClient:
-        def relevant_attributes(self, context: str, attributes: list[str]) -> list[str]:
-            return list(attributes[:12])
-
-    result = attribute_discovery(state, client=FakeClient())
+    client = attribute_classifier_factory(select=lambda attributes: attributes[:12])
+    result = attribute_discovery(state, client=client)
 
     assert len(result) == 10

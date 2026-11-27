@@ -1,17 +1,20 @@
-from agent_runtime.models.plan import PlanStep
 from agent_runtime.planning.tool_wrapper import build_tools
 from capabilities.registry.global_registry import (
     GLOBAL_TOOL_REGISTRY, available_agent_tools, register_agent_tools,
 )
 from agent_runtime.execution.tool_executor import run_executor
-from agent_runtime.models.plan import Plan
-from agent_runtime.models.agent_profile import AgentProfile
 from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE, DocumentWritingDelegationArgs
 from capabilities.discovery.models import AvailableAgent, CapabilityDiscoveryResult
 
 
-def test_agent_tool_receives_explicit_task_and_normalizes_evidence(monkeypatch, agent_state_factory) -> None:
-    parent = agent_state_factory(profile=AgentProfile(name="parent", scope="main_agent"))
+def test_agent_tool_receives_explicit_task_and_normalizes_evidence(
+    plan_factory,
+    plan_step_factory,
+    agent_profile_factory,
+    monkeypatch,
+    agent_state_factory,
+) -> None:
+    parent = agent_state_factory(profile=agent_profile_factory(name="parent", scope="main_agent"))
     child = agent_state_factory(profile=DOCUMENT_WRITING_PROFILE)
     parent.available_agent_states = {"document_writing": child}
     seen = []
@@ -21,12 +24,12 @@ def test_agent_tool_receives_explicit_task_and_normalizes_evidence(monkeypatch, 
         return state
 
     monkeypatch.setattr("agents.registry.agent_registry.get", lambda profile: run_child)
-    step = PlanStep(
+    step = plan_step_factory(
         id="E1", tool="document_writing", plan="Expected outcome",
         hypothesis="Expected outcome",
         args={"task": "Create a document.", "evidence_ids": ["ev-1", " ev-1 ", "ev-2"]},
     )
-    parent.node_states.planner.plan = Plan(steps=[step])
+    parent.node_states.planner.plan = plan_factory(steps=[step])
     run_executor(parent)
     result = parent.direct_tool_results[0]
     assert seen[0].inputs.task == "Create a document."
@@ -54,22 +57,22 @@ def test_agent_delegation_tool_accepts_evidence_ids() -> None:
     assert parsed.evidence_ids == ["evidence-1", "evidence-1", "  evidence-2  "]
 
 
-def test_delegated_agent_states_honor_delegation_policy(agent_state_factory) -> None:
+def test_delegated_agent_states_honor_delegation_policy(agent_profile_factory, agent_state_factory) -> None:
     parent = agent_state_factory(
-        profile=AgentProfile(
+        profile=agent_profile_factory(
             name="coordinator",
             scope="main_agent",
             default_available_agent_names={"default_agent"},
         ),
     )
     default_agent = agent_state_factory(
-        profile=AgentProfile(name="default_agent", scope="main_agent"),
+        profile=agent_profile_factory(name="default_agent", scope="main_agent"),
     )
     undiscovered_agent = agent_state_factory(
-        profile=AgentProfile(name="undiscovered_agent", scope="main_agent"),
+        profile=agent_profile_factory(name="undiscovered_agent", scope="main_agent"),
     )
     blocked_agent = agent_state_factory(
-        profile=AgentProfile(name="blocked_agent", scope="main_agent", delegatable=False),
+        profile=agent_profile_factory(name="blocked_agent", scope="main_agent", delegatable=False),
     )
     parent.available_agent_states = {
         "coordinator": parent,
@@ -87,9 +90,12 @@ def test_delegated_agent_states_honor_delegation_policy(agent_state_factory) -> 
     assert [tool.name for tool in visible] == ["default_agent"]
 
 
-def test_non_delegating_agent_exposes_no_delegation_targets(agent_state_factory) -> None:
+def test_non_delegating_agent_exposes_no_delegation_targets(
+    agent_profile_factory,
+    agent_state_factory,
+) -> None:
     parent = agent_state_factory(
-        profile=AgentProfile(
+        profile=agent_profile_factory(
             name="leaf",
             scope="main_agent",
             can_delegate_agents=False,
@@ -97,19 +103,24 @@ def test_non_delegating_agent_exposes_no_delegation_targets(agent_state_factory)
     )
     parent.available_agent_states = {
         "other": agent_state_factory(
-            profile=AgentProfile(name="other", scope="main_agent"),
+            profile=agent_profile_factory(name="other", scope="main_agent"),
         )
     }
 
     assert available_agent_tools(parent) == []
 
 
-def test_delegated_agent_execution_rejects_self_delegation(agent_state_factory) -> None:
+def test_delegated_agent_execution_rejects_self_delegation(
+    plan_factory,
+    plan_step_factory,
+    agent_profile_factory,
+    agent_state_factory,
+) -> None:
     parent = agent_state_factory(
-        profile=AgentProfile(name="coordinator", scope="main_agent"),
+        profile=agent_profile_factory(name="coordinator", scope="main_agent"),
     )
     parent.available_agent_states = {"coordinator": parent}
-    step = PlanStep(
+    step = plan_step_factory(
         id="E1",
         tool="coordinator",
         plan="Delegate this task.",
@@ -117,7 +128,7 @@ def test_delegated_agent_execution_rejects_self_delegation(agent_state_factory) 
     )
 
     register_agent_tools([parent.agent_profile])
-    parent.node_states.planner.plan = Plan(steps=[step])
+    parent.node_states.planner.plan = plan_factory(steps=[step])
     run_executor(parent)
     result = parent.direct_tool_results[0]
 

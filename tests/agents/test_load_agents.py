@@ -7,10 +7,8 @@ from agents.research.profile import RESEARCH_PROFILE
 from agents.coding.profile import CODING_PROFILE
 from agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
-from agent_runtime.models.main_state import MainState
-from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentKind, AgentProfile
+from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentKind
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
-from agent_runtime.models.plan import Plan
 from agent_runtime.execution.tool_executor import run_executor
 from agent_runtime.planning.tool_call_parser import parse_tool_calls_to_plan_steps
 from agent_runtime.planning.tool_wrapper import build_tools
@@ -22,7 +20,7 @@ from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY, REGISTER
 from personalization.profile.models import UserProfile
 
 
-def test_load_agents_adds_system_agents_before_user_agent_discovery(monkeypatch) -> None:
+def test_load_agents_adds_system_agents_before_user_agent_discovery(main_state_factory, monkeypatch) -> None:
     monkeypatch.setattr(load_agents_module, "embed_text", lambda _: [1.0])
 
     class FakeRepository:
@@ -31,7 +29,7 @@ def test_load_agents_adds_system_agents_before_user_agent_discovery(monkeypatch)
 
     monkeypatch.setattr(load_agents_module, "get_agent_repo", lambda: FakeRepository())
 
-    state = MainState.new(
+    state = main_state_factory(
         task="research a topic and write the findings",
         execution_context=AgentExecutionContext.new(),
         llm=object(),
@@ -55,7 +53,7 @@ def test_load_agents_adds_system_agents_before_user_agent_discovery(monkeypatch)
 
 
 @pytest.mark.parametrize("strategy", list(AgentExecutionStrategy))
-def test_db_agents_are_exposed_and_executed_for_their_owner(monkeypatch, strategy, db_agent_factory, agent_state_factory) -> None:
+def test_db_agents_are_exposed_and_executed_for_their_owner(main_state_factory, plan_factory, agent_profile_factory, monkeypatch, strategy, db_agent_factory, agent_state_factory) -> None:
     rows = {
         owner: db_agent_factory(
             agent_type=AgentType.USER, user_id=owner, name="db_helper",
@@ -82,7 +80,7 @@ def test_db_agents_are_exposed_and_executed_for_their_owner(monkeypatch, strateg
         context = AgentExecutionContext.new(
             user_profile=UserProfile(user_id=owner), conversation_id=f"conversation-{owner}",
         )
-        main = MainState.new(task="Delegate a calculation", execution_context=context, llm=object(), agent_profiles=[])
+        main = main_state_factory(task="Delegate a calculation", execution_context=context, llm=object(), agent_profiles=[])
         load_agents(main)
         child = main.agent_states["db_helper"]
         assert child.agent_profile.kind == AgentKind.USER_AGENT
@@ -91,7 +89,7 @@ def test_db_agents_are_exposed_and_executed_for_their_owner(monkeypatch, strateg
         assert child.agent_profile.allowed_categories == {"math"}
         assert child.agent_profile.stage_model_selections["planner"].model == "gpt-4o-mini"
         parent = agent_state_factory(
-            profile=AgentProfile(name="coordinator", scope="main_agent"),
+            profile=agent_profile_factory(name="coordinator", scope="main_agent"),
             execution_context=context,
         )
         parent.available_agent_states = main.agent_states
@@ -124,7 +122,7 @@ def test_db_agents_are_exposed_and_executed_for_their_owner(monkeypatch, strateg
             "hypothesis": "A result is calculated.",
         }
         provider_tool.args_schema.model_validate(args)
-        parent.node_states.planner.plan = Plan(steps=parse_tool_calls_to_plan_steps([
+        parent.node_states.planner.plan = plan_factory(steps=parse_tool_calls_to_plan_steps([
             {"id": "E1", "name": "db_helper", "args": args},
         ], tools))
         run_executor(parent)

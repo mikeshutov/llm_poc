@@ -23,8 +23,8 @@ from capabilities.registry.constants import TOOL_RESULT_TYPE_MEAL_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_WEATHER
 
 
-def test_svg_file_evidence_is_detected_for_inline_preview() -> None:
-    svg = EvidenceView(
+def test_svg_file_evidence_is_detected_for_inline_preview(evidence_factory) -> None:
+    svg = evidence_factory(
         type="file",
         metadata={"mime_type": "image/svg+xml"},
         data={
@@ -50,8 +50,8 @@ def test_debug_llm_payload_reads_compact_input_and_output_metadata() -> None:
     assert payload["metadata"] == {}
 
 
-def test_serialize_roundtrip_payload_preserves_persisted_evidence() -> None:
-    evidence = EvidenceView( summary="A recipe",
+def test_serialize_roundtrip_payload_preserves_persisted_evidence(evidence_factory) -> None:
+    evidence = evidence_factory( summary="A recipe",
         data={
             "title": "Pasta Primavera",
         })
@@ -93,11 +93,11 @@ def test_get_renderable_result_blocks_falls_back_to_flat_content() -> None:
     assert blocks == [SynthesisResultBlock(content="Flat answer.", evidence_ids=[])]
 
 
-def test_build_block_cards_uses_hydrated_evidence_with_links() -> None:
+def test_build_block_cards_uses_hydrated_evidence_with_links(evidence_factory) -> None:
     cards = _build_block_cards(
         SynthesisResultBlock(content="News summary", evidence_ids=["25a4bcc1-2b18-5a36-940c-29c535bae654"]),
         {
-            "25a4bcc1-2b18-5a36-940c-29c535bae654": EvidenceView(
+            "25a4bcc1-2b18-5a36-940c-29c535bae654": evidence_factory(
                 id="25a4bcc1-2b18-5a36-940c-29c535bae654",
                 summary="Article summary",
                 source="news_search",
@@ -122,11 +122,11 @@ def test_build_block_cards_uses_hydrated_evidence_with_links() -> None:
     ]
 
 
-def test_build_inline_evidence_skips_card_like_evidence() -> None:
+def test_build_inline_evidence_skips_card_like_evidence(evidence_factory) -> None:
     evidence = _build_inline_evidence(
         SynthesisResultBlock(content="News summary", evidence_ids=["25a4bcc1-2b18-5a36-940c-29c535bae654", "c38c296c-3e94-56a7-86e1-dfe071c82fcc"]),
         {
-            "25a4bcc1-2b18-5a36-940c-29c535bae654": EvidenceView(
+            "25a4bcc1-2b18-5a36-940c-29c535bae654": evidence_factory(
                 id="25a4bcc1-2b18-5a36-940c-29c535bae654",
                 summary="Article summary",
                 source="news_search",
@@ -135,7 +135,7 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
             "urls": [EvidenceUrl(url="https://example.com/article", url_type=EvidenceUrlType.WEBSITE)],
             "image_url": "",
         }),
-            "c38c296c-3e94-56a7-86e1-dfe071c82fcc": EvidenceView(
+            "c38c296c-3e94-56a7-86e1-dfe071c82fcc": evidence_factory(
                 id="c38c296c-3e94-56a7-86e1-dfe071c82fcc",
                 summary="25.9 C in Toronto",
                 source=TOOL_NAME_GET_WEATHER,
@@ -156,7 +156,7 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
         ),
     ]
     assert _is_inline_label_evidence(
-        EvidenceView(
+        evidence_factory(
             id="c38c296c-3e94-56a7-86e1-dfe071c82fcc",
             summary="25.9 C in Toronto",
             source=TOOL_NAME_GET_WEATHER,
@@ -169,7 +169,7 @@ def test_build_inline_evidence_skips_card_like_evidence() -> None:
     )
 
 
-def test_render_assistant_content_renders_meal_recipe_cards(monkeypatch) -> None:
+def test_render_assistant_content_renders_meal_recipe_cards(evidence_factory, monkeypatch) -> None:
     rendered_meals: list[EvidenceView] = []
     monkeypatch.setattr("rendering.rendering.st.markdown", lambda value: None)
     monkeypatch.setattr("rendering.rendering.fetch_llm_usage_for_roundtrip", lambda value: None)
@@ -182,7 +182,7 @@ def test_render_assistant_content_renders_meal_recipe_cards(monkeypatch) -> None
         {
             "result": [{"content": "Here are recipes.", "evidence_ids": ["meal-1"]}],
             "evidence_by_id": {
-                "meal-1": EvidenceView(
+                "meal-1": evidence_factory(
                     id="meal-1",
                     summary="Vegetable pasta",
                     source="search_meals",
@@ -200,11 +200,11 @@ def test_render_assistant_content_renders_meal_recipe_cards(monkeypatch) -> None
     assert rendered_meals[0].type == TOOL_RESULT_TYPE_MEAL_RESULTS
 
 
-def test_build_inline_evidence_includes_generic_web_search_results() -> None:
+def test_build_inline_evidence_includes_generic_web_search_results(evidence_factory) -> None:
     evidence = _build_inline_evidence(
         SynthesisResultBlock(content="Web summary", evidence_ids=["25a4bcc1-2b18-5a36-940c-29c535bae654"]),
         {
-            "25a4bcc1-2b18-5a36-940c-29c535bae654": EvidenceView(
+            "25a4bcc1-2b18-5a36-940c-29c535bae654": evidence_factory(
                 id="25a4bcc1-2b18-5a36-940c-29c535bae654",
                 summary="Article summary",
                 source=TOOL_NAME_GENERIC_WEB_SEARCH,
@@ -224,7 +224,7 @@ def test_build_inline_evidence_includes_generic_web_search_results() -> None:
         ),
     ]
     assert _is_inline_link_evidence(
-        EvidenceView(
+        evidence_factory(
             id="25a4bcc1-2b18-5a36-940c-29c535bae654",
             summary="Article summary",
             source=TOOL_NAME_GENERIC_WEB_SEARCH,
@@ -236,11 +236,11 @@ def test_build_inline_evidence_includes_generic_web_search_results() -> None:
     )
 
 
-def test_build_inline_evidence_includes_generic_web_search_results_from_source_only() -> None:
+def test_build_inline_evidence_includes_generic_web_search_results_from_source_only(evidence_factory) -> None:
     evidence = _build_inline_evidence(
         SynthesisResultBlock(content="Web summary", evidence_ids=["25a4bcc1-2b18-5a36-940c-29c535bae654"]),
         {
-            "25a4bcc1-2b18-5a36-940c-29c535bae654": EvidenceView(
+            "25a4bcc1-2b18-5a36-940c-29c535bae654": evidence_factory(
                 id="25a4bcc1-2b18-5a36-940c-29c535bae654",
                 summary="Article summary",
                 source=TOOL_NAME_GENERIC_WEB_SEARCH,
@@ -261,7 +261,10 @@ def test_build_inline_evidence_includes_generic_web_search_results_from_source_o
     ]
 
 
-def test_render_result_block_renders_file_citations_as_inline_file_names(monkeypatch) -> None:
+def test_render_result_block_renders_file_citations_as_inline_file_names(
+    evidence_factory,
+    monkeypatch,
+) -> None:
     calls: dict[str, list[object]] = {"markdown": [], "caption": []}
 
     monkeypatch.setattr(
@@ -273,7 +276,7 @@ def test_render_result_block_renders_file_citations_as_inline_file_names(monkeyp
     cards = _render_result_block(
         SynthesisResultBlock(content="Your resume lists three years of experience.", evidence_ids=["file-evidence"]),
         {
-            "file-evidence": EvidenceView(
+            "file-evidence": evidence_factory(
                 id="file-evidence",
                 summary="Experience at Acme Corp.",
                 source="asset_search_details",
@@ -292,7 +295,7 @@ def test_render_result_block_renders_file_citations_as_inline_file_names(monkeyp
     assert calls["caption"] == []
 
 
-def test_render_result_block_renders_weather_as_inline_html_link(monkeypatch) -> None:
+def test_render_result_block_renders_weather_as_inline_html_link(evidence_factory, monkeypatch) -> None:
     calls: dict[str, list[object]] = {"markdown": [], "write": [], "caption": []}
 
     monkeypatch.setattr(
@@ -305,7 +308,7 @@ def test_render_result_block_renders_weather_as_inline_html_link(monkeypatch) ->
     cards = _render_result_block(
         SynthesisResultBlock(content="Toronto is warm today.", evidence_ids=["25a4bcc1-2b18-5a36-940c-29c535bae654"]),
         {
-            "25a4bcc1-2b18-5a36-940c-29c535bae654": EvidenceView(
+            "25a4bcc1-2b18-5a36-940c-29c535bae654": evidence_factory(
                 id="25a4bcc1-2b18-5a36-940c-29c535bae654",
                 summary="25.9 C in Toronto",
                 source=TOOL_NAME_GET_WEATHER,
@@ -328,7 +331,7 @@ def test_render_result_block_renders_weather_as_inline_html_link(monkeypatch) ->
     assert rendered_kwargs == {}
 
 
-def test_render_result_block_renders_magic_card_rulings_as_a_table(monkeypatch) -> None:
+def test_render_result_block_renders_magic_card_rulings_as_a_table(evidence_factory, monkeypatch) -> None:
     rendered_rulings: list[list[EvidenceView]] = []
     monkeypatch.setattr("rendering.rendering.st.write", lambda value: None)
     monkeypatch.setattr(
@@ -339,7 +342,7 @@ def test_render_result_block_renders_magic_card_rulings_as_a_table(monkeypatch) 
     cards = _render_result_block(
         SynthesisResultBlock(content="Humility rulings", evidence_ids=["25a4bcc1-2b18-5a36-940c-29c535bae654"]),
         {
-            "25a4bcc1-2b18-5a36-940c-29c535bae654": EvidenceView(
+            "25a4bcc1-2b18-5a36-940c-29c535bae654": evidence_factory(
                 id="25a4bcc1-2b18-5a36-940c-29c535bae654",
                 summary="Humility applies in layers 6 and 7b.",
         type=TOOL_RESULT_TYPE_RULES,
@@ -353,11 +356,5 @@ def test_render_result_block_renders_magic_card_rulings_as_a_table(monkeypatch) 
     assert cards == []
     assert len(rendered_rulings) == 1
     assert rendered_rulings[0][0].data["published_at"] == "2004-10-04"
-
-
-
-
-
-
 
 

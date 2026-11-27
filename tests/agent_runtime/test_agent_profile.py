@@ -1,16 +1,7 @@
 from __future__ import annotations
 
-import sys
 from types import SimpleNamespace
-from types import ModuleType
 
-if "yfinance" not in sys.modules:
-    sys.modules["yfinance"] = ModuleType("yfinance")
-
-if "pycountry" not in sys.modules:
-    pycountry_module = ModuleType("pycountry")
-    pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
-    sys.modules["pycountry"] = pycountry_module
 
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 from agent_runtime.models.agent_profile import AgentProfile

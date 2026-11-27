@@ -1,27 +1,17 @@
 from __future__ import annotations
 
-import sys
-from types import ModuleType, SimpleNamespace
 from uuid import uuid4
 
-if "yfinance" not in sys.modules:
-    sys.modules["yfinance"] = ModuleType("yfinance")
-
-if "pycountry" not in sys.modules:
-    pycountry_module = ModuleType("pycountry")
-    pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
-    sys.modules["pycountry"] = pycountry_module
 
 from agents.main.request import TOP_LEVEL_PROFILE
 from agent_runtime.models.agent_prompt import PromptSectionKeys
-from agent_runtime.models.agent_state import AgentState
-from retrieval.evidence import EvidenceView, ToolResult
+from retrieval.evidence import ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.planning.prompts.planner_prompt import build_planner_prompt
 
 
-def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> None:
-    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
+def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results(agent_state_factory, evidence_factory) -> None:
+    state = agent_state_factory(task="Find a good answer", llm=object(), profile=TOP_LEVEL_PROFILE)
     plan = Plan.model_validate(
         {
             "steps": [
@@ -43,7 +33,7 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
                 tool_name="web_search",
             result={"secret": "raw payload should not be in planner prompt"},
             evidence=[
-                EvidenceView(
+                evidence_factory(
                     summary="Short evidence summary.",
                         source="web_search",
         type="web_search_results",
@@ -69,8 +59,8 @@ def test_planner_prompt_exposes_top_level_evidence_views_not_tool_results() -> N
     assert all("Example Result" not in message.content for message in messages)
 
 
-def test_planner_prompt_explains_an_empty_execution_retry() -> None:
-    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
+def test_planner_prompt_explains_an_empty_execution_retry(agent_state_factory) -> None:
+    state = agent_state_factory(task="Find a good answer", llm=object(), profile=TOP_LEVEL_PROFILE)
     state.node_states.planner.no_result_attempts = 1
 
     prompt, _ = build_planner_prompt(state)
@@ -78,24 +68,24 @@ def test_planner_prompt_explains_an_empty_execution_retry() -> None:
     assert "The previous plan execution produced no results." in prompt.build()
 
 
-def test_top_level_planner_prompt_includes_shared_rules() -> None:
-    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
+def test_top_level_planner_prompt_includes_shared_rules(agent_state_factory) -> None:
+    state = agent_state_factory(task="Find a good answer", llm=object(), profile=TOP_LEVEL_PROFILE)
 
     prompt, _ = build_planner_prompt(state)
 
     assert "Each tool call must include an affirmative, factual, testable hypothesis" in prompt.build()
 
 
-def test_plan_execute_evaluate_planner_batches_independent_tools() -> None:
-    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
+def test_plan_execute_evaluate_planner_batches_independent_tools(agent_state_factory) -> None:
+    state = agent_state_factory(task="Find a good answer", llm=object(), profile=TOP_LEVEL_PROFILE)
 
     prompt, _ = build_planner_prompt(state)
 
     assert "include all of them in the same plan" in prompt.build()
 
 
-def test_planner_prompt_includes_evaluator_missing_information() -> None:
-    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
+def test_planner_prompt_includes_evaluator_missing_information(agent_state_factory) -> None:
+    state = agent_state_factory(task="Find a good answer", llm=object(), profile=TOP_LEVEL_PROFILE)
     state.node_states.evaluator.missing_information = ["Current Canadian pricing", "Shipping availability"]
 
     prompt, _ = build_planner_prompt(state)
@@ -107,13 +97,11 @@ def test_planner_prompt_includes_evaluator_missing_information() -> None:
     assert "The evaluator identified unresolved missing_information below." in prompt.build()
 
 
-def test_planner_prompt_omits_missing_information_guidance_without_evaluator_feedback() -> None:
-    state = AgentState.new(task="Find a good answer", llm=object(), agent_profile=TOP_LEVEL_PROFILE)
+def test_planner_prompt_omits_missing_information_guidance_without_evaluator_feedback(agent_state_factory) -> None:
+    state = agent_state_factory(task="Find a good answer", llm=object(), profile=TOP_LEVEL_PROFILE)
 
     prompt, _ = build_planner_prompt(state)
 
     assert "The evaluator identified unresolved missing_information below." not in prompt.build()
-
-
 
 

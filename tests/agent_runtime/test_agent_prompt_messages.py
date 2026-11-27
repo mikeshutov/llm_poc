@@ -2,19 +2,19 @@ from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from conversation.models.conversation_models import ConversationContext, ConversationMessage
+from conversation.models.conversation_models import ConversationContext
 from agent_runtime.models.agent_prompt import AgentPrompt, PromptSectionKeys
 
 
-def test_agent_prompt_builds_native_chat_messages() -> None:
+def test_agent_prompt_builds_native_chat_messages(conversation_message_factory) -> None:
     prompt = AgentPrompt(
         instruction="Answer helpfully.",
         rules="Use only the supplied evidence.",
         conversation_context=ConversationContext(
             conversation_summary="The user is shopping for boots.",
             messages=[
-                ConversationMessage(uuid4(), uuid4(), 0, "user", "visible", "user", "I need waterproof boots.", {}, {}, None, ""),
-                ConversationMessage(uuid4(), uuid4(), 1, "assistant", "visible", "assistant", "What size do you need?", {}, {}, None, ""),
+                conversation_message_factory(content="I need waterproof boots."),
+                conversation_message_factory(sequence=1, kind="assistant", role="assistant", content="What size do you need?"),
             ],
         ),
         task="Find suitable options.",
@@ -39,14 +39,12 @@ def test_agent_prompt_builds_native_chat_messages() -> None:
     assert messages[3].content == "Find suitable options."
 
 
-def test_agent_prompt_sends_tool_result_as_native_tool_messages() -> None:
+def test_agent_prompt_sends_tool_result_as_native_tool_messages(conversation_message_factory) -> None:
     prompt = AgentPrompt(
         instruction="",
         conversation_context=ConversationContext(
             messages=[
-                ConversationMessage(
-                    uuid4(), uuid4(), 0, "tool_result", "internal", "tool",
-                        "ignored hypothesis", {
+                conversation_message_factory(kind="tool_result", visibility="internal", role="tool", content="ignored hypothesis", payload={
                         "tool_name": "search_products",
                         "status": "completed",
                         "output_payload": {"raw": "do not send this"},
@@ -55,8 +53,7 @@ def test_agent_prompt_sends_tool_result_as_native_tool_messages() -> None:
                             "summary": "Waterproof boots",
                                 "data": {"title": "Boots"},
                         }],
-                    }, {}, None, "",
-                ),
+                    }),
             ],
         ),
     )
@@ -78,27 +75,23 @@ def test_agent_prompt_sends_tool_result_as_native_tool_messages() -> None:
     )
 
 
-def test_agent_prompt_preserves_historical_tool_names() -> None:
+def test_agent_prompt_preserves_historical_tool_names(conversation_message_factory) -> None:
     tool_call_id = uuid4()
     prompt = AgentPrompt(
         instruction="",
         conversation_context=ConversationContext(
             messages=[
-                ConversationMessage(
-                    tool_call_id, uuid4(), 0, "tool_call", "internal", "assistant", "", {
+                conversation_message_factory(id=tool_call_id, kind="tool_call", visibility="internal", role="assistant", payload={
                         "tool_name": "products_search",
                         "provider_tool_call_id": "call-1",
                         "input_payload": {"query": "boots"},
-                    }, {}, None, "",
-                ),
-                ConversationMessage(
-                    uuid4(), uuid4(), 1, "tool_result", "internal", "tool", "", {
+                    }),
+                conversation_message_factory(sequence=1, kind="tool_result", visibility="internal", role="tool", payload={
                         "tool_name": "products_search",
                         "provider_tool_call_id": "call-1",
                         "status": "completed",
                         "evidence": [],
-                    }, {}, tool_call_id, "",
-                ),
+                    }, parent_message_id=tool_call_id),
             ],
         ),
     )

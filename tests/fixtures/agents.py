@@ -1,0 +1,104 @@
+from dataclasses import dataclass, replace
+from uuid import uuid4
+
+import pytest
+
+from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentProfile
+from agent_runtime.models.agent_state import AgentState
+from agent_runtime.models.main_state import MainState
+from agents.models.agent import Agent
+from retrieval.evidence import ToolResult
+
+
+@dataclass(frozen=True)
+class _NamedTool:
+    name: str
+
+
+@pytest.fixture
+def agent_profile_factory():
+    def create(**overrides):
+        return AgentProfile(**{"name": "test_agent", "scope": "main_agent", **overrides})
+
+    return create
+
+
+@pytest.fixture
+def agent_state_factory(agent_profile_factory):
+    def create(*, profile=None, profile_overrides=None, plan=None, task="", llm=None, **kwargs):
+        if profile is None:
+            profile = agent_profile_factory(
+                static_tools=[_NamedTool(step.tool) for step in plan.steps] if plan else [],
+            )
+        if profile_overrides:
+            profile = replace(profile, **profile_overrides)
+        state = AgentState.new(
+            agent_profile=profile, task=task, llm=object() if llm is None else llm, **kwargs,
+        )
+        if plan is not None:
+            state.node_states.planner.plan = plan
+            state.node_states.planner.plan_count = 1
+        return state
+
+    return create
+
+
+@pytest.fixture
+def react_agent_state_factory(agent_state_factory):
+    def create(*, max_turns=3, task="Find the answer", profile_overrides=None, **kwargs):
+        return agent_state_factory(
+            task=task,
+            profile_overrides={
+                "name": "react_agent", "execution_strategy": AgentExecutionStrategy.REACT,
+                "max_turns": max_turns, **(profile_overrides or {}),
+            },
+            **kwargs,
+        )
+
+    return create
+
+
+@pytest.fixture
+def db_agent_factory():
+    def create(**overrides):
+        return Agent(**{
+            "id": uuid4(), "name": "researcher", "planner_instruction": "Plan the request.",
+            **overrides,
+        })
+
+    return create
+
+
+@pytest.fixture
+def main_state_factory():
+    def create(*, task="", agent_profiles=(), llm=None, **kwargs):
+        return MainState.new(
+            task=task, agent_profiles=list(agent_profiles),
+            llm=object() if llm is None else llm, **kwargs,
+        )
+
+    return create
+
+
+@pytest.fixture
+def set_plan_results():
+    """Attach a plan and its results, keyed by local step ID, without persistence."""
+    def update(state, *, plan=None, results=None, plan_count=1, needs_replan=False):
+        if plan is not None:
+            state.node_states.planner.plan = plan.model_copy(deep=True)
+            state.node_states.planner.plan_count = max(0, plan_count)
+        state.node_states.planner.needs_replan = needs_replan
+        steps = {step.id: step for step in (plan.steps if plan is not None else [])}
+        tool_results = []
+        for step_id, value in (results or {}).items():
+            step = steps[step_id]
+            result = value if isinstance(value, ToolResult) else ToolResult(result=value)
+            tool_results.append(result.model_copy(update={
+                "tool_call_id": result.tool_call_id or uuid4(),
+                "plan_step_id": result.plan_step_id or step.db_id,
+                "tool_name": result.tool_name or step.tool,
+            }))
+        state.direct_tool_results[:] = tool_results
+        return state
+
+    return update

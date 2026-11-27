@@ -1,22 +1,11 @@
 from __future__ import annotations
 
-import sys
 from decimal import Decimal
-from types import ModuleType, SimpleNamespace
 from uuid import uuid4
 from unittest.mock import patch
 
-if 'yfinance' not in sys.modules:
-    sys.modules['yfinance'] = ModuleType('yfinance')
 
-if 'pycountry' not in sys.modules:
-    pycountry_module = ModuleType('pycountry')
-    pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
-    sys.modules['pycountry'] = pycountry_module
-
-from conversation.models.conversation_models import ConversationContext, ConversationRoundtrip
-from conversation.models.conversation_models import Conversation
-from integrations.ip_api.models import IpLocation
+from conversation.models.conversation_models import ConversationContext
 from llm.chat_models import build_llm_for_stage
 from llm.conversation_model_config import (
     ANTHROPIC_PROVIDER,
@@ -44,97 +33,6 @@ from agent_runtime.models.agent_execution_context import AgentExecutionContext
 from agent_runtime.models.agent_result import AgentResult
 from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agent_runtime.service import run_request_orchestrator_for_query
-from agent_runtime.context import bind_runtime_context
-from retrieval.reranker import CandidateReranker
-
-
-class TrackingChatOpenAI:
-    def __init__(self, model: str, **kwargs):
-        self.model = model
-        self.kwargs = kwargs
-
-    def invoke(self, prompt: str):
-        raise AssertionError(f'Unexpected invoke for prompt: {prompt[:80]}')
-
-
-class TrackingChatAnthropic:
-    def __init__(self, model_name: str, **kwargs):
-        self.model = model_name
-        self.kwargs = kwargs
-
-    def invoke(self, prompt: str):
-        raise AssertionError(f'Unexpected invoke for prompt: {prompt[:80]}')
-
-
-class FakeConversationRepository:
-    def __init__(self):
-        self.pending_calls: list[dict] = []
-        self.update_calls: list[dict] = []
-        self.conversation_id = uuid4()
-        self.roundtrip_id = uuid4()
-
-    def get_conversation(self, conversation_id):
-        assert conversation_id == self.conversation_id
-        return Conversation(
-            id=self.conversation_id,
-            user_id='anonymous',
-            title='Test Conversation',
-            created_at='2026-08-08T00:00:00Z',
-            metadata={},
-            tone_state={},
-            summary='',
-            summary_embedding=None,
-        )
-
-    def create_pending_roundtrip(self, conversation_id, user_prompt, model=None, roundtrip_summary=None, roundtrip_summary_embedding=None, metadata=None):
-        self.pending_calls.append(
-            {
-                'conversation_id': conversation_id,
-                'user_prompt': user_prompt,
-                'model': model,
-                'metadata': metadata,
-            }
-        )
-        return ConversationRoundtrip(
-            id=self.roundtrip_id,
-            conversation_id=conversation_id,
-            message_index=0,
-            roundtrip_summary=None,
-            roundtrip_summary_embedding=None,
-            created_at='2026-08-08T00:00:00Z',
-            metadata=metadata or {},
-            status='pending',
-        )
-
-    def update_roundtrip(self, roundtrip_id, response, payload, roundtrip_summary=None, roundtrip_summary_embedding=None):
-        self.update_calls.append(
-            {
-                'roundtrip_id': roundtrip_id,
-                'response': response,
-                'payload': payload,
-                'roundtrip_summary': roundtrip_summary,
-            }
-        )
-        return ConversationRoundtrip(
-            id=roundtrip_id,
-            conversation_id=self.conversation_id,
-            message_index=0,
-            roundtrip_summary=roundtrip_summary,
-            roundtrip_summary_embedding=roundtrip_summary_embedding,
-            created_at='2026-08-08T00:00:00Z',
-            metadata=self.pending_calls[0]['metadata'],
-            status='completed',
-        )
-
-
-class FakeConversationModelConfigRepository:
-    def __init__(self, config: ConversationModelConfig, conversation_id):
-        self.config = config
-        self.conversation_id = conversation_id
-
-    def resolve(self, conversation_id):
-        assert conversation_id == self.conversation_id
-        return self.config
 
 
 def test_conversation_model_config_resolves_partial_overrides_with_defaults() -> None:
@@ -241,7 +139,7 @@ def test_conversation_model_config_groups_models_by_provider() -> None:
     assert "deepseek-v4-flash" in grouped[DEEPSEEK_PROVIDER]
 
 
-def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> None:
+def test_llm_factory_build_llm_for_stage_uses_conversation_model_config(tracking_openai_model_factory) -> None:
     from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
@@ -271,7 +169,7 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
         ]
     )
 
-    with patch('llm.chat_models.ChatOpenAI', TrackingChatOpenAI):
+    with patch('llm.chat_models.ChatOpenAI', tracking_openai_model_factory):
         state = AgentState.new(
             task='Help me remember this.',
             execution_context=AgentExecutionContext.new(
@@ -280,7 +178,7 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
                 model_config=config,
             ),
             agent_profile=TOP_LEVEL_PROFILE,
-            llm=TrackingChatOpenAI(model='gpt-5.6-luna'),
+            llm=tracking_openai_model_factory(model='gpt-5.6-luna'),
         )
 
         planner_llm = build_llm_for_stage(
@@ -310,7 +208,7 @@ def test_llm_factory_build_llm_for_stage_uses_conversation_model_config() -> Non
         assert main_planner_llm.model == 'gpt-5.6-luna'
 
 
-def test_llm_factory_build_llm_for_stage_uses_anthropic_provider() -> None:
+def test_llm_factory_build_llm_for_stage_uses_anthropic_provider(tracking_anthropic_model_factory, tracking_openai_model_factory) -> None:
     from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
@@ -326,9 +224,9 @@ def test_llm_factory_build_llm_for_stage_uses_anthropic_provider() -> None:
         ]
     )
 
-    with patch('llm.chat_models.ChatAnthropic', TrackingChatAnthropic), patch(
+    with patch('llm.chat_models.ChatAnthropic', tracking_anthropic_model_factory), patch(
         'agent_runtime.models.agent_state.build_chat_model',
-        side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name),
+        side_effect=lambda provider, model_name: tracking_openai_model_factory(model=model_name),
     ):
         state = AgentState.new(
             task='Help me remember this.',
@@ -350,7 +248,7 @@ def test_llm_factory_build_llm_for_stage_uses_anthropic_provider() -> None:
     assert planner_llm.model == 'claude-sonnet-5'
 
 
-def test_llm_factory_build_llm_for_stage_uses_deepseek_openai_compatible_endpoint() -> None:
+def test_llm_factory_build_llm_for_stage_uses_deepseek_openai_compatible_endpoint(tracking_openai_model_factory) -> None:
     from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
@@ -366,9 +264,9 @@ def test_llm_factory_build_llm_for_stage_uses_deepseek_openai_compatible_endpoin
         ]
     )
 
-    with patch('llm.chat_models.ChatOpenAI', TrackingChatOpenAI), patch(
+    with patch('llm.chat_models.ChatOpenAI', tracking_openai_model_factory), patch(
         'agent_runtime.models.agent_state.build_chat_model',
-        side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name),
+        side_effect=lambda provider, model_name: tracking_openai_model_factory(model=model_name),
     ):
         state = AgentState.new(
             task='Help me remember this.',
@@ -391,7 +289,7 @@ def test_llm_factory_build_llm_for_stage_uses_deepseek_openai_compatible_endpoin
     assert planner_llm.kwargs['base_url'] == 'https://api.deepseek.com'
 
 
-def test_llm_factory_build_llm_for_stage_uses_google_openai_compatible_endpoint() -> None:
+def test_llm_factory_build_llm_for_stage_uses_google_openai_compatible_endpoint(tracking_openai_model_factory) -> None:
     from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
@@ -407,9 +305,9 @@ def test_llm_factory_build_llm_for_stage_uses_google_openai_compatible_endpoint(
         ]
     )
 
-    with patch('llm.chat_models.ChatOpenAI', TrackingChatOpenAI), patch(
+    with patch('llm.chat_models.ChatOpenAI', tracking_openai_model_factory), patch(
         'agent_runtime.models.agent_state.build_chat_model',
-        side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name),
+        side_effect=lambda provider, model_name: tracking_openai_model_factory(model=model_name),
     ):
         state = AgentState.new(
             task='Help me remember this.',
@@ -435,7 +333,7 @@ def test_llm_factory_build_llm_for_stage_uses_google_openai_compatible_endpoint(
     )
 
 
-def test_llm_factory_build_llm_for_stage_uses_xai_openai_compatible_endpoint() -> None:
+def test_llm_factory_build_llm_for_stage_uses_xai_openai_compatible_endpoint(tracking_openai_model_factory) -> None:
     from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
@@ -451,9 +349,9 @@ def test_llm_factory_build_llm_for_stage_uses_xai_openai_compatible_endpoint() -
         ]
     )
 
-    with patch('llm.chat_models.ChatOpenAI', TrackingChatOpenAI), patch(
+    with patch('llm.chat_models.ChatOpenAI', tracking_openai_model_factory), patch(
         'agent_runtime.models.agent_state.build_chat_model',
-        side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name),
+        side_effect=lambda provider, model_name: tracking_openai_model_factory(model=model_name),
     ):
         state = AgentState.new(
             task='Help me remember this.',
@@ -476,7 +374,7 @@ def test_llm_factory_build_llm_for_stage_uses_xai_openai_compatible_endpoint() -
     assert planner_llm.kwargs['base_url'] == 'https://api.x.ai/v1'
 
 
-def test_llm_factory_build_llm_for_stage_uses_cohere_openai_compatible_endpoint() -> None:
+def test_llm_factory_build_llm_for_stage_uses_cohere_openai_compatible_endpoint(tracking_openai_model_factory) -> None:
     from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
@@ -492,9 +390,9 @@ def test_llm_factory_build_llm_for_stage_uses_cohere_openai_compatible_endpoint(
         ]
     )
 
-    with patch('llm.chat_models.ChatOpenAI', TrackingChatOpenAI), patch(
+    with patch('llm.chat_models.ChatOpenAI', tracking_openai_model_factory), patch(
         'agent_runtime.models.agent_state.build_chat_model',
-        side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name),
+        side_effect=lambda provider, model_name: tracking_openai_model_factory(model=model_name),
     ):
         state = AgentState.new(
             task='Help me remember this.',
@@ -517,7 +415,7 @@ def test_llm_factory_build_llm_for_stage_uses_cohere_openai_compatible_endpoint(
     assert planner_llm.kwargs['base_url'] == 'https://api.cohere.ai/compatibility/v1'
 
 
-def test_llm_factory_build_llm_for_stage_uses_mistral_openai_compatible_endpoint() -> None:
+def test_llm_factory_build_llm_for_stage_uses_mistral_openai_compatible_endpoint(tracking_openai_model_factory) -> None:
     from agent_runtime.models.agent_state import AgentState
 
     conversation_id = uuid4()
@@ -533,9 +431,9 @@ def test_llm_factory_build_llm_for_stage_uses_mistral_openai_compatible_endpoint
         ]
     )
 
-    with patch('llm.chat_models.ChatOpenAI', TrackingChatOpenAI), patch(
+    with patch('llm.chat_models.ChatOpenAI', tracking_openai_model_factory), patch(
         'agent_runtime.models.agent_state.build_chat_model',
-        side_effect=lambda provider, model_name: TrackingChatOpenAI(model=model_name),
+        side_effect=lambda provider, model_name: tracking_openai_model_factory(model=model_name),
     ):
         state = AgentState.new(
             task='Help me remember this.',
@@ -558,12 +456,12 @@ def test_llm_factory_build_llm_for_stage_uses_mistral_openai_compatible_endpoint
     assert planner_llm.kwargs['base_url'] == 'https://api.mistral.ai/v1'
 
 
-def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> None:
+def test_run_request_orchestrator_records_resolved_model_config_snapshot(conversation_model_config_repository_factory, request_conversation_repository_factory) -> None:
     conversation_id = uuid4()
     config = ConversationModelConfig.build_default()
-    fake_repo = FakeConversationRepository()
+    fake_repo = request_conversation_repository_factory()
     fake_repo.conversation_id = conversation_id
-    fake_model_config_repo = FakeConversationModelConfigRepository(config, conversation_id)
+    fake_model_config_repo = conversation_model_config_repository_factory(config, conversation_id)
     captured_context_kwargs: dict[str, object] = {}
 
     def fake_build_roundtrip_context(conversation_id_arg, limit=5):
@@ -604,12 +502,12 @@ def test_run_request_orchestrator_records_resolved_model_config_snapshot() -> No
     assert fake_repo.update_calls[0]['payload'].roundtrip_latency_ms >= 0
 
 
-def test_run_request_orchestrator_passes_geometadata_to_user_profile_builder() -> None:
+def test_run_request_orchestrator_passes_geometadata_to_user_profile_builder(conversation_model_config_repository_factory, request_conversation_repository_factory) -> None:
     conversation_id = uuid4()
     config = ConversationModelConfig.build_default()
-    fake_repo = FakeConversationRepository()
+    fake_repo = request_conversation_repository_factory()
     fake_repo.conversation_id = conversation_id
-    fake_model_config_repo = FakeConversationModelConfigRepository(config, conversation_id)
+    fake_model_config_repo = conversation_model_config_repository_factory(config, conversation_id)
     captured_profile_kwargs: dict[str, object] = {}
 
     def fake_build_user_profile(**kwargs):

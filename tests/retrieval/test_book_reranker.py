@@ -4,7 +4,6 @@ from capabilities.adapters.books.candidate_mapper import (
     rerank_book_search_result,
 )
 from capabilities.adapters.books.constants import DEFAULT_BOOK_SEARCH_LIMIT
-from tests.test_utilities.fake_reranker import FakeReranker
 
 
 def test_book_to_candidate_maps_book_fields() -> None:
@@ -42,8 +41,10 @@ def test_book_to_candidate_maps_book_fields() -> None:
     assert "url" not in candidate.fields
 
 
-def test_rerank_book_search_result_reorders_results_and_preserves_metadata() -> None:
-    llm = FakeReranker('{"ranked_ids": ["/works/OL7W", "/works/OL6W", "/works/OL5W", "/works/OL4W", "/works/OL3W", "/works/OL2W"]}')
+def test_rerank_book_search_result_reorders_results_and_preserves_metadata(reranker_factory) -> None:
+    llm = reranker_factory(
+        ranked_ids=["/works/OL7W", "/works/OL6W", "/works/OL5W", "/works/OL4W", "/works/OL3W", "/works/OL2W"],
+    )
     response = BookSearchResult.model_validate(
         {
             "numFound": 11,
@@ -81,8 +82,8 @@ def test_rerank_book_search_result_reorders_results_and_preserves_metadata() -> 
     assert reranked.reranked is True
 
 
-def test_rerank_book_search_result_skips_llm_when_result_count_is_at_or_below_limit() -> None:
-    llm = FakeReranker('{"ranked_ids": ["/works/OL2W", "/works/OL1W"]}')
+def test_rerank_book_search_result_skips_llm_when_result_count_is_at_or_below_limit(reranker_factory) -> None:
+    llm = reranker_factory(ranked_ids=["/works/OL2W", "/works/OL1W"])
     response = BookSearchResult.model_validate(
         {
             "numFound": 2,

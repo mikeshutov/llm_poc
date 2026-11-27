@@ -2,53 +2,32 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from agent_runtime.models.agent_profile import AgentProfile
 from agent_runtime.models.agent_prompt import EvidenceStep
-from agent_runtime.models.agent_state import AgentState
-from retrieval.evidence import EvidenceView
 from agent_runtime.evaluation.completion import _build_premise, try_completion_evaluation
 from serviceclients.completion_evaluator.models import CompletionEvaluatorResult
 
 
-class FakeCompletionEvaluatorClient:
-    def __init__(self, result: CompletionEvaluatorResult) -> None:
-        self.result = result
-        self.calls: list[tuple[str, str]] = []
-
-    def evaluate(self, premise: str, hypothesis: str) -> CompletionEvaluatorResult:
-        self.calls.append((premise, hypothesis))
-        return self.result
-
-
-def _state() -> AgentState:
-    return AgentState(
-        agent_profile=AgentProfile(name="test", scope="test"),
-        llm=object(),
-    )
-
-
-def _evidence_steps() -> list[EvidenceStep]:
-    return [
-        EvidenceStep(
-            type="search",
-            evidence=[EvidenceView(id=uuid4(), summary="Toronto weather is sunny.")],
-        )
-    ]
-
-
-def test_completion_gate_returns_satisfied_for_high_confidence_entailment() -> None:
-    client = FakeCompletionEvaluatorClient(
+def test_completion_gate_returns_satisfied_for_high_confidence_entailment(
+    evidence_step_factory,
+    agent_state_factory,
+    completion_client_factory,
+) -> None:
+    client = completion_client_factory(
         CompletionEvaluatorResult(contradiction=0.02, neutral=0.03, entailment=0.95)
     )
 
-    result = try_completion_evaluation(_state(), _evidence_steps(), client=client)
+    result = try_completion_evaluation(agent_state_factory(), [evidence_step_factory()], client=client)
 
     assert result is True
     assert client.calls
 
 
-def test_completion_gate_uses_compact_named_records_and_tool_hypothesis() -> None:
-    evidence = EvidenceView(
+def test_completion_gate_uses_compact_named_records_and_tool_hypothesis(
+    evidence_factory,
+    agent_state_factory,
+    completion_client_factory,
+) -> None:
+    evidence = evidence_factory(
         id=uuid4(),
         summary="A warm soup recipe.",
         metadata={"servings": 4, "diet": "vegetarian"},
@@ -62,19 +41,19 @@ def test_completion_gate_uses_compact_named_records_and_tool_hypothesis() -> Non
             evidence=[evidence],
         )
     ]
-    client = FakeCompletionEvaluatorClient(
+    client = completion_client_factory(
         CompletionEvaluatorResult(contradiction=0.02, neutral=0.03, entailment=0.95)
     )
 
     assert _build_premise(steps) == (
         "Chicken soup with servings, diet"
     )
-    assert try_completion_evaluation(_state(), steps, client=client) is True
+    assert try_completion_evaluation(agent_state_factory(), steps, client=client) is True
     assert client.calls[0][1] == "Find a vegetarian soup recipe."
 
 
-def test_completion_gate_includes_values_only_for_evaluation_fields() -> None:
-    evidence = EvidenceView(
+def test_completion_gate_includes_values_only_for_evaluation_fields(evidence_factory) -> None:
+    evidence = evidence_factory(
         id=uuid4(),
         summary="A spicy curry.",
         metadata={"area": "Kenyan", "category": "Beef", "ingredients": ["beef", "onion"]},
@@ -94,26 +73,31 @@ def test_completion_gate_includes_values_only_for_evaluation_fields() -> None:
     )
 
 
-def test_completion_gate_returns_none_for_uncertain_result() -> None:
-    client = FakeCompletionEvaluatorClient(
+def test_completion_gate_returns_none_for_uncertain_result(
+    evidence_step_factory,
+    agent_state_factory,
+    completion_client_factory,
+) -> None:
+    client = completion_client_factory(
         CompletionEvaluatorResult(contradiction=0.1, neutral=0.8, entailment=0.1)
     )
 
-    result = try_completion_evaluation(_state(), _evidence_steps(), client=client)
+    result = try_completion_evaluation(agent_state_factory(), [evidence_step_factory()], client=client)
 
     assert result is False
 
 
-def test_completion_gate_returns_none_without_evidence() -> None:
-    client = FakeCompletionEvaluatorClient(
+def test_completion_gate_returns_none_without_evidence(
+    agent_state_factory,
+    completion_client_factory,
+) -> None:
+    client = completion_client_factory(
         CompletionEvaluatorResult(contradiction=0.0, neutral=0.0, entailment=1.0)
     )
 
-    result = try_completion_evaluation(_state(), [], client=client)
+    result = try_completion_evaluation(agent_state_factory(), [], client=client)
 
     assert result is False
     assert client.calls == []
-
-
 
 

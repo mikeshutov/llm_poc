@@ -3,59 +3,25 @@ from uuid import uuid4
 
 from jobs.orchestration import job_orchestrator
 from jobs.service import generate_job_plan
-from agent_runtime.models.plan import PlanStep, PlanningResult
 
 
-def _planning_result(*, steps: list[PlanStep], status: str = "ready") -> PlanningResult:
-    return PlanningResult(steps=steps, status=status)
-
-
-def test_job_orchestrator_returns_generated_plan(monkeypatch) -> None:
-    step = PlanStep(id="step-1", plan="Search", hypothesis="The search returns relevant results.", tool="search", args={})
-    monkeypatch.setattr(job_orchestrator, "build_user_profile", lambda user_id: SimpleNamespace(user_id=user_id))
-    monkeypatch.setattr(job_orchestrator.AgentState, "new", lambda *args, **kwargs: object())
-    monkeypatch.setattr(
-        job_orchestrator,
-        "build_planner_prompt",
-        lambda state: (SimpleNamespace(build_messages=lambda: [{"role": "user", "content": "prompt"}]), []),
+def test_job_orchestrator_returns_generated_plan(job_planner_factory, plan_step_factory) -> None:
+    step = plan_step_factory(
+        id="step-1", hypothesis="The search returns relevant results.", tool="search",
     )
-    monkeypatch.setattr(
-        job_orchestrator,
-        "invoke_planner",
-        lambda *args, **kwargs: (
-            PlanningResult(steps=[step]),
-            None,
-        ),
-    )
+    job_planner_factory(steps=[step])
 
-    plan, error = job_orchestrator.JobOrchestrator().generate_plan(
-        user_id="user-1",
-        prompt="Find something",
-    )
+    plan, error = job_orchestrator.JobOrchestrator().generate_plan(user_id="user-1", prompt="Find something")
 
     assert error is None
     assert plan is not None
     assert plan.steps[0].tool == "search"
 
 
-def test_job_orchestrator_returns_error_for_empty_plan(monkeypatch) -> None:
-    monkeypatch.setattr(job_orchestrator, "build_user_profile", lambda user_id: SimpleNamespace(user_id=user_id))
-    monkeypatch.setattr(job_orchestrator.AgentState, "new", lambda *args, **kwargs: object())
-    monkeypatch.setattr(
-        job_orchestrator,
-        "build_planner_prompt",
-        lambda state: (SimpleNamespace(build_messages=lambda: [{"role": "user", "content": "prompt"}]), []),
-    )
-    monkeypatch.setattr(
-        job_orchestrator,
-        "invoke_planner",
-        lambda *args, **kwargs: (_planning_result(steps=[]), None),
-    )
+def test_job_orchestrator_returns_error_for_empty_plan(job_planner_factory) -> None:
+    job_planner_factory(steps=[])
 
-    plan, error = job_orchestrator.JobOrchestrator().generate_plan(
-        user_id="user-1",
-        prompt="Find something",
-    )
+    plan, error = job_orchestrator.JobOrchestrator().generate_plan(user_id="user-1", prompt="Find something")
 
     assert plan is None
     assert error == "planner did not produce a usable plan"

@@ -3,12 +3,12 @@ from __future__ import annotations
 from uuid import UUID
 
 from agent_runtime.models.agent_prompt import EvidenceStep
-from retrieval.evidence import EvidenceUrl, EvidenceView
+from retrieval.evidence import EvidenceUrl
 from agent_runtime.models.synthesized_result import SynthesisResult, SynthesisResultBlock
 from agent_runtime.synthesis.synthesis import _build_result_blocks
 
 
-def test_synthesis_drops_citations_not_present_in_supplied_evidence() -> None:
+def test_synthesis_drops_citations_not_present_in_supplied_evidence(evidence_factory) -> None:
     supplied_id = UUID("e5cf297f-8f55-55a7-b1b2-7fb389482919")
     result, used_ids = _build_result_blocks(
         SynthesisResult(
@@ -19,7 +19,7 @@ def test_synthesis_drops_citations_not_present_in_supplied_evidence() -> None:
         ),
         [EvidenceStep(
             type="search",
-            evidence=[EvidenceView(id=supplied_id,
+            evidence=[evidence_factory(id=supplied_id,
         data={
             "title": "Supported result",
         })],
@@ -30,7 +30,7 @@ def test_synthesis_drops_citations_not_present_in_supplied_evidence() -> None:
     assert used_ids == [str(supplied_id)]
 
 
-def test_synthesis_does_not_fallback_to_all_evidence_after_invalid_citations() -> None:
+def test_synthesis_does_not_fallback_to_all_evidence_after_invalid_citations(evidence_factory) -> None:
     supplied_id = UUID("e5cf297f-8f55-55a7-b1b2-7fb389482919")
     result, used_ids = _build_result_blocks(
         SynthesisResult(
@@ -41,7 +41,7 @@ def test_synthesis_does_not_fallback_to_all_evidence_after_invalid_citations() -
         ),
         [EvidenceStep(
             type="search",
-            evidence=[EvidenceView(id=supplied_id,
+            evidence=[evidence_factory(id=supplied_id,
         data={
             "title": "Supported result",
         })],
@@ -52,7 +52,7 @@ def test_synthesis_does_not_fallback_to_all_evidence_after_invalid_citations() -
     assert used_ids == []
 
 
-def test_synthesis_fallback_deduplicates_evidence_with_same_url() -> None:
+def test_synthesis_fallback_deduplicates_evidence_with_same_url(evidence_factory) -> None:
     first_id = UUID("e5cf297f-8f55-55a7-b1b2-7fb389482919")
     second_id = UUID("c38c296c-3e94-56a7-86e1-dfe071c82fcc")
     result, used_ids = _build_result_blocks(
@@ -60,13 +60,13 @@ def test_synthesis_fallback_deduplicates_evidence_with_same_url() -> None:
         [EvidenceStep(
             type="search",
             evidence=[
-                EvidenceView(
+                evidence_factory(
                     id=first_id,
         data={
             "title": "First result",
             "urls": [EvidenceUrl(url="https://example.com/page")],
         }),
-                EvidenceView(
+                evidence_factory(
                     id=second_id,
         data={
             "title": "Duplicate result",
@@ -80,7 +80,7 @@ def test_synthesis_fallback_deduplicates_evidence_with_same_url() -> None:
     assert used_ids == [str(first_id)]
 
 
-def test_synthesis_deduplicates_explicit_citations_with_same_url() -> None:
+def test_synthesis_deduplicates_explicit_citations_with_same_url(evidence_factory) -> None:
     first_id = UUID("e5cf297f-8f55-55a7-b1b2-7fb389482919")
     second_id = UUID("c38c296c-3e94-56a7-86e1-dfe071c82fcc")
     result, used_ids = _build_result_blocks(
@@ -91,11 +91,11 @@ def test_synthesis_deduplicates_explicit_citations_with_same_url() -> None:
         [EvidenceStep(
             type="search",
             evidence=[
-                EvidenceView(id=first_id,
+                evidence_factory(id=first_id,
         data={
             "urls": [EvidenceUrl(url="https://example.com/page")],
         }),
-                EvidenceView(id=second_id,
+                evidence_factory(id=second_id,
         data={
             "urls": [EvidenceUrl(url="https://example.com/page")],
         }),
@@ -105,7 +105,5 @@ def test_synthesis_deduplicates_explicit_citations_with_same_url() -> None:
 
     assert result[0].evidence_ids == [str(first_id)]
     assert used_ids == [str(first_id)]
-
-
 
 

@@ -7,8 +7,8 @@ from integrations.web_fetch.client import WebFetchClient
 from capabilities.adapters.web.web_fetch import web_fetch
 
 
-def test_web_fetch_client_extracts_page_details(monkeypatch) -> None:
-    response = SimpleNamespace(
+def test_web_fetch_client_extracts_page_details(http_response_factory, monkeypatch) -> None:
+    response = http_response_factory(
         url="https://example.com/article",
         status_code=200,
         headers={"content-type": "text/html; charset=utf-8"},
@@ -18,7 +18,6 @@ def test_web_fetch_client_extracts_page_details(monkeypatch) -> None:
             <body><script>ignore me</script><h1>Headline</h1><p>Readable content.</p></body></html>
         """,
     )
-    response.raise_for_status = lambda: None
     monkeypatch.setattr("integrations.web_fetch.client.requests.get", lambda *args, **kwargs: response)
 
     page = WebFetchClient().fetch("https://example.com/article")

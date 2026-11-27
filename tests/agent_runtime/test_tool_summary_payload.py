@@ -1,22 +1,12 @@
 from __future__ import annotations
 
-import sys
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
-if "yfinance" not in sys.modules:
-    sys.modules["yfinance"] = ModuleType("yfinance")
-
-if "pycountry" not in sys.modules:
-    pycountry_module = ModuleType("pycountry")
-    pycountry_module.countries = SimpleNamespace(
-        lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper())
-    )
-    sys.modules["pycountry"] = pycountry_module
 
 from agent_runtime.models.agent_result import AgentResult
-from retrieval.evidence import EvidenceView, ToolResult
+from retrieval.evidence import ToolResult
 from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agent_runtime.models.orchestrator_payload import OrchestratorPayloadToolSummary
 from agent_runtime.models.relevant_evidence import RelevantEvidenceByTool
@@ -24,14 +14,14 @@ from agent_runtime.models.synthesized_result import SynthesisResultBlock
 from capabilities.registry.constants import TOOL_NAME_LOOKUP_EVIDENCE
 
 
-def test_orchestrator_payload_derives_tool_summary_from_evidence() -> None:
+def test_orchestrator_payload_derives_tool_summary_from_evidence(evidence_factory) -> None:
     tool_call_id = uuid4()
     tool_results = [
         ToolResult(
             tool_call_id=tool_call_id,
             tool_name="get_current_weather",
             evidence=[
-                EvidenceView(
+                evidence_factory(
         type="weather",
                     summary="21 C in Toronto.",
         data={
@@ -63,9 +53,9 @@ def test_orchestrator_payload_derives_tool_summary_from_evidence() -> None:
     }
 
 
-def test_tool_summary_builds_from_canonical_evidence() -> None:
-    product_evidence = EvidenceView(source="find_products", type="product_results")
-    ignored_evidence = EvidenceView()
+def test_tool_summary_builds_from_canonical_evidence(evidence_factory) -> None:
+    product_evidence = evidence_factory(source="find_products", type="product_results")
+    ignored_evidence = evidence_factory()
 
     tool_summary = OrchestratorPayloadToolSummary.build(
         {
@@ -80,7 +70,7 @@ def test_tool_summary_builds_from_canonical_evidence() -> None:
     }
 
 
-def test_orchestrator_result_groups_relevant_evidence_by_tool() -> None:
+def test_orchestrator_result_groups_relevant_evidence_by_tool(evidence_factory) -> None:
     tool_call_id = uuid4()
     evidence_id = uuid4()
     tool_results = [
@@ -88,7 +78,7 @@ def test_orchestrator_result_groups_relevant_evidence_by_tool() -> None:
             tool_call_id=tool_call_id,
             tool_name="search_products",
             evidence=[
-                EvidenceView(
+                evidence_factory(
                     id=evidence_id,
         data={
             "title": "Product",
@@ -111,9 +101,9 @@ def test_orchestrator_result_groups_relevant_evidence_by_tool() -> None:
     }
 
 
-def test_relevant_evidence_by_tool_builds_from_canonical_evidence() -> None:
-    product_evidence = EvidenceView(source="find_products", type="product_results")
-    ignored_evidence = EvidenceView()
+def test_relevant_evidence_by_tool_builds_from_canonical_evidence(evidence_factory) -> None:
+    product_evidence = evidence_factory(source="find_products", type="product_results")
+    ignored_evidence = evidence_factory()
 
     relevant_evidence = RelevantEvidenceByTool.build(
         [product_evidence.id, product_evidence.id, ignored_evidence.id, uuid4()],
@@ -128,14 +118,14 @@ def test_relevant_evidence_by_tool_builds_from_canonical_evidence() -> None:
     }
 
 
-def test_excluded_tool_evidence_is_not_persisted() -> None:
+def test_excluded_tool_evidence_is_not_persisted(evidence_factory) -> None:
     lookup_tool_call_id = uuid4()
     product_tool_call_id = uuid4()
-    lookup_evidence = EvidenceView(
+    lookup_evidence = evidence_factory(
         data={
             "title": "Historical product",
         })
-    product_evidence = EvidenceView(
+    product_evidence = evidence_factory(
         data={
             "title": "Current product",
         })
@@ -176,7 +166,5 @@ def test_excluded_tool_evidence_is_not_persisted() -> None:
     assert relevant_evidence.model_dump(mode="json") == {
         "find_products": [str(product_evidence.id)]
     }
-
-
 
 

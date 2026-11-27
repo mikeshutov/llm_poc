@@ -1,34 +1,22 @@
-from uuid import uuid4
-
 import pytest
 
-from agents.models.agent import Agent, AgentType
+from agents.models.agent import AgentType
 from agents import seeder
 from agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 
 
-def _agent(**overrides) -> Agent:
-    payload = {
-        "id": uuid4(),
-        "name": "researcher",
-        "planner_instruction": "Plan the request.",
-        **overrides,
-    }
-    return Agent.model_validate(payload)
-
-
-def test_user_agent_requires_user_id() -> None:
+def test_user_agent_requires_user_id(db_agent_factory) -> None:
     with pytest.raises(ValueError, match="require a user_id"):
-        _agent(agent_type=AgentType.USER)
+        db_agent_factory(agent_type=AgentType.USER)
 
 
-def test_system_agent_cannot_have_user_id() -> None:
+def test_system_agent_cannot_have_user_id(db_agent_factory) -> None:
     with pytest.raises(ValueError, match="cannot have a user_id"):
-        _agent(agent_type=AgentType.SYSTEM, user_id="user-1")
+        db_agent_factory(agent_type=AgentType.SYSTEM, user_id="user-1")
 
 
-def test_system_agent_can_be_global() -> None:
-    agent = _agent(agent_type=AgentType.SYSTEM)
+def test_system_agent_can_be_global(db_agent_factory) -> None:
+    agent = db_agent_factory(agent_type=AgentType.SYSTEM)
 
     assert agent.user_id is None
     assert agent.agent_type == AgentType.SYSTEM
@@ -62,9 +50,9 @@ def test_system_agent_seeder_delegates_each_profile(monkeypatch) -> None:
     }]
 
 
-def test_system_agent_seeder_deletes_profiles_removed_from_code(monkeypatch) -> None:
+def test_system_agent_seeder_deletes_profiles_removed_from_code(db_agent_factory, monkeypatch) -> None:
     profiles = [PROFILE_MANAGEMENT_PROFILE]
-    stale_agent = _agent(agent_type=AgentType.SYSTEM, name="removed-agent")
+    stale_agent = db_agent_factory(agent_type=AgentType.SYSTEM, name="removed-agent")
     deleted = []
 
     class FakeRepository:

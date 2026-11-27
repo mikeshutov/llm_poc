@@ -3,20 +3,12 @@ from __future__ import annotations
 from serviceclients.attribute_classifier.client import AttributeClassifierClient
 
 
-class FakeResponse:
-    def raise_for_status(self) -> None:
-        return
-
-    def json(self) -> dict[str, list[str]]:
-        return {"relevant_attributes": ["waterproof rating"]}
-
-
-def test_client_returns_relevant_attributes(monkeypatch) -> None:
+def test_client_returns_relevant_attributes(http_response_factory, monkeypatch) -> None:
     calls = {}
 
     def post(url, *, json, timeout):
         calls.update(url=url, json=json, timeout=timeout)
-        return FakeResponse()
+        return http_response_factory(payload={"relevant_attributes": ["waterproof rating"]})
 
     monkeypatch.setattr("serviceclients.attribute_classifier.client.requests.post", post)
 

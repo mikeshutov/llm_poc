@@ -1,18 +1,7 @@
 from __future__ import annotations
 
-import sys
-from types import ModuleType, SimpleNamespace
 from uuid import uuid4
 
-if "yfinance" not in sys.modules:
-    sys.modules["yfinance"] = ModuleType("yfinance")
-
-if "pycountry" not in sys.modules:
-    pycountry_module = ModuleType("pycountry")
-    pycountry_module.countries = SimpleNamespace(
-        lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper())
-    )
-    sys.modules["pycountry"] = pycountry_module
 
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import UserProfile
@@ -20,13 +9,11 @@ from agents.main.request import TOP_LEVEL_PROFILE
 from agents.profile_management.profile import build_profile_management_profile
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
 from retrieval.evidence import EvidenceView, ToolResult
-from agent_runtime.models.main_state import MainState
-from agent_runtime.models.agent_state import AgentState
 
 
-def test_main_state_gathers_typed_child_results_without_rebasing_ids() -> None:
+def test_main_state_gathers_typed_child_results_without_rebasing_ids(main_state_factory) -> None:
     user_profile = UserProfile()
-    main_state = MainState.new(
+    main_state = main_state_factory(
         task="Combine child evidence.",
         execution_context=AgentExecutionContext.new(
             conversation_context=ConversationContext(),
@@ -84,9 +71,9 @@ def test_main_state_gathers_typed_child_results_without_rebasing_ids() -> None:
     assert len(relevant_evidence_ids) == 2
 
 
-def test_main_state_gathers_top_level_main_agent_results() -> None:
+def test_main_state_gathers_top_level_main_agent_results(main_state_factory, agent_state_factory) -> None:
     user_profile = UserProfile()
-    main_state = MainState.new(
+    main_state = main_state_factory(
         task="Use main-agent evidence.",
         execution_context=AgentExecutionContext.new(
             conversation_context=ConversationContext(),
@@ -96,8 +83,8 @@ def test_main_state_gathers_top_level_main_agent_results() -> None:
         agent_profiles=[TOP_LEVEL_PROFILE],
     )
     evidence_id = uuid4()
-    top_level_state = AgentState.new(
-        agent_profile=TOP_LEVEL_PROFILE,
+    top_level_state = agent_state_factory(
+        profile=TOP_LEVEL_PROFILE,
         task=main_state.task,
         execution_context=main_state.execution_context,
         llm=object(),
@@ -116,7 +103,5 @@ def test_main_state_gathers_top_level_main_agent_results() -> None:
 
     assert main_state.gather_tool_results() == top_level_state.direct_tool_results
     assert main_state.gather_relevant_evidence_ids() == [evidence_id]
-
-
 
 

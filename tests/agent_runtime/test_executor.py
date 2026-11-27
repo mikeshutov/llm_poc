@@ -1,28 +1,17 @@
 from __future__ import annotations
 
 import threading
-import sys
-from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 
-if "yfinance" not in sys.modules:
-    sys.modules["yfinance"] = ModuleType("yfinance")
-
-if "pycountry" not in sys.modules:
-    pycountry_module = ModuleType("pycountry")
-    pycountry_module.countries = SimpleNamespace(
-        lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper())
-    )
-    sys.modules["pycountry"] = pycountry_module
 
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
-from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentProfile
+from agent_runtime.models.agent_profile import AgentExecutionStrategy
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
-from retrieval.evidence import EvidenceView, ToolResult
+from retrieval.evidence import ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.execution.tool_executor import _agent_completion_result, _substitute_refs, run_executor
 from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY
@@ -136,7 +125,7 @@ def test_run_executor_propagates_runtime_context_to_worker_threads(agent_state_f
     }
 
 
-def test_run_executor_returns_standardized_subagent_result_without_merging_state(monkeypatch, agent_state_factory) -> None:
+def test_run_executor_returns_standardized_subagent_result_without_merging_state(agent_profile_factory, monkeypatch, agent_state_factory) -> None:
     parent = agent_state_factory(plan=Plan.model_validate({
         "steps": [{
             "id": "E1",
@@ -146,7 +135,7 @@ def test_run_executor_returns_standardized_subagent_result_without_merging_state
         }],
     }))
     delegated = agent_state_factory(
-        profile=AgentProfile(name="document_writing", scope=MAIN_AGENT_MODEL_SCOPE),
+        profile=agent_profile_factory(name="document_writing", scope=MAIN_AGENT_MODEL_SCOPE),
         execution_context=parent.execution_context,
     )
     parent.available_agent_states = {"document_writing": delegated}
@@ -166,7 +155,7 @@ def test_run_executor_returns_standardized_subagent_result_without_merging_state
     assert parent.direct_tool_results[0].tool_name == "document_writing"
 
 
-def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch, agent_state_factory) -> None:
+def test_run_executor_exposes_only_final_subagent_evaluation(agent_profile_factory, monkeypatch, agent_state_factory) -> None:
     parent = agent_state_factory(plan=Plan.model_validate({
         "steps": [{
             "id": "E1",
@@ -176,7 +165,7 @@ def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch, agent_
         }],
     }))
     delegated = agent_state_factory(
-        profile=AgentProfile(name="research", scope=MAIN_AGENT_MODEL_SCOPE),
+        profile=agent_profile_factory(name="research", scope=MAIN_AGENT_MODEL_SCOPE),
         execution_context=parent.execution_context,
     )
     parent.available_agent_states = {"research": delegated}
@@ -255,7 +244,7 @@ def test_executor_preserves_failures_and_duplicate_results(monkeypatch, agent_st
     assert "Provider unavailable" in state.reasoner_message_history[1].content
 
 
-def test_executor_persists_agent_result_with_original_step_and_evidence(monkeypatch, agent_state_factory, recording_tool_repository) -> None:
+def test_executor_persists_agent_result_with_original_step_and_evidence(evidence_factory, monkeypatch, agent_state_factory, recording_tool_repository) -> None:
     plan = Plan.model_validate({"steps": [{
         "id": "E1", "plan": "Write a document", "tool": "document_writing",
         "args": {"task": "Write a document"},
@@ -265,7 +254,7 @@ def test_executor_persists_agent_result_with_original_step_and_evidence(monkeypa
     parent.agent_profile.name = "request_orchestrator"
     child = agent_state_factory(profile=DOCUMENT_WRITING_PROFILE)
     parent.available_agent_states = {"document_writing": child}
-    evidence = EvidenceView(id=str(uuid4()), type="file", source="test", summary="Document saved")
+    evidence = evidence_factory(id=str(uuid4()), type="file", source="test", summary="Document saved")
 
     def run_child(state):
         state.direct_tool_results.append(ToolResult(result={"saved": True}, evidence=[evidence]))
@@ -314,12 +303,12 @@ def test_executor_persists_failure_status_and_direct_return_does_not_report_succ
     (AnswerStatus.FAILED, ExecutionStatus.FAILED, "failed to complete the delegated task"),
     (AnswerStatus.PENDING, ExecutionStatus.PENDING, "has not completed the delegated task"),
 ])
-def test_delegated_summary_reflects_status(agent_state_factory, answer_status, execution_status, expected):
-    child = agent_state_factory(profile=AgentProfile(
+def test_delegated_summary_reflects_status(evidence_factory, agent_profile_factory, agent_state_factory, answer_status, execution_status, expected):
+    child = agent_state_factory(profile=agent_profile_factory(
         name="child", scope="main_agent", execution_strategy=AgentExecutionStrategy.REACT,
     ))
     child.result = child.result.copy(answer_status=answer_status, execution_status=execution_status)
-    evidence = EvidenceView(id="ev-1", type="test", source="test", summary="Supporting finding")
+    evidence = evidence_factory(id="ev-1", type="test", source="test", summary="Supporting finding")
     child.direct_tool_results = [ToolResult(evidence=[evidence, evidence])]
 
     result = _agent_completion_result(agent_name="child", state=child, task="Do the task")

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -18,33 +17,8 @@ def test_bounded_json_value_limits_large_nested_payloads() -> None:
     assert value.get("_truncated") is True
 
 
-class FakeRepo:
-    def __init__(self) -> None:
-        self.calls: list[dict] = []
-
-    def record_llm_usage(self, **kwargs):
-        self.calls.append(kwargs)
-        return kwargs
-
-
-class FakeLangChainResponse:
-    def __init__(self) -> None:
-        self.content = '{}'
-        self.usage_metadata = {
-            'input_tokens': 120,
-            'output_tokens': 30,
-            'total_tokens': 150,
-        }
-        self.response_metadata = {'model_name': 'gpt-5.6-luna'}
-
-
-class FakeOpenAIResponse:
-    def __init__(self) -> None:
-        self.usage = SimpleNamespace(prompt_tokens=210, completion_tokens=45, total_tokens=255)
-
-
-def test_extract_llm_usage_from_langchain_response() -> None:
-    usage = extract_llm_usage(FakeLangChainResponse())
+def test_extract_llm_usage_from_langchain_response(langchain_response_factory) -> None:
+    usage = extract_llm_usage(langchain_response_factory(input_tokens=120, output_tokens=30))
 
     assert usage is not None
     assert usage.input_tokens == 120
@@ -52,8 +26,8 @@ def test_extract_llm_usage_from_langchain_response() -> None:
     assert usage.total_tokens == 150
 
 
-def test_extract_llm_usage_from_openai_response() -> None:
-    usage = extract_llm_usage(FakeOpenAIResponse())
+def test_extract_llm_usage_from_openai_response(openai_response_factory) -> None:
+    usage = extract_llm_usage(openai_response_factory())
 
     assert usage is not None
     assert usage.input_tokens == 210
@@ -61,12 +35,15 @@ def test_extract_llm_usage_from_openai_response() -> None:
     assert usage.total_tokens == 255
 
 
-def test_record_llm_call_uses_base_pricing_for_snapshot_model_name() -> None:
-    fake_repo = FakeRepo()
+def test_record_llm_call_uses_base_pricing_for_snapshot_model_name(
+    langchain_response_factory,
+    recording_conversation_repository_factory,
+) -> None:
+    fake_repo = recording_conversation_repository_factory()
 
     with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
         record_llm_call(
-            raw_response=FakeLangChainResponse(),
+            raw_response=langchain_response_factory(input_tokens=120, output_tokens=30),
             model_name='gpt-5.6-luna-2026-03-17',
             conversation_id=None,
             roundtrip_id=None,
@@ -76,19 +53,22 @@ def test_record_llm_call_uses_base_pricing_for_snapshot_model_name() -> None:
             callsite='shared_planner.run_planner',
         )
 
-    assert len(fake_repo.calls) == 1
-    assert fake_repo.calls[0]['input_price_per_million_tokens'] == Decimal('0.20')
-    assert fake_repo.calls[0]['output_price_per_million_tokens'] == Decimal('1.20')
+    assert len(fake_repo.llm_calls) == 1
+    assert fake_repo.llm_calls[0]['input_price_per_million_tokens'] == Decimal('0.20')
+    assert fake_repo.llm_calls[0]['output_price_per_million_tokens'] == Decimal('1.20')
 
 
-def test_record_llm_call_computes_costs_and_persists() -> None:
-    fake_repo = FakeRepo()
+def test_record_llm_call_computes_costs_and_persists(
+    langchain_response_factory,
+    recording_conversation_repository_factory,
+) -> None:
+    fake_repo = recording_conversation_repository_factory()
     conversation_id = uuid4()
     roundtrip_id = uuid4()
 
     with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
         record_llm_call(
-            raw_response=FakeLangChainResponse(),
+            raw_response=langchain_response_factory(input_tokens=120, output_tokens=30),
             model_name='gpt-5.6-luna',
             conversation_id=str(conversation_id),
             roundtrip_id=str(roundtrip_id),
@@ -99,8 +79,8 @@ def test_record_llm_call_computes_costs_and_persists() -> None:
             metadata={'kind': 'test'},
         )
 
-    assert len(fake_repo.calls) == 1
-    stored = fake_repo.calls[0]
+    assert len(fake_repo.llm_calls) == 1
+    stored = fake_repo.llm_calls[0]
     assert stored['conversation_id'] == conversation_id
     assert stored['roundtrip_id'] == roundtrip_id
     assert stored['model'] == 'gpt-5.6-luna'
@@ -115,9 +95,12 @@ def test_record_llm_call_computes_costs_and_persists() -> None:
     assert stored['metadata'] == {'kind': 'test'}
 
 
-def test_record_llm_call_charges_cached_luna_tokens_at_the_cached_rate() -> None:
-    fake_repo = FakeRepo()
-    response = FakeLangChainResponse()
+def test_record_llm_call_charges_cached_luna_tokens_at_the_cached_rate(
+    langchain_response_factory,
+    recording_conversation_repository_factory,
+) -> None:
+    fake_repo = recording_conversation_repository_factory()
+    response = langchain_response_factory(input_tokens=120, output_tokens=30)
     response.usage_metadata['input_tokens'] = 1_000
     response.usage_metadata['output_tokens'] = 100
     response.usage_metadata['total_tokens'] = 1_100
@@ -135,18 +118,21 @@ def test_record_llm_call_charges_cached_luna_tokens_at_the_cached_rate() -> None
             callsite='shared_planner.run_planner',
         )
 
-    stored = fake_repo.calls[0]
+    stored = fake_repo.llm_calls[0]
     assert stored['cached_input_tokens'] == 400
     assert stored['computed_input_cost'] == Decimal('0.000128')
     assert stored['computed_output_cost'] == Decimal('0.00012')
     assert stored['computed_total_cost'] == Decimal('0.000248')
 
 
-def test_record_llm_call_raises_when_model_has_no_pricing() -> None:
-    fake_repo = FakeRepo()
+def test_record_llm_call_raises_when_model_has_no_pricing(
+    langchain_response_factory,
+    recording_conversation_repository_factory,
+) -> None:
+    fake_repo = recording_conversation_repository_factory()
 
     with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
-        response = FakeLangChainResponse()
+        response = langchain_response_factory(input_tokens=120, output_tokens=30)
         response.response_metadata = {'model_name': 'not-a-real-model'}
         with pytest.raises(KeyError):
             record_llm_call(
@@ -161,12 +147,15 @@ def test_record_llm_call_raises_when_model_has_no_pricing() -> None:
             )
 
 
-def test_record_llm_call_persists_compact_input_and_output_metadata() -> None:
-    fake_repo = FakeRepo()
+def test_record_llm_call_persists_compact_input_and_output_metadata(
+    langchain_response_factory,
+    recording_conversation_repository_factory,
+) -> None:
+    fake_repo = recording_conversation_repository_factory()
 
     with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
         record_llm_call(
-            raw_response=FakeLangChainResponse(),
+            raw_response=langchain_response_factory(input_tokens=120, output_tokens=30),
             model_name='gpt-5.6-luna',
             conversation_id=None,
             roundtrip_id=None,
@@ -179,7 +168,7 @@ def test_record_llm_call_persists_compact_input_and_output_metadata() -> None:
             metadata={'kind': 'test'},
         )
 
-    stored = fake_repo.calls[0]
+    stored = fake_repo.llm_calls[0]
     assert 'input_object' not in stored['metadata']
     assert 'output_object' not in stored['metadata']
     assert stored['metadata']['input']['bytes'] > 0
@@ -188,12 +177,15 @@ def test_record_llm_call_persists_compact_input_and_output_metadata() -> None:
     assert stored['metadata']['kind'] == 'test'
 
 
-def test_record_llm_call_persists_latency_ms_in_metadata() -> None:
-    fake_repo = FakeRepo()
+def test_record_llm_call_persists_latency_ms_in_metadata(
+    langchain_response_factory,
+    recording_conversation_repository_factory,
+) -> None:
+    fake_repo = recording_conversation_repository_factory()
 
     with patch('llm.usage.get_conversation_repo', return_value=fake_repo):
         record_llm_call(
-            raw_response=FakeLangChainResponse(),
+            raw_response=langchain_response_factory(input_tokens=120, output_tokens=30),
             model_name='gpt-5.6-luna',
             conversation_id=None,
             roundtrip_id=None,
@@ -204,7 +196,7 @@ def test_record_llm_call_persists_latency_ms_in_metadata() -> None:
             latency_ms=321,
         )
 
-    stored = fake_repo.calls[0]
+    stored = fake_repo.llm_calls[0]
     assert stored['metadata']['latency_ms'] == 321
 
 

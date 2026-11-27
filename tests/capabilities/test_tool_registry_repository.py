@@ -45,7 +45,10 @@ def test_registered_tool_defaults_to_active_version_one() -> None:
     assert definition.is_active is True
 
 
-def test_registry_upsert_embeds_explicit_name_plus_discovery_text(monkeypatch) -> None:
+def test_registry_upsert_embeds_explicit_name_plus_discovery_text(
+    database_connection_factory,
+    monkeypatch,
+) -> None:
     definition = RegisteredTool(
         id=uuid4(),
         name="asset_search",
@@ -55,18 +58,7 @@ def test_registry_upsert_embeds_explicit_name_plus_discovery_text(monkeypatch) -
     )
     captured: list[str] = []
 
-    class Cursor:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def execute(self, query, params):
-            captured.append(params[3])
-
-        def fetchone(self):
-            return {
+    connection, cursor = database_connection_factory(row={
                 "id": definition.id,
                 "name": definition.name,
                 "version": definition.version,
@@ -79,15 +71,11 @@ def test_registry_upsert_embeds_explicit_name_plus_discovery_text(monkeypatch) -
                 "metadata": {},
                 "created_at": None,
                 "updated_at": None,
-            }
-
-    class Connection:
-        def cursor(self, **kwargs):
-            return Cursor()
+            })
 
     monkeypatch.setattr(registry_module, "embed_text", lambda value: captured.append(value) or [0.1])
     repository = object.__new__(registry_module.ToolRegistryRepository)
-    repository._conn = Connection()
+    repository._conn = connection
 
     repository.upsert(definition)
 

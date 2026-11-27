@@ -1,26 +1,15 @@
 from __future__ import annotations
 
-import sys
-from types import ModuleType, SimpleNamespace
 from dataclasses import dataclass
 from uuid import uuid4
 
 import pytest
 
 
-if 'yfinance' not in sys.modules:
-    sys.modules['yfinance'] = ModuleType('yfinance')
-
-if 'pycountry' not in sys.modules:
-    pycountry_module = ModuleType('pycountry')
-    pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
-    sys.modules['pycountry'] = pycountry_module
-
 from conversation.models.conversation_models import ConversationContext
 from personalization.profile.models import GeoLocation, GeoMetadata, UserAttributesSection, UserProfile, build_geometadata
 from personalization.profile.service import build_user_profile, hydrate_user_profile_core, load_user_profile_attributes
 from personalization.tone.models import TonePreferences
-from personalization.user_attributes.models.user_attribute_models import UserAttribute
 from agent_runtime.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from agent_runtime.models.synthesized_result import SynthesisResult
 from capabilities.discovery.models import AvailableTool
@@ -45,18 +34,11 @@ class LegacyUserAttribute:
 
 def test_user_attributes_section_accepts_dataclass_shaped_attributes() -> None:
     legacy_attribute = LegacyUserAttribute(
-        id=uuid4(),
-        user_id=None,
-        value=["pizza", "eggs"],
-        attribute_embedding=[0.1, 0.2],
-        attribute_type="food.preference",
-        group_key=None,
-        source="explicit",
-        is_active=True,
-        created_at="2026-08-05T00:00:00Z",
-        updated_at="2026-08-05T00:00:00Z",
-        confidence=0.9,
-        importance=0.8,
+        id=uuid4(), user_id=None, value=["pizza", "eggs"],
+        attribute_embedding=[0.1, 0.2], attribute_type="food.preference",
+        group_key=None, source="explicit", is_active=True,
+        created_at="2026-08-05T00:00:00Z", updated_at="2026-08-05T00:00:00Z",
+        confidence=0.9, importance=0.8,
     )
 
     section = UserAttributesSection(attributes=[legacy_attribute])
@@ -66,50 +48,30 @@ def test_user_attributes_section_accepts_dataclass_shaped_attributes() -> None:
     assert section.attributes[0].value == ["pizza", "eggs"]
 
 
-def test_load_user_profile_attributes_condenses_same_type_and_group_key() -> None:
+def test_load_user_profile_attributes_condenses_same_type_and_group_key(user_attribute_factory) -> None:
     captured_user_ids: list[str | None] = []
 
     class FakeRepo:
         def list_attributes(self, *, limit=50, order_by='updated_at', descending=True, user_id=None, is_active=None, attribute_type=None, group_key=None, source=None):
             captured_user_ids.append(user_id)
             return [
-                UserAttribute(
-                    id=uuid4(),
-                    user_id=None,
+                user_attribute_factory(
                     value=['pizza', 'eggs'],
-                    attribute_embedding=None,
-                    attribute_type='food.preference',
-                    group_key=None,
-                    source='explicit',
-                    is_active=True,
                     created_at='2026-08-05T00:00:00Z',
                     updated_at='2026-08-05T00:00:00Z',
                     confidence=0.9,
                     importance=0.8,
                 ),
-                UserAttribute(
-                    id=uuid4(),
-                    user_id=None,
+                user_attribute_factory(
                     value=['eggs', 'coffee'],
-                    attribute_embedding=None,
-                    attribute_type='food.preference',
-                    group_key=None,
-                    source='explicit',
-                    is_active=True,
                     created_at='2026-08-04T00:00:00Z',
                     updated_at='2026-08-04T00:00:00Z',
                     confidence=0.8,
                     importance=0.7,
                 ),
-                UserAttribute(
-                    id=uuid4(),
-                    user_id=None,
+                user_attribute_factory(
                     value=['cake'],
-                    attribute_embedding=None,
-                    attribute_type='food.preference',
                     group_key='desserts',
-                    source='explicit',
-                    is_active=True,
                     created_at='2026-08-03T00:00:00Z',
                     updated_at='2026-08-03T00:00:00Z',
                     confidence=0.8,
@@ -141,19 +103,13 @@ def test_load_user_profile_attributes_condenses_same_type_and_group_key() -> Non
     assert captured_user_ids == ['user-123']
 
 
-def test_prompt_profile_excludes_management_fields_by_default() -> None:
+def test_prompt_profile_excludes_management_fields_by_default(user_attribute_factory) -> None:
     profile = UserProfile(
         user_attributes=UserAttributesSection(
             attributes=[
-                UserAttribute(
-                    id=uuid4(),
-                    user_id=None,
+                user_attribute_factory(
                     value=['pizza'],
-                    attribute_embedding=None,
-                    attribute_type='food.preference',
                     group_key='meals',
-                    source='explicit',
-                    is_active=True,
                     created_at='2026-08-05T00:00:00Z',
                     updated_at='2026-08-05T00:00:00Z',
                     confidence=0.9,
@@ -195,7 +151,6 @@ def test_prompt_profile_excludes_management_fields_by_default() -> None:
     assert 'updated_at' in management_rendered
     assert 'is_active' in management_rendered
     assert '"id"' in management_rendered
-
 
 
 def test_prompt_profile_prunes_empty_fields() -> None:
@@ -528,6 +483,5 @@ def test_agent_prompt_includes_tone_when_user_profile_section_requested_with_ton
     assert '"tone"' in prompt_text
     assert '"verbosity": "concise"' in prompt_text
     assert '"directness": "high"' in prompt_text
-
 
 

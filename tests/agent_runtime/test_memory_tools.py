@@ -3,27 +3,17 @@ from __future__ import annotations
 import importlib
 from uuid import uuid4
 
-from conversation.models.conversation_models import ConversationMessage, ConversationRoundtrip
 from agent_runtime.context import bind_runtime_context
 from capabilities.adapters.memories.get_memory_detail import get_memory_detail
 
 
-def test_get_memory_detail_returns_typed_result() -> None:
+def test_get_memory_detail_returns_typed_result(conversation_roundtrip_factory, conversation_message_factory) -> None:
     class FakeConversationRepo:
         def __init__(self) -> None:
-            self.roundtrip = ConversationRoundtrip(
-                id=uuid4(),
-                conversation_id=uuid4(),
-                message_index=7,
-                roundtrip_summary="The conversation decided on a 30-day return policy.",
-                roundtrip_summary_embedding=None,
-                created_at="2026-08-01T12:00:00+00:00",
-                metadata={"model": "gpt-5.6-terra"},
-                status="completed",
-            )
+            self.roundtrip = conversation_roundtrip_factory(id=uuid4(), conversation_id=uuid4(), message_index=7, roundtrip_summary="The conversation decided on a 30-day return policy.", roundtrip_summary_embedding=None, created_at="2026-08-01T12:00:00+00:00", metadata={"model": "gpt-5.6-terra"}, status="completed")
             self.messages = [
-                ConversationMessage(uuid4(), self.roundtrip.id, 0, "user", "visible", "user", "What did we decide about returns?", {}, {}, None, ""),
-                ConversationMessage(uuid4(), self.roundtrip.id, 1, "assistant", "visible", "assistant", "We said we would offer 30-day returns.", {}, {"stage": "synthesis", "model": "gpt-5.6-terra"}, None, ""),
+                conversation_message_factory(roundtrip_id=self.roundtrip.id, content="What did we decide about returns?"),
+                conversation_message_factory(roundtrip_id=self.roundtrip.id, sequence=1, kind="assistant", role="assistant", content="We said we would offer 30-day returns.", metadata={"stage": "synthesis", "model": "gpt-5.6-terra"}),
             ]
 
         def get_roundtrip_for_user(self, roundtrip_id, user_id: str | None):
@@ -69,5 +59,4 @@ def test_get_memory_detail_rejects_invalid_roundtrip_id() -> None:
     )
     assert result.evidence == []
     assert result.evidence == []
-
 

@@ -1,17 +1,8 @@
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
-from types import ModuleType, SimpleNamespace
 from uuid import NAMESPACE_URL, UUID, uuid5
 
-if 'yfinance' not in sys.modules:
-    sys.modules['yfinance'] = ModuleType('yfinance')
-
-if 'pycountry' not in sys.modules:
-    pycountry_module = ModuleType('pycountry')
-    pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
-    sys.modules['pycountry'] = pycountry_module
 
 from integrations.brave.models import NewsSearchResponse, WebSearchResponse
 from integrations.meal_db.models import MealSearchResult
@@ -26,7 +17,6 @@ from retrieval.evidence_store import (
     build_evidence_steps_from_tool_results,
 )
 from capabilities.adapters.food.search_meals import _tool_result as meal_tool_result
-from capabilities.adapters.news.hn_search import _tool_result as hn_tool_result
 from capabilities.adapters.web.generic_web_search import _web_search_tool_result
 from capabilities.adapters.search.structured_facts_lookup import _tool_result as structured_facts_tool_result
 from capabilities.adapters.search.wikipedia_search import _tool_result as wikipedia_tool_result
@@ -841,9 +831,5 @@ def test_build_evidence_steps_puts_wrapper_search_metadata_on_parent_step() -> N
         "search_type": "web_search",
     }
     assert evidence_steps[0].evidence[0].metadata == {}
-
-
-
-
 
 
