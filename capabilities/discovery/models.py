@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from capabilities.registry.constants import (
+    TOOL_CATEGORY_AGENTS,
+)
+
 from pydantic import BaseModel, Field
 
 
@@ -13,7 +17,7 @@ class AvailableAgent(BaseModel):
         return AvailableTool(
             name=self.agent,
             title="Agent capability",
-            category="agents",
+            category=TOOL_CATEGORY_AGENTS,
             description=self.description,
         )
 

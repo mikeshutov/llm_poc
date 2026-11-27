@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from capabilities.registry.constants import (
+    TOOL_CATEGORY_FINANCE,
+    TOOL_CATEGORY_FINANCE_CRYPTO,
+    TOOL_CATEGORY_MATH,
+    TOOL_CATEGORY_CODE_EXECUTION,
+)
+
 from agent_runtime.models.agent_profile import (
     AgentDelegationArgs,
     AgentExecutionStrategy,
@@ -63,7 +70,7 @@ def build_coding_profile() -> AgentProfile:
             "An agent capable of generating, executing, and validating code to solve "
             "computational tasks."
         ),
-        allowed_categories={"math", "finance", "finance_crypto", "code_execution"},
+        allowed_categories={TOOL_CATEGORY_MATH, TOOL_CATEGORY_FINANCE, TOOL_CATEGORY_FINANCE_CRYPTO, TOOL_CATEGORY_CODE_EXECUTION},
         static_tools=static_tools,
         execution_strategy=AgentExecutionStrategy.REACT,
         delegatable=True,

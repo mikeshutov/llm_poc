@@ -1,3 +1,24 @@
+from capabilities.registry.constants import (
+    TOOL_CATEGORY_PRODUCTS,
+    TOOL_CATEGORY_WEATHER,
+    TOOL_CATEGORY_FINANCE,
+    TOOL_CATEGORY_FINANCE_CRYPTO,
+    TOOL_CATEGORY_WEB_SEARCH,
+    TOOL_CATEGORY_KNOWLEDGE,
+    TOOL_CATEGORY_CALENDAR,
+    TOOL_CATEGORY_LOCATION,
+    TOOL_CATEGORY_BOOKS,
+    TOOL_CATEGORY_LANGUAGE,
+    TOOL_CATEGORY_FOOD,
+    TOOL_CATEGORY_MATH,
+    TOOL_CATEGORY_CODE_EXECUTION,
+    TOOL_CATEGORY_GAMES,
+    TOOL_CATEGORY_MEMORIES,
+    TOOL_CATEGORY_FILES,
+    TOOL_CATEGORY_FILE_MANAGEMENT,
+    TOOL_CATEGORY_WRITING,
+    TOOL_CATEGORY_WORKSPACE,
+)
 from common.config import get_env_bool, get_env_float, get_env_int
 from capabilities.adapters.books import search_books
 from capabilities.adapters.code import code_execute
@@ -218,14 +239,14 @@ PROFILE_TOOLS = [
 
 # if this were to grow much larger I would probably create sub categories or a tree structure of tools
 TOOL_CATEGORIES: dict[str, ToolCategory] = {
-    "products": ToolCategory(
+    TOOL_CATEGORY_PRODUCTS: ToolCategory(
         tools=PRODUCT_TOOLS,
         description="Search and browse products and product categories from the internal catalog.",
         rules=[
             "Make sure that previous context is taken into account when providing filters unless explicitly told not to.",
         ]
     ),
-    "weather": ToolCategory(
+    TOOL_CATEGORY_WEATHER: ToolCategory(
         tools=WEATHER_TOOLS,
         description="Retrieve current, forecast, or historical monthly weather conditions for a specified location.",
         rules=[
@@ -234,58 +255,58 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "Use weather_lookup with dates in one past calendar month for historical conditions.",
         ],
     ),
-    "finance": ToolCategory(
+    TOOL_CATEGORY_FINANCE: ToolCategory(
         tools=FINANCE_TOOLS,
         description="Retrieve currency exchange rates, historical rate time series, stock prices, and commodity prices (e.g. gold, silver via futures tickers like GC=F, SI=F).",
     ),
-    "finance_crypto": ToolCategory(
+    TOOL_CATEGORY_FINANCE_CRYPTO: ToolCategory(
         tools=CRYPTO_TOOLS,
         description="Retrieve live cryptocurrency market data including prices, market cap, and volume.",
     ),
-    "web_search": ToolCategory(
+    TOOL_CATEGORY_WEB_SEARCH: ToolCategory(
         tools=WEB_SEARCH_TOOLS,
         description="Search the web, current news, or Hacker News discussions for fresh external results.",
     ),
-    "knowledge": ToolCategory(
+    TOOL_CATEGORY_KNOWLEDGE: ToolCategory(
         tools=KNOWLEDGE_TOOLS,
         description="Look up information from Wikipedia, Wikidata structured facts, or country data.",
     ),
-    "calendar": ToolCategory(
+    TOOL_CATEGORY_CALENDAR: ToolCategory(
         tools=CALENDAR_TOOLS,
         description="Look up public holidays for a country and year, optionally filtered to a province or state, or get the current time for a timezone.",
         rules=[
             "For a province or state request, pass the ISO 3166-2 subdivision code when known (for example, CA-ON for Ontario).",
         ],
     ),
-    "location": ToolCategory(
+    TOOL_CATEGORY_LOCATION: ToolCategory(
         tools=LOCATION_TOOLS,
         description="Resolve the caller's geographic location by IP address.",
     ),
-    "books": ToolCategory(
+    TOOL_CATEGORY_BOOKS: ToolCategory(
         tools=BOOKS_TOOLS,
         description="Search the Open Library catalog for books by title, author, or subject.",
     ),
-    "language": ToolCategory(
+    TOOL_CATEGORY_LANGUAGE: ToolCategory(
         tools=LANGUAGE_TOOLS,
         description="Look up word definitions, meanings, parts of speech, synonyms, and antonyms.",
     ),
-    "food": ToolCategory(
+    TOOL_CATEGORY_FOOD: ToolCategory(
         tools=FOOD_TOOLS,
         description="Search for meal recipes by name or keyword, including ingredients and instructions.",
     ),
-    "math": ToolCategory(
+    TOOL_CATEGORY_MATH: ToolCategory(
         tools=MATH_TOOLS,
         description="Evaluate mathematical expressions and perform mathematical calculations.",
     ),
-    "code_execution": ToolCategory(
+    TOOL_CATEGORY_CODE_EXECUTION: ToolCategory(
         tools=CODE_EXECUTION_TOOLS,
         description="Execute Python code in an isolated Docker sandbox with no network access and resource limits.",
     ),
-    "games": ToolCategory(
+    TOOL_CATEGORY_GAMES: ToolCategory(
         tools=GAMES_TOOLS,
         description="Look up Magic: The Gathering commander deck context from EDHREC and card information from Scryfall, including reranked commander card recommendations, oracle text, mana cost, type line, legality, pricing, and images.",
     ),
-    "memories": ToolCategory(
+    TOOL_CATEGORY_MEMORIES: ToolCategory(
         tools=MEMORY_TOOLS,
         description="Search prior conversation summaries for relevant past requests and discussions as memories.",
         rules=[
@@ -295,7 +316,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "When the user asks what was previously said, decided, suggested, or discussed about a topic, prefer the two-step memories flow over guessing from current context.",
         ],
     ),
-    "files": ToolCategory(
+    TOOL_CATEGORY_FILES: ToolCategory(
         tools=FILE_TOOLS,
         description="To be utilized for any searches involving files. Search and retrieve content from uploaded files. To be used when files are in the context either with a name or ID.",
         result_rules=[
@@ -307,7 +328,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "When comparing an image from a file, load its description first and use the description rather than the file name.",
         ],
     ),
-    "file_management": ToolCategory(
+    TOOL_CATEGORY_FILE_MANAGEMENT: ToolCategory(
         tools=FILE_MANAGEMENT_TOOLS,
         description="Create, read, edit, delete, list, rename, and move files in the managed file workspace.",
         rules=[
@@ -316,7 +337,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "Keep all paths inside the managed files directory.",
         ],
     ),
-    "writing": ToolCategory(
+    TOOL_CATEGORY_WRITING: ToolCategory(
         tools=WRITING_TOOLS,
         description="Discover reusable writing template metadata and supported document formats.",
         rules=[
@@ -325,7 +346,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "The tool returns metadata only; do not assume template content is available.",
         ],
     ),
-    "workspace": ToolCategory(
+    TOOL_CATEGORY_WORKSPACE: ToolCategory(
         tools=WORKSPACE_READ_TOOLS,
         description="Read and search files in the current conversation workspace without modifying them.",
         rules=[

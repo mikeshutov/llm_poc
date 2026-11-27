@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+from capabilities.registry.constants import (
+    TOOL_CATEGORY_WEB_SEARCH,
+    TOOL_CATEGORY_KNOWLEDGE,
+    TOOL_CATEGORY_BOOKS,
+    TOOL_CATEGORY_LANGUAGE,
+    TOOL_CATEGORY_WORKSPACE,
+)
+
 from agent_runtime.models.agent_profile import (
     AgentExecutionStrategy,
     AgentProfile,
@@ -44,7 +52,7 @@ def build_research_profile() -> AgentProfile:
             "research-{topic}.md file in the conversation workspace. The completed report is "
             "the definitive research output for downstream agents."
         ),
-        allowed_categories={"web_search", "knowledge", "books", "language", "workspace"},
+        allowed_categories={TOOL_CATEGORY_WEB_SEARCH, TOOL_CATEGORY_KNOWLEDGE, TOOL_CATEGORY_BOOKS, TOOL_CATEGORY_LANGUAGE, TOOL_CATEGORY_WORKSPACE},
         static_tools=list(_RESEARCH_WORKSPACE_TOOLS.values()),
         required_completion_tools={TOOL_NAME_WORKSPACE_FILE_COMPLETE},
         execution_strategy=AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR,
