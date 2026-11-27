@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from psycopg.types.json import Jsonb
 from pydantic import BaseModel
 
 from common.config import ROLE_ASSISTANT, ROLE_TOOL
@@ -12,6 +11,7 @@ from common.signatures import build_signature
 from retrieval.evidence import EvidenceView, ToolResult
 from agent_runtime.models.plan import Plan, PlanStep
 from capabilities.registry.repository.models import ToolCall
+from conversation.models.conversation_models import ConversationMessage
 
 
 def _optional_uuid(value: Any) -> UUID | None:
@@ -47,7 +47,7 @@ class MessageToolRepository:
 
     def append_tool_call(self, roundtrip_id: UUID, plan: Plan | None, step: PlanStep, *, input_payload=None,
                          output_payload=None, evidence=None, status=None, error_message=None, duration_ms=None,
-                         is_subagent: bool = False) -> UUID:
+                         is_subagent: bool = False, subagent_name: str | None = None) -> UUID:
         sanitized_input = self._sanitize_for_storage(step.args if input_payload is None else input_payload)
         output = self._sanitize_for_storage(output_payload) if output_payload is not None else None
         if isinstance(output, dict):
@@ -68,7 +68,7 @@ class MessageToolRepository:
                 "call_metadata": self._sanitize_for_storage(step.metadata),
             }, metadata=message_metadata,
             is_subagent=is_subagent,
-            subagent_name=step.tool if is_subagent else None,
+            subagent_name=subagent_name,
         )
         result_message = self._repo.append_message(
             roundtrip_id, kind="tool_result", role=ROLE_TOOL, visibility="internal",
@@ -89,7 +89,7 @@ class MessageToolRepository:
                 "call_metadata": self._sanitize_for_storage(step.metadata),
             }, metadata=message_metadata, parent_message_id=request_message.id,
             is_subagent=is_subagent,
-            subagent_name=step.tool if is_subagent else None,
+            subagent_name=subagent_name,
         )
         return result_message.id
 
@@ -97,12 +97,11 @@ class MessageToolRepository:
         if not message_ids:
             return []
         with self._repo._conn.cursor() as cur:
-            cur.execute("SELECT DISTINCT roundtrip_id FROM conversation_message WHERE id = ANY(%s)", (message_ids,))
-            roundtrip_ids = [row["roundtrip_id"] for row in cur.fetchall()]
-        messages = []
-        for roundtrip_id in roundtrip_ids:
-            messages.extend(message for message in self._repo.list_messages(roundtrip_id)
-                            if message.kind == "tool_result" and message.id in message_ids)
+            cur.execute(
+                "SELECT * FROM conversation_message WHERE id = ANY(%s) AND kind = 'tool_result'",
+                (message_ids,),
+            )
+            messages = [ConversationMessage(**row) for row in cur.fetchall()]
         by_id = {message.id: message for message in messages}
         return [by_id[message_id] for message_id in message_ids if message_id in by_id]
 
@@ -120,16 +119,17 @@ class MessageToolRepository:
             summary=payload.get("summary"), created_at=message.created_at,
         )
 
-    def has_request_hash(self, roundtrip_id: UUID, request_hash: str) -> bool:
-        return any(message.payload.get("request_hash") == request_hash
-                   for message in self._repo.list_messages(roundtrip_id) if message.kind == "tool_result")
-
     def count_request_hash(self, roundtrip_id: UUID, request_hash: str) -> int:
-        return sum(
-            message.payload.get("request_hash") == request_hash
-            for message in self._repo.list_messages(roundtrip_id)
-            if message.kind == "tool_result"
-        )
+        with self._repo._conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS count FROM conversation_message
+                WHERE roundtrip_id = %s AND kind = 'tool_result'
+                  AND payload->>'request_hash' = %s
+                """,
+                (roundtrip_id, request_hash),
+            )
+            return cur.fetchone()["count"]
 
     def get_tool_calls(self, tool_call_ids: list[UUID]) -> list[ToolCall]:
         return [self._tool_call_from_message(message) for message in self._tool_messages_for_ids(tool_call_ids)]
@@ -173,27 +173,3 @@ class MessageToolRepository:
                     evidence=evidence,
                 ))
         return results
-
-    def get_tool_calls_by_roundtrips(self, roundtrip_ids: list[UUID]) -> dict[UUID, list[ToolCall]]:
-        return {roundtrip_id: [self._tool_call_from_message(message)
-                for message in self._repo.list_messages(roundtrip_id) if message.kind == "tool_result"]
-                for roundtrip_id in roundtrip_ids}
-
-    def copy_tool_calls(self, roundtrip_id_map: dict[UUID, UUID]) -> None:
-        for source_id, target_id in roundtrip_id_map.items():
-            copied_ids: dict[UUID, UUID] = {}
-            for message in self._repo.list_messages(source_id):
-                if message.kind in {"tool_call", "tool_result"}:
-                    copied = self._repo.append_message(target_id, kind=message.kind, role=message.role,
-                        visibility=message.visibility, content=message.content,
-                        payload=message.payload, metadata=message.metadata,
-                        parent_message_id=copied_ids.get(message.parent_message_id))
-                    copied_ids[message.id] = copied.id
-
-    def update_tool_call_summary(self, tool_call_id: UUID, summary: str) -> None:
-        for message in self._tool_messages_for_ids([tool_call_id]):
-            payload = dict(message.payload)
-            payload["summary"] = summary
-            with self._repo._conn.cursor() as cur:
-                cur.execute("UPDATE conversation_message SET payload = %s WHERE id = %s",
-                            (Jsonb(payload), tool_call_id))

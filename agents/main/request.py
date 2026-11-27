@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from capabilities.registry.constants import (
+    TOOL_CATEGORY_FILE_MANAGEMENT,
+    TOOL_CATEGORY_WRITING,
+)
+
 import re
 from pathlib import PurePosixPath
 from urllib.parse import unquote
@@ -78,7 +83,7 @@ TOP_LEVEL_PROFILE = AgentProfile(
     name=AgentName.REQUEST_ORCHESTRATOR,
     scope=MAIN_AGENT_MODEL_SCOPE,
     description="Top-level request reasoner and executor.",
-    excluded_categories={"file_management", "writing"},
+    excluded_categories={TOOL_CATEGORY_FILE_MANAGEMENT, TOOL_CATEGORY_WRITING},
     static_tools=[CAPABILITY_DISCOVERY_TOOL, USER_MANAGEMENT_TOOL, calculate],
     planner_instruction=(
         "For straightforward arithmetic or percentage questions, call math_calculate "

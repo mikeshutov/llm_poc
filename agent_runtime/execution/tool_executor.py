@@ -45,7 +45,7 @@ class StepExecutionResult:
 
     @property
     def status(self) -> str:
-        return tool_result_status(self.output)
+        return self.output.status
 
 
 def _substitute_refs(obj, results: dict):
@@ -82,20 +82,6 @@ def _tool_results_by_local_step_id(agent_state: AgentState) -> dict[str, ToolRes
     return tool_results_by_local_step_id
 
 
-def tool_result_status(result: ToolResult) -> str:
-    """Classify the common result for persistence and strategy completion."""
-    payload = result.result if isinstance(result.result, dict) else {}
-    if payload.get("status") in {"rejected", "duplicate"}:
-        return "rejected"
-    if (
-        payload.get("error")
-        or payload.get("status") in {"error", "failed"}
-        or (result.state is not None and result.state.status == ToolOutcomeStatus.FAILED)
-    ):
-        return "error"
-    return "completed"
-
-
 def execute_step(
     step: PlanStep,
     *,
@@ -129,11 +115,12 @@ def execute_step(
             )
     if not isinstance(output, ToolResult):
         output = ToolResult(result=output, evidence=[])
-    result_status = tool_result_status(output)
+    output = output.model_copy(update={"tool_name": step.tool, "plan_step_id": step.db_id})
+    result_status = output.status
     error_text = ""
     if result_status in {"error", "rejected"}:
         payload = output.result if isinstance(output.result, dict) else {}
-        error_text = str(payload.get("error") or (
+        error_text = str(payload.get("error") or payload.get("error_message") or (
             output.state.reason if output.state is not None else None
         ) or f"Tool '{step.tool}' reported {result_status}.")
         if result_status == "rejected":
@@ -252,6 +239,10 @@ def _record_step_result(
             duration_ms=execution_result.latency_ms,
             status=status,
             is_subagent=agent_state.agent_profile.name != AgentName.REQUEST_ORCHESTRATOR,
+            subagent_name=(
+                agent_state.agent_profile.name
+                if agent_state.agent_profile.name != AgentName.REQUEST_ORCHESTRATOR else None
+            ),
         )
         agent_state.result = agent_state.result.with_recorded_tool_call(tool_call_id)
 

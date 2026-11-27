@@ -131,6 +131,21 @@ class ToolResult(BaseModel):
     evidence: list[EvidenceView] = Field(default_factory=list)
     state: ToolOutcome | None = None
 
+    @property
+    def status(self) -> str:
+        """Canonical execution status for persistence and completion checks."""
+        payload = self.result if isinstance(self.result, Mapping) else {}
+        if payload.get("status") in {"rejected", "duplicate"}:
+            return "rejected"
+        if (
+            payload.get("error")
+            or payload.get("error_message")
+            or payload.get("status") in {"error", "failed"}
+            or (self.state is not None and self.state.status == ToolOutcomeStatus.FAILED)
+        ):
+            return "error"
+        return "completed"
+
     @classmethod
     def error(cls, error: str, **extra_result: Any) -> "ToolResult":
         payload: dict[str, Any] = {"error": error}
