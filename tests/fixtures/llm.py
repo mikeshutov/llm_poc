@@ -1,5 +1,6 @@
 from copy import deepcopy
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -57,6 +58,18 @@ def llm_factory():
 @pytest.fixture
 def openai_client_factory():
     return FakeOpenAIClient
+
+
+@pytest.fixture
+def embedding_client_factory():
+    def create(*, embedding=(1.0, 0.0), error=None):
+        request = Mock(
+            return_value=SimpleNamespace(data=[SimpleNamespace(embedding=list(embedding))]),
+            side_effect=error,
+        )
+        return SimpleNamespace(embeddings=SimpleNamespace(create=request))
+
+    return create
 
 
 @pytest.fixture
