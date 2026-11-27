@@ -9,8 +9,7 @@ from pathlib import Path
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from agent_runtime.context import get_current_conversation_id
-from agent_runtime.context import get_current_user_id
+from agent_runtime.context import current_agent_state
 from assets.files.storage import conversation_workspace_path, scoped_file_path
 from assets.files.urls import static_file_url
 from assets.files.models import FileListResult
@@ -101,8 +100,11 @@ class WorkspacePromoteArgs(BaseModel):
 
 
 def _workspace_root() -> Path:
-    user_id = (get_current_user_id() or ANONYMOUS_OWNER).strip()
-    conversation_id = (get_current_conversation_id() or "").strip()
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
+    active_conversation_id = active_state.execution_context.conversation_id if active_state is not None else None
+    user_id = (active_user_id or ANONYMOUS_OWNER).strip()
+    conversation_id = (active_conversation_id or "").strip()
     if (
         not user_id
         or user_id in {".", ".."}
@@ -309,13 +311,14 @@ def workspace_file_promote(file_names: list[str]) -> ToolResult:
         if not source.is_file():
             raise ValueError(f"Workspace file does not exist: '{file_name}'.")
 
-    managed_paths = [scoped_file_path(source.name, user_id=get_current_user_id()) for source in sources]
+    active_state = current_agent_state.get()
+    user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
+    managed_paths = [scoped_file_path(source.name, user_id=user_id) for source in sources]
     duplicate_names = {path.name for path in managed_paths if managed_paths.count(path) > 1}
     if duplicate_names:
         raise ValueError(f"Multiple workspace files resolve to the same managed filename: {', '.join(sorted(duplicate_names))}.")
 
     repository = AssetRepository()
-    user_id = get_current_user_id()
     files = []
     evidence = []
     for source, managed_path in zip(sources, managed_paths):

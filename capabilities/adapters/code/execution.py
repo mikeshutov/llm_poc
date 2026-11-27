@@ -9,7 +9,7 @@ from typing import Literal
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from agent_runtime.context import get_current_conversation_id, get_current_user_id
+from agent_runtime.context import current_agent_state
 from assets.files.storage import conversation_workspace_path
 from common.config import ANONYMOUS_OWNER, UTF8_ENCODING
 from capabilities.registry.constants import (
@@ -64,8 +64,11 @@ def _docker_workspace_path(path: Path) -> str:
 
 
 def _conversation_workspace() -> Path | None:
-    user_id = (get_current_user_id() or ANONYMOUS_OWNER).strip()
-    conversation_id = (get_current_conversation_id() or "").strip()
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
+    active_conversation_id = active_state.execution_context.conversation_id if active_state is not None else None
+    user_id = (active_user_id or ANONYMOUS_OWNER).strip()
+    conversation_id = (active_conversation_id or "").strip()
     if (
         not user_id
         or user_id in {".", ".."}

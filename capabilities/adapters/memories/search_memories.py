@@ -9,7 +9,7 @@ from conversation.models.conversation_models import ConversationMemory, Roundtri
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.clients.embeddings import embed_text
 from retrieval.evidence import EvidenceView, ToolResult
-from agent_runtime.context import get_current_user_id
+from agent_runtime.context import current_agent_state
 from capabilities.adapters.memories.constants import DEFAULT_MEMORY_RESULT_LIMIT
 from capabilities.registry.constants import TOOL_NAME_SEARCH_MEMORIES
 from capabilities.registry.constants import TOOL_RESULT_TYPE_MEMORY_RESULTS
@@ -60,6 +60,8 @@ def search_memories(
     query_embedding = embed_text(query)
     repo = get_conversation_repo()
 
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
     if conversation_ids is not None:
         parsed_ids: list[UUID] = []
         for conversation_id in conversation_ids:
@@ -75,7 +77,7 @@ def search_memories(
             query_embedding=query_embedding,
             conversation_ids=parsed_ids,
             limit=limit,
-            user_id=get_current_user_id(),
+            user_id=active_user_id,
         )
         evidence: list[EvidenceView] = []
         for memory in memories:
@@ -103,7 +105,7 @@ def search_memories(
     roundtrip_matches = repo.search_roundtrip_memories(
         query_embedding=query_embedding,
         limit=limit,
-        user_id=get_current_user_id(),
+        user_id=active_user_id,
     )
     best_by_conversation: dict[str, ConversationMemory] = {}
     for match in roundtrip_matches:

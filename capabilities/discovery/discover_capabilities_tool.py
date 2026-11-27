@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from common.logging import record_node_log
 from agent_runtime.constants import NodeName
-from agent_runtime.context import get_current_agent_state
+from agent_runtime.context import current_agent_state
 from capabilities.discovery.capability_discovery import capability_discovery
 
 
@@ -16,7 +16,7 @@ class CapabilityDiscoveryArgs(BaseModel):
 
 
 def _discover(prompt: str) -> dict[str, Any]:
-    state = get_current_agent_state()
+    state = current_agent_state.get()
     if state is None:
         return {"error": "Capability discovery is unavailable outside an active request."}
     query = prompt.strip()

@@ -304,7 +304,7 @@ def test_tool_registry_cache_store_error_does_not_fail_tool_request(cache_reposi
     assert calls == 1
 
 
-def test_user_specific_cache_isolated_by_user(cache_repository_factory, tool_factory) -> None:
+def test_user_specific_cache_isolated_by_user(cache_repository_factory, tool_factory, agent_state_factory) -> None:
     cache = cache_repository_factory()
     calls = 0
 
@@ -318,10 +318,10 @@ def test_user_specific_cache_isolated_by_user(cache_repository_factory, tool_fac
         Tool(tool_factory("private_search", callback), cache_policy=ToolCachePolicy(60, is_user_specific=True))
     )
 
-    with patch("capabilities.registry.global_registry.get_current_user_id", return_value="user-a"):
+    with bind_agent_context(agent_state_factory(user_id="user-a")):
         first = registry.call_tool("private_search", {"query": "chicken"})
         second = registry.call_tool("private_search", {"query": "chicken"})
-    with patch("capabilities.registry.global_registry.get_current_user_id", return_value="user-b"):
+    with bind_agent_context(agent_state_factory(user_id="user-b")):
         third = registry.call_tool("private_search", {"query": "chicken"})
 
     assert first == {"value": 1}
@@ -331,7 +331,7 @@ def test_user_specific_cache_isolated_by_user(cache_repository_factory, tool_fac
     assert cache.put_calls == 2
 
 
-def test_user_specific_cache_bypasses_anonymous_requests(cache_repository_factory, tool_factory) -> None:
+def test_user_specific_cache_bypasses_anonymous_requests(cache_repository_factory, tool_factory, agent_state_factory) -> None:
     cache = cache_repository_factory()
     calls = 0
 
@@ -345,7 +345,7 @@ def test_user_specific_cache_bypasses_anonymous_requests(cache_repository_factor
         Tool(tool_factory("private_search", callback), cache_policy=ToolCachePolicy(60, is_user_specific=True))
     )
 
-    with patch("capabilities.registry.global_registry.get_current_user_id", return_value=None):
+    with bind_agent_context(agent_state_factory()):
         first = registry.call_tool("private_search", {"query": "chicken"})
         second = registry.call_tool("private_search", {"query": "chicken"})
 

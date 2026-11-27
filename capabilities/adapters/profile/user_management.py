@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
-from agent_runtime.context import get_current_agent_state
+from agent_runtime.context import current_agent_state
 from retrieval.evidence import ToolResult
 
 
@@ -15,7 +15,7 @@ def _run_user_management(task: str) -> ToolResult:
     from agent_runtime.execution.tool_executor import execute_agent_tool
     from agent_runtime.models.agent_profile import AgentName
 
-    state = get_current_agent_state()
+    state = current_agent_state.get()
     if state is None:
         return ToolResult.error("User management is unavailable outside an active request.")
     return execute_agent_tool(

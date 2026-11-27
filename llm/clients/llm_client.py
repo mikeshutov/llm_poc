@@ -10,7 +10,7 @@ from llm.clients.tool_response_parser import parse_tool_args
 from llm.conversation_model_config import DEFAULT_MINI_MODEL, OPENAI_PROVIDER
 from llm.models.tool_call import ToolCall, ToolCallResult
 from llm.usage import record_llm_call
-from agent_runtime.context import get_current_conversation_id, get_current_roundtrip_id, get_current_user_id
+from agent_runtime.context import current_agent_state
 
 CAPTION_MAX_TOKENS = 200
 
@@ -50,13 +50,18 @@ class LlmClient:
             **({"temperature": temperature} if temperature is not None else {}),
         )
         latency_ms = int((perf_counter() - started_at) * 1000)
+        active_state = current_agent_state.get()
+        active_conversation_id = active_state.execution_context.conversation_id if active_state is not None else None
+        active_roundtrip_id = active_state.execution_context.roundtrip_id if active_state is not None else None
+        active_roundtrip_id = str(active_roundtrip_id) if active_roundtrip_id is not None else None
+        active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
         record_llm_call(
             raw_response=resp,
             model_name=resolved_model,
             provider=OPENAI_PROVIDER,
-            conversation_id=get_current_conversation_id(),
-            roundtrip_id=get_current_roundtrip_id(),
-            user_id=get_current_user_id(),
+            conversation_id=active_conversation_id,
+            roundtrip_id=active_roundtrip_id,
+            user_id=active_user_id,
             agent="utility",
             stage="tool_calling",
             callsite="llm_client.call_with_tools",
@@ -121,13 +126,18 @@ class LlmClient:
             max_completion_tokens=CAPTION_MAX_TOKENS,
         )
         latency_ms = int((perf_counter() - started_at) * 1000)
+        active_state = current_agent_state.get()
+        active_conversation_id = active_state.execution_context.conversation_id if active_state is not None else None
+        active_roundtrip_id = active_state.execution_context.roundtrip_id if active_state is not None else None
+        active_roundtrip_id = str(active_roundtrip_id) if active_roundtrip_id is not None else None
+        active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
         record_llm_call(
             raw_response=response,
             model_name=self.default_model,
             provider=OPENAI_PROVIDER,
-            conversation_id=get_current_conversation_id(),
-            roundtrip_id=get_current_roundtrip_id(),
-            user_id=get_current_user_id(),
+            conversation_id=active_conversation_id,
+            roundtrip_id=active_roundtrip_id,
+            user_id=active_user_id,
             agent="utility",
             stage="image_caption",
             callsite="llm_client.generate_caption_from_image_file",

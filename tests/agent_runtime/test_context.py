@@ -7,39 +7,30 @@ import pytest
 
 from agent_runtime.context import (
     bind_agent_context,
-    get_current_agent_name,
-    get_current_agent_state,
-    get_current_conversation_id,
-    get_current_roundtrip_id,
-    get_current_user_id,
+    current_agent_state,
 )
 from agent_runtime.orchestrator import run_agent
 
 
 def test_no_active_agent_has_no_ambient_context():
-    assert get_current_agent_state() is None
-    assert get_current_agent_name() is None
-    assert get_current_conversation_id() is None
-    assert get_current_roundtrip_id() is None
-    assert get_current_user_id() is None
+    assert current_agent_state.get() is None
 
 
-def test_context_readers_follow_live_agent_state(agent_state_factory):
+def test_context_holds_live_agent_state(agent_state_factory):
     state = agent_state_factory()
     with bind_agent_context(state):
-        assert get_current_agent_state() is state
-        assert get_current_roundtrip_id() is None
+        assert current_agent_state.get() is state
         state.execution_context.conversation_id = "conversation-2"
         state.execution_context.roundtrip_id = uuid4()
         state.execution_context.user_profile.user_id = "user-2"
         state.agent_profile.name = "updated-agent"
 
-        assert get_current_conversation_id() == state.execution_context.conversation_id
-        assert get_current_roundtrip_id() == str(state.execution_context.roundtrip_id)
-        assert get_current_user_id() == state.execution_context.user_profile.user_id
-        assert get_current_agent_name() == state.agent_profile.name
+        assert current_agent_state.get().execution_context.conversation_id == "conversation-2"
+        assert current_agent_state.get().execution_context.roundtrip_id == state.execution_context.roundtrip_id
+        assert current_agent_state.get().execution_context.user_profile.user_id == "user-2"
+        assert current_agent_state.get().agent_profile.name == "updated-agent"
 
-    assert get_current_agent_state() is None
+    assert current_agent_state.get() is None
 
 
 @pytest.mark.parametrize("fails", [False, True])
@@ -49,17 +40,15 @@ def test_nested_agent_scope_restores_parent(agent_state_factory, fails):
     with bind_agent_context(parent):
         try:
             with bind_agent_context(child):
-                assert get_current_agent_state() is child
-                assert get_current_agent_name() == "child"
+                assert current_agent_state.get() is child
                 if fails:
                     raise RuntimeError("Child failed")
         except RuntimeError:
             assert fails
 
-        assert get_current_agent_state() is parent
-        assert get_current_agent_name() == "parent"
+        assert current_agent_state.get() is parent
 
-    assert get_current_agent_state() is None
+    assert current_agent_state.get() is None
 
 
 def test_parallel_agents_keep_their_own_state(agent_state_factory):
@@ -71,20 +60,19 @@ def test_parallel_agents_keep_their_own_state(agent_state_factory):
     barrier = Barrier(2)
 
     def run(child):
-        assert get_current_agent_state() is parent
+        assert current_agent_state.get() is parent
         with bind_agent_context(child):
             barrier.wait(timeout=2)
-            assert get_current_agent_state() is child
-            assert get_current_agent_name() == child.agent_profile.name
-        assert get_current_agent_state() is parent
+            assert current_agent_state.get() is child
+        assert current_agent_state.get() is parent
 
     with bind_agent_context(parent), ThreadPoolExecutor(max_workers=2) as executor:
         futures = [executor.submit(copy_context().run, run, child) for child in children]
         for future in futures:
             future.result()
-        assert get_current_agent_state() is parent
+        assert current_agent_state.get() is parent
 
-    assert get_current_agent_state() is None
+    assert current_agent_state.get() is None
 
 
 @pytest.mark.parametrize("fails", [False, True])
@@ -96,7 +84,7 @@ def test_request_binds_its_agent_before_orchestration_and_restores_context(
     main_state = main_state_factory(task="Find an answer")
 
     def orchestrate(state):
-        active = get_current_agent_state()
+        active = current_agent_state.get()
         assert active is state.main_agent_state
         assert active.execution_context is state.execution_context
         assert active.inputs.task == state.task
@@ -111,4 +99,4 @@ def test_request_binds_its_agent_before_orchestration_and_restores_context(
     else:
         assert run_agent(main_state) is main_state.result
 
-    assert get_current_agent_state() is None
+    assert current_agent_state.get() is None

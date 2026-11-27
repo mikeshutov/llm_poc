@@ -2,7 +2,7 @@ import importlib
 
 import pytest
 
-from agent_runtime.context import get_current_agent_state
+from agent_runtime.context import current_agent_state
 from agent_runtime.execution.tool_executor import execute_agent_tool
 from agent_runtime.models.agent_profile import AgentExecutionStrategy
 from agent_runtime.models.agent_state import AgentState
@@ -59,7 +59,7 @@ def test_only_react_delegates_discover_before_the_runner(
     capabilities = CapabilityDiscoveryResult(tools=[AvailableTool(name="math_calculate")])
 
     def discover(active, **kwargs):
-        assert get_current_agent_state() is active
+        assert current_agent_state.get() is active
         assert active.inputs.task == "Calculate a total"
         assert kwargs["include_agents"] is False
         assert kwargs["allowed_tool_names"] == active.agent_profile.tool_names
@@ -67,7 +67,7 @@ def test_only_react_delegates_discover_before_the_runner(
         return capabilities
 
     def run(active):
-        assert get_current_agent_state() is active
+        assert current_agent_state.get() is active
         assert active is not child
         assert active.inputs.discovered_attribute_types == []
         assert active.available_agent_states is None
@@ -84,4 +84,4 @@ def test_only_react_delegates_discover_before_the_runner(
     assert events == (["discover", "run"] if strategy == AgentExecutionStrategy.REACT else ["run"])
     assert result.tool_name == "helper"
     assert child.inputs.discovered_attribute_types == ["food.preference"]
-    assert get_current_agent_state() is None
+    assert current_agent_state.get() is None

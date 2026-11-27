@@ -22,11 +22,7 @@ from capabilities.discovery.models import AvailableTool, CapabilityDiscoveryResu
 from langchain_core.tools import StructuredTool
 from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
 from agent_runtime.strategies.single_pass.graph import DirectReturnStrategy
-from agent_runtime.context import (
-    get_current_conversation_id,
-    get_current_roundtrip_id,
-    get_current_user_id,
-)
+from agent_runtime.context import current_agent_state
 
 
 def test_substitute_refs_uses_typed_tool_results() -> None:
@@ -131,10 +127,12 @@ def test_run_executor_propagates_runtime_context_to_worker_threads(
 
     def fake_call_tool(name: str, tool_input=None, allowed_tool_names=None) -> ToolResult:
         assert threading.current_thread() is not caller_thread
+        active_state = current_agent_state.get()
+        assert active_state is state
         seen_context.update(
-            conversation_id=get_current_conversation_id(),
-            roundtrip_id=get_current_roundtrip_id(),
-            user_id=get_current_user_id(),
+            conversation_id=active_state.execution_context.conversation_id,
+            roundtrip_id=str(active_state.execution_context.roundtrip_id),
+            user_id=active_state.execution_context.user_profile.user_id,
         )
         return ToolResult(result={"ok": True})
 

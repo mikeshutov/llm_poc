@@ -3,7 +3,7 @@ import threading
 import pytest
 from langchain_core.tools import StructuredTool
 
-from agent_runtime.context import bind_agent_context, get_current_conversation_id
+from agent_runtime.context import bind_agent_context, current_agent_state
 from agent_runtime.execution.tool_executor import run_executor
 from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY
 from capabilities.registry.models import Tool
@@ -36,7 +36,9 @@ def test_serial_writes_finish_before_concurrent_reads_in_plan_order(
 
     def read(name):
         assert writes_finished.is_set()
-        assert get_current_conversation_id() == "scheduling-test"
+        active_state = current_agent_state.get()
+        assert active_state is not None
+        assert active_state.execution_context.conversation_id == "scheduling-test"
         events.append(name)
         reads.wait(timeout=2)
         return ToolResult(result={"read": name})

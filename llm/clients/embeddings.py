@@ -81,8 +81,11 @@ def _record_embedding_log(
     # lazily so standalone scripts and startup-time model setup do not create
     # a logging dependency or fail when no roundtrip is active.
     from common.logging import record_node_log
-    from agent_runtime.context import get_current_roundtrip_id
+    from agent_runtime.context import current_agent_state
 
+    active_state = current_agent_state.get()
+    active_roundtrip_id = active_state.execution_context.roundtrip_id if active_state is not None else None
+    active_roundtrip_id = str(active_roundtrip_id) if active_roundtrip_id is not None else None
     record_node_log(
         node_name=node_name,
         stage="embedding",
@@ -92,7 +95,7 @@ def _record_embedding_log(
             "Embedding call failed" if error else
             "Embedding cache hit" if cache_hit else "Embedding call completed"
         ),
-        roundtrip_id=get_current_roundtrip_id(),
+        roundtrip_id=active_roundtrip_id,
         duration_ms=duration_ms,
         payload={
             "model": EMBEDDING_MODEL,

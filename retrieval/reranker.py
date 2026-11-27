@@ -10,7 +10,7 @@ from retrieval.reranker_constants import DEFAULT_TOP_K, RERANKER_EVENT_TYPE, RER
 from retrieval.reranker_models import Candidate, RerankerScore
 from retrieval.query import build_reranker_query
 from agent_runtime.constants import NodeName
-from agent_runtime.context import get_current_roundtrip_id
+from agent_runtime.context import current_agent_state
 
 
 def _record_reranker_event(
@@ -24,8 +24,11 @@ def _record_reranker_event(
     batch_size: int | None,
     error: str = "",
 ) -> None:
+    active_state = current_agent_state.get()
+    active_roundtrip_id = active_state.execution_context.roundtrip_id if active_state is not None else None
+    active_roundtrip_id = str(active_roundtrip_id) if active_roundtrip_id is not None else None
     record_node_log(
-        roundtrip_id=get_current_roundtrip_id(),
+        roundtrip_id=active_roundtrip_id,
         node_name=NodeName.RERANKER,
         event_type=RERANKER_EVENT_TYPE,
         payload={

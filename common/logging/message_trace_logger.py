@@ -7,7 +7,7 @@ from uuid import UUID
 from conversation.repository.repo_factory import get_conversation_repo
 from common.data import bounded_json_value
 from agent_runtime.constants import NodeName
-from agent_runtime.context import get_current_roundtrip_id
+from agent_runtime.context import current_agent_state
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,10 @@ def record_node_log(
 ) -> None:
     """Persist a bounded node diagnostic without entering conversation history."""
     resolved_node_name = _node_value(node_name)
-    resolved_roundtrip_id = roundtrip_id or get_current_roundtrip_id()
+    active_state = current_agent_state.get()
+    active_roundtrip_id = active_state.execution_context.roundtrip_id if active_state is not None else None
+    active_roundtrip_id = str(active_roundtrip_id) if active_roundtrip_id is not None else None
+    resolved_roundtrip_id = roundtrip_id or active_roundtrip_id
     if not resolved_roundtrip_id:
         return
     try:

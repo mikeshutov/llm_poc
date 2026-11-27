@@ -10,7 +10,7 @@ from assets.models import AssetChunkResult, AssetContentType, AssetType
 from assets.repository.asset_chunk_repository import AssetChunkRepository
 from llm.clients.embeddings import embed_text
 from retrieval.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
-from agent_runtime.context import get_current_user_id
+from agent_runtime.context import current_agent_state
 from capabilities.registry.constants import TOOL_NAME_SEARCH_ASSETS, TOOL_RESULT_TYPE_ASSET_RESULTS
 
 
@@ -59,11 +59,13 @@ Use asset_type to restrict the search to file or http_page assets, and content_t
 )
 def search_assets(query: str, asset_type: Optional[AssetType] = None, content_type: Optional[AssetContentType] = None) -> ToolResult:
     embedded_query = embed_text(query)
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
     results = AssetChunkRepository().search_assets(
         query_embedding=embedded_query,
         asset_type=asset_type.value if asset_type else None,
         content_type=content_type,
-        user_id=get_current_user_id(),
+        user_id=active_user_id,
     )
     return _tool_result([AssetChunkResult.model_validate(result) for result in results])
 
