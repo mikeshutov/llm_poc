@@ -58,7 +58,7 @@ def build_agent_tool(profile):
         name=profile.name,
         description=profile.description,
         args_schema=profile.delegation_args_schema,
-        metadata={"agent_name": profile.name},
+        metadata={"agent_name": profile.name, "can_run_concurrently": profile.can_run_concurrently},
     )
 
 
@@ -130,6 +130,15 @@ class ToolRegistry:
 
             if wait_seconds > 0:
                 sleep(wait_seconds)
+
+    def can_run_concurrently(self, name: str) -> bool:
+        """Only tools explicitly declared safe may share an execution phase."""
+        try:
+            tool = self.get(name)
+        except UnknownToolError:
+            return False
+        metadata = getattr(tool, "metadata", None) or {}
+        return bool(getattr(tool, "can_run_concurrently", metadata.get("can_run_concurrently", False)))
 
     @staticmethod
     def _should_retry(exc: Exception, tool: Any) -> bool:
@@ -292,6 +301,7 @@ def register_agent_tools(profiles, *, user_id: str | None = None) -> None:
                 if owner is None or (
                     existing.description == profile.description
                     and existing.args_schema is profile.delegation_args_schema
+                    and metadata.get("can_run_concurrently", False) == profile.can_run_concurrently
                 ):
                     continue
             GLOBAL_TOOL_REGISTRY.register(build_agent_tool(profile), user_id=owner, replace=existing is not None)

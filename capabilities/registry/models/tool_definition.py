@@ -37,6 +37,7 @@ class Tool:
     rate_limit_policy: RateLimitPolicy | None = None
     version: int = 3
     cache_policy: ToolCachePolicy | None = None
+    can_run_concurrently: bool = False
 
     @property
     def name(self) -> str:

@@ -136,66 +136,66 @@ BRAVE_RETRY_POLICY = RetryPolicy(
 )
 
 # Tool Definitions
-PRODUCT_TOOLS = [Tool(search_products, result_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS, cache_policy=ToolCachePolicy(900)), Tool(list_product_categories, result_type=TOOL_RESULT_TYPE_PRODUCT_CATEGORIES, cache_policy=ToolCachePolicy(3600))]
+PRODUCT_TOOLS = [Tool(search_products, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_PRODUCT_RESULTS, cache_policy=ToolCachePolicy(900)), Tool(list_product_categories, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_PRODUCT_CATEGORIES, cache_policy=ToolCachePolicy(3600))]
 WEATHER_TOOLS = [
-    Tool(get_weather, result_type=TOOL_RESULT_TYPE_WEATHER, cache_policy=ToolCachePolicy(300)),
+    Tool(get_weather, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_WEATHER, cache_policy=ToolCachePolicy(300)),
 ]
 FINANCE_TOOLS = [
-    Tool(exchange_rates_lookup, result_type=TOOL_RESULT_TYPE_FINANCE, cache_policy=ToolCachePolicy(300)),
-    Tool(get_stock_price, result_type=TOOL_RESULT_TYPE_FINANCE, cache_policy=ToolCachePolicy(300)),
+    Tool(exchange_rates_lookup, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_FINANCE, cache_policy=ToolCachePolicy(300)),
+    Tool(get_stock_price, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_FINANCE, cache_policy=ToolCachePolicy(300)),
 ]
 CRYPTO_TOOLS = [
-    Tool(get_crypto_markets, result_type=TOOL_RESULT_TYPE_CRYPTO_MARKET, cache_policy=ToolCachePolicy(300)),
-    Tool(get_crypto_historical_prices, result_type=TOOL_RESULT_TYPE_CRYPTO_MARKET, cache_policy=ToolCachePolicy(3600)),
+    Tool(get_crypto_markets, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_CRYPTO_MARKET, cache_policy=ToolCachePolicy(300)),
+    Tool(get_crypto_historical_prices, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_CRYPTO_MARKET, cache_policy=ToolCachePolicy(3600)),
 ]
 WEB_SEARCH_TOOLS = [
-    Tool(generic_web_search, result_type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS, cache_policy=ToolCachePolicy(300), rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
-    Tool(news_search, result_type=TOOL_RESULT_TYPE_NEWS_RESULTS, cache_policy=ToolCachePolicy(300), rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
-    Tool(hn_search, result_type=TOOL_RESULT_TYPE_NEWS_RESULTS, cache_policy=ToolCachePolicy(300)),
-    Tool(web_fetch, result_type=TOOL_RESULT_TYPE_WEB_PAGE, cache_policy=ToolCachePolicy(900)),
+    Tool(generic_web_search, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_WEB_SEARCH_RESULTS, cache_policy=ToolCachePolicy(300), rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
+    Tool(news_search, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_NEWS_RESULTS, cache_policy=ToolCachePolicy(300), rate_limit_key="brave", retry_policy=BRAVE_RETRY_POLICY, rate_limit_policy=BRAVE_RATE_LIMIT_POLICY),
+    Tool(hn_search, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_NEWS_RESULTS, cache_policy=ToolCachePolicy(300)),
+    Tool(web_fetch, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_WEB_PAGE, cache_policy=ToolCachePolicy(900)),
 ]
 KNOWLEDGE_TOOLS = [
-    Tool(wikipedia_search, result_type=TOOL_RESULT_TYPE_KNOWLEDGE, cache_policy=ToolCachePolicy(3600)),
-    Tool(structured_facts_lookup, result_type=TOOL_RESULT_TYPE_STRUCTURED_FACTS, cache_policy=ToolCachePolicy(3600)),
-    Tool(country_lookup, result_type=TOOL_RESULT_TYPE_COUNTRY, cache_policy=ToolCachePolicy(86400)),
+    Tool(wikipedia_search, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_KNOWLEDGE, cache_policy=ToolCachePolicy(3600)),
+    Tool(structured_facts_lookup, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_STRUCTURED_FACTS, cache_policy=ToolCachePolicy(3600)),
+    Tool(country_lookup, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_COUNTRY, cache_policy=ToolCachePolicy(86400)),
 ]
-CALENDAR_TOOLS = [Tool(public_holidays_lookup, result_type=TOOL_RESULT_TYPE_CALENDAR, cache_policy=ToolCachePolicy(86400)), Tool(get_world_time, result_type=TOOL_RESULT_TYPE_TIME, cache_policy=ToolCachePolicy(30))]
-LOCATION_TOOLS = [Tool(get_caller_location, result_type=TOOL_RESULT_TYPE_LOCATION)]
-BOOKS_TOOLS = [Tool(search_books, result_type=TOOL_RESULT_TYPE_BOOK_RESULTS, cache_policy=ToolCachePolicy(3600))]
-LANGUAGE_TOOLS = [Tool(define_word, result_type=TOOL_RESULT_TYPE_DEFINITION, cache_policy=ToolCachePolicy(86400))]
+CALENDAR_TOOLS = [Tool(public_holidays_lookup, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_CALENDAR, cache_policy=ToolCachePolicy(86400)), Tool(get_world_time, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_TIME, cache_policy=ToolCachePolicy(30))]
+LOCATION_TOOLS = [Tool(get_caller_location, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_LOCATION)]
+BOOKS_TOOLS = [Tool(search_books, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_BOOK_RESULTS, cache_policy=ToolCachePolicy(3600))]
+LANGUAGE_TOOLS = [Tool(define_word, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_DEFINITION, cache_policy=ToolCachePolicy(86400))]
 FOOD_TOOLS = [
     Tool(
-        search_meals,
+        search_meals, can_run_concurrently=True,
         result_type=TOOL_RESULT_TYPE_MEAL_RESULTS,
         cache_policy=ToolCachePolicy(3600),
     ),
-    Tool(search_cocktails, result_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS, cache_policy=ToolCachePolicy(3600)),
+    Tool(search_cocktails, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_COCKTAIL_RESULTS, cache_policy=ToolCachePolicy(3600)),
 ]
-MATH_TOOLS = [Tool(calculate, result_type=TOOL_RESULT_TYPE_CALCULATION, cache_policy=ToolCachePolicy(86400))]
+MATH_TOOLS = [Tool(calculate, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_CALCULATION, cache_policy=ToolCachePolicy(86400))]
 CODE_EXECUTION_TOOLS = [Tool(code_execute, result_type=TOOL_RESULT_TYPE_CODE_EXECUTION, version=2)]
 GAMES_TOOLS = [
-    Tool(get_commander_details, result_type=TOOL_RESULT_TYPE_DECKS, cache_policy=ToolCachePolicy(3600)),
-    Tool(get_commander_cards, result_type=TOOL_RESULT_TYPE_CARD_RESULTS, cache_policy=ToolCachePolicy(3600)),
-    Tool(search_magic_cards, result_type=TOOL_RESULT_TYPE_CARD_RESULTS, cache_policy=ToolCachePolicy(3600)),
-    Tool(get_magic_card_rulings, result_type=TOOL_RESULT_TYPE_RULES, cache_policy=ToolCachePolicy(3600)),
+    Tool(get_commander_details, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_DECKS, cache_policy=ToolCachePolicy(3600)),
+    Tool(get_commander_cards, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_CARD_RESULTS, cache_policy=ToolCachePolicy(3600)),
+    Tool(search_magic_cards, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_CARD_RESULTS, cache_policy=ToolCachePolicy(3600)),
+    Tool(get_magic_card_rulings, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_RULES, cache_policy=ToolCachePolicy(3600)),
 ]
 MEMORY_TOOLS = [
-    Tool(get_memory_detail, result_type=TOOL_RESULT_TYPE_MEMORY_DETAIL, version=4, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
-    Tool(lookup_evidence, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
-    Tool(search_memories, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
+    Tool(get_memory_detail, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_MEMORY_DETAIL, version=4, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
+    Tool(lookup_evidence, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
+    Tool(search_memories, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_MEMORY_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)),
 ]
-FILE_TOOLS = [Tool(search_assets, result_type=TOOL_RESULT_TYPE_ASSET_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(search_asset_details, result_type=TOOL_RESULT_TYPE_ASSET_DETAILS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(get_file_by_id, result_type=TOOL_RESULT_TYPE_FILE, cache_policy=ToolCachePolicy(300, is_user_specific=True))]
+FILE_TOOLS = [Tool(search_assets, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_ASSET_RESULTS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(search_asset_details, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_ASSET_DETAILS, cache_policy=ToolCachePolicy(300, is_user_specific=True)), Tool(get_file_by_id, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_FILE, cache_policy=ToolCachePolicy(300, is_user_specific=True))]
 FILE_MANAGEMENT_TOOLS = [
     Tool(file_create, result_type=TOOL_RESULT_TYPE_FILE, version=6),
-    Tool(file_read, result_type=TOOL_RESULT_TYPE_FILE, version=4),
+    Tool(file_read, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_FILE, version=4),
     Tool(file_edit, result_type=TOOL_RESULT_TYPE_FILE, version=4),
     Tool(file_delete, result_type=TOOL_RESULT_TYPE_FILE),
-    Tool(file_list, result_type=TOOL_RESULT_TYPE_FILE),
+    Tool(file_list, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_FILE),
     Tool(file_move, result_type=TOOL_RESULT_TYPE_FILE),
 ]
 WRITING_TOOLS = [
     Tool(
-        writing_templates,
+        writing_templates, can_run_concurrently=True,
         result_type=TOOL_RESULT_TYPE_WRITING_TEMPLATES,
         version=1,
         cache_policy=ToolCachePolicy(3600),
@@ -203,16 +203,16 @@ WRITING_TOOLS = [
 ]
 WORKSPACE_TOOLS = [
     Tool(workspace_file_write, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
-    Tool(workspace_file_read, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=2),
+    Tool(workspace_file_read, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=2),
     Tool(workspace_file_edit, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
-    Tool(workspace_file_list, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=3),
+    Tool(workspace_file_list, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=3),
     Tool(workspace_file_delete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
     Tool(workspace_file_complete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
     Tool(workspace_file_promote, result_type=TOOL_RESULT_TYPE_FILE, version=2),
 ]
 WORKSPACE_READ_TOOLS = [
-    Tool(workspace_file_read, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=2),
-    Tool(workspace_file_list, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=3),
+    Tool(workspace_file_read, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=2),
+    Tool(workspace_file_list, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=3),
 ]
 WORKSPACE_MUTATION_TOOLS = [
     tool for tool in WORKSPACE_TOOLS if tool.name not in {item.name for item in WORKSPACE_READ_TOOLS}
