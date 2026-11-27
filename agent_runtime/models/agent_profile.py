@@ -76,6 +76,7 @@ class AgentProfile:
     can_delegate_agents: bool = True
     default_available_agent_names: set[str] = field(default_factory=set)
     max_turns: int = DEFAULT_MAX_TURNS
+    can_run_concurrently: bool = False
     required_completion_tools: set[str] = field(default_factory=set)
     planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
     synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION
