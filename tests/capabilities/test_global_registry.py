@@ -16,9 +16,12 @@ if 'pycountry' not in sys.modules:
     pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
     sys.modules['pycountry'] = pycountry_module
 
+from agent_runtime.context import bind_runtime_context
+from agent_runtime.models.agent_profile import AgentKind, AgentProfile
+from capabilities.registry import global_registry
 from common.http import HttpClientError
 from requests.exceptions import Timeout
-from capabilities.registry.global_registry import ToolRegistry, ToolRegistryError
+from capabilities.registry.global_registry import ToolRegistry, ToolRegistryError, UnknownToolError
 from common.cache.repository import decode_cache_output, encode_cache_output
 from common.cache.policy import ToolCachePolicy
 from capabilities.registry.models import RateLimitPolicy, Tool
@@ -115,8 +118,6 @@ def test_registry_rejects_overwriting_an_existing_tool() -> None:
 
 
 def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins() -> None:
-    from agent_runtime.context import bind_runtime_context
-
     registry = ToolRegistry()
     registry.register(_FakeTool("assistant", lambda args: "Alice"), user_id="alice")
     registry.register(_FakeTool("assistant", lambda args: "Bob"), user_id="bob")
@@ -131,14 +132,8 @@ def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins() -> Non
         registry.register(_FakeTool("builtin", lambda args: "replacement"), user_id="alice")
 
 
-def test_agent_registration_is_idempotent_and_preserves_other_users(monkeypatch) -> None:
-    from agent_runtime.models.agent_profile import AgentKind, AgentProfile
-    from capabilities.registry import global_registry
-
-    registry = ToolRegistry()
-    monkeypatch.setattr(global_registry, "GLOBAL_TOOL_REGISTRY", registry)
-    monkeypatch.setattr(global_registry, "_REGISTERED_DEFAULTS", False)
-    global_registry.register_default_tools()
+def test_agent_registration_is_idempotent_and_preserves_other_users(registered_tool_registry) -> None:
+    registry = registered_tool_registry
     original = registry.get("coding")
     global_registry.register_default_tools()
     assert registry.get("coding") is original
@@ -156,6 +151,15 @@ def test_agent_registration_is_idempotent_and_preserves_other_users(monkeypatch)
         global_registry.register_agent_tools([
             AgentProfile(name="coding", scope="main_agent", kind=AgentKind.USER_AGENT),
         ], user_id="alice")
+
+
+@pytest.mark.parametrize("iteration", range(2))
+def test_registered_tools_do_not_leak_between_tests(registered_tool_registry, iteration):
+    with pytest.raises(UnknownToolError):
+        registered_tool_registry.get("test_only_tool")
+
+    registered_tool_registry.register(_FakeTool("test_only_tool", lambda args: iteration))
+    assert registered_tool_registry.call_tool("test_only_tool") == iteration
 
 
 def test_tool_registry_serializes_calls_for_shared_rate_limit_key() -> None:

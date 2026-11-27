@@ -1,30 +1,18 @@
-import pytest
-
 from agent_runtime.models.plan import PlanStep
 from agent_runtime.planning.tool_wrapper import build_tools
 from capabilities.registry.global_registry import (
-    GLOBAL_TOOL_REGISTRY, available_agent_tools, register_agent_tools, register_default_tools,
+    GLOBAL_TOOL_REGISTRY, available_agent_tools, register_agent_tools,
 )
 from agent_runtime.execution.tool_executor import run_executor
 from agent_runtime.models.plan import Plan
-from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_profile import AgentProfile
-from agent_runtime.models.agent_execution_context import AgentExecutionContext
 from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE, DocumentWritingDelegationArgs
 from capabilities.discovery.models import AvailableAgent, CapabilityDiscoveryResult
 
 
-@pytest.fixture(autouse=True)
-def initialize_registry():
-    register_default_tools()
-
-
-def test_agent_tool_receives_explicit_task_and_normalizes_evidence(monkeypatch) -> None:
-    parent = AgentState.new(
-        agent_profile=AgentProfile(name="parent", scope="main_agent"),
-        llm=object(),
-    )
-    child = AgentState.new(agent_profile=DOCUMENT_WRITING_PROFILE, llm=object())
+def test_agent_tool_receives_explicit_task_and_normalizes_evidence(monkeypatch, agent_state_factory) -> None:
+    parent = agent_state_factory(profile=AgentProfile(name="parent", scope="main_agent"))
+    child = agent_state_factory(profile=DOCUMENT_WRITING_PROFILE)
     parent.available_agent_states = {"document_writing": child}
     seen = []
 
@@ -48,24 +36,14 @@ def test_agent_tool_receives_explicit_task_and_normalizes_evidence(monkeypatch) 
 
 
 def test_agent_delegation_tool_keeps_explicit_task_schema() -> None:
-    state = AgentState.new(
-        agent_profile=DOCUMENT_WRITING_PROFILE,
-        execution_context=AgentExecutionContext.new(),
-        llm=object(),
-    )
-    tool = build_tools([GLOBAL_TOOL_REGISTRY.get(state.agent_profile.name)])[0]
+    tool = build_tools([GLOBAL_TOOL_REGISTRY.get(DOCUMENT_WRITING_PROFILE.name)])[0]
 
     assert list(tool.args_schema.model_fields) == ["parameters", "hypothesis", "evaluation_fields"]
     assert tool.args_schema.model_fields["parameters"].annotation is DocumentWritingDelegationArgs
 
 
 def test_agent_delegation_tool_accepts_evidence_ids() -> None:
-    state = AgentState.new(
-        agent_profile=AgentProfile(name="document_writing", scope="main_agent"),
-        execution_context=AgentExecutionContext.new(),
-        llm=object(),
-    )
-    tool = build_tools([GLOBAL_TOOL_REGISTRY.get(state.agent_profile.name)])[0]
+    tool = build_tools([GLOBAL_TOOL_REGISTRY.get(DOCUMENT_WRITING_PROFILE.name)])[0]
 
     parsed = tool.args_schema.model_fields["parameters"].annotation.model_validate({
         "task": "Create a research paper.",
@@ -76,26 +54,22 @@ def test_agent_delegation_tool_accepts_evidence_ids() -> None:
     assert parsed.evidence_ids == ["evidence-1", "evidence-1", "  evidence-2  "]
 
 
-def test_delegated_agent_states_honor_delegation_policy() -> None:
-    parent = AgentState.new(
-        agent_profile=AgentProfile(
+def test_delegated_agent_states_honor_delegation_policy(agent_state_factory) -> None:
+    parent = agent_state_factory(
+        profile=AgentProfile(
             name="coordinator",
             scope="main_agent",
             default_available_agent_names={"default_agent"},
         ),
-        llm=object(),
     )
-    default_agent = AgentState.new(
-        agent_profile=AgentProfile(name="default_agent", scope="main_agent"),
-        llm=object(),
+    default_agent = agent_state_factory(
+        profile=AgentProfile(name="default_agent", scope="main_agent"),
     )
-    undiscovered_agent = AgentState.new(
-        agent_profile=AgentProfile(name="undiscovered_agent", scope="main_agent"),
-        llm=object(),
+    undiscovered_agent = agent_state_factory(
+        profile=AgentProfile(name="undiscovered_agent", scope="main_agent"),
     )
-    blocked_agent = AgentState.new(
-        agent_profile=AgentProfile(name="blocked_agent", scope="main_agent", delegatable=False),
-        llm=object(),
+    blocked_agent = agent_state_factory(
+        profile=AgentProfile(name="blocked_agent", scope="main_agent", delegatable=False),
     )
     parent.available_agent_states = {
         "coordinator": parent,
@@ -113,29 +87,26 @@ def test_delegated_agent_states_honor_delegation_policy() -> None:
     assert [tool.name for tool in visible] == ["default_agent"]
 
 
-def test_non_delegating_agent_exposes_no_delegation_targets() -> None:
-    parent = AgentState.new(
-        agent_profile=AgentProfile(
+def test_non_delegating_agent_exposes_no_delegation_targets(agent_state_factory) -> None:
+    parent = agent_state_factory(
+        profile=AgentProfile(
             name="leaf",
             scope="main_agent",
             can_delegate_agents=False,
         ),
-        llm=object(),
     )
     parent.available_agent_states = {
-        "other": AgentState.new(
-            agent_profile=AgentProfile(name="other", scope="main_agent"),
-            llm=object(),
+        "other": agent_state_factory(
+            profile=AgentProfile(name="other", scope="main_agent"),
         )
     }
 
     assert available_agent_tools(parent) == []
 
 
-def test_delegated_agent_execution_rejects_self_delegation() -> None:
-    parent = AgentState.new(
-        agent_profile=AgentProfile(name="coordinator", scope="main_agent"),
-        llm=object(),
+def test_delegated_agent_execution_rejects_self_delegation(agent_state_factory) -> None:
+    parent = agent_state_factory(
+        profile=AgentProfile(name="coordinator", scope="main_agent"),
     )
     parent.available_agent_states = {"coordinator": parent}
     step = PlanStep(

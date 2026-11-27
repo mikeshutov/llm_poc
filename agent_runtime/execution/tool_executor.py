@@ -345,11 +345,15 @@ def _agent_completion_result(
     if state.result.execution_status.value not in {"pending", "success"}:
         status = state.result.execution_status.value
     summaries = [item.summary.strip() for item in evidence if item.summary and item.summary.strip()]
-    summary = (
-        f"{agent_name} completed the delegated task. " + " ".join(dict.fromkeys(summaries))
-        if summaries
-        else f"{agent_name} completed the delegated task."
-    )
+    status_text = {
+        "success": "completed the delegated task",
+        "partial_success": "partially completed the delegated task",
+        "partial": "partially completed the delegated task",
+        "no_new_work": "stopped because no new work was available",
+        "failed": "failed to complete the delegated task",
+        "pending": "has not completed the delegated task",
+    }[status]
+    summary = " ".join([f"{agent_name} {status_text}.", *dict.fromkeys(summaries)])
     outcome = None
     if state.agent_profile.execution_strategy == AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR:
         evaluation_status = state.node_states.evaluator.evaluation_status

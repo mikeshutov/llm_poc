@@ -16,6 +16,7 @@ from llm.usage import record_llm_call
 from rendering.debug import PLAN_KIND
 from agent_runtime.models.agent_prompt import AgentPrompt, PromptSectionKeys
 from agent_runtime.models.agent_state import AgentState
+from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_profile import AgentExecutionStrategy
 from agent_runtime.models.decision import DecisionResponse, DecisionStatus
 from agent_runtime.models.plan import Plan
@@ -40,6 +41,19 @@ class DecisionResult:
 
 
 DecisionPromptBuilder = Callable[[AgentState], tuple[AgentPrompt, list[BaseTool]]]
+
+
+def record_decision_status(state: AgentState, status: DecisionStatus) -> None:
+    state.node_states.planner.decision_status = status
+    if state.node_states.planner.plan and state.node_states.planner.plan.steps:
+        return
+    if status == DecisionStatus.SATISFIED:
+        state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
+    elif status == DecisionStatus.BLOCKED:
+        state.result = state.result.copy(
+            answer_status=AnswerStatus.FAILED,
+            execution_status=ExecutionStatus.FAILED,
+        )
 
 
 def build_decision_prompt(

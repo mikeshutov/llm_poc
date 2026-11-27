@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from agent_runtime.models.agent_profile import (
     AgentExecutionStrategy,
     AgentKind,
@@ -13,7 +15,6 @@ from agent_runtime.strategies.single_pass.graph import DirectReturnStrategy
 from agent_runtime.strategies.react.decision import DecisionResult
 from agent_runtime.models.decision import DecisionStatus
 from retrieval.evidence import ToolResult
-import pytest
 
 
 def _state(max_turns: int = 3) -> AgentState:

@@ -2,25 +2,24 @@ from __future__ import annotations
 
 import importlib
 from types import SimpleNamespace
-from uuid import uuid4
 
 from agent_runtime.models.main_state import MainState
 from capabilities.discovery.capability_discovery import capability_discovery
 from capabilities.discovery.models import AvailableAgent, AvailableTool, CapabilityDiscoveryResult
 from agent_runtime.models.agent_profile import AgentKind
-from agents.models.agent import Agent, AgentType
+from agents.models.agent import AgentType
 from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY
 
 discover_module = importlib.import_module("capabilities.discovery.capability_discovery")
 
 
-def test_runtime_discovery_registers_database_system_and_user_agents(monkeypatch) -> None:
-    system_agent = Agent(
-        id=uuid4(), agent_type=AgentType.SYSTEM, name="database_system",
+def test_runtime_discovery_registers_database_system_and_user_agents(monkeypatch, db_agent_factory) -> None:
+    system_agent = db_agent_factory(
+        agent_type=AgentType.SYSTEM, name="database_system",
         planner_instruction="Run the database system agent.",
     )
-    user_agent = Agent(
-        id=uuid4(), agent_type=AgentType.USER, user_id="alice", name="runtime_helper",
+    user_agent = db_agent_factory(
+        agent_type=AgentType.USER, user_id="alice", name="runtime_helper",
         planner_instruction="Run Alice's dynamically discovered agent.",
     )
 

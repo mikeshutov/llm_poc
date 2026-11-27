@@ -11,25 +11,12 @@ from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.execution.tool_executor import run_executor, tool_result_status
 from agent_runtime.models.decision import DecisionStatus
-from agent_runtime.strategies.react.decision import run_decision
+from agent_runtime.strategies.react.decision import record_decision_status, run_decision
 from agent_runtime.strategies.react.subagent_prompt import build_subagent_decision_prompt
 
 
 @dataclass(frozen=True)
 class DirectReturnStrategy:
-    @staticmethod
-    def _record_decision_status(state: AgentState, status: DecisionStatus) -> None:
-        state.node_states.planner.decision_status = status
-        if state.node_states.planner.plan and state.node_states.planner.plan.steps:
-            return
-        if status == DecisionStatus.SATISFIED:
-            state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
-        elif status == DecisionStatus.BLOCKED:
-            state.result = state.result.copy(
-                answer_status=AnswerStatus.FAILED,
-                execution_status=ExecutionStatus.FAILED,
-            )
-
     def _reasoner(self, state: AgentState) -> AgentState:
         if state.node_states.planner.plan_count >= state.max_turns:
             return state
@@ -49,7 +36,7 @@ class DirectReturnStrategy:
             return state
         state.node_states.planner.plan = result.plan
         state.node_states.planner.plan_count += 1
-        self._record_decision_status(state, result.status)
+        record_decision_status(state, result.status)
         return state
 
     @staticmethod

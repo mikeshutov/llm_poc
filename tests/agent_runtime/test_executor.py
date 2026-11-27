@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import threading
-from dataclasses import dataclass
 import sys
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
+
+import pytest
 
 if "yfinance" not in sys.modules:
     sys.modules["yfinance"] = ModuleType("yfinance")
@@ -18,39 +19,21 @@ if "pycountry" not in sys.modules:
     sys.modules["pycountry"] = pycountry_module
 
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
-from agent_runtime.models.agent_profile import AgentProfile
+from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentProfile
+from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
-from agent_runtime.models.agent_state import AgentState
-from retrieval.evidence import ToolResult
+from retrieval.evidence import EvidenceView, ToolResult
 from agent_runtime.models.plan import Plan
-from agent_runtime.execution.tool_executor import _substitute_refs, run_executor
-from agent_runtime.execution.message_history import append_execution_messages
-from capabilities.registry.global_registry import register_default_tools
+from agent_runtime.execution.tool_executor import _agent_completion_result, _substitute_refs, run_executor
+from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY
+from langchain_core.tools import StructuredTool
+from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
+from agent_runtime.strategies.single_pass.graph import DirectReturnStrategy
 from agent_runtime.context import (
     get_current_conversation_id,
     get_current_roundtrip_id,
     get_current_user_id,
 )
-
-
-@dataclass(frozen=True)
-class ToolSpec:
-    name: str
-
-
-def _state_for_plan(plan: Plan) -> AgentState:
-    state = AgentState.new(
-        task="Run tools",
-        llm=object(),
-        agent_profile=AgentProfile(
-            name="test_agent",
-            scope=MAIN_AGENT_MODEL_SCOPE,
-            static_tools=[ToolSpec(step.tool) for step in plan.steps],
-        ),
-    )
-    state.node_states.planner.plan = plan
-    state.node_states.planner.plan_count = 1
-    return state
 
 
 def test_substitute_refs_uses_typed_tool_results() -> None:
@@ -62,11 +45,11 @@ def test_substitute_refs_uses_typed_tool_results() -> None:
     assert _substitute_refs({"value": "#E2"}, {}) == {"value": "#E2"}
 
 
-def test_subagent_execution_appends_tool_exchange_to_local_message_history(monkeypatch) -> None:
+def test_subagent_execution_appends_tool_exchange_to_local_message_history(monkeypatch, agent_state_factory) -> None:
     plan = Plan.model_validate({
         "steps": [{"id": "E1", "plan": "Run tool", "tool": "tool_a", "args": {}}]
     })
-    state = _state_for_plan(plan)
+    state = agent_state_factory(plan=plan)
     monkeypatch.setattr(
         "agent_runtime.execution.tool_executor.call_tool",
         lambda **kwargs: ToolResult(result={"ok": True}),
@@ -79,7 +62,7 @@ def test_subagent_execution_appends_tool_exchange_to_local_message_history(monke
     assert state.reasoner_message_history[1].name == "tool_a"
 
 
-def test_run_executor_parallelizes_typed_plan_steps() -> None:
+def test_run_executor_parallelizes_typed_plan_steps(agent_state_factory) -> None:
     plan = Plan.model_validate(
         {
             "steps": [
@@ -88,7 +71,7 @@ def test_run_executor_parallelizes_typed_plan_steps() -> None:
             ]
         }
     )
-    state = _state_for_plan(plan)
+    state = agent_state_factory(plan=plan)
     started = threading.Event()
     started_steps: list[str] = []
     captured = []
@@ -114,7 +97,7 @@ def test_run_executor_parallelizes_typed_plan_steps() -> None:
     ):
         run_executor(state)
 
-    assert started_steps == ["tool_a", "tool_b"]
+    assert sorted(started_steps) == ["tool_a", "tool_b"]
     assert [result.step.db_id for result in captured] == [step.db_id for step in plan.steps]
     assert [result.output.result for result in captured] == [
         {"tool": "tool_a", "value": "a"},
@@ -122,11 +105,11 @@ def test_run_executor_parallelizes_typed_plan_steps() -> None:
     ]
 
 
-def test_run_executor_propagates_runtime_context_to_worker_threads() -> None:
+def test_run_executor_propagates_runtime_context_to_worker_threads(agent_state_factory) -> None:
     plan = Plan.model_validate(
         {"steps": [{"id": "E1", "plan": "Run tool", "tool": "tool_a", "args": {}}]}
     )
-    state = _state_for_plan(plan)
+    state = agent_state_factory(plan=plan)
     state.execution_context = AgentExecutionContext.new(conversation_id="conversation-123")
     state.execution_context.roundtrip_id = uuid4()
     state.execution_context.user_profile.user_id = "user-789"
@@ -153,9 +136,8 @@ def test_run_executor_propagates_runtime_context_to_worker_threads() -> None:
     }
 
 
-def test_run_executor_returns_standardized_subagent_result_without_merging_state(monkeypatch) -> None:
-    register_default_tools()
-    parent = _state_for_plan(Plan.model_validate({
+def test_run_executor_returns_standardized_subagent_result_without_merging_state(monkeypatch, agent_state_factory) -> None:
+    parent = agent_state_factory(plan=Plan.model_validate({
         "steps": [{
             "id": "E1",
             "plan": "Create the document.",
@@ -163,27 +145,18 @@ def test_run_executor_returns_standardized_subagent_result_without_merging_state
             "args": {"task": "Create the document."},
         }],
     }))
-    delegated = AgentState.new(
-        task="",
-        agent_profile=AgentProfile(name="document_writing", scope=MAIN_AGENT_MODEL_SCOPE),
+    delegated = agent_state_factory(
+        profile=AgentProfile(name="document_writing", scope=MAIN_AGENT_MODEL_SCOPE),
         execution_context=parent.execution_context,
-        llm=object(),
     )
     parent.available_agent_states = {"document_writing": delegated}
 
-    completed = AgentState.new(
-        task="",
-        agent_profile=delegated.agent_profile,
+    completed = agent_state_factory(
+        profile=delegated.agent_profile,
         execution_context=parent.execution_context,
-        llm=object(),
     )
 
-    class Registry:
-        @staticmethod
-        def get(profile):
-            return lambda state: completed
-
-    monkeypatch.setattr("agents.registry.agent_registry", Registry())
+    monkeypatch.setattr("agents.registry.agent_registry.get", lambda profile: lambda state: completed)
 
     run_executor(parent)
 
@@ -193,9 +166,8 @@ def test_run_executor_returns_standardized_subagent_result_without_merging_state
     assert parent.direct_tool_results[0].tool_name == "document_writing"
 
 
-def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch) -> None:
-    register_default_tools()
-    parent = _state_for_plan(Plan.model_validate({
+def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch, agent_state_factory) -> None:
+    parent = agent_state_factory(plan=Plan.model_validate({
         "steps": [{
             "id": "E1",
             "plan": "Research the data.",
@@ -203,29 +175,20 @@ def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch) -> Non
             "args": {"task": "Research the data."},
         }],
     }))
-    delegated = AgentState.new(
-        task="",
-        agent_profile=AgentProfile(name="research", scope=MAIN_AGENT_MODEL_SCOPE),
+    delegated = agent_state_factory(
+        profile=AgentProfile(name="research", scope=MAIN_AGENT_MODEL_SCOPE),
         execution_context=parent.execution_context,
-        llm=object(),
     )
     parent.available_agent_states = {"research": delegated}
 
-    completed = AgentState.new(
-        task="",
-        agent_profile=delegated.agent_profile,
+    completed = agent_state_factory(
+        profile=delegated.agent_profile,
         execution_context=parent.execution_context,
-        llm=object(),
     )
     completed.node_states.evaluator.evaluation_status = "RETRYABLE"
     completed.node_states.evaluator.missing_information = ["The annual wage series."]
 
-    class Registry:
-        @staticmethod
-        def get(profile):
-            return lambda state: completed
-
-    monkeypatch.setattr("agents.registry.agent_registry", Registry())
+    monkeypatch.setattr("agents.registry.agent_registry.get", lambda profile: lambda state: completed)
 
     run_executor(parent)
 
@@ -237,18 +200,13 @@ def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch) -> Non
     assert parent.direct_tool_results[0].result["status"] == "pending"
 
 
-def test_executor_runs_tools_and_agents_in_one_parallel_batch(monkeypatch) -> None:
-    from langchain_core.tools import StructuredTool
-    from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY
-    from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
-
-    register_default_tools()
+def test_executor_runs_tools_and_agents_in_one_parallel_batch(monkeypatch, agent_state_factory) -> None:
     plan = Plan.model_validate({"steps": [
         {"id": "E1", "plan": "Run a function", "tool": "batch_function", "args": {}},
         {"id": "E2", "plan": "Run an agent", "tool": "document_writing", "args": {"task": "Create a document."}},
     ]})
-    parent = _state_for_plan(plan)
-    child = AgentState.new(agent_profile=DOCUMENT_WRITING_PROFILE, llm=object())
+    parent = agent_state_factory(plan=plan)
+    child = agent_state_factory(profile=DOCUMENT_WRITING_PROFILE)
     parent.available_agent_states = {"document_writing": child}
     barrier = threading.Barrier(2)
 
@@ -274,12 +232,12 @@ def test_executor_runs_tools_and_agents_in_one_parallel_batch(monkeypatch) -> No
     assert len(parent.reasoner_message_history) == 4
 
 
-def test_executor_preserves_failures_and_duplicate_results(monkeypatch) -> None:
+def test_executor_preserves_failures_and_duplicate_results(monkeypatch, agent_state_factory) -> None:
     plan = Plan.model_validate({"steps": [
         {"id": f"E{i}", "plan": "Run a tool", "tool": "broken", "args": {}}
         for i in range(1, 4)
     ]})
-    state = _state_for_plan(plan)
+    state = agent_state_factory(plan=plan)
     state.available_agent_states = {}
     calls = []
 
@@ -297,46 +255,27 @@ def test_executor_preserves_failures_and_duplicate_results(monkeypatch) -> None:
     assert "Provider unavailable" in state.reasoner_message_history[1].content
 
 
-def test_executor_persists_agent_result_with_original_step_and_evidence(monkeypatch) -> None:
-    from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
-    from retrieval.evidence import EvidenceView
-
-    register_default_tools()
+def test_executor_persists_agent_result_with_original_step_and_evidence(monkeypatch, agent_state_factory, recording_tool_repository) -> None:
     plan = Plan.model_validate({"steps": [{
         "id": "E1", "plan": "Write a document", "tool": "document_writing",
         "args": {"task": "Write a document"},
     }]})
-    parent = _state_for_plan(plan)
+    parent = agent_state_factory(plan=plan)
     parent.execution_context.roundtrip_id = uuid4()
     parent.agent_profile.name = "request_orchestrator"
-    child = AgentState.new(agent_profile=DOCUMENT_WRITING_PROFILE, llm=object())
+    child = agent_state_factory(profile=DOCUMENT_WRITING_PROFILE)
     parent.available_agent_states = {"document_writing": child}
     evidence = EvidenceView(id=str(uuid4()), type="file", source="test", summary="Document saved")
-    recorded = []
-    call_id = uuid4()
-
-    class Repository:
-        def count_request_hash(self, *args):
-            return 0
-
-        def append_tool_call(self, roundtrip_id, current_plan, step, **kwargs):
-            recorded.append((step, kwargs))
-            return call_id
-
-        def get_tool_results(self, ids):
-            return [recorded[0][1]["output_payload"]]
 
     def run_child(state):
         state.direct_tool_results.append(ToolResult(result={"saved": True}, evidence=[evidence]))
         return state
 
-    repo = Repository()
     monkeypatch.setattr("agents.registry.agent_registry.get", lambda profile: run_child)
-    monkeypatch.setattr("agent_runtime.execution.tool_executor.MessageToolRepository", lambda: repo)
-    monkeypatch.setattr("agent_runtime.models.agent_state.message_repository.MessageToolRepository", lambda: repo)
     run_executor(parent)
 
-    step, payload = recorded[0]
+    call_id, payload = next(iter(recording_tool_repository.records.items()))
+    step = payload["step"]
     assert step is plan.steps[0]
     assert payload["output_payload"].plan_step_id == step.db_id
     assert payload["evidence"] == [evidence]
@@ -347,37 +286,47 @@ def test_executor_persists_agent_result_with_original_step_and_evidence(monkeypa
     assert "Document saved" in parent.reasoner_message_history[1].content
 
 
-def test_executor_persists_failure_status_and_direct_return_does_not_report_success(monkeypatch) -> None:
-    from agent_runtime.strategies.single_pass.graph import DirectReturnStrategy
-
+def test_executor_persists_failure_status_and_direct_return_does_not_report_success(monkeypatch, agent_state_factory, recording_tool_repository) -> None:
     plan = Plan.model_validate({"steps": [{
         "id": "E1", "plan": "Run tool", "tool": "broken", "args": {},
     }]})
-    state = _state_for_plan(plan)
+    state = agent_state_factory(plan=plan)
     state.execution_context.roundtrip_id = uuid4()
-    recorded = []
-
-    class Repository:
-        def count_request_hash(self, *args):
-            return 0
-
-        def append_tool_call(self, *args, **kwargs):
-            recorded.append(kwargs)
-            return uuid4()
-
-        def get_tool_results(self, ids):
-            return [entry["output_payload"] for entry in recorded]
 
     def broken(**kwargs):
         raise RuntimeError("Provider unavailable")
 
-    repo = Repository()
     monkeypatch.setattr("agent_runtime.execution.tool_executor.call_tool", broken)
-    monkeypatch.setattr("agent_runtime.execution.tool_executor.MessageToolRepository", lambda: repo)
-    monkeypatch.setattr("agent_runtime.models.agent_state.message_repository.MessageToolRepository", lambda: repo)
     run_executor(state)
     DirectReturnStrategy._route_after_execute(state)
 
-    assert recorded[0]["status"] == "error"
-    assert "Provider unavailable" in recorded[0]["error_message"]
+    payload = next(iter(recording_tool_repository.records.values()))
+    assert payload["status"] == "error"
+    assert "Provider unavailable" in payload["error_message"]
     assert state.result.execution_status.value == "failed"
+
+
+@pytest.mark.parametrize("answer_status, execution_status, expected", [
+    (AnswerStatus.SUCCESS, ExecutionStatus.SUCCESS, "completed the delegated task"),
+    (AnswerStatus.PARTIAL_SUCCESS, ExecutionStatus.SUCCESS, "partially completed the delegated task"),
+    (AnswerStatus.SUCCESS, ExecutionStatus.PARTIAL, "partially completed the delegated task"),
+    (AnswerStatus.FAILED, ExecutionStatus.NO_NEW_WORK, "stopped because no new work was available"),
+    (AnswerStatus.FAILED, ExecutionStatus.FAILED, "failed to complete the delegated task"),
+    (AnswerStatus.PENDING, ExecutionStatus.PENDING, "has not completed the delegated task"),
+])
+def test_delegated_summary_reflects_status(agent_state_factory, answer_status, execution_status, expected):
+    child = agent_state_factory(profile=AgentProfile(
+        name="child", scope="main_agent", execution_strategy=AgentExecutionStrategy.REACT,
+    ))
+    child.result = child.result.copy(answer_status=answer_status, execution_status=execution_status)
+    evidence = EvidenceView(id="ev-1", type="test", source="test", summary="Supporting finding")
+    child.direct_tool_results = [ToolResult(evidence=[evidence, evidence])]
+
+    result = _agent_completion_result(agent_name="child", state=child, task="Do the task")
+
+    assert result.result["summary"] == f"child {expected}. Supporting finding"
+    assert result.result["status"] == (
+        execution_status.value if execution_status not in {ExecutionStatus.PENDING, ExecutionStatus.SUCCESS}
+        else answer_status.value
+    )
+    assert result.evidence == [evidence]

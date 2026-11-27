@@ -1,6 +1,3 @@
-from types import SimpleNamespace
-from uuid import uuid4
-
 import pytest
 
 from agents.discovery import load_agents as load_agents_module
@@ -12,14 +9,13 @@ from agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
 from agent_runtime.models.main_state import MainState
 from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentKind, AgentProfile
-from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.plan import Plan
 from agent_runtime.execution.tool_executor import run_executor
 from agent_runtime.planning.tool_call_parser import parse_tool_calls_to_plan_steps
 from agent_runtime.planning.tool_wrapper import build_tools
 from agent_runtime.strategies.react.decision import build_decision_prompt
-from agents.models.agent import Agent, AgentModelConfig, AgentType
+from agents.models.agent import AgentModelConfig, AgentType
 from agents.registry import agent_registry
 from capabilities.discovery.models import AvailableAgent, CapabilityDiscoveryResult
 from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY, REGISTERED_AGENTS
@@ -59,10 +55,10 @@ def test_load_agents_adds_system_agents_before_user_agent_discovery(monkeypatch)
 
 
 @pytest.mark.parametrize("strategy", list(AgentExecutionStrategy))
-def test_db_agents_are_exposed_and_executed_for_their_owner(monkeypatch, strategy) -> None:
+def test_db_agents_are_exposed_and_executed_for_their_owner(monkeypatch, strategy, db_agent_factory, agent_state_factory) -> None:
     rows = {
-        owner: Agent(
-            id=uuid4(), agent_type=AgentType.USER, user_id=owner, name="db_helper",
+        owner: db_agent_factory(
+            agent_type=AgentType.USER, user_id=owner, name="db_helper",
             description=f"{owner}'s helper loaded from the database",
             execution_strategy=strategy, planner_instruction=f"Follow {owner}'s instructions.",
             allowed_categories=["math"], max_turns=4,
@@ -94,9 +90,9 @@ def test_db_agents_are_exposed_and_executed_for_their_owner(monkeypatch, strateg
         assert child.agent_profile.max_turns == 4
         assert child.agent_profile.allowed_categories == {"math"}
         assert child.agent_profile.stage_model_selections["planner"].model == "gpt-4o-mini"
-        parent = AgentState.new(
-            agent_profile=AgentProfile(name="coordinator", scope="main_agent"),
-            execution_context=context, llm=object(),
+        parent = agent_state_factory(
+            profile=AgentProfile(name="coordinator", scope="main_agent"),
+            execution_context=context,
         )
         parent.available_agent_states = main.agent_states
         parent.inputs.discovered_capabilities = CapabilityDiscoveryResult(agents=[AvailableAgent(agent="db_helper")])

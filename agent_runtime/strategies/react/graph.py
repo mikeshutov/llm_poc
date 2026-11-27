@@ -11,7 +11,7 @@ from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.execution.tool_executor import run_executor
 from agent_runtime.models.decision import DecisionStatus
-from agent_runtime.strategies.react.decision import run_decision
+from agent_runtime.strategies.react.decision import record_decision_status, run_decision
 from agent_runtime.strategies.react.subagent_prompt import build_subagent_decision_prompt
 from common.logging import record_node_log
 
@@ -40,19 +40,6 @@ def _plan_was_entirely_duplicate_rejected(state: AgentState) -> bool:
 
 @dataclass(frozen=True)
 class ReactStrategy:
-    @staticmethod
-    def _record_decision_status(state: AgentState, status: DecisionStatus) -> None:
-        state.node_states.planner.decision_status = status
-        if state.node_states.planner.plan and state.node_states.planner.plan.steps:
-            return
-        if status == DecisionStatus.SATISFIED:
-            state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
-        elif status == DecisionStatus.BLOCKED:
-            state.result = state.result.copy(
-                answer_status=AnswerStatus.FAILED,
-                execution_status=ExecutionStatus.FAILED,
-            )
-
     def _decide(self, state: AgentState, *, callsite: str) -> AgentState:
         if state.node_states.planner.plan_count >= state.max_turns:
             return state
@@ -85,7 +72,7 @@ class ReactStrategy:
             return state
         state.node_states.planner.plan = result.plan
         state.node_states.planner.plan_count += 1
-        self._record_decision_status(state, result.status)
+        record_decision_status(state, result.status)
         return state
 
     def _reason(self, state: AgentState) -> AgentState:
