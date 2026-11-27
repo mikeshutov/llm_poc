@@ -13,8 +13,6 @@ from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agent_runtime.models.synthesized_result import SynthesisResult, SynthesisResultBlock
 from agent_runtime.context import bind_agent_context
 from agents.main.agent import MainReasonerStrategy
-from agents.profile_management.profile import build_profile_management_profile
-from agents.delegate.profile import DELEGATE_PROFILE
 from capabilities.adapters.math import calculate
 from capabilities.adapters.profile import (
     USER_MANAGEMENT_TOOL,
@@ -101,7 +99,6 @@ def initialize_request_agent_state(main_state: MainState) -> AgentState:
 
 
 def run_main_request_strategy(main_state: MainState) -> MainState:
-    _ensure_static_agents(main_state)
     execution_state = initialize_request_agent_state(main_state)
     execution_state.inputs.discovered_capabilities = main_state.discovered_capabilities
     execution_state.inputs.discovered_attribute_types = list(main_state.discovered_attribute_types)
@@ -152,14 +149,3 @@ def _is_uuid(value: str) -> bool:
         return True
     except (ValueError, AttributeError, TypeError):
         return False
-
-
-def _ensure_static_agents(main_state: MainState) -> None:
-    existing_names = set(main_state.agent_states)
-    if AgentName.PROFILE_MANAGEMENT not in existing_names:
-        main_state.agent_profiles.append(
-            build_profile_management_profile(main_state.execution_context.user_profile)
-        )
-    if AgentName.DELEGATE not in existing_names:
-        main_state.agent_profiles.append(DELEGATE_PROFILE)
-    main_state.initialize_agent_states()

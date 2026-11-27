@@ -18,6 +18,34 @@ from retrieval.evidence import ToolResult
 from retrieval.evidence import EvidenceUrl
 from agents.main.request import _normalize_generated_file_links
 from agents.main.request import TOP_LEVEL_PROFILE
+from agents.main.request import run_main_request_strategy
+from agents.delegate.profile import DELEGATE_PROFILE
+
+
+def test_request_strategy_preserves_initialized_agents(
+    main_state_factory, agent_profile_factory, monkeypatch,
+):
+    profiles = [
+        build_profile_management_profile(),
+        DELEGATE_PROFILE,
+        agent_profile_factory(name="discovered_helper"),
+    ]
+    state = main_state_factory(task="Answer the request", agent_profiles=profiles)
+    agents = dict(state.agent_states)
+    agents["discovered_helper"].inputs.task = "Existing delegated task"
+
+    def run(self, active, *, thread_id):
+        assert active.available_agent_states == agents
+        return active
+
+    monkeypatch.setattr(MainReasonerStrategy, "run", run)
+
+    run_main_request_strategy(state)
+
+    assert state.agent_profiles == profiles
+    assert state.agent_states == agents
+    assert all(state.agent_states[name] is agent for name, agent in agents.items())
+    assert agents["discovered_helper"].inputs.task == "Existing delegated task"
 
 
 def test_normalize_generated_file_links_uses_file_evidence_url(evidence_factory) -> None:
