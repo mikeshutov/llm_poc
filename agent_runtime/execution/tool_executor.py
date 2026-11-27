@@ -17,12 +17,6 @@ from agent_runtime.constants import NodeName
 from agent_runtime.models.agent_inputs import AgentInputs
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentName
-from agent_runtime.models.evaluation_result import (
-    EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT,
-    EVALUATION_STATUS_RETRYABLE,
-    EVALUATION_STATUS_SATISFIED,
-    EVALUATION_STATUS_TERMINAL,
-)
 from retrieval.evidence import ToolOutcome, ToolOutcomeStatus, ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.models.plan import PlanStep
@@ -338,6 +332,7 @@ def _agent_completion_result(
     agent_name: str,
     state: AgentState,
     task: str,
+    error: str | None = None,
 ) -> ToolResult:
     """Translate internal subagent state into the parent capability contract."""
     child_results = state.gather_tool_results()
@@ -363,21 +358,23 @@ def _agent_completion_result(
         "pending": "has not completed the delegated task",
     }[status]
     summary = " ".join([f"{agent_name} {status_text}.", *dict.fromkeys(summaries)])
-    outcome = None
-    if state.agent_profile.execution_strategy == AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR:
-        evaluation_status = state.node_states.evaluator.evaluation_status
-        outcome_status = {
-            EVALUATION_STATUS_SATISFIED: ToolOutcomeStatus.COMPLETED,
-            EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT: ToolOutcomeStatus.PARTIAL,
-            EVALUATION_STATUS_RETRYABLE: ToolOutcomeStatus.NEEDS_INPUT,
-            EVALUATION_STATUS_TERMINAL: ToolOutcomeStatus.FAILED,
-        }[evaluation_status]
-        missing_inputs = list(state.node_states.evaluator.missing_information)
-        outcome = ToolOutcome(
-            status=outcome_status,
-            reason=("; ".join(missing_inputs) if missing_inputs else None),
-            missing_inputs=missing_inputs,
-        )
+    outcome_status = {
+        "success": ToolOutcomeStatus.COMPLETED,
+        "partial_success": ToolOutcomeStatus.PARTIAL,
+        "partial": ToolOutcomeStatus.PARTIAL,
+        "no_new_work": ToolOutcomeStatus.FAILED,
+        "failed": ToolOutcomeStatus.FAILED,
+        "pending": ToolOutcomeStatus.NEEDS_INPUT,
+    }[status]
+    missing_inputs = (
+        list(state.node_states.evaluator.missing_information)
+        if outcome_status != ToolOutcomeStatus.COMPLETED else []
+    )
+    outcome = ToolOutcome(
+        status=outcome_status,
+        reason=error or ("; ".join(missing_inputs) if missing_inputs else None),
+        missing_inputs=missing_inputs,
+    )
     return ToolResult(
         tool_name=agent_name,
         result={

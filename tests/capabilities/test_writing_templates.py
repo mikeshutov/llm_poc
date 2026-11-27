@@ -192,7 +192,7 @@ def test_research_paper_template_contains_required_baseline_sections() -> None:
     assert "## 5. Limitations" in body
     assert "## 6. Conclusion" in body
     assert "## References" in body
-    assert "150â€“250-word" in body
+    assert "150–250-word" in body
 
 
 def test_essay_template_contains_required_baseline_sections() -> None:
