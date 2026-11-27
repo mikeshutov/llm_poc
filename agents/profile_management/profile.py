@@ -22,7 +22,7 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
     return AgentProfile(
         name=AgentName.PROFILE_MANAGEMENT,
         scope=PROFILE_AGENT_MODEL_SCOPE,
-        version=3,
+        version=6,
         description=(
             "Maintain durable user profile fields and attributes. Use this whenever "
             "the user states or hints at preferences, avoidances, interests, or other durable "
@@ -34,7 +34,7 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
         execution_strategy=AgentExecutionStrategy.DIRECT_RETURN,
         delegatable=False,
         can_delegate_agents=False,
-        max_turns=5,
+        max_turns=10,
         planner_instruction=(
             'Maintain durable user profile fields and durable user attributes. '
             'Do not answer the user. '

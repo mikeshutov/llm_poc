@@ -16,13 +16,8 @@ from common.logging import compact_trace_inputs, compact_trace_outputs, record_n
 from agent_runtime.constants import NodeName
 from agent_runtime.models.agent_inputs import AgentInputs
 from agent_runtime.models.agent_state import AgentState
+from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentName
-from agent_runtime.models.evaluation_result import (
-    EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT,
-    EVALUATION_STATUS_RETRYABLE,
-    EVALUATION_STATUS_SATISFIED,
-    EVALUATION_STATUS_TERMINAL,
-)
 from retrieval.evidence import ToolOutcome, ToolOutcomeStatus, ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.models.plan import PlanStep
@@ -338,6 +333,7 @@ def _agent_completion_result(
     agent_name: str,
     state: AgentState,
     task: str,
+    error: str | None = None,
 ) -> ToolResult:
     """Translate internal subagent state into the parent capability contract."""
     child_results = state.gather_tool_results()
@@ -350,41 +346,43 @@ def _agent_completion_result(
             seen_evidence_ids.add(item.id)
             evidence.append(item)
 
-    status = state.result.answer_status.value
-    if state.result.execution_status.value not in {"pending", "success"}:
-        status = state.result.execution_status.value
+    status = state.result.answer_status
+    if state.result.execution_status not in {ExecutionStatus.PENDING, ExecutionStatus.SUCCESS}:
+        status = state.result.execution_status
     summaries = [item.summary.strip() for item in evidence if item.summary and item.summary.strip()]
     status_text = {
-        "success": "completed the delegated task",
-        "partial_success": "partially completed the delegated task",
-        "partial": "partially completed the delegated task",
-        "no_new_work": "stopped because no new work was available",
-        "failed": "failed to complete the delegated task",
-        "pending": "has not completed the delegated task",
+        AnswerStatus.SUCCESS: "completed the delegated task",
+        AnswerStatus.PARTIAL_SUCCESS: "partially completed the delegated task",
+        ExecutionStatus.PARTIAL: "partially completed the delegated task",
+        ExecutionStatus.NO_NEW_WORK: "stopped because no new work was available",
+        AnswerStatus.FAILED: "failed to complete the delegated task",
+        AnswerStatus.PENDING: "has not completed the delegated task",
     }[status]
     summary = " ".join([f"{agent_name} {status_text}.", *dict.fromkeys(summaries)])
-    outcome = None
-    if state.agent_profile.execution_strategy == AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR:
-        evaluation_status = state.node_states.evaluator.evaluation_status
-        outcome_status = {
-            EVALUATION_STATUS_SATISFIED: ToolOutcomeStatus.COMPLETED,
-            EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT: ToolOutcomeStatus.PARTIAL,
-            EVALUATION_STATUS_RETRYABLE: ToolOutcomeStatus.NEEDS_INPUT,
-            EVALUATION_STATUS_TERMINAL: ToolOutcomeStatus.FAILED,
-        }[evaluation_status]
-        missing_inputs = list(state.node_states.evaluator.missing_information)
-        outcome = ToolOutcome(
-            status=outcome_status,
-            reason=("; ".join(missing_inputs) if missing_inputs else None),
-            missing_inputs=missing_inputs,
-        )
+    outcome_status = {
+        AnswerStatus.SUCCESS: ToolOutcomeStatus.COMPLETED,
+        AnswerStatus.PARTIAL_SUCCESS: ToolOutcomeStatus.PARTIAL,
+        ExecutionStatus.PARTIAL: ToolOutcomeStatus.PARTIAL,
+        ExecutionStatus.NO_NEW_WORK: ToolOutcomeStatus.FAILED,
+        AnswerStatus.FAILED: ToolOutcomeStatus.FAILED,
+        AnswerStatus.PENDING: ToolOutcomeStatus.NEEDS_INPUT,
+    }[status]
+    missing_inputs = (
+        list(state.node_states.evaluator.missing_information)
+        if outcome_status != ToolOutcomeStatus.COMPLETED else []
+    )
+    outcome = ToolOutcome(
+        status=outcome_status,
+        reason=error or ("; ".join(missing_inputs) if missing_inputs else None),
+        missing_inputs=missing_inputs,
+    )
     return ToolResult(
         tool_name=agent_name,
         result={
             "agent": agent_name,
             "task": task,
             "evidence_ids": state.inputs.evidence_ids,
-            "status": status,
+            "status": status.value,
             "summary": summary,
             "output_evidence_ids": [item.id for item in evidence],
         },

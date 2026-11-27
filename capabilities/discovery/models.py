@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from capabilities.registry.constants import (
-    TOOL_CATEGORY_AGENTS,
-)
-
 from pydantic import BaseModel, Field
+from capabilities.registry.constants import TOOL_CATEGORY_AGENTS
 
 
 class AvailableAgent(BaseModel):
