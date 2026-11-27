@@ -56,6 +56,8 @@ class MainState:
         return state
 
     def initialize_agent_states(self) -> None:
+        from capabilities.registry.global_registry import register_agent_tools
+
         for agent_profile in self.agent_profiles:
             if agent_profile.name not in self.agent_states:
                 self.agent_states[agent_profile.name] = AgentState.new(
@@ -67,6 +69,7 @@ class MainState:
 
         for agent_state in self.agent_states.values():
             agent_state.inputs = AgentInputs.new(task="", request_task=self.task)
+        register_agent_tools(self.agent_profiles, user_id=self.execution_context.user_profile.user_id)
 
     def gather_relevant_evidence_ids(self) -> list[UUID]:
         relevant_evidence_ids: list[UUID] = []

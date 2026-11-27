@@ -10,6 +10,7 @@ _current_conversation_id: ContextVar[str | None] = ContextVar("current_conversat
 _current_roundtrip_id: ContextVar[str | None] = ContextVar("current_roundtrip_id", default=None)
 _current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
 _current_agent_name: ContextVar[str | None] = ContextVar("current_agent_name", default=None)
+_current_agent_state: ContextVar[object | None] = ContextVar("current_agent_state", default=None)
 _current_conversation_model_config: ContextVar[ConversationModelConfig | None] = ContextVar("current_conversation_model_config", default=None)
 
 
@@ -29,16 +30,22 @@ def get_current_agent_name() -> str | None:
     return _current_agent_name.get()
 
 
+def get_current_agent_state():
+    return _current_agent_state.get()
+
+
 def get_current_conversation_model_config() -> ConversationModelConfig | None:
     return _current_conversation_model_config.get()
 
 
 @contextmanager
-def bind_agent_context(*, agent_name: str | None) -> Iterator[None]:
+def bind_agent_context(*, agent_name: str | None, agent_state=None) -> Iterator[None]:
     agent_token: Token[str | None] = _current_agent_name.set(agent_name)
+    state_token = _current_agent_state.set(agent_state)
     try:
         yield
     finally:
+        _current_agent_state.reset(state_token)
         _current_agent_name.reset(agent_token)
 
 

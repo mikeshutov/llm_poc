@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from threading import Lock
+from threading import Lock, RLock
 from time import monotonic, sleep
 from typing import Any
+
+from langchain_core.tools import StructuredTool
 
 from common.http import HttpClientError
 from common.logging import record_node_log
@@ -18,7 +20,12 @@ from capabilities.adapters.profile import (
 )
 from capabilities.adapters.user_attributes import upsert_user_attribute
 from common.cache.repository import InvalidCachePayloadError, ToolCacheRepository
-from agent_runtime.context import get_current_user_id
+from agent_runtime.context import get_current_agent_state, get_current_user_id
+from agent_runtime.models.agent_profile import AgentKind, AgentProfile
+from agents.coding.profile import CODING_PROFILE
+from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
+from agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
+from agents.research.profile import RESEARCH_PROFILE
 from requests.exceptions import Timeout
 
 
@@ -32,6 +39,27 @@ class UnknownToolError(ToolRegistryError):
 
 class DisallowedToolError(ToolRegistryError):
     pass
+
+
+def build_agent_tool(profile):
+    """Build the registry tool whose implementation runs one agent."""
+    def invoke_agent(**kwargs):
+        agent_state = get_current_agent_state()
+        if agent_state is None:
+            raise ToolRegistryError(
+                f"Agent tool '{profile.name}' requires an active agent execution state."
+            )
+        from agent_runtime.execution.tool_executor import execute_agent_tool
+
+        return execute_agent_tool(agent_state, profile.name, kwargs)
+
+    return StructuredTool.from_function(
+        func=invoke_agent,
+        name=profile.name,
+        description=profile.description,
+        args_schema=profile.delegation_args_schema,
+        metadata={"agent_name": profile.name},
+    )
 
 
 def _record_tool_registry_log(message: str, payload: dict[str, Any], *, level: str = "info", stage: str = "") -> None:
@@ -53,22 +81,29 @@ class _RateLimitState:
 
 class ToolRegistry:
     def __init__(self, *, cache_repository=None, enable_cache: bool = False) -> None:
-        self._tools: dict[str, Any] = {}
+        self._tools: dict[tuple[str | None, str], Any] = {}
         self._rate_limit_states: dict[str, _RateLimitState] = defaultdict(_RateLimitState)
         self._cache_repository = cache_repository
         self._enable_cache = enable_cache
 
-    def register(self, tool: Any) -> None:
+    def register(self, tool: Any, *, user_id: str | None = None, replace: bool = False) -> None:
         name = getattr(tool, "name", None)
         invoke = getattr(tool, "invoke", None)
         if not isinstance(name, str) or not name:
             raise ToolRegistryError("Tool must define a non-empty string name.")
         if not callable(invoke):
             raise ToolRegistryError(f"Tool '{name}' must expose an invoke method.")
-        self._tools[name] = tool
+        key = (user_id, name)
+        existing = self._tools.get(key)
+        if user_id is not None and (None, name) in self._tools:
+            raise ToolRegistryError(f"Tool name '{name}' is reserved by a built-in capability.")
+        if existing is not None and existing is not tool and not replace:
+            raise ToolRegistryError(f"Tool '{name}' is already registered.")
+        self._tools[key] = tool
 
-    def get(self, name: str) -> Any:
-        tool = self._tools.get(name)
+    def get(self, name: str, *, user_id: str | None = None) -> Any:
+        owner = user_id if user_id is not None else get_current_user_id()
+        tool = self._tools.get((owner, name)) or self._tools.get((None, name))
         if tool is None:
             raise UnknownToolError(f"Unknown tool '{name}'.")
         return tool
@@ -207,7 +242,14 @@ class ToolRegistry:
 
 
 GLOBAL_TOOL_REGISTRY = ToolRegistry(enable_cache=True)
+REGISTERED_AGENTS: list[AgentProfile] = [
+    PROFILE_MANAGEMENT_PROFILE,
+    DOCUMENT_WRITING_PROFILE,
+    RESEARCH_PROFILE,
+    CODING_PROFILE,
+]
 _REGISTERED_DEFAULTS = False
+_REGISTRATION_LOCK = RLock()
 PROFILE_RUNTIME_TOOLS = (
     update_user_names,
     update_user_tone,
@@ -219,24 +261,56 @@ AGENT_ONLY_TOOL_NAMES = {tool.name for tool in AGENT_ONLY_TOOLS}
 
 def register_default_tools() -> None:
     global _REGISTERED_DEFAULTS
-    if _REGISTERED_DEFAULTS:
-        return
-    for tool in tools:
-        GLOBAL_TOOL_REGISTRY.register(tool)
-    # Runtime-only orchestration capability. It is intentionally not part of
-    # ``capabilities.registry.tools`` and therefore is never persisted by the tool seeder.
-    GLOBAL_TOOL_REGISTRY.register(CAPABILITY_DISCOVERY_TOOL)
-    GLOBAL_TOOL_REGISTRY.register(USER_MANAGEMENT_TOOL)
-    # Profile tools are runtime-only capabilities. They are available to the
-    # profile-management agent through its static tool list, but are not
-    # persisted or returned by dynamic capability discovery.
-    for tool in PROFILE_RUNTIME_TOOLS:
-        GLOBAL_TOOL_REGISTRY.register(tool)
-    # Workspace tools are executable only when an agent profile explicitly
-    # grants them. They remain absent from the persisted/global discovery list.
-    for tool in AGENT_ONLY_TOOLS:
-        GLOBAL_TOOL_REGISTRY.register(tool)
-    _REGISTERED_DEFAULTS = True
+    with _REGISTRATION_LOCK:
+        if _REGISTERED_DEFAULTS:
+            return
+        defaults = {tool.name: tool for tool in tools}
+        defaults.update({
+            tool.name: tool
+            for tool in (CAPABILITY_DISCOVERY_TOOL, USER_MANAGEMENT_TOOL, *PROFILE_RUNTIME_TOOLS, *AGENT_ONLY_TOOLS)
+        })
+        for tool in defaults.values():
+            GLOBAL_TOOL_REGISTRY.register(tool)
+        for profile in REGISTERED_AGENTS:
+            GLOBAL_TOOL_REGISTRY.register(build_agent_tool(profile))
+        _REGISTERED_DEFAULTS = True
+
+
+def register_agent_tools(profiles, *, user_id: str | None = None) -> None:
+    with _REGISTRATION_LOCK:
+        register_default_tools()
+        for profile in profiles:
+            owner = user_id if profile.kind == AgentKind.USER_AGENT else None
+            if profile.kind == AgentKind.USER_AGENT and not owner:
+                raise ToolRegistryError(f"User agent '{profile.name}' requires a user ID.")
+            key = (owner, profile.name)
+            existing = GLOBAL_TOOL_REGISTRY._tools.get(key)
+            if existing is not None:
+                metadata = getattr(existing, "metadata", None) or {}
+                if metadata.get("agent_name") != profile.name:
+                    raise ToolRegistryError(f"Tool '{profile.name}' is already registered as a function.")
+                if owner is None or (
+                    existing.description == profile.description
+                    and existing.args_schema is profile.delegation_args_schema
+                ):
+                    continue
+            GLOBAL_TOOL_REGISTRY.register(build_agent_tool(profile), user_id=owner, replace=existing is not None)
+
+
+def available_agent_tools(state) -> list:
+    """Select registered agent tools available to this caller."""
+    if not state.agent_profile.can_delegate_agents:
+        return []
+    capabilities = state.inputs.discovered_capabilities
+    discovered = None if capabilities is None else {agent.agent for agent in capabilities.agents}
+    defaults = state.agent_profile.default_available_agent_names
+    return [
+        GLOBAL_TOOL_REGISTRY.get(name, user_id=state.execution_context.user_profile.user_id)
+        for name, target in (state.available_agent_states or {}).items()
+        if name != state.agent_profile.name
+        and target.agent_profile.delegatable
+        and (discovered is None or name in discovered or name in defaults)
+    ]
 
 
 def call_tool(name: str, tool_input: Any = None, allowed_tool_names: set[str] | None = None) -> Any:
@@ -249,8 +323,12 @@ def call_tool(name: str, tool_input: Any = None, allowed_tool_names: set[str] | 
 __all__ = [
     "DisallowedToolError",
     "GLOBAL_TOOL_REGISTRY",
+    "REGISTERED_AGENTS",
     "ToolRegistryError",
     "UnknownToolError",
     "register_default_tools",
+    "register_agent_tools",
+    "build_agent_tool",
+    "available_agent_tools",
     "call_tool",
 ]

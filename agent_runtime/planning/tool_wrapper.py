@@ -73,8 +73,6 @@ def build_tools(
     include_evaluation_wrapper: bool = True,
 ) -> list[BaseTool]:
     return [
-        candidate
-        if (getattr(candidate, "metadata", None) or {}).get("agent_delegation")
-        else wrap_tool(candidate) if include_evaluation_wrapper else adapt_tool(candidate)
+        wrap_tool(candidate) if include_evaluation_wrapper else adapt_tool(candidate)
         for candidate in tools
     ]

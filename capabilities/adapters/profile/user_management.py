@@ -1,82 +1,25 @@
 from __future__ import annotations
 
-from contextvars import ContextVar
-from typing import TYPE_CHECKING
-
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
-from agent_runtime.models.agent_result import ExecutionStatus
-from capabilities.adapters.profile.result_models import UserManagementResult
-
-if TYPE_CHECKING:
-    from agent_runtime.models.agent_state import AgentState
-    from agent_runtime.models.main_state import MainState
+from agent_runtime.context import get_current_agent_state
+from retrieval.evidence import ToolResult
 
 
 class UserManagementArgs(BaseModel):
     task: str = Field(..., min_length=1, description="Describe the profile-management task to perform.")
 
 
-_CURRENT_MAIN_STATE: ContextVar[Any] = ContextVar("user_management_main_state", default=None)
-_CURRENT_AGENT_STATE: ContextVar[Any] = ContextVar("user_management_agent_state", default=None)
-
-
-def bind_user_management_state(state: MainState):
-    return _CURRENT_MAIN_STATE.set(state)
-
-
-def reset_user_management_state(token) -> None:
-    _CURRENT_MAIN_STATE.reset(token)
-
-
-def bind_user_management_agent_state(state: AgentState):
-    return _CURRENT_AGENT_STATE.set(state)
-
-
-def reset_user_management_agent_state(token) -> None:
-    _CURRENT_AGENT_STATE.reset(token)
-
-
-def _run_user_management(task: str) -> UserManagementResult:
+def _run_user_management(task: str) -> ToolResult:
+    from agent_runtime.execution.tool_executor import execute_agent_tool
     from agent_runtime.models.agent_profile import AgentName
-    from agent_runtime.models.agent_inputs import AgentInputs
 
-    main_state = _CURRENT_MAIN_STATE.get()
-    current_agent_state = _CURRENT_AGENT_STATE.get()
-    if main_state is None:
-        return UserManagementResult(error="User management is unavailable outside an active request.")
-
-    delegated = main_state.agent_states.get(AgentName.PROFILE_MANAGEMENT)
-    if delegated is None and current_agent_state is not None and current_agent_state.available_agent_states:
-        delegated = current_agent_state.available_agent_states.get(AgentName.PROFILE_MANAGEMENT)
-    if delegated is None:
-        return UserManagementResult(error="The profile-management agent is unavailable for this request.")
-
-    delegated.inputs = AgentInputs.new(
-        task=task.strip(),
-        request_task=delegated.inputs.request_task,
-    )
-    try:
-        from agents.registry import agent_registry
-
-        runner = agent_registry.get(delegated.agent_profile)
-        completed = runner(delegated)
-    except Exception as exc:
-        return UserManagementResult(
-            agent=AgentName.PROFILE_MANAGEMENT,
-            status=ExecutionStatus.FAILED,
-            error=str(exc),
-        )
-
-    tool_results = completed.gather_tool_results()
-    return UserManagementResult(
-        agent=AgentName.PROFILE_MANAGEMENT,
-        status=completed.result.execution_status,
-        answer_status=completed.result.answer_status,
-        tool_names=completed.gather_used_tools(),
-        tool_call_ids=[str(value) for value in completed.result.tool_call_ids],
-        result_count=len(tool_results),
+    state = get_current_agent_state()
+    if state is None:
+        return ToolResult.error("User management is unavailable outside an active request.")
+    return execute_agent_tool(
+        state, AgentName.PROFILE_MANAGEMENT, {"task": task}, tool_name="user_management",
     )
 
 
@@ -88,5 +31,6 @@ USER_MANAGEMENT_TOOL = StructuredTool.from_function(
         "and user attributes. Describe the requested profile-management task."
     ),
     args_schema=UserManagementArgs,
+    metadata={"agent_name": "profile_management"},
 )
 

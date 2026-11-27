@@ -32,7 +32,8 @@ def build_profile_management_profile(user_profile: UserProfile | None = None) ->
         excluded_categories=set(TOOL_CATEGORIES),
         static_tools=static_tools,
         execution_strategy=AgentExecutionStrategy.DIRECT_RETURN,
-        delegatable=True,
+        delegatable=False,
+        can_delegate_agents=False,
         max_turns=5,
         planner_instruction=(
             'Maintain durable user profile fields and durable user attributes. '

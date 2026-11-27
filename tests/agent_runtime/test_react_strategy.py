@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from agent_runtime.models.agent_profile import (
     AgentExecutionStrategy,
+    AgentKind,
     AgentProfile,
 )
 from agents.registry import AgentRegistry
@@ -137,3 +140,44 @@ def test_direct_return_reasons_once(monkeypatch) -> None:
 
     assert calls == ["direct_return.reasoner"]
     assert result.node_states.planner.plan_count == 1
+
+
+@pytest.mark.parametrize("payload, expected", [
+    ({"ok": True}, "success"),
+    ({"error": "Provider failed"}, "failed"),
+    ({"status": "failed"}, "failed"),
+    ({"status": "duplicate"}, "failed"),
+])
+def test_direct_return_classifies_in_memory_results(payload, expected) -> None:
+    state = _state()
+    step = PlanStep(id="E1", tool="lookup", plan="Look up data")
+    state.node_states.planner.plan = Plan(steps=[step])
+    state.direct_tool_results = [ToolResult(plan_step_id=step.db_id, result=payload)]
+
+    DirectReturnStrategy._route_after_execute(state)
+
+    assert state.result.execution_status.value == expected
+
+
+@pytest.mark.parametrize("kind", ["builtin", "user_agent"])
+@pytest.mark.parametrize("conversation_id", [None, "conversation-123"])
+def test_agent_registry_runs_profile_strategy_with_conversation_thread(monkeypatch, kind, conversation_id) -> None:
+    profile = AgentProfile(
+        name="custom_agent", scope="main_agent", kind=AgentKind(kind),
+        execution_strategy=AgentExecutionStrategy.REACT,
+        planner_instruction="Use this exact instruction.",
+    )
+    state = AgentState.new(agent_profile=profile, llm=object())
+    state.execution_context.conversation_id = conversation_id
+    seen = []
+
+    def fake_run(self, current, *, thread_id):
+        seen.append((current, thread_id))
+        return current
+
+    monkeypatch.setattr(ReactStrategy, "run", fake_run)
+    result = AgentRegistry().get(profile)(state)
+
+    assert result is state
+    assert seen == [(state, conversation_id or "")]
+    assert state.agent_profile is profile

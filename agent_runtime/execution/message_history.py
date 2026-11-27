@@ -43,15 +43,10 @@ def append_execution_messages(state: AgentState) -> None:
     }
     use_native_tool_args = state.agent_profile.execution_strategy == AgentExecutionStrategy.REACT
     for step in plan.steps:
-        if not step.tool and not step.agent:
+        if not step.tool:
             continue
-        capability_name = step.tool or step.agent
-        if step.agent:
-            capability_args = {
-                "task": step.args.get("task", step.plan),
-                "evidence_ids": step.args.get("evidence_ids", []),
-            }
-        elif use_native_tool_args:
+        capability_name = step.tool
+        if use_native_tool_args:
             capability_args = step.args
         else:
             capability_args = {

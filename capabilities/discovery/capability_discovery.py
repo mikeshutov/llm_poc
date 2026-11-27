@@ -221,9 +221,9 @@ def _discover_agent_profiles(
     main_state: MainState,
     query_embedding: list[float] | None,
 ) -> list[Any]:
-    from agents.seeder import SYSTEM_AGENT_PROFILES
+    from capabilities.registry.global_registry import REGISTERED_AGENTS
 
-    profiles_by_name = {profile.name: profile for profile in SYSTEM_AGENT_PROFILES}
+    profiles_by_name = {profile.name: profile for profile in REGISTERED_AGENTS}
     profiles_by_name.update({profile.name: profile for profile in main_state.agent_profiles})
     try:
         repository = get_agent_repo()
