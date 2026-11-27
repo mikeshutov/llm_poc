@@ -18,7 +18,7 @@ search this directory for the topic or fixture name.
 | `tools.py` | `registered_tool_registry`, `tool_repository_factory`, `recording_tool_repository` |
 | `conversation.py` | `conversation_message_factory`, `conversation_roundtrip_factory`, `context_repository_factory`, `conversation_repository_factory`, `recording_conversation_repository_factory`, `request_conversation_repository_factory`, `conversation_model_config_repository_factory` |
 | `database.py` | `database_connection_factory` |
-| `llm.py` | `llm_factory`, `langchain_response_factory`, `openai_response_factory`, `openai_client_factory`, `tracking_openai_model_factory`, `tracking_anthropic_model_factory` |
+| `llm.py` | `llm_factory`, `langchain_response_factory`, `openai_response_factory`, `openai_client_factory`, `embedding_client_factory`, `tracking_openai_model_factory`, `tracking_anthropic_model_factory` |
 | `evidence.py` | `evidence_factory`, `evidence_step_factory` |
 | `evaluation.py` | `completion_client_factory` |
 | `retrieval.py` | `reranker_factory`, `static_reranker_factory` |

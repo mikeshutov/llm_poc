@@ -1,32 +1,30 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from capabilities.registry.constants import (
+    TOOL_CATEGORY_BOOKS,
+    TOOL_CATEGORY_CALENDAR,
+    TOOL_CATEGORY_FINANCE,
+    TOOL_CATEGORY_KNOWLEDGE,
+    TOOL_CATEGORY_LANGUAGE,
+    TOOL_CATEGORY_LOCATION,
+    TOOL_CATEGORY_MATH,
     TOOL_CATEGORY_PRODUCTS,
     TOOL_CATEGORY_WEATHER,
-    TOOL_CATEGORY_FINANCE,
-    TOOL_CATEGORY_WEB_SEARCH,
-    TOOL_CATEGORY_KNOWLEDGE,
-    TOOL_CATEGORY_CALENDAR,
-    TOOL_CATEGORY_LOCATION,
-    TOOL_CATEGORY_BOOKS,
-    TOOL_CATEGORY_LANGUAGE,
-    TOOL_CATEGORY_MATH,
-    TOOL_CATEGORY_WRITING,
     TOOL_CATEGORY_WORKSPACE,
-    TOOL_DISCOVERY_CATEGORY_INTERNAL_PRODUCTS,
-    TOOL_DISCOVERY_CATEGORY_WEB_SEARCH,
-    TOOL_DISCOVERY_CATEGORY_NEWS,
-    TOOL_DISCOVERY_CATEGORY_RECIPES,
+    TOOL_CATEGORY_WRITING,
+    TOOL_DISCOVERY_CATEGORY_ASSETS,
     TOOL_DISCOVERY_CATEGORY_CODE_EXECUTION,
+    TOOL_DISCOVERY_CATEGORY_FILE_MANAGEMENT,
+    TOOL_DISCOVERY_CATEGORY_INTERNAL_PRODUCTS,
     TOOL_DISCOVERY_CATEGORY_MAGIC,
     TOOL_DISCOVERY_CATEGORY_MEMORIES,
-    TOOL_DISCOVERY_CATEGORY_ASSETS,
+    TOOL_DISCOVERY_CATEGORY_NEWS,
+    TOOL_DISCOVERY_CATEGORY_RECIPES,
     TOOL_DISCOVERY_CATEGORY_UPLOADED_FILES,
-    TOOL_DISCOVERY_CATEGORY_FILE_MANAGEMENT,
     TOOL_DISCOVERY_CATEGORY_USER_PROFILE,
+    TOOL_DISCOVERY_CATEGORY_WEB_SEARCH,
 )
-
-from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -44,7 +42,7 @@ class ToolDiscoveryMetadata:
         return "\n".join(parts)
 
 
-_DISCOVERY_METADATA: dict[str, ToolDiscoveryMetadata] = {
+DISCOVERY_METADATA: dict[str, ToolDiscoveryMetadata] = {
     "products_search": ToolDiscoveryMetadata("Product search", TOOL_CATEGORY_PRODUCTS, "Search internal catalog products, external shopping results, or both using an explicit source.", ("catalog", "inventory", "web shopping", "price")),
     "products_list_categories": ToolDiscoveryMetadata("Internal product category lookup", TOOL_DISCOVERY_CATEGORY_INTERNAL_PRODUCTS, "List categories available in the internal product catalog.", ("catalog", "categories")),
     "weather_lookup": ToolDiscoveryMetadata("Weather lookup", TOOL_CATEGORY_WEATHER, "Retrieve current, forecast, or historical monthly weather conditions for a city or location.", ("temperature", "wind", "conditions", "forecast", "historical weather")),
@@ -52,7 +50,7 @@ _DISCOVERY_METADATA: dict[str, ToolDiscoveryMetadata] = {
     "finance_stock_price": ToolDiscoveryMetadata("Stock market price lookup", TOOL_CATEGORY_FINANCE, "Retrieve current stock prices and basic market data by ticker."),
     "finance_crypto_markets": ToolDiscoveryMetadata("Cryptocurrency market lookup", TOOL_CATEGORY_FINANCE, "Retrieve cryptocurrency prices, market caps, volume, and market changes."),
     "finance_crypto_historical_prices": ToolDiscoveryMetadata("Historical cryptocurrency prices", TOOL_CATEGORY_FINANCE, "Retrieve historical cryptocurrency prices for an inclusive date range."),
-    TOOL_CATEGORY_WEB_SEARCH: ToolDiscoveryMetadata("General web search", TOOL_DISCOVERY_CATEGORY_WEB_SEARCH, "Search the public web for general information and current web content.", ("internet", "web pages")),
+    "web_search": ToolDiscoveryMetadata("General web search", TOOL_DISCOVERY_CATEGORY_WEB_SEARCH, "Search the public web for general information and current web content.", ("internet", "web pages")),
     "web_fetch": ToolDiscoveryMetadata("Web page fetch", TOOL_DISCOVERY_CATEGORY_WEB_SEARCH, "Fetch a public web page and extract its readable title, description, and text for detailed research.", ("internet", "web pages", "article details")),
     "search_news": ToolDiscoveryMetadata("Current news search", TOOL_DISCOVERY_CATEGORY_NEWS, "Search current news stories and article overviews.", ("breaking news", "recent events")),
     "search_wikipedia": ToolDiscoveryMetadata("Wikipedia search", TOOL_CATEGORY_KNOWLEDGE, "Search Wikipedia pages and retrieve short article summaries."),
@@ -85,15 +83,12 @@ _DISCOVERY_METADATA: dict[str, ToolDiscoveryMetadata] = {
     "file_list": ToolDiscoveryMetadata("List managed files", TOOL_DISCOVERY_CATEGORY_FILE_MANAGEMENT, "Discover files in the managed files directory.", ("list files", "file inventory")),
     "file_move": ToolDiscoveryMetadata("Move a managed file", TOOL_DISCOVERY_CATEGORY_FILE_MANAGEMENT, "Rename or relocate a managed file within the managed files directory.", ("rename file", "move file")),
     "writing_templates": ToolDiscoveryMetadata("Writing templates", TOOL_CATEGORY_WRITING, "Discover reusable writing template metadata and supported output formats. Returns metadata only, not template content.", ("document template", "essay template", "report template", "meeting notes"), version=1),
-    "workspace_file_read": ToolDiscoveryMetadata("Read workspace file", TOOL_CATEGORY_WORKSPACE, "Read text or source content from a file in the current conversation workspace without modifying it.", (TOOL_CATEGORY_WORKSPACE, "file contents", "source code"), version=2),
-    "workspace_file_list": ToolDiscoveryMetadata("Search workspace files", TOOL_CATEGORY_WORKSPACE, "List or search files in the current conversation workspace by name, regular expression, or text content without modifying them.", (TOOL_CATEGORY_WORKSPACE, "find files", "search file contents"), version=3),
+    "workspace_file_read": ToolDiscoveryMetadata("Read workspace file", TOOL_CATEGORY_WORKSPACE, "Read text or source content from a file in the current conversation workspace without modifying it.", ("workspace", "file contents", "source code"), version=2),
+    "workspace_file_list": ToolDiscoveryMetadata("Search workspace files", TOOL_CATEGORY_WORKSPACE, "List or search files in the current conversation workspace by name, regular expression, or text content without modifying them.", ("workspace", "find files", "search file contents"), version=3),
     "workspace_file_complete": ToolDiscoveryMetadata("Complete workspace file", TOOL_CATEGORY_WORKSPACE, "Validate and mark a completed workspace file as the final artifact produced by the current agent.", (TOOL_CATEGORY_WORKSPACE, "final report", "completed artifact")),
     "user_update_names": ToolDiscoveryMetadata("Update user names", TOOL_DISCOVERY_CATEGORY_USER_PROFILE, "Update any explicitly provided display, first, or last name fields; empty fields remain unchanged."),
     "user_update_tone": ToolDiscoveryMetadata("Update user tone preferences", TOOL_DISCOVERY_CATEGORY_USER_PROFILE, "Store durable preferences for response tone, directness, humor, and technical depth."),
 }
-
-DISCOVERY_METADATA: dict[str, ToolDiscoveryMetadata] = _DISCOVERY_METADATA
-
 
 def get_tool_discovery_metadata(tool_name: str) -> ToolDiscoveryMetadata:
     try:
