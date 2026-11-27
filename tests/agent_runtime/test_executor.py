@@ -262,7 +262,7 @@ def test_executor_runs_tools_and_agents_in_one_parallel_batch(monkeypatch) -> No
         return state
 
     registered = StructuredTool.from_function(function, name="batch_function", description="Test function")
-    monkeypatch.setitem(GLOBAL_TOOL_REGISTRY._tools, registered.name, registered)
+    monkeypatch.setitem(GLOBAL_TOOL_REGISTRY._tools, (None, registered.name), registered)
     monkeypatch.setattr("agents.registry.agent_registry.get", lambda profile: agent)
 
     run_executor(parent)
@@ -340,6 +340,44 @@ def test_executor_persists_agent_result_with_original_step_and_evidence(monkeypa
     assert step is plan.steps[0]
     assert payload["output_payload"].plan_step_id == step.db_id
     assert payload["evidence"] == [evidence]
+    assert "evidence" not in payload["output_payload"].result
+    assert payload["output_payload"].result["output_evidence_ids"] == [evidence.id]
     assert payload["is_subagent"] is False
     assert parent.result.tool_call_ids == [call_id]
     assert "Document saved" in parent.reasoner_message_history[1].content
+
+
+def test_executor_persists_failure_status_and_direct_return_does_not_report_success(monkeypatch) -> None:
+    from agent_runtime.strategies.single_pass.graph import DirectReturnStrategy
+
+    plan = Plan.model_validate({"steps": [{
+        "id": "E1", "plan": "Run tool", "tool": "broken", "args": {},
+    }]})
+    state = _state_for_plan(plan)
+    state.execution_context.roundtrip_id = uuid4()
+    recorded = []
+
+    class Repository:
+        def count_request_hash(self, *args):
+            return 0
+
+        def append_tool_call(self, *args, **kwargs):
+            recorded.append(kwargs)
+            return uuid4()
+
+        def get_tool_results(self, ids):
+            return [entry["output_payload"] for entry in recorded]
+
+    def broken(**kwargs):
+        raise RuntimeError("Provider unavailable")
+
+    repo = Repository()
+    monkeypatch.setattr("agent_runtime.execution.tool_executor.call_tool", broken)
+    monkeypatch.setattr("agent_runtime.execution.tool_executor.MessageToolRepository", lambda: repo)
+    monkeypatch.setattr("agent_runtime.models.agent_state.message_repository.MessageToolRepository", lambda: repo)
+    run_executor(state)
+    DirectReturnStrategy._route_after_execute(state)
+
+    assert recorded[0]["status"] == "error"
+    assert "Provider unavailable" in recorded[0]["error_message"]
+    assert state.result.execution_status.value == "failed"

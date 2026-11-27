@@ -9,7 +9,7 @@ from agent_runtime.constants import EXECUTE_TOOLS_EDGE, NodeName
 from agent_runtime.models.agent_profile import AgentExecutionStrategy
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_state import AgentState
-from agent_runtime.execution.tool_executor import run_executor
+from agent_runtime.execution.tool_executor import run_executor, tool_result_status
 from agent_runtime.models.decision import DecisionStatus
 from agent_runtime.strategies.react.decision import run_decision
 from agent_runtime.strategies.react.subagent_prompt import build_subagent_decision_prompt
@@ -77,8 +77,14 @@ class DirectReturnStrategy:
             return END
 
         step_ids = {step.db_id for step in plan.steps}
-        calls = [call for call in state.gather_tool_calls() if call.plan_step_id in step_ids]
-        if calls and all(call.status == "completed" for call in calls):
+        results = {
+            result.plan_step_id: result
+            for result in state.gather_tool_results()
+            if result.plan_step_id in step_ids
+        }
+        if results.keys() == step_ids and all(
+            tool_result_status(result) == "completed" for result in results.values()
+        ):
             state.result = state.result.copy(
                 answer_status=AnswerStatus.SUCCESS,
                 execution_status=ExecutionStatus.SUCCESS,

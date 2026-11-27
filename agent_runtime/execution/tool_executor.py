@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
-from contextlib import ExitStack
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any
@@ -16,7 +15,7 @@ from common.signatures import build_signature
 from common.logging import compact_trace_inputs, compact_trace_outputs, record_node_log
 from agent_runtime.constants import NodeName
 from agent_runtime.models.agent_state import AgentState
-from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentName, AgentProfile
+from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentName
 from agent_runtime.models.evaluation_result import (
     EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT,
     EVALUATION_STATUS_RETRYABLE,
@@ -38,10 +37,14 @@ MAX_IDENTICAL_TOOL_CALLS = 2
 class StepExecutionResult:
     step: PlanStep
     args: dict[str, Any]
-    output: Any
+    output: ToolResult
     error_text: str = ""
     rejection_reason: str = ""
     latency_ms: int = 0
+
+    @property
+    def status(self) -> str:
+        return tool_result_status(self.output)
 
 
 def _substitute_refs(obj, results: dict):
@@ -78,7 +81,21 @@ def _tool_results_by_local_step_id(agent_state: AgentState) -> dict[str, ToolRes
     return tool_results_by_local_step_id
 
 
-def _execute_step(
+def tool_result_status(result: ToolResult) -> str:
+    """Classify the common result for persistence and strategy completion."""
+    payload = result.result if isinstance(result.result, dict) else {}
+    if payload.get("status") in {"rejected", "duplicate"}:
+        return "rejected"
+    if (
+        payload.get("error")
+        or payload.get("status") in {"error", "failed"}
+        or (result.state is not None and result.state.status == ToolOutcomeStatus.FAILED)
+    ):
+        return "error"
+    return "completed"
+
+
+def execute_step(
     step: PlanStep,
     *,
     tool_results_by_step_id: dict[str, ToolResult],
@@ -92,17 +109,11 @@ def _execute_step(
         is_duplicate = "already made in this roundtrip" in rejection_reason
         output = ToolResult.error(
             rejection_reason,
-            **({"status": "duplicate"} if is_duplicate else {}),
+            status="duplicate" if is_duplicate else "rejected",
         )
-        error_text = rejection_reason
     else:
         try:
             output = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)
-            error_text = ""
-            if isinstance(output, ToolResult) and isinstance(output.result, dict):
-                error_text = str(output.result.get("error") or "")
-                if output.result.get("status") == "rejected":
-                    rejection_reason = error_text
         except ValidationError as e:
             error_text = f"Invalid arguments for tool '{step.tool}': {e.errors(include_url=False)}"
             output = ToolResult(
@@ -115,6 +126,17 @@ def _execute_step(
                 result={"error": error_text, "tool": step.tool},
                 evidence=[],
             )
+    if not isinstance(output, ToolResult):
+        output = ToolResult(result=output, evidence=[])
+    result_status = tool_result_status(output)
+    error_text = ""
+    if result_status in {"error", "rejected"}:
+        payload = output.result if isinstance(output.result, dict) else {}
+        error_text = str(payload.get("error") or (
+            output.state.reason if output.state is not None else None
+        ) or f"Tool '{step.tool}' reported {result_status}.")
+        if result_status == "rejected":
+            rejection_reason = error_text
     latency_ms = int((perf_counter() - started_at) * 1000)
 
     return StepExecutionResult(
@@ -127,7 +149,9 @@ def _execute_step(
     )
 
 
-def execute_agent_tool(agent_state: AgentState, agent_name: str, args: dict[str, Any]) -> ToolResult:
+def execute_agent_tool(
+    agent_state: AgentState, agent_name: str, args: dict[str, Any], *, tool_name: str | None = None,
+) -> ToolResult:
     """Run an agent-backed registry tool and return the common tool result."""
     if not agent_state.agent_profile.can_delegate_agents:
         return ToolResult.error(
@@ -138,7 +162,15 @@ def execute_agent_tool(agent_state: AgentState, agent_name: str, args: dict[str,
         return ToolResult.error(f"Agent '{agent_name}' cannot delegate to itself.", status="rejected")
 
     delegated = (agent_state.available_agent_states or {}).get(agent_name)
-    if delegated is None or agent_name not in {tool.name for tool in available_agent_tools(agent_state)}:
+    if tool_name is not None:
+        facade = agent_state.agent_profile.tools_by_name.get(tool_name)
+        authorized = (
+            facade is not None
+            and (getattr(facade, "metadata", None) or {}).get("agent_name") == agent_name
+        )
+    else:
+        authorized = agent_name in {tool.name for tool in available_agent_tools(agent_state)}
+    if delegated is None or not authorized:
         return ToolResult.error(f"Delegated agent '{agent_name}' is not available.", status="rejected")
 
     from agents.registry import agent_registry
@@ -166,41 +198,6 @@ def execute_agent_tool(agent_state: AgentState, agent_name: str, args: dict[str,
         task=delegated_run.inputs.task,
     )
 
-def execute_step(
-    step: PlanStep,
-    *,
-    tool_results_by_step_id: dict[str, ToolResult] | None = None,
-    agent_profile: AgentProfile | None = None,
-    agent_state: AgentState | None = None,
-    execution_context=None,
-    resolved_args: dict[str, Any] | None = None,
-) -> StepExecutionResult:
-    """Execute a registry tool with the caller's runtime context."""
-    profile = agent_profile or (agent_state.agent_profile if agent_state is not None else None)
-    allowed = None if profile is None else set(profile.tool_names)
-    if agent_state is not None:
-        allowed.update((agent_state.available_agent_states or {}).keys())
-        execution_context = execution_context or agent_state.execution_context
-    with ExitStack() as stack:
-        if execution_context is not None:
-            stack.enter_context(bind_runtime_context(
-                conversation_id=execution_context.conversation_id,
-                conversation_model_config=execution_context.model_config,
-                roundtrip_id=str(execution_context.roundtrip_id) if execution_context.roundtrip_id else None,
-                user_id=execution_context.user_profile.user_id,
-            ))
-        if agent_state is not None:
-            stack.enter_context(bind_agent_context(
-                agent_name=agent_state.agent_profile.name,
-                agent_state=agent_state,
-            ))
-        return _execute_step(
-            step,
-            tool_results_by_step_id=tool_results_by_step_id or {},
-            allowed_tool_names=allowed,
-            resolved_args=resolved_args,
-        )
-
 
 def _record_step_result(
     agent_state: AgentState,
@@ -212,10 +209,7 @@ def _record_step_result(
 ) -> None:
     execution_context = agent_state.execution_context
     step = execution_result.step
-    output = execution_result.output
-    if not isinstance(output, ToolResult):
-        output = ToolResult(result=output, evidence=[])
-    output = output.model_copy(update={
+    output = execution_result.output.model_copy(update={
         "tool_name": step.tool,
         "plan_step_id": step.db_id,
         "iteration": iteration_number,
@@ -225,7 +219,7 @@ def _record_step_result(
     if tool_repo is None:
         agent_state.direct_tool_results.append(output)
     evidence_count = len(output.evidence)
-    status = "rejected" if execution_result.rejection_reason else ("error" if execution_result.error_text else "completed")
+    status = execution_result.status
     record_node_log(
         roundtrip_id=execution_context.roundtrip_id,
         node_name=NodeName.EXECUTOR,
@@ -253,10 +247,10 @@ def _record_step_result(
             step,
             input_payload=execution_result.args,
             output_payload=output,
-            evidence=output.evidence if isinstance(output, ToolResult) else [],
+            evidence=output.evidence,
             error_message=execution_result.error_text or None,
             duration_ms=execution_result.latency_ms,
-            status="rejected" if execution_result.rejection_reason else None,
+            status=status,
             is_subagent=agent_state.agent_profile.name != AgentName.REQUEST_ORCHESTRATOR,
         )
         agent_state.result = agent_state.result.with_recorded_tool_call(tool_call_id)
@@ -305,7 +299,7 @@ def run_executor(agent_state: AgentState) -> AgentState:
         with ThreadPoolExecutor(max_workers=len(pending)) as executor:
             futures = [
                 executor.submit(
-                    copy_context().run, _execute_step, step,
+                    copy_context().run, execute_step, step,
                     tool_results_by_step_id=prior_results,
                     allowed_tool_names=allowed,
                     resolved_args=args,
@@ -379,13 +373,7 @@ def _agent_completion_result(
             "evidence_ids": state.inputs.evidence_ids,
             "status": status,
             "summary": summary,
-            "evidence": [
-                bounded_json_value(
-                    item.model_dump(mode="json"),
-                    max_bytes=8_000,
-                )
-                for item in evidence
-            ],
+            "output_evidence_ids": [item.id for item in evidence],
         },
         evidence=evidence,
         state=outcome,

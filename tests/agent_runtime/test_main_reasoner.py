@@ -14,10 +14,6 @@ from capabilities.discovery.discover_capabilities_tool import (
 )
 from capabilities.adapters.profile import (
     USER_MANAGEMENT_TOOL,
-    bind_user_management_agent_state,
-    bind_user_management_state,
-    reset_user_management_agent_state,
-    reset_user_management_state,
 )
 from agents.profile_management.profile import build_profile_management_profile
 from agent_runtime.models.main_state import MainState
@@ -388,17 +384,22 @@ def test_user_management_static_tool_runs_profile_agent(monkeypatch) -> None:
         return profile_state
 
     monkeypatch.setattr("agents.registry.agent_registry.get", lambda profile: fake_runner)
-    state_token = bind_user_management_state(main_state)
-    agent_token = bind_user_management_agent_state(agent_state)
-    try:
-        output = USER_MANAGEMENT_TOOL.invoke({"task": "Remember that I like spicy food."})
-    finally:
-        reset_user_management_agent_state(agent_token)
-        reset_user_management_state(state_token)
+    from agent_runtime.execution.tool_executor import run_executor
+
+    agent_state.agent_profile = TOP_LEVEL_PROFILE
+    agent_state.available_agent_states = main_state.agent_states
+    step = PlanStep(
+        id="E1", tool="user_management", plan="Remember the preference.",
+        args={"task": "Remember that I like spicy food."},
+    )
+    agent_state.node_states.planner.plan = Plan(steps=[step])
+    run_executor(agent_state)
+    output = agent_state.direct_tool_results[0]
 
     assert captured == ["Remember that I like spicy food."]
-    assert output.agent == "profile_management"
-    assert output.status.value == "pending"
+    assert output.result["agent"] == "profile_management"
+    assert output.result["status"] == "pending"
+    assert main_state.agent_states["profile_management"].inputs.task == ""
 
 
 

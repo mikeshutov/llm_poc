@@ -16,10 +16,6 @@ from agents.profile_management.profile import build_profile_management_profile
 from capabilities.adapters.math import calculate
 from capabilities.adapters.profile import (
     USER_MANAGEMENT_TOOL,
-    bind_user_management_agent_state,
-    bind_user_management_state,
-    reset_user_management_agent_state,
-    reset_user_management_state,
 )
 from capabilities.discovery.discover_capabilities_tool import (
     CAPABILITY_DISCOVERY_TOOL,
@@ -106,8 +102,6 @@ def run_main_request_strategy(main_state: MainState) -> MainState:
     execution_state.available_agent_states = main_state.agent_states
     token = bind_capability_discovery_state(main_state)
     agent_token = bind_capability_discovery_agent_state(execution_state)
-    profile_token = bind_user_management_state(main_state)
-    profile_agent_token = bind_user_management_agent_state(execution_state)
     try:
         execution_state = TOP_LEVEL_STRATEGY.run(
             execution_state,
@@ -116,8 +110,6 @@ def run_main_request_strategy(main_state: MainState) -> MainState:
     finally:
         reset_capability_discovery_agent_state(agent_token)
         reset_capability_discovery_state(token)
-        reset_user_management_agent_state(profile_agent_token)
-        reset_user_management_state(profile_token)
     main_state.main_agent_state = execution_state
     main_state.relevant_evidence_ids = list(execution_state.result.relevant_evidence_ids)
     main_state.plan = execution_state.node_states.planner.plan

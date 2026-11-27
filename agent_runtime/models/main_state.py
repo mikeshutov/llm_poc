@@ -69,7 +69,7 @@ class MainState:
 
         for agent_state in self.agent_states.values():
             agent_state.inputs = AgentInputs.new(task="", request_task=self.task)
-        register_agent_tools(self.agent_profiles)
+        register_agent_tools(self.agent_profiles, user_id=self.execution_context.user_profile.user_id)
 
     def gather_relevant_evidence_ids(self) -> list[UUID]:
         relevant_evidence_ids: list[UUID] = []

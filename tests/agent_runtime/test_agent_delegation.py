@@ -5,7 +5,8 @@ from agent_runtime.planning.tool_wrapper import build_tools
 from capabilities.registry.global_registry import (
     GLOBAL_TOOL_REGISTRY, available_agent_tools, register_agent_tools, register_default_tools,
 )
-from agent_runtime.execution.tool_executor import execute_step
+from agent_runtime.execution.tool_executor import run_executor
+from agent_runtime.models.plan import Plan
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_profile import AgentProfile
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
@@ -37,11 +38,13 @@ def test_agent_tool_receives_explicit_task_and_normalizes_evidence(monkeypatch) 
         hypothesis="Expected outcome",
         args={"task": "Create a document.", "evidence_ids": ["ev-1", " ev-1 ", "ev-2"]},
     )
-    result = execute_step(step, agent_state=parent)
+    parent.node_states.planner.plan = Plan(steps=[step])
+    run_executor(parent)
+    result = parent.direct_tool_results[0]
     assert seen[0].inputs.task == "Create a document."
     assert seen[0].inputs.evidence_ids == ["ev-1", "ev-2"]
     assert child.inputs.task == ""
-    assert result.error_text == ""
+    assert not result.result.get("error")
 
 
 def test_agent_delegation_tool_keeps_explicit_task_schema() -> None:
@@ -143,7 +146,9 @@ def test_delegated_agent_execution_rejects_self_delegation() -> None:
     )
 
     register_agent_tools([parent.agent_profile])
-    result = execute_step(step, agent_state=parent)
+    parent.node_states.planner.plan = Plan(steps=[step])
+    run_executor(parent)
+    result = parent.direct_tool_results[0]
 
-    assert result.output.result["status"] == "rejected"
-    assert "cannot delegate to itself" in result.output.result["error"]
+    assert result.result["status"] == "rejected"
+    assert "cannot delegate to itself" in result.result["error"]
