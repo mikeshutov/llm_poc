@@ -7,7 +7,7 @@ from common.logging import compact_trace_inputs, compact_trace_outputs, record_n
 
 from llm.clients.embeddings import embed_text
 from agents.repository.repo_factory import get_agent_repo
-from agents.seeder import SYSTEM_AGENT_PROFILES
+from capabilities.registry.global_registry import REGISTERED_AGENTS
 from agent_runtime.models.main_state import MainState
 from agents.discovery.agent_selection_query import build_agent_selection_query
 from agent_runtime.constants import NodeName
@@ -21,7 +21,7 @@ def load_agents(main_state: MainState) -> MainState:
         conversation_context=main_state.execution_context.conversation_context,
     )
     existing_names = {profile.name for profile in main_state.agent_profiles}
-    for profile in SYSTEM_AGENT_PROFILES:
+    for profile in REGISTERED_AGENTS:
         if profile.name in existing_names:
             continue
         main_state.agent_profiles.append(profile)
@@ -61,8 +61,8 @@ def load_agents(main_state: MainState) -> MainState:
             message="No user agents were available; using system agents",
             payload={
                 "query": main_state.discovery_query,
-                "agent_count": len(SYSTEM_AGENT_PROFILES),
-                "system_agent_count": len(SYSTEM_AGENT_PROFILES),
+                "agent_count": len(REGISTERED_AGENTS),
+                "system_agent_count": len(REGISTERED_AGENTS),
             },
             duration_ms=int((perf_counter() - started_at) * 1000),
         )

@@ -2,12 +2,53 @@ from __future__ import annotations
 
 import importlib
 from types import SimpleNamespace
+from uuid import uuid4
 
 from agent_runtime.models.main_state import MainState
 from capabilities.discovery.capability_discovery import capability_discovery
 from capabilities.discovery.models import AvailableAgent, AvailableTool, CapabilityDiscoveryResult
+from agent_runtime.models.agent_profile import AgentKind
+from agents.models.agent import Agent, AgentType
+from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY
 
 discover_module = importlib.import_module("capabilities.discovery.capability_discovery")
+
+
+def test_runtime_discovery_registers_database_system_and_user_agents(monkeypatch) -> None:
+    system_agent = Agent(
+        id=uuid4(), agent_type=AgentType.SYSTEM, name="database_system",
+        planner_instruction="Run the database system agent.",
+    )
+    user_agent = Agent(
+        id=uuid4(), agent_type=AgentType.USER, user_id="alice", name="runtime_helper",
+        planner_instruction="Run Alice's dynamically discovered agent.",
+    )
+
+    class Repository:
+        def list_system_agents(self):
+            return [system_agent]
+
+        def list_relevant_for_user(self, user_id, *, query_embedding):
+            assert user_id == "alice"
+            return [user_agent]
+
+    monkeypatch.setattr(discover_module, "get_agent_repo", Repository)
+    monkeypatch.setattr(discover_module, "embed_text", lambda query: [1.0])
+    monkeypatch.setattr(discover_module, "_discover_persisted_tools", lambda *args: [])
+    monkeypatch.setattr(discover_module, "_rank_candidates", lambda query, embedding, candidates: [
+        (1.0, candidate) for name, text, candidate in candidates
+        if name in {system_agent.name, user_agent.name}
+    ])
+    state = MainState.new(task="Find a helper", llm=object(), agent_profiles=[])
+    state.execution_context.user_profile.user_id = "alice"
+
+    discovered = capability_discovery(state)
+
+    assert {agent.agent for agent in discovered.agents} == {system_agent.name, user_agent.name}
+    assert state.agent_states[system_agent.name].agent_profile.kind == AgentKind.BUILTIN
+    assert state.agent_states[user_agent.name].agent_profile.kind == AgentKind.USER_AGENT
+    assert GLOBAL_TOOL_REGISTRY.get(system_agent.name).name == system_agent.name
+    assert GLOBAL_TOOL_REGISTRY.get(user_agent.name, user_id="alice").name == user_agent.name
 
 
 def test_discovery_projects_tools_and_agents_to_common_capability_shape() -> None:

@@ -21,7 +21,11 @@ from capabilities.adapters.profile import (
 from capabilities.adapters.user_attributes import upsert_user_attribute
 from common.cache.repository import InvalidCachePayloadError, ToolCacheRepository
 from agent_runtime.context import get_current_agent_state, get_current_user_id
-from agent_runtime.models.agent_profile import AgentKind
+from agent_runtime.models.agent_profile import AgentKind, AgentProfile
+from agents.coding.profile import CODING_PROFILE
+from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
+from agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
+from agents.research.profile import RESEARCH_PROFILE
 from requests.exceptions import Timeout
 
 
@@ -238,6 +242,12 @@ class ToolRegistry:
 
 
 GLOBAL_TOOL_REGISTRY = ToolRegistry(enable_cache=True)
+REGISTERED_AGENTS: list[AgentProfile] = [
+    PROFILE_MANAGEMENT_PROFILE,
+    DOCUMENT_WRITING_PROFILE,
+    RESEARCH_PROFILE,
+    CODING_PROFILE,
+]
 _REGISTERED_DEFAULTS = False
 _REGISTRATION_LOCK = RLock()
 PROFILE_RUNTIME_TOOLS = (
@@ -254,8 +264,6 @@ def register_default_tools() -> None:
     with _REGISTRATION_LOCK:
         if _REGISTERED_DEFAULTS:
             return
-        from agents.seeder import SYSTEM_AGENT_PROFILES
-
         defaults = {tool.name: tool for tool in tools}
         defaults.update({
             tool.name: tool
@@ -263,7 +271,7 @@ def register_default_tools() -> None:
         })
         for tool in defaults.values():
             GLOBAL_TOOL_REGISTRY.register(tool)
-        for profile in SYSTEM_AGENT_PROFILES:
+        for profile in REGISTERED_AGENTS:
             GLOBAL_TOOL_REGISTRY.register(build_agent_tool(profile))
         _REGISTERED_DEFAULTS = True
 
@@ -315,6 +323,7 @@ def call_tool(name: str, tool_input: Any = None, allowed_tool_names: set[str] | 
 __all__ = [
     "DisallowedToolError",
     "GLOBAL_TOOL_REGISTRY",
+    "REGISTERED_AGENTS",
     "ToolRegistryError",
     "UnknownToolError",
     "register_default_tools",

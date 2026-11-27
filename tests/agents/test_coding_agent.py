@@ -1,5 +1,5 @@
 from agents.coding.profile import CODING_PROFILE, build_coding_profile
-from agents.seeder import SYSTEM_AGENT_PROFILES
+from capabilities.registry.global_registry import REGISTERED_AGENTS
 from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentName
 
 
@@ -9,7 +9,7 @@ def test_coding_agent_is_general_purpose_and_seeded() -> None:
         "An agent capable of generating, executing, and validating code to solve computational tasks."
     )
     assert CODING_PROFILE.execution_strategy == AgentExecutionStrategy.REACT
-    assert CODING_PROFILE in SYSTEM_AGENT_PROFILES
+    assert CODING_PROFILE in REGISTERED_AGENTS
 
 
 def test_coding_profile_can_be_rebuilt() -> None:
