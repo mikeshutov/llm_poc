@@ -45,7 +45,7 @@ def build_research_profile() -> AgentProfile:
     return AgentProfile(
         name=AgentName.RESEARCH,
         scope=MAIN_AGENT_MODEL_SCOPE,
-        version=3,
+        version=4,
         description=(
             "Research a topic by decomposing it into questions, selecting appropriate "
             "sources, gathering and checking evidence, and writing the final findings to a "
@@ -61,18 +61,8 @@ def build_research_profile() -> AgentProfile:
         max_turns=8,
         planner_instruction=(
             "Plan and execute a rigorous research workflow for the provided topic. "
-            "First decompose the request into named, substantial subproblems and "
-            "map which ones are independent versus dependent. Choose the smallest useful set "
-            "of independently solvable subproblems; do not create "
-            "artificial or trivial splits. For each independent subproblem, decide whether the "
-            "general-purpose delegate agent should solve it. Delegate when splitting improves "
-            "coverage, source diversity, or turnaround; solve directly when the work is too small, "
-            "dependent, or requires synthesis from the coordinator. Each delegated task must cover "
-            "one concrete dimension, such as a source family, date range, metric definition, "
-            "historical period, or comparability question. Delegate the narrow subproblem itself, "
-            "not the original user request or a paraphrase of the full request. Run independent "
-            "delegations in parallel where possible, sequence dependent work, gather diverse relevant "
-            "evidence, reconcile delegated findings, and replan when the evidence leaves an important gap. "
+            "Delegate independent research questions when useful. Give each delegate a focused task, "
+            "reconcile its findings, and avoid duplicating completed work. "
             "Write the final report using the supplied "
             "template and make that workspace file the final evidence for downstream agents. "
             "Do not answer the user directly.\n\n"

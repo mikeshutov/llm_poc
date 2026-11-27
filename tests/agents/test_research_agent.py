@@ -1,3 +1,4 @@
+from agent_runtime.planning.prompts.planner_prompt import build_planner_prompt
 from agents.research.profile import RESEARCH_PROFILE
 from agents.research.prompts import build_research_rules, load_research_template
 
@@ -38,3 +39,15 @@ def test_research_template_is_loaded_from_agents_folder() -> None:
 
     assert template.startswith("# Research: {{topic}}")
     assert "## Evidence and sources" in template
+
+
+def test_research_delegation_guidance_is_optional_and_profile_driven(agent_state_factory) -> None:
+    state = agent_state_factory(profile=RESEARCH_PROFILE, task="Research a topic")
+    state.available_agent_states = {}
+
+    prompt, _ = build_planner_prompt(state)
+
+    assert prompt.instruction == RESEARCH_PROFILE.planner_instruction
+    assert "Delegate independent research questions when useful." in prompt.instruction
+    assert "avoid duplicating completed work" in prompt.instruction
+    assert "parallel" not in prompt.instruction

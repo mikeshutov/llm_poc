@@ -32,10 +32,10 @@ def build_delegate_profile() -> AgentProfile:
     return AgentProfile(
         name=AgentName.DELEGATE,
         scope=MAIN_AGENT_MODEL_SCOPE,
-        version=8,
+        version=9,
         description=(
             "Solve one task delegated by a parent agent using the available capabilities. "
-            "Return the completed result and supporting evidence to the parent. This agent cannot delegate further."
+            "Gather supporting evidence for the parent. This agent cannot delegate further."
         ),
         # The profile grants domain permissions; discovery selects which of
         # those tools are exposed for the assigned task.
@@ -64,11 +64,8 @@ def build_delegate_profile() -> AgentProfile:
         delegatable=True,
         max_turns=10,
         planner_instruction=(
-            "Solve only the task assigned by the parent agent. Use the available tools to gather, "
-            "check, and organize the findings and supporting evidence for the parent. "
-            "Return the completed result with supporting evidence IDs. Do not answer the user "
-            "directly, write the parent's final report, take over the full parent task, "
-            "or delegate to another agent."
+            "Complete the assigned task using available tools. Stay within its scope and "
+            "ground findings in supporting evidence."
         ),
     )
 
