@@ -12,7 +12,7 @@ search this directory for the topic or fixture name.
 
 | Module | Fixtures |
 | --- | --- |
-| `agents.py` | `agent_profile_factory`, `user_agent_profile_factory`, `agent_state_factory`, `react_agent_state_factory`, `main_state_factory`, `db_agent_factory`, `set_plan_results` |
+| `agents.py` | `agent_profile_factory`, `user_agent_profile_factory`, `execution_context_factory`, `agent_state_factory`, `react_agent_state_factory`, `main_state_factory`, `db_agent_factory`, `set_plan_results` |
 | `planning.py` | `plan_step_factory`, `plan_factory`, `default_plan`, `planning_result_factory` |
 | `capabilities.py` | `tool_factory`, `cache_repository_factory` |
 | `tools.py` | `registered_tool_registry`, `tool_repository_factory`, `recording_tool_repository` |
@@ -61,6 +61,9 @@ given an existing execution context, the owner override copies its user profile
 without changing the supplied context. `user_agent_profile_factory(name="helper",
 description="Research helper")` defaults to a user-agent profile in the main scope
 and accepts the same profile overrides as `agent_profile_factory`.
+Use `execution_context_factory(user_id="alice", conversation_id="conversation-1",
+roundtrip_id=uuid4())` when context identifiers matter. Omitted identifiers stay
+unset; user profiles and conversation contexts are fresh on every call.
 `db_agent_factory` supplies an ID, name, and instruction; specify ownership fields
 explicitly, such as `user_id="alice"` or `agent_type=AgentType.SYSTEM`.
 

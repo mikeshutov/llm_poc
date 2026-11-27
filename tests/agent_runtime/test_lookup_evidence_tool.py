@@ -2,19 +2,16 @@ from __future__ import annotations
 
 import importlib
 
-from retrieval.evidence import EvidenceView
-from agent_runtime.models.agent_execution_context import AgentExecutionContext
-from personalization.profile.models import UserProfile
 from agent_runtime.context import bind_agent_context
 from capabilities.adapters.memories.lookup_evidence import lookup_evidence
 
 
-def test_lookup_evidence_returns_a_batch_in_request_order(agent_state_factory) -> None:
-    first = EvidenceView( summary="First summary",
+def test_lookup_evidence_returns_a_batch_in_request_order(agent_state_factory, evidence_factory) -> None:
+    first = evidence_factory( summary="First summary",
         data={
             "title": "First evidence",
         })
-    second = EvidenceView( summary="Second summary",
+    second = evidence_factory( summary="Second summary",
         data={
             "title": "Second evidence",
         })
@@ -31,11 +28,7 @@ def test_lookup_evidence_returns_a_batch_in_request_order(agent_state_factory) -
     original_evidence_repository = module.EvidenceRepository
     module.EvidenceRepository = FakeEvidenceRepository
     try:
-        with bind_agent_context(agent_state_factory(
-            execution_context=AgentExecutionContext.new(
-                conversation_id="conversation-1", user_profile=UserProfile(user_id="user-123"),
-            ),
-        )):
+        with bind_agent_context(agent_state_factory(user_id="user-123")):
             result = lookup_evidence.invoke(
                 {"evidence_ids": ["second", "missing", "first", "second", " "]}
             )

@@ -236,9 +236,7 @@ def test_top_level_reasoner_exposes_memory_detail_with_search_guidance(agent_sta
     assert "memory_detail" in {tool.name for tool in tools}
 
 
-def test_main_reasoner_prompt_prefers_research_agent_for_multi_source_comparisons(
-    agent_state_factory,
-) -> None:
+def test_main_reasoner_prompt_prefers_research_agent_for_multi_source_comparisons(agent_state_factory) -> None:
     state = agent_state_factory(
         profile=TOP_LEVEL_PROFILE,
         task="Compare LangGraph and CrewAI for multi-agent orchestration.",

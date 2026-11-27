@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib
 
 
-from agent_runtime.models.agent_execution_context import AgentExecutionContext
 from agent_runtime.context import bind_agent_context
 from agents.profile_management.profile import build_profile_management_profile
 from agents.profile_management.prompts import build_profile_management_rules
@@ -43,11 +42,7 @@ def test_update_user_names_updates_supplied_fields_and_ignores_empty_fields(agen
     original_repo_getter = module.get_user_profile_repo
     module.get_user_profile_repo = lambda: fake_repo
     try:
-        with bind_agent_context(agent_state_factory(
-            execution_context=AgentExecutionContext.new(
-                conversation_id="conversation-1", user_profile=UserProfile(user_id="user-123"),
-            ),
-        )):
+        with bind_agent_context(agent_state_factory(user_id="user-123")):
             result = update_user_names.invoke(
                 {"first_name": "Michael", "last_name": "", "display_name": ""}
             )
@@ -86,11 +81,7 @@ def test_update_user_tone_merges_with_existing_preferences(agent_state_factory) 
     original_repo_getter = module.get_user_profile_repo
     module.get_user_profile_repo = lambda: fake_repo
     try:
-        with bind_agent_context(agent_state_factory(
-            execution_context=AgentExecutionContext.new(
-                conversation_id="conversation-1", user_profile=UserProfile(user_id="user-123"),
-            ),
-        )):
+        with bind_agent_context(agent_state_factory(user_id="user-123")):
             result = update_user_tone.invoke(
                 {"confidence": 0.95, "directness": "high", "technical_depth": "high"}
             )

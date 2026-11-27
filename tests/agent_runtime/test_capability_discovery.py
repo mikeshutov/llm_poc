@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -12,6 +13,30 @@ from agents.models.agent import AgentType
 from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY
 
 discover_module = importlib.import_module("capabilities.discovery.capability_discovery")
+
+
+@pytest.mark.parametrize("embedding", [None, [1.0, 0.0], []])
+def test_discovery_reuses_supplied_embedding_or_embeds_the_query(
+    monkeypatch, agent_state_factory, embedding,
+):
+    embed = Mock(return_value=[0.0, 1.0])
+    persisted = Mock(return_value=[])
+    monkeypatch.setattr(discover_module, "embed_text", embed)
+    monkeypatch.setattr(discover_module, "_build_tool_candidates", lambda: [])
+    monkeypatch.setattr(discover_module, "_discover_persisted_tools", persisted)
+
+    capability_discovery(
+        agent_state_factory(), include_agents=False,
+        query="Find a tool", query_embedding=embedding,
+    )
+
+    if embedding is None:
+        embed.assert_called_once_with("Find a tool")
+    else:
+        embed.assert_not_called()
+    persisted.assert_called_once_with(
+        "Find a tool", embed.return_value if embedding is None else embedding, None,
+    )
 
 
 def test_runtime_discovery_registers_database_system_and_user_agents(monkeypatch, db_agent_factory, agent_state_factory) -> None:

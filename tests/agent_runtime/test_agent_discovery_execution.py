@@ -24,6 +24,8 @@ def test_initial_enrichment_discovers_against_the_request_agent(
     ])
     monkeypatch.setattr("agent_runtime.state_enrichment.load_user_profile", lambda _: None)
     state = main_state_factory(task="Find a helper")
+    state.discovery_query = "Previously embedded request"
+    state.discovery_query_embedding = [1.0]
     seen = []
 
     def discover(active, **kwargs):
@@ -31,6 +33,8 @@ def test_initial_enrichment_discovers_against_the_request_agent(
         assert active is state.main_agent_state
         assert active.inputs.task == state.task
         assert kwargs["allowed_tool_names"] == active.agent_profile.tool_names
+        assert kwargs["query"] == state.discovery_query
+        assert kwargs["query_embedding"] is state.discovery_query_embedding
         seen.append(active)
         return discovery.capability_discovery(active, **kwargs)
 

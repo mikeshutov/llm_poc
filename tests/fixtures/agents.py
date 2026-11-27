@@ -35,6 +35,17 @@ def user_agent_profile_factory(agent_profile_factory):
 
 
 @pytest.fixture
+def execution_context_factory():
+    def create(*, user_id=None, **overrides):
+        context = AgentExecutionContext.new(**overrides)
+        if user_id is not None:
+            context.user_profile = context.user_profile.model_copy(update={"user_id": user_id}, deep=True)
+        return context
+
+    return create
+
+
+@pytest.fixture
 def agent_state_factory(agent_profile_factory):
     def create(*, profile=None, profile_overrides=None, plan=None, task="", llm=None, user_id=None, **kwargs):
         if profile is None:

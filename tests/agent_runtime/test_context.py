@@ -43,9 +43,9 @@ def test_context_readers_follow_live_agent_state(agent_state_factory):
 
 
 @pytest.mark.parametrize("fails", [False, True])
-def test_nested_agent_scope_restores_parent(agent_profile_factory, agent_state_factory, fails):
-    parent = agent_state_factory(profile=agent_profile_factory(name="parent", scope="main_agent"))
-    child = agent_state_factory(profile=agent_profile_factory(name="child", scope="main_agent"))
+def test_nested_agent_scope_restores_parent(agent_state_factory, fails):
+    parent = agent_state_factory(profile_overrides={"name": "parent"})
+    child = agent_state_factory(profile_overrides={"name": "child"})
     with bind_agent_context(parent):
         try:
             with bind_agent_context(child):
@@ -62,10 +62,10 @@ def test_nested_agent_scope_restores_parent(agent_profile_factory, agent_state_f
     assert get_current_agent_state() is None
 
 
-def test_parallel_agents_keep_their_own_state(agent_profile_factory, agent_state_factory):
+def test_parallel_agents_keep_their_own_state(agent_state_factory):
     parent = agent_state_factory()
     children = [
-        agent_state_factory(profile=agent_profile_factory(name=name, scope="main_agent"))
+        agent_state_factory(profile_overrides={"name": name})
         for name in ["alice", "bob"]
     ]
     barrier = Barrier(2)
@@ -93,7 +93,7 @@ def test_request_binds_its_agent_before_orchestration_and_restores_context(
     monkeypatch,
     fails,
 ):
-    main_state = main_state_factory(task="Find an answer", agent_profiles=[], llm=object())
+    main_state = main_state_factory(task="Find an answer")
 
     def orchestrate(state):
         active = get_current_agent_state()

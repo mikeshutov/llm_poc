@@ -3,9 +3,7 @@ from __future__ import annotations
 import importlib
 from uuid import uuid4
 
-from personalization.profile.models import UserProfile
 from agent_runtime.context import bind_agent_context
-from agent_runtime.models.agent_execution_context import AgentExecutionContext
 from capabilities.adapters.memories.get_memory_detail import get_memory_detail
 
 
@@ -56,11 +54,7 @@ def test_get_memory_detail_returns_typed_result(
     original_repo_getter = module.get_conversation_repo
     module.get_conversation_repo = lambda: fake_repo
     try:
-        with bind_agent_context(agent_state_factory(
-            execution_context=AgentExecutionContext.new(
-                conversation_id="conversation-1", user_profile=UserProfile(user_id="user-123"),
-            ),
-        )):
+        with bind_agent_context(agent_state_factory(user_id="user-123")):
             result = get_memory_detail.invoke({"roundtrip_id": str(fake_repo.roundtrip.id)})
     finally:
         module.get_conversation_repo = original_repo_getter

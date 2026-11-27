@@ -119,7 +119,12 @@ def test_tool_registry_serializes_calls_for_shared_rate_limit_key(tool_factory) 
     assert abs(call_times[1][1] - call_times[0][1]) >= 0.045
 
 
-def test_tool_registry_retries_timeout_when_policy_allows(tool_factory) -> None:
+@pytest.mark.parametrize("error", [
+    pytest.param(Timeout("timed out"), id="timeout"),
+    pytest.param(HttpClientError("HTTP 429 on https://example.com: rate limited"), id="http-429"),
+    pytest.param(RuntimeError("HTTP 429 on https://api.search.brave.com/res/v1/web/search: rate limited"), id="wrapped-http-429"),
+])
+def test_tool_registry_retries_transient_errors_when_policy_allows(tool_factory, error) -> None:
     registry = ToolRegistry()
     attempts = 0
 
@@ -127,7 +132,7 @@ def test_tool_registry_retries_timeout_when_policy_allows(tool_factory) -> None:
         nonlocal attempts
         attempts += 1
         if attempts == 1:
-            raise Timeout("timed out")
+            raise error
         return {"ok": True}
 
     registry.register(
@@ -143,58 +148,7 @@ def test_tool_registry_retries_timeout_when_policy_allows(tool_factory) -> None:
     assert attempts == 2
 
 
-def test_tool_registry_retries_http_429_when_policy_allows(tool_factory) -> None:
-    registry = ToolRegistry()
-    attempts = 0
-
-    def callback(_tool_input):
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise HttpClientError("HTTP 429 on https://example.com: rate limited")
-        return {"ok": True}
-
-    registry.register(
-        Tool(
-            tool_factory("retry_tool", callback),
-            retry_policy=RetryPolicy(max_attempts=2, backoff_seconds=0.0),
-        )
-    )
-
-    result = registry.call_tool("retry_tool", {})
-
-    assert result == {"ok": True}
-    assert attempts == 2
-
-
-def test_tool_registry_retries_wrapped_http_429_when_policy_allows(tool_factory) -> None:
-    registry = ToolRegistry()
-    attempts = 0
-
-    def callback(_tool_input):
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise RuntimeError("HTTP 429 on https://api.search.brave.com/res/v1/web/search: rate limited")
-        return {"ok": True}
-
-    registry.register(
-        Tool(
-            tool_factory("retry_tool", callback),
-            retry_policy=RetryPolicy(max_attempts=2, backoff_seconds=0.0),
-        )
-    )
-
-    result = registry.call_tool("retry_tool", {})
-
-    assert result == {"ok": True}
-    assert attempts == 2
-
-
-def test_tool_registry_cache_miss_invokes_tool_and_stores_result(
-    cache_repository_factory,
-    tool_factory,
-) -> None:
+def test_tool_registry_cache_miss_invokes_tool_and_stores_result(cache_repository_factory, tool_factory) -> None:
     cache = cache_repository_factory()
     calls = 0
 
@@ -236,11 +190,7 @@ def test_tool_registry_cache_hit_skips_tool_invocation(cache_repository_factory,
     assert cache.put_calls == 1
 
 
-def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence(
-    cache_repository_factory,
-    tool_factory,
-    evidence_factory,
-) -> None:
+def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence(cache_repository_factory, tool_factory, evidence_factory) -> None:
     cache = cache_repository_factory()
     calls = 0
     evidence = evidence_factory(
@@ -269,10 +219,7 @@ def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence(
     assert calls == 1
 
 
-def test_tool_registry_legacy_cache_payload_is_treated_as_miss(
-    cache_repository_factory,
-    tool_factory,
-) -> None:
+def test_tool_registry_legacy_cache_payload_is_treated_as_miss(cache_repository_factory, tool_factory) -> None:
     cache = cache_repository_factory()
     calls = 0
 
@@ -298,10 +245,7 @@ def test_tool_registry_legacy_cache_payload_is_treated_as_miss(
     assert calls == 1
 
 
-def test_tool_registry_malformed_cache_envelope_is_treated_as_miss(
-    cache_repository_factory,
-    tool_factory,
-) -> None:
+def test_tool_registry_malformed_cache_envelope_is_treated_as_miss(cache_repository_factory, tool_factory) -> None:
     cache = cache_repository_factory()
     calls = 0
 
@@ -344,10 +288,7 @@ def test_tool_registry_cache_lookup_error_falls_back_to_tool(cache_repository_fa
     assert calls == 1
 
 
-def test_tool_registry_cache_store_error_does_not_fail_tool_request(
-    cache_repository_factory,
-    tool_factory,
-) -> None:
+def test_tool_registry_cache_store_error_does_not_fail_tool_request(cache_repository_factory, tool_factory) -> None:
     cache = cache_repository_factory(fail_put=True)
     calls = 0
 

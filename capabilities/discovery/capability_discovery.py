@@ -281,6 +281,7 @@ def capability_discovery(
     *,
     include_agents: bool = True,
     query: str | None = None,
+    query_embedding: list[float] | None = None,
     allowed_tool_names: set[str] | None = None,
 ) -> CapabilityDiscoveryResult:
     """Find concrete capabilities relevant to the current request.
@@ -292,20 +293,20 @@ def capability_discovery(
         conversation_context=state.execution_context.conversation_context,
     )).strip()
     embedding_started_at = perf_counter()
-    try:
-        query_embedding = embed_text(query)
-    except Exception as exc:
-        query_embedding = None
-        record_node_log(
-            node_name=NodeName.CAPABILITY_DISCOVERY,
-            stage="embedding",
-            event_type="capability_discovery",
-            level="warning",
-            message="Capability discovery embedding failed",
-            roundtrip_id=state.execution_context.roundtrip_id,
-            payload={"query": query, "error": str(exc)},
-            duration_ms=int((perf_counter() - embedding_started_at) * 1000),
-        )
+    if query_embedding is None:
+        try:
+            query_embedding = embed_text(query)
+        except Exception as exc:
+            record_node_log(
+                node_name=NodeName.CAPABILITY_DISCOVERY,
+                stage="embedding",
+                event_type="capability_discovery",
+                level="warning",
+                message="Capability discovery embedding failed",
+                roundtrip_id=state.execution_context.roundtrip_id,
+                payload={"query": query, "error": str(exc)},
+                duration_ms=int((perf_counter() - embedding_started_at) * 1000),
+            )
 
     tool_candidates = _build_tool_candidates()
     if allowed_tool_names is not None:

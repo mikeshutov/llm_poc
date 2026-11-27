@@ -39,6 +39,7 @@ _GENERATED_FILE_LINK = re.compile(
     re.IGNORECASE,
 )
 
+
 def _file_name_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.casefold())
 

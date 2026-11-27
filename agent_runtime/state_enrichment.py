@@ -30,6 +30,8 @@ def enrich_state(
                 capability_lookup,
                 capability_state,
                 include_agents=include_agents,
+                query=main_state.discovery_query or None,
+                query_embedding=main_state.discovery_query_embedding,
                 allowed_tool_names=capability_state.agent_profile.tool_names,
             )
             main_state.discovered_attribute_types = attribute_future.result()
