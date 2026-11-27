@@ -86,6 +86,7 @@ def _execute_step(
     allowed_tool_names: set[str] | None,
     resolved_args: dict[str, Any] | None = None,
     rejection_reason: str = "",
+    is_delegated: bool = False,
 ) -> StepExecutionResult:
     args = resolved_args if resolved_args is not None else _substitute_refs(step.args, tool_results_by_step_id)
     started_at = perf_counter()
@@ -121,6 +122,7 @@ def _execute_step(
         error_text=error_text,
         rejection_reason=rejection_reason,
         latency_ms=latency_ms,
+        is_delegated=is_delegated,
     )
 
 
@@ -194,6 +196,19 @@ def _execute_agent_step(
     )
 
 
+def execute_agent_tool(agent_state: AgentState, agent_name: str, args: dict[str, Any]) -> ToolResult:
+    """Invoke a registered agent-backed tool from the common tool registry."""
+    step = PlanStep(
+        id=f"agent:{agent_name}",
+        tool=agent_name,
+        plan=str(args.get("task", "")),
+        args=args,
+    )
+    result = _execute_agent_step(agent_state, step, resolved_args=args)
+    output = result.output
+    return output if isinstance(output, ToolResult) else ToolResult(result=output, evidence=[])
+
+
 def execute_step(
     step: PlanStep,
     *,
@@ -214,45 +229,38 @@ def execute_step(
         step.args,
         tool_results_by_step_id or {},
     )
-    is_delegated_tool = (
-        agent_state is not None
-        and step.tool in (agent_state.available_agent_states or {})
-    )
-    if is_delegated_tool:
-        if agent_state is None:
-            message = f"Delegated agent '{step.tool}' requires an execution state."
-            return StepExecutionResult(
-                step=step,
-                args=args,
-                output=ToolResult.error(message, status="error"),
-                error_text=message,
-            )
-        if execution_context is None:
-            return _execute_agent_step(agent_state, step, resolved_args=args)
-        with bind_runtime_context(
-            conversation_id=execution_context.conversation_id,
-            conversation_model_config=execution_context.model_config,
-            roundtrip_id=str(execution_context.roundtrip_id) if execution_context.roundtrip_id else None,
-            user_id=execution_context.user_profile.user_id,
-        ):
-            return _execute_agent_step(agent_state, step, resolved_args=args)
+    if agent_state is not None and agent_state.available_agent_states:
+        from capabilities.registry.global_registry import register_agent_tools
 
+        register_agent_tools(
+            delegated.agent_profile
+            for delegated in agent_state.available_agent_states.values()
+        )
     allowed_tool_names = None if agent_profile is None else set(agent_profile.tool_names)
+    if agent_state is not None:
+        allowed_tool_names = (allowed_tool_names or set()) | set(agent_state.available_agent_states or {})
     kwargs = {
         "tool_results_by_step_id": tool_results_by_step_id or {},
         "allowed_tool_names": allowed_tool_names,
+        "is_delegated": agent_state is not None and step.tool in (agent_state.available_agent_states or {}),
     }
     if resolved_args is not None:
         kwargs["resolved_args"] = resolved_args
     if execution_context is None:
-        return _execute_step(step, **kwargs)
+        if agent_state is None:
+            return _execute_step(step, **kwargs)
+        with bind_agent_context(agent_name=agent_state.agent_profile.name, agent_state=agent_state):
+            return _execute_step(step, **kwargs)
     with bind_runtime_context(
         conversation_id=execution_context.conversation_id,
         conversation_model_config=execution_context.model_config,
         roundtrip_id=str(execution_context.roundtrip_id) if execution_context.roundtrip_id else None,
         user_id=execution_context.user_profile.user_id,
     ):
-        return _execute_step(step, **kwargs)
+        if agent_state is None:
+            return _execute_step(step, **kwargs)
+        with bind_agent_context(agent_name=agent_state.agent_profile.name, agent_state=agent_state):
+            return _execute_step(step, **kwargs)
 
 
 def _record_step_result(

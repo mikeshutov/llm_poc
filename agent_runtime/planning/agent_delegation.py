@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from langchain_core.tools import BaseTool, StructuredTool
+from langchain_core.tools import BaseTool
 
 from agent_runtime.models.agent_state import AgentState
+from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY, register_agent_tools
 
 
 def delegated_agent_states(state: AgentState) -> list[AgentState]:
@@ -35,29 +36,6 @@ def build_agent_delegation_tools(
     agent_states: Iterable[AgentState],
 ) -> list[BaseTool]:
     """Build native tools that create explicit agent-delegation plan steps."""
-    tools: list[BaseTool] = []
-    for agent_state in agent_states:
-        profile = agent_state.agent_profile
-        args_schema = profile.delegation_args_schema
-
-        def delegate(*, agent_name=profile.name, **kwargs):
-            payload = dict(kwargs)
-            evidence_ids = payload.get("evidence_ids")
-            if isinstance(evidence_ids, list):
-                payload["evidence_ids"] = list(dict.fromkeys(
-                    value.strip()
-                    for value in evidence_ids
-                    if isinstance(value, str) and value.strip()
-                ))
-            return {"agent": agent_name, **payload}
-
-        tools.append(
-            StructuredTool.from_function(
-                func=delegate,
-                name=profile.name,
-                description=profile.description,
-                args_schema=args_schema,
-                metadata={"agent_delegation": True},
-            )
-        )
-    return tools
+    profiles = [agent_state.agent_profile for agent_state in agent_states]
+    register_agent_tools(profiles)
+    return [GLOBAL_TOOL_REGISTRY.get(profile.name) for profile in profiles]

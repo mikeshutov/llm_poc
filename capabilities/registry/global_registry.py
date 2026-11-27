@@ -34,6 +34,31 @@ class DisallowedToolError(ToolRegistryError):
     pass
 
 
+def build_agent_tool(profile):
+    """Build the registry tool whose implementation runs one agent."""
+    from langchain_core.tools import StructuredTool
+
+    from agent_runtime.context import get_current_agent_state
+
+    def invoke_agent(**kwargs):
+        agent_state = get_current_agent_state()
+        if agent_state is None:
+            raise ToolRegistryError(
+                f"Agent tool '{profile.name}' requires an active agent execution state."
+            )
+        from agent_runtime.execution.tool_executor import execute_agent_tool
+
+        return execute_agent_tool(agent_state, profile.name, kwargs)
+
+    return StructuredTool.from_function(
+        func=invoke_agent,
+        name=profile.name,
+        description=profile.description,
+        args_schema=profile.delegation_args_schema,
+        metadata={"agent_delegation": True},
+    )
+
+
 def _record_tool_registry_log(message: str, payload: dict[str, Any], *, level: str = "info", stage: str = "") -> None:
     record_node_log(
         node_name=NodeName.EXECUTOR,
@@ -239,6 +264,12 @@ def register_default_tools() -> None:
     _REGISTERED_DEFAULTS = True
 
 
+def register_agent_tools(profiles) -> None:
+    register_default_tools()
+    for profile in profiles:
+        GLOBAL_TOOL_REGISTRY.register(build_agent_tool(profile))
+
+
 def call_tool(name: str, tool_input: Any = None, allowed_tool_names: set[str] | None = None) -> Any:
     register_default_tools()
     if allowed_tool_names is None and name in AGENT_ONLY_TOOL_NAMES:
@@ -252,5 +283,7 @@ __all__ = [
     "ToolRegistryError",
     "UnknownToolError",
     "register_default_tools",
+    "register_agent_tools",
+    "build_agent_tool",
     "call_tool",
 ]
