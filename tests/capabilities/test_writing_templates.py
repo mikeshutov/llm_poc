@@ -12,19 +12,8 @@ from capabilities.adapters.writing.templates import (
 )
 
 
-def _write(path: Path, content: str) -> None:
-    path.write_text(content, encoding="utf-8")
-
-
-def _catalog(tmp_path: Path, definitions: str, **template_files: str) -> None:
-    _write(tmp_path / "definitions.yaml", "templates:\n" + definitions)
-    for filename, content in template_files.items():
-        _write(tmp_path / filename, content)
-
-
-def test_load_writing_templates_validates_yaml_definitions(tmp_path: Path) -> None:
-    _catalog(
-        tmp_path,
+def test_load_writing_templates_validates_yaml_definitions(writing_catalog_factory, tmp_path: Path) -> None:
+    writing_catalog_factory(
         """
   - id: essay
     name: Essay
@@ -56,9 +45,8 @@ def test_load_writing_templates_validates_yaml_definitions(tmp_path: Path) -> No
     ]
 
 
-def test_load_writing_templates_rejects_duplicate_ids(tmp_path: Path) -> None:
-    _catalog(
-        tmp_path,
+def test_load_writing_templates_rejects_duplicate_ids(writing_catalog_factory, tmp_path: Path) -> None:
+    writing_catalog_factory(
         """
   - id: duplicate
     name: Duplicate
@@ -86,9 +74,8 @@ def test_load_writing_templates_rejects_duplicate_ids(tmp_path: Path) -> None:
         load_writing_templates(tmp_path)
 
 
-def test_load_writing_templates_rejects_unsupported_formats(tmp_path: Path) -> None:
-    _catalog(
-        tmp_path,
+def test_load_writing_templates_rejects_unsupported_formats(writing_catalog_factory, tmp_path: Path) -> None:
+    writing_catalog_factory(
         """
   - id: bad
     name: Bad
@@ -107,9 +94,12 @@ def test_load_writing_templates_rejects_unsupported_formats(tmp_path: Path) -> N
         load_writing_templates(tmp_path)
 
 
-def test_writing_templates_filters_and_returns_metadata_only(monkeypatch, tmp_path: Path) -> None:
-    _catalog(
-        tmp_path,
+def test_writing_templates_filters_and_returns_metadata_only(
+    writing_catalog_factory,
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    writing_catalog_factory(
         """
   - id: essay
     name: Essay
@@ -157,9 +147,8 @@ def test_writing_templates_fails_when_directory_is_missing(monkeypatch, tmp_path
         writing_templates.invoke({})
 
 
-def test_template_body_is_loaded_only_explicitly(tmp_path: Path) -> None:
-    _catalog(
-        tmp_path,
+def test_template_body_is_loaded_only_explicitly(writing_catalog_factory, tmp_path: Path) -> None:
+    writing_catalog_factory(
         """
   - id: essay
     name: Essay

@@ -1,16 +1,7 @@
-import sys
-from types import ModuleType, SimpleNamespace
 
-if "pycountry" not in sys.modules:
-    pycountry_module = ModuleType("pycountry")
-    pycountry_module.countries = SimpleNamespace(
-        lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper())
-    )
-    sys.modules["pycountry"] = pycountry_module
 
 from common.html_text import html_to_plain_text
 from integrations.brave.models import NewsResult, NewsSearchQuery, NewsSearchResponse, WebSearchResponse, WebSearchResult
-from products.models.product_result import ProductResult
 from products.models.product_search_results import ProductSearchResults
 from products.models.product_source import ProductSource
 from retrieval.evidence import EvidenceView
@@ -126,36 +117,22 @@ def test_standalone_brave_news_evidence_strips_html_from_summary() -> None:
     assert result.evidence[0].summary == "Forecast for Toronto today."
 
 
-def test_brave_shopping_product_evidence_strips_html_from_summary() -> None:
-    product = ProductResult(
+def test_brave_shopping_product_evidence_strips_html_from_summary(product_factory) -> None:
+    product = product_factory(
         id="product-1",
         name="Weather Radio",
         description="<b>Weather</b> radio &amp; alert receiver.",
-        category=None,
-        color=None,
-        style=None,
-        gender=None,
-        season=None,
-        year=None,
-        price=None,
         source=ProductSource.WEB,
     )
 
     assert _product_summary(product) == "Weather radio & alert receiver."
 
 
-def test_product_result_metadata_is_not_repeated_on_each_evidence_item() -> None:
-    product = ProductResult(
+def test_product_result_metadata_is_not_repeated_on_each_evidence_item(product_factory) -> None:
+    product = product_factory(
         id="product-1",
         name="Weather Radio",
         description="Alert receiver.",
-        category=None,
-        color=None,
-        style=None,
-        gender=None,
-        season=None,
-        year=None,
-        price=None,
         source=ProductSource.WEB,
     )
 
@@ -174,9 +151,5 @@ def test_product_result_metadata_is_not_repeated_on_each_evidence_item() -> None
         "product_source": "web",
     }
     assert result.evidence[0].metadata == {}
-
-
-
-
 
 

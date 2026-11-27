@@ -1,32 +1,10 @@
-from uuid import uuid4
 from unittest.mock import patch
 
 from conversation.context_builder import build_roundtrip_context
-from conversation.models.conversation_models import Conversation, ConversationMessage, ConversationRoundtrip, ConversationSummary
 
 
-class FakeConversationRepository:
-    def __init__(self):
-        self.roundtrip = ConversationRoundtrip(uuid4(), uuid4(), 1, "summary", None, "2026-01-01", {}, "completed")
-        self.messages = [
-            ConversationMessage(uuid4(), self.roundtrip.id, 0, "user", "visible", "user", "Find boots.", {}, {}, None, ""),
-            ConversationMessage(uuid4(), self.roundtrip.id, 1, "assistant", "visible", "assistant", "Here are boots.", {"next_question": "What size?"}, {"stage": "synthesis"}, None, ""),
-        ]
-
-    def get_conversation(self, conversation_id):
-        return Conversation(conversation_id, "user-1", "Test", "", {}, {}, "", None)
-
-    def get_latest_summary(self, conversation_id):
-        return ConversationSummary(uuid4(), conversation_id, "", 0, "")
-
-    def list_roundtrips(self, *args, **kwargs):
-        return [self.roundtrip]
-
-    def list_messages(self, roundtrip_id, include_internal=True, exclude_subagents=False):
-        return self.messages
-
-def test_context_uses_ordered_visible_messages() -> None:
-    repository = FakeConversationRepository()
+def test_context_uses_ordered_visible_messages(context_repository_factory) -> None:
+    repository = context_repository_factory()
     with patch("conversation.context_builder.get_conversation_repo", return_value=repository):
         context = build_roundtrip_context(str(repository.roundtrip.conversation_id))
 
@@ -34,33 +12,20 @@ def test_context_uses_ordered_visible_messages() -> None:
     assert context.conversation_summary == ""
 
 
-def test_context_projects_out_internal_trace_messages() -> None:
-    repository = FakeConversationRepository()
-    repository.messages.insert(1, ConversationMessage(
-        uuid4(), repository.roundtrip.id, 1, "assistant", "internal", "assistant",
-        "full prompt should not be context", {"sections_raw": {"large": "x" * 10000}}, {}, None, "",
-    ))
+def test_context_projects_out_internal_trace_messages(conversation_message_factory, context_repository_factory) -> None:
+    repository = context_repository_factory()
+    repository.messages.insert(1, conversation_message_factory(roundtrip_id=repository.roundtrip.id, sequence=1, kind="assistant", visibility="internal", role="assistant", content="full prompt should not be context", payload={"sections_raw": {"large": "x" * 10000}}))
     with patch("conversation.context_builder.get_conversation_repo", return_value=repository):
         context = build_roundtrip_context(str(repository.roundtrip.conversation_id))
 
     assert all(message.visibility == "visible" for message in context.messages)
 
 
-def test_context_excludes_subagent_tool_entries() -> None:
-    repository = FakeConversationRepository()
+def test_context_excludes_subagent_tool_entries(conversation_message_factory, context_repository_factory) -> None:
+    repository = context_repository_factory()
     repository.messages.extend([
-        ConversationMessage(
-            uuid4(), repository.roundtrip.id, 2, "tool_call", "internal", "assistant",
-            "document_writing: create the report", {"tool_name": "document_writing"},
-            {"tool_name": "document_writing"}, None, "",
-            is_subagent=True, subagent_name="document_writing",
-        ),
-        ConversationMessage(
-            uuid4(), repository.roundtrip.id, 3, "tool_result", "internal", "tool", "",
-            {"tool_name": "document_writing", "output_payload": {"task": "create the report"}},
-            {"tool_name": "document_writing"}, None, "",
-            is_subagent=True, subagent_name="document_writing",
-        ),
+        conversation_message_factory(roundtrip_id=repository.roundtrip.id, sequence=2, kind="tool_call", visibility="internal", role="assistant", content="document_writing: create the report", payload={"tool_name": "document_writing"}, metadata={"tool_name": "document_writing"}, is_subagent=True, subagent_name="document_writing"),
+        conversation_message_factory(roundtrip_id=repository.roundtrip.id, sequence=3, kind="tool_result", visibility="internal", role="tool", payload={"tool_name": "document_writing", "output_payload": {"task": "create the report"}}, metadata={"tool_name": "document_writing"}, is_subagent=True, subagent_name="document_writing"),
     ])
     with patch("conversation.context_builder.get_conversation_repo", return_value=repository):
         context = build_roundtrip_context(str(repository.roundtrip.conversation_id))

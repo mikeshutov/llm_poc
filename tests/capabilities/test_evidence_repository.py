@@ -6,33 +6,7 @@ from retrieval.evidence import EvidenceView
 from capabilities.registry.repository.evidence_repository import EvidenceRepository
 
 
-class FakeCursor:
-    def __init__(self, *, fetchall_rows: list[dict]):
-        self.fetchall_rows = fetchall_rows
-        self.executed: list[tuple[str, tuple]] = []
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def execute(self, sql, params):
-        self.executed.append((sql, params))
-
-    def fetchall(self):
-        return self.fetchall_rows
-
-
-class FakeConnection:
-    def __init__(self, cursor: FakeCursor):
-        self._cursor = cursor
-
-    def cursor(self, row_factory=None):
-        return self._cursor
-
-
-def test_get_by_ids_reads_canonical_evidence_views() -> None:
+def test_get_by_ids_reads_canonical_evidence_views(database_connection_factory) -> None:
     evidence_id = uuid4()
     row = {
         "id": evidence_id,
@@ -46,19 +20,19 @@ def test_get_by_ids_reads_canonical_evidence_views() -> None:
         },
         "metadata": {"price": 25.0},
     }
-    cursor = FakeCursor(fetchall_rows=[{"payload": {"evidence": [row]}}])
-    repository = EvidenceRepository(conn=FakeConnection(cursor))
+    connection, cursor = database_connection_factory(rows=[{"payload": {"evidence": [row]}}])
+    repository = EvidenceRepository(conn=connection)
 
     evidence_by_id = repository.get_by_ids(
         [str(evidence_id), "not-a-uuid", str(evidence_id)],
         user_id="user-1",
     )
 
-    assert "FROM conversation_message" in cursor.executed[0][0]
-    assert "jsonb_each" not in cursor.executed[0][0]
-    assert "JOIN conversation_roundtrip" in cursor.executed[0][0]
-    assert "c.user_id" in cursor.executed[0][0]
-    assert cursor.executed[0][1] == ("user-1", "user-1")
+    assert "FROM conversation_message" in cursor.execute.call_args.args[0]
+    assert "jsonb_each" not in cursor.execute.call_args.args[0]
+    assert "JOIN conversation_roundtrip" in cursor.execute.call_args.args[0]
+    assert "c.user_id" in cursor.execute.call_args.args[0]
+    assert cursor.execute.call_args.args[1] == ("user-1", "user-1")
     assert evidence_by_id == {
         str(evidence_id): EvidenceView(
             id=evidence_id,
@@ -72,7 +46,5 @@ def test_get_by_ids_reads_canonical_evidence_views() -> None:
             "urls": [{"url": "https://example.com", "url_type": "website"}],
         })
     }
-
-
 
 

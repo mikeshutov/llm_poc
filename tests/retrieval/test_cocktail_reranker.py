@@ -3,8 +3,6 @@ from capabilities.adapters.food.candidate_mapper import (
     cocktail_to_candidate,
     rerank_cocktail_search_result,
 )
-from capabilities.adapters.food.constants import DEFAULT_MEAL_RERANK_LIMIT
-from tests.test_utilities.fake_reranker import FakeReranker
 
 
 def test_cocktail_to_candidate_maps_cocktail_fields() -> None:
@@ -36,8 +34,8 @@ def test_cocktail_to_candidate_maps_cocktail_fields() -> None:
     assert candidate.fields["ingredients"] == ["Tequila", "Lime Juice"]
 
 
-def test_rerank_cocktail_search_result_reorders_and_limits_to_three() -> None:
-    llm = FakeReranker('{"ranked_ids": ["drink-5", "drink-4", "drink-3", "drink-2", "drink-1"]}')
+def test_rerank_cocktail_search_result_reorders_and_limits_to_three(reranker_factory) -> None:
+    llm = reranker_factory(ranked_ids=["drink-5", "drink-4", "drink-3", "drink-2", "drink-1"])
     response = CocktailSearchResult.model_validate(
         {
             "drinks": [
@@ -57,8 +55,10 @@ def test_rerank_cocktail_search_result_reorders_and_limits_to_three() -> None:
     assert reranked.reranked is True
 
 
-def test_rerank_cocktail_search_result_skips_llm_when_result_count_is_at_or_below_limit() -> None:
-    llm = FakeReranker('{"ranked_ids": ["drink-2", "drink-1"]}')
+def test_rerank_cocktail_search_result_skips_llm_when_result_count_is_at_or_below_limit(
+    reranker_factory,
+) -> None:
+    llm = reranker_factory(ranked_ids=["drink-2", "drink-1"])
     response = CocktailSearchResult.model_validate(
         {
             "drinks": [

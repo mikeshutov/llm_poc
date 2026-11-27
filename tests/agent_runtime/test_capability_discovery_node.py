@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from agent_runtime.models.main_state import MainState
 from capabilities.discovery.models import CapabilityDiscoveryResult
 from agent_runtime.state_enrichment import enrich_state
 
 
-def test_capability_node_stores_shared_discovery_results() -> None:
+def test_capability_node_stores_shared_discovery_results(main_state_factory) -> None:
     attribute_lookup = lambda _: ["food.preference"]
     capability_lookup = lambda _, **kwargs: CapabilityDiscoveryResult()
-    state = MainState.new(task="food", agent_profiles=[])
+    state = main_state_factory(task="food", agent_profiles=[])
 
     enrich_state(
         state,

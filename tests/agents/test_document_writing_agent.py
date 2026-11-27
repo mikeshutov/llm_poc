@@ -1,5 +1,4 @@
 from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
-from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
 from agent_runtime.strategies.react.subagent_prompt import build_subagent_decision_prompt
 
@@ -25,9 +24,9 @@ def test_document_writing_agent_is_react() -> None:
     assert DOCUMENT_WRITING_PROFILE.execution_strategy.value == "react"
 
 
-def test_document_writing_react_prompt_exposes_file_creation_rules() -> None:
-    state = AgentState.new(
-        agent_profile=DOCUMENT_WRITING_PROFILE,
+def test_document_writing_react_prompt_exposes_file_creation_rules(agent_state_factory) -> None:
+    state = agent_state_factory(
+        profile=DOCUMENT_WRITING_PROFILE,
         execution_context=AgentExecutionContext.new(),
         llm=object(),
     )
@@ -42,9 +41,9 @@ def test_document_writing_react_prompt_exposes_file_creation_rules() -> None:
     assert '"status"' in prompt.build()
 
 
-def test_document_writing_prompt_exposes_parent_evidence_ids() -> None:
-    state = AgentState.new(
-        agent_profile=DOCUMENT_WRITING_PROFILE,
+def test_document_writing_prompt_exposes_parent_evidence_ids(agent_state_factory) -> None:
+    state = agent_state_factory(
+        profile=DOCUMENT_WRITING_PROFILE,
         execution_context=AgentExecutionContext.new(),
         llm=object(),
     )

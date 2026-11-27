@@ -1,30 +1,20 @@
 from uuid import uuid4
-import sys
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
-if "yfinance" not in sys.modules:
-    sys.modules["yfinance"] = ModuleType("yfinance")
-
-if "pycountry" not in sys.modules:
-    pycountry_module = ModuleType("pycountry")
-    pycountry_module.countries = SimpleNamespace(
-        lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper())
-    )
-    sys.modules["pycountry"] = pycountry_module
 
 from agent_runtime.models.agent_prompt import (
     AgentPrompt,
     EvidenceStep,
     PromptSectionKeys,
 )
-from retrieval.evidence import EvidenceView, ToolResult
+from retrieval.evidence import ToolResult
 from retrieval.evidence_store import build_evidence_steps_from_tool_results
 from agent_runtime.evaluation.prompts.evaluator_prompt import build_evaluator_prompt
 from langchain_core.messages import SystemMessage
 
 
-def test_evidence_views_exclude_internal_and_raw_fields() -> None:
-    evidence = EvidenceView(
+def test_evidence_views_exclude_internal_and_raw_fields(evidence_factory) -> None:
+    evidence = evidence_factory(
         id=uuid4(),
         summary="A product.",
         source="catalog",
@@ -54,8 +44,8 @@ def test_evidence_views_exclude_internal_and_raw_fields() -> None:
     }
 
 
-def test_agent_prompt_serializes_compact_evidence_view() -> None:
-    evidence = EvidenceView(
+def test_agent_prompt_serializes_compact_evidence_view(evidence_factory) -> None:
+    evidence = evidence_factory(
         source="catalog",
         summary="A product.",
         metadata={"price": 25.0},
@@ -71,8 +61,8 @@ def test_agent_prompt_serializes_compact_evidence_view() -> None:
     assert prompt.sections_raw[PromptSectionKeys.EVIDENCE][0]["evidence"] == [evidence.model_dump(mode="json")]
 
 
-def test_agent_prompt_serializes_evaluator_evidence_view() -> None:
-    evidence = EvidenceView(
+def test_agent_prompt_serializes_evaluator_evidence_view(evidence_factory) -> None:
+    evidence = evidence_factory(
         summary="A product with current pricing.",
         source="catalog",
         type="product_results",
@@ -104,8 +94,8 @@ def test_agent_prompt_serializes_evaluator_evidence_view() -> None:
     ]
 
 
-def test_evaluator_evidence_is_not_duplicated_into_prompt_messages() -> None:
-    evidence = EvidenceView( summary="Useful evidence.",
+def test_evaluator_evidence_is_not_duplicated_into_prompt_messages(evidence_factory) -> None:
+    evidence = evidence_factory( summary="Useful evidence.",
         data={
             "title": "Current result",
         })
@@ -159,7 +149,5 @@ def test_evidence_steps_do_not_label_tool_errors_as_no_results() -> None:
     assert prompt.sections_raw[PromptSectionKeys.EVIDENCE] == [
         {"type": "web_search_results"}
     ]
-
-
 
 

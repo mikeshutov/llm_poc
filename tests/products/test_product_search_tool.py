@@ -1,61 +1,30 @@
 import pytest
 
-from products.models.product_result import ProductResult
-from products.models.product_search_results import ProductSearchResults
 from products.models.product_source import ProductSource
 from capabilities.adapters.products.find_products import search_products
 
 
-def _internal_result() -> ProductSearchResults:
-    return ProductSearchResults(
-        internal_results=[
-            ProductResult(
-                id="internal-1",
-                name="Internal shoes",
-                description="Catalog result",
-                category="Footwear",
-                color=None,
-                style=None,
-                gender=None,
-                season=None,
-                year=None,
-                price=100,
-                source=ProductSource.DB,
-            )
-        ],
-        external_results=[],
-        retrieved_count=1,
-        reranked=True,
+def test_product_search_supports_explicit_internal_web_and_both_sources(
+    product_search_results_factory,
+    product_factory,
+    monkeypatch,
+) -> None:
+    internal_result = product_search_results_factory(
+        internal_results=[product_factory(
+            id="internal-1", name="Internal shoes", description="Catalog result",
+            category="Footwear", price=100,
+        )],
+        retrieved_count=1, reranked=True,
     )
-
-
-def _web_result() -> ProductSearchResults:
-    return ProductSearchResults(
-        internal_results=[],
-        external_results=[
-            ProductResult(
-                id="https://example.com/shoes",
-                name="Web shoes",
-                description="Web result",
-                category=None,
-                color=None,
-                style=None,
-                gender=None,
-                season=None,
-                year=None,
-                price=120,
-                url="https://example.com/shoes",
-                source=ProductSource.WEB,
-            )
-        ],
-        retrieved_count=1,
-        reranked=True,
+    web_result = product_search_results_factory(
+        external_results=[product_factory(
+            id="https://example.com/shoes", name="Web shoes", description="Web result",
+            price=120, url="https://example.com/shoes", source=ProductSource.WEB,
+        )],
+        retrieved_count=1, reranked=True,
     )
-
-
-def test_product_search_supports_explicit_internal_web_and_both_sources(monkeypatch) -> None:
-    monkeypatch.setitem(search_products.func.__globals__, "catalog_find_products", lambda **_: _internal_result())
-    monkeypatch.setitem(search_products.func.__globals__, "web_find_products", lambda **_: _web_result())
+    monkeypatch.setitem(search_products.func.__globals__, "catalog_find_products", lambda **_: internal_result)
+    monkeypatch.setitem(search_products.func.__globals__, "web_find_products", lambda **_: web_result)
 
     internal = search_products.invoke({"source": "internal", "query_text": "shoes"})
     web = search_products.invoke({"source": "web", "query_text": "shoes"})

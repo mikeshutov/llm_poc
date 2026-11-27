@@ -1,99 +1,23 @@
 from __future__ import annotations
 
-import sys
 import threading
 import time
-from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
-if 'yfinance' not in sys.modules:
-    sys.modules['yfinance'] = ModuleType('yfinance')
-
-if 'pycountry' not in sys.modules:
-    pycountry_module = ModuleType('pycountry')
-    pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
-    sys.modules['pycountry'] = pycountry_module
 
 from agent_runtime.context import bind_runtime_context
-from agent_runtime.models.agent_profile import AgentKind, AgentProfile
+from agent_runtime.models.agent_profile import AgentKind
 from capabilities.registry import global_registry
 from common.http import HttpClientError
 from requests.exceptions import Timeout
 from capabilities.registry.global_registry import ToolRegistry, ToolRegistryError, UnknownToolError
-from common.cache.repository import decode_cache_output, encode_cache_output
 from common.cache.policy import ToolCachePolicy
 from capabilities.registry.models import RateLimitPolicy, Tool
 from capabilities.retry.policy import RetryPolicy
-from retrieval.evidence import EvidenceView, ToolResult
+from retrieval.evidence import ToolResult
 from capabilities.adapters.profile import USER_MANAGEMENT_TOOL
-
-
-class _FakeTool:
-    def __init__(self, name: str, callback) -> None:
-        self.name = name
-        self.description = ""
-        self.args_schema = None
-        self._callback = callback
-
-    def invoke(self, tool_input=None):
-        return self._callback(tool_input or {})
-
-
-class _FakeCacheRepository:
-    def __init__(self):
-        self.entries = {}
-        self.get_calls = 0
-        self.put_calls = 0
-
-    @staticmethod
-    def sanitize(value):
-        return value
-
-    @staticmethod
-    def build_cache_key(*, tool_name, tool_version, tool_input, user_id=None):
-        return (tool_name, tool_version, user_id, repr(tool_input))
-
-    def get(self, *, tool, tool_input, user_id=None):
-        self.get_calls += 1
-        cache_key = self.build_cache_key(
-            tool_name=tool.name,
-            tool_version=tool.version,
-            tool_input=tool_input,
-            user_id=user_id,
-        )
-        cached_output = self.entries.get(cache_key)
-        return None if cached_output is None else decode_cache_output(cached_output)
-
-    def put(self, **kwargs):
-        self.put_calls += 1
-        cache_key = self.build_cache_key(
-            tool_name=kwargs["tool"].name,
-            tool_version=kwargs["tool"].version,
-            tool_input=kwargs["tool_input"],
-            user_id=kwargs.get("user_id"),
-        )
-        self.entries[cache_key] = encode_cache_output(kwargs["output_payload"])
-
-
-class _FailingCacheRepository(_FakeCacheRepository):
-    def __init__(self, *, fail_get=False, fail_put=False):
-        super().__init__()
-        self.fail_get = fail_get
-        self.fail_put = fail_put
-
-    def get(self, **kwargs):
-        self.get_calls += 1
-        if self.fail_get:
-            raise RuntimeError("cache lookup unavailable")
-        return super().get(**kwargs)
-
-    def put(self, **kwargs):
-        self.put_calls += 1
-        if self.fail_put:
-            raise RuntimeError("cache store unavailable")
-        super().put(**kwargs)
 
 
 def test_runtime_structured_tool_without_cache_policy_is_executable() -> None:
@@ -105,23 +29,23 @@ def test_runtime_structured_tool_without_cache_policy_is_executable() -> None:
     assert result.result["error"] == "User management is unavailable outside an active request."
 
 
-def test_registry_rejects_overwriting_an_existing_tool() -> None:
+def test_registry_rejects_overwriting_an_existing_tool(tool_factory) -> None:
     registry = ToolRegistry()
-    original = _FakeTool("shared", lambda args: "original")
+    original = tool_factory("shared", lambda args: "original")
     registry.register(original)
     registry.register(original)
 
     with pytest.raises(ToolRegistryError, match="already registered"):
-        registry.register(_FakeTool("shared", lambda args: "replacement"))
+        registry.register(tool_factory("shared", lambda args: "replacement"))
 
     assert registry.call_tool("shared") == "original"
 
 
-def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins() -> None:
+def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins(tool_factory) -> None:
     registry = ToolRegistry()
-    registry.register(_FakeTool("assistant", lambda args: "Alice"), user_id="alice")
-    registry.register(_FakeTool("assistant", lambda args: "Bob"), user_id="bob")
-    registry.register(_FakeTool("builtin", lambda args: "shared"))
+    registry.register(tool_factory("assistant", lambda args: "Alice"), user_id="alice")
+    registry.register(tool_factory("assistant", lambda args: "Bob"), user_id="bob")
+    registry.register(tool_factory("builtin", lambda args: "shared"))
 
     for owner, expected in [("alice", "Alice"), ("bob", "Bob")]:
         with bind_runtime_context(conversation_id=None, conversation_model_config=None, user_id=owner):
@@ -129,17 +53,17 @@ def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins() -> Non
             assert registry.call_tool("builtin") == "shared"
 
     with pytest.raises(ToolRegistryError, match="reserved"):
-        registry.register(_FakeTool("builtin", lambda args: "replacement"), user_id="alice")
+        registry.register(tool_factory("builtin", lambda args: "replacement"), user_id="alice")
 
 
-def test_agent_registration_is_idempotent_and_preserves_other_users(registered_tool_registry) -> None:
+def test_agent_registration_is_idempotent_and_preserves_other_users(agent_profile_factory, registered_tool_registry) -> None:
     registry = registered_tool_registry
     original = registry.get("coding")
     global_registry.register_default_tools()
     assert registry.get("coding") is original
 
-    alice = AgentProfile(name="assistant", scope="main_agent", kind=AgentKind.USER_AGENT, description="Alice's agent")
-    bob = AgentProfile(name="assistant", scope="main_agent", kind=AgentKind.USER_AGENT, description="Bob's agent")
+    alice = agent_profile_factory(name="assistant", scope="main_agent", kind=AgentKind.USER_AGENT, description="Alice's agent")
+    bob = agent_profile_factory(name="assistant", scope="main_agent", kind=AgentKind.USER_AGENT, description="Bob's agent")
     global_registry.register_agent_tools([alice], user_id="alice")
     alice_tool = registry.get("assistant", user_id="alice")
     global_registry.register_agent_tools([alice], user_id="alice")
@@ -149,20 +73,20 @@ def test_agent_registration_is_idempotent_and_preserves_other_users(registered_t
     assert registry.get("assistant", user_id="bob").description == "Bob's agent"
     with pytest.raises(ToolRegistryError, match="reserved"):
         global_registry.register_agent_tools([
-            AgentProfile(name="coding", scope="main_agent", kind=AgentKind.USER_AGENT),
+            agent_profile_factory(name="coding", scope="main_agent", kind=AgentKind.USER_AGENT),
         ], user_id="alice")
 
 
 @pytest.mark.parametrize("iteration", range(2))
-def test_registered_tools_do_not_leak_between_tests(registered_tool_registry, iteration):
+def test_registered_tools_do_not_leak_between_tests(tool_factory, registered_tool_registry, iteration):
     with pytest.raises(UnknownToolError):
         registered_tool_registry.get("test_only_tool")
 
-    registered_tool_registry.register(_FakeTool("test_only_tool", lambda args: iteration))
+    registered_tool_registry.register(tool_factory("test_only_tool", lambda args: iteration))
     assert registered_tool_registry.call_tool("test_only_tool") == iteration
 
 
-def test_tool_registry_serializes_calls_for_shared_rate_limit_key() -> None:
+def test_tool_registry_serializes_calls_for_shared_rate_limit_key(tool_factory) -> None:
     registry = ToolRegistry()
     call_times: list[tuple[str, float]] = []
     lock = threading.Lock()
@@ -176,8 +100,8 @@ def test_tool_registry_serializes_calls_for_shared_rate_limit_key() -> None:
         return _callback
 
     policy = RateLimitPolicy(max_requests=1, window_seconds=0.05)
-    registry.register(Tool(_FakeTool("news_search", make_callback("news_search")), rate_limit_key="brave", rate_limit_policy=policy))
-    registry.register(Tool(_FakeTool("generic_web_search", make_callback("generic_web_search")), rate_limit_key="brave", rate_limit_policy=policy))
+    registry.register(Tool(tool_factory("news_search", make_callback("news_search")), rate_limit_key="brave", rate_limit_policy=policy))
+    registry.register(Tool(tool_factory("generic_web_search", make_callback("generic_web_search")), rate_limit_key="brave", rate_limit_policy=policy))
 
     thread_one = threading.Thread(target=registry.call_tool, args=("news_search", {}))
     thread_two = threading.Thread(target=registry.call_tool, args=("generic_web_search", {}))
@@ -190,7 +114,7 @@ def test_tool_registry_serializes_calls_for_shared_rate_limit_key() -> None:
     assert abs(call_times[1][1] - call_times[0][1]) >= 0.045
 
 
-def test_tool_registry_retries_timeout_when_policy_allows() -> None:
+def test_tool_registry_retries_timeout_when_policy_allows(tool_factory) -> None:
     registry = ToolRegistry()
     attempts = 0
 
@@ -203,7 +127,7 @@ def test_tool_registry_retries_timeout_when_policy_allows() -> None:
 
     registry.register(
         Tool(
-            _FakeTool("retry_tool", callback),
+            tool_factory("retry_tool", callback),
             retry_policy=RetryPolicy(max_attempts=2, backoff_seconds=0.0),
         )
     )
@@ -214,7 +138,7 @@ def test_tool_registry_retries_timeout_when_policy_allows() -> None:
     assert attempts == 2
 
 
-def test_tool_registry_retries_http_429_when_policy_allows() -> None:
+def test_tool_registry_retries_http_429_when_policy_allows(tool_factory) -> None:
     registry = ToolRegistry()
     attempts = 0
 
@@ -227,7 +151,7 @@ def test_tool_registry_retries_http_429_when_policy_allows() -> None:
 
     registry.register(
         Tool(
-            _FakeTool("retry_tool", callback),
+            tool_factory("retry_tool", callback),
             retry_policy=RetryPolicy(max_attempts=2, backoff_seconds=0.0),
         )
     )
@@ -238,7 +162,7 @@ def test_tool_registry_retries_http_429_when_policy_allows() -> None:
     assert attempts == 2
 
 
-def test_tool_registry_retries_wrapped_http_429_when_policy_allows() -> None:
+def test_tool_registry_retries_wrapped_http_429_when_policy_allows(tool_factory) -> None:
     registry = ToolRegistry()
     attempts = 0
 
@@ -251,7 +175,7 @@ def test_tool_registry_retries_wrapped_http_429_when_policy_allows() -> None:
 
     registry.register(
         Tool(
-            _FakeTool("retry_tool", callback),
+            tool_factory("retry_tool", callback),
             retry_policy=RetryPolicy(max_attempts=2, backoff_seconds=0.0),
         )
     )
@@ -262,8 +186,8 @@ def test_tool_registry_retries_wrapped_http_429_when_policy_allows() -> None:
     assert attempts == 2
 
 
-def test_tool_registry_cache_miss_invokes_tool_and_stores_result() -> None:
-    cache = _FakeCacheRepository()
+def test_tool_registry_cache_miss_invokes_tool_and_stores_result(cache_repository_factory, tool_factory) -> None:
+    cache = cache_repository_factory()
     calls = 0
 
     def callback(_tool_input):
@@ -272,7 +196,7 @@ def test_tool_registry_cache_miss_invokes_tool_and_stores_result() -> None:
         return {"value": calls}
 
     registry = ToolRegistry(cache_repository=cache, enable_cache=True)
-    registry.register(Tool(_FakeTool("cache_tool", callback), cache_policy=ToolCachePolicy(60), version=2))
+    registry.register(Tool(tool_factory("cache_tool", callback), cache_policy=ToolCachePolicy(60), version=2))
 
     result = registry.call_tool("cache_tool", {"query": "chicken"})
 
@@ -282,8 +206,8 @@ def test_tool_registry_cache_miss_invokes_tool_and_stores_result() -> None:
     assert cache.put_calls == 1
 
 
-def test_tool_registry_cache_hit_skips_tool_invocation() -> None:
-    cache = _FakeCacheRepository()
+def test_tool_registry_cache_hit_skips_tool_invocation(cache_repository_factory, tool_factory) -> None:
+    cache = cache_repository_factory()
     calls = 0
 
     def callback(_tool_input):
@@ -292,7 +216,7 @@ def test_tool_registry_cache_hit_skips_tool_invocation() -> None:
         return {"value": calls}
 
     registry = ToolRegistry(cache_repository=cache, enable_cache=True)
-    registry.register(Tool(_FakeTool("cache_tool", callback), cache_policy=ToolCachePolicy(60), version=2))
+    registry.register(Tool(tool_factory("cache_tool", callback), cache_policy=ToolCachePolicy(60), version=2))
 
     first = registry.call_tool("cache_tool", {"query": "chicken"})
     second = registry.call_tool("cache_tool", {"query": "chicken"})
@@ -304,10 +228,10 @@ def test_tool_registry_cache_hit_skips_tool_invocation() -> None:
     assert cache.put_calls == 1
 
 
-def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence() -> None:
-    cache = _FakeCacheRepository()
+def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence(cache_repository_factory, tool_factory, evidence_factory) -> None:
+    cache = cache_repository_factory()
     calls = 0
-    evidence = EvidenceView(
+    evidence = evidence_factory(
         summary="A chicken soup recipe.",
         source="search_meals",
         type="meal_results",
@@ -322,7 +246,7 @@ def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence() -> None
         return ToolResult(result={"name": "Chicken soup"}, evidence=[evidence])
 
     registry = ToolRegistry(cache_repository=cache, enable_cache=True)
-    registry.register(Tool(_FakeTool("search_meals", callback), cache_policy=ToolCachePolicy(60), version=2))
+    registry.register(Tool(tool_factory("search_meals", callback), cache_policy=ToolCachePolicy(60), version=2))
 
     first = registry.call_tool("search_meals", {"query": "chicken"})
     second = registry.call_tool("search_meals", {"query": "chicken"})
@@ -333,8 +257,8 @@ def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence() -> None
     assert calls == 1
 
 
-def test_tool_registry_legacy_cache_payload_is_treated_as_miss() -> None:
-    cache = _FakeCacheRepository()
+def test_tool_registry_legacy_cache_payload_is_treated_as_miss(cache_repository_factory, tool_factory) -> None:
+    cache = cache_repository_factory()
     calls = 0
 
     def callback(_tool_input):
@@ -342,7 +266,7 @@ def test_tool_registry_legacy_cache_payload_is_treated_as_miss() -> None:
         calls += 1
         return ToolResult(result={"value": calls}, evidence=[])
 
-    tool = Tool(_FakeTool("cache_tool", callback), cache_policy=ToolCachePolicy(60), version=2)
+    tool = Tool(tool_factory("cache_tool", callback), cache_policy=ToolCachePolicy(60), version=2)
     registry = ToolRegistry(cache_repository=cache, enable_cache=True)
     registry.register(tool)
     cache_key = cache.build_cache_key(
@@ -359,8 +283,8 @@ def test_tool_registry_legacy_cache_payload_is_treated_as_miss() -> None:
     assert calls == 1
 
 
-def test_tool_registry_malformed_cache_envelope_is_treated_as_miss() -> None:
-    cache = _FakeCacheRepository()
+def test_tool_registry_malformed_cache_envelope_is_treated_as_miss(cache_repository_factory, tool_factory) -> None:
+    cache = cache_repository_factory()
     calls = 0
 
     def callback(_tool_input):
@@ -368,7 +292,7 @@ def test_tool_registry_malformed_cache_envelope_is_treated_as_miss() -> None:
         calls += 1
         return {"value": calls}
 
-    tool = Tool(_FakeTool("cache_tool", callback), cache_policy=ToolCachePolicy(60), version=2)
+    tool = Tool(tool_factory("cache_tool", callback), cache_policy=ToolCachePolicy(60), version=2)
     registry = ToolRegistry(cache_repository=cache, enable_cache=True)
     registry.register(tool)
     cache_key = cache.build_cache_key(
@@ -386,8 +310,8 @@ def test_tool_registry_malformed_cache_envelope_is_treated_as_miss() -> None:
     assert calls == 1
 
 
-def test_tool_registry_cache_lookup_error_falls_back_to_tool() -> None:
-    cache = _FailingCacheRepository(fail_get=True)
+def test_tool_registry_cache_lookup_error_falls_back_to_tool(cache_repository_factory, tool_factory) -> None:
+    cache = cache_repository_factory(fail_get=True)
     calls = 0
 
     def callback(_tool_input):
@@ -396,14 +320,14 @@ def test_tool_registry_cache_lookup_error_falls_back_to_tool() -> None:
         return {"value": calls}
 
     registry = ToolRegistry(cache_repository=cache, enable_cache=True)
-    registry.register(Tool(_FakeTool("cache_tool", callback), cache_policy=ToolCachePolicy(60)))
+    registry.register(Tool(tool_factory("cache_tool", callback), cache_policy=ToolCachePolicy(60)))
 
     assert registry.call_tool("cache_tool", {"query": "chicken"}) == {"value": 1}
     assert calls == 1
 
 
-def test_tool_registry_cache_store_error_does_not_fail_tool_request() -> None:
-    cache = _FailingCacheRepository(fail_put=True)
+def test_tool_registry_cache_store_error_does_not_fail_tool_request(cache_repository_factory, tool_factory) -> None:
+    cache = cache_repository_factory(fail_put=True)
     calls = 0
 
     def callback(_tool_input):
@@ -412,14 +336,14 @@ def test_tool_registry_cache_store_error_does_not_fail_tool_request() -> None:
         return {"value": calls}
 
     registry = ToolRegistry(cache_repository=cache, enable_cache=True)
-    registry.register(Tool(_FakeTool("cache_tool", callback), cache_policy=ToolCachePolicy(60)))
+    registry.register(Tool(tool_factory("cache_tool", callback), cache_policy=ToolCachePolicy(60)))
 
     assert registry.call_tool("cache_tool", {"query": "chicken"}) == {"value": 1}
     assert calls == 1
 
 
-def test_user_specific_cache_isolated_by_user() -> None:
-    cache = _FakeCacheRepository()
+def test_user_specific_cache_isolated_by_user(cache_repository_factory, tool_factory) -> None:
+    cache = cache_repository_factory()
     calls = 0
 
     def callback(_tool_input):
@@ -429,7 +353,7 @@ def test_user_specific_cache_isolated_by_user() -> None:
 
     registry = ToolRegistry(cache_repository=cache, enable_cache=True)
     registry.register(
-        Tool(_FakeTool("private_search", callback), cache_policy=ToolCachePolicy(60, is_user_specific=True))
+        Tool(tool_factory("private_search", callback), cache_policy=ToolCachePolicy(60, is_user_specific=True))
     )
 
     with patch("capabilities.registry.global_registry.get_current_user_id", return_value="user-a"):
@@ -445,8 +369,8 @@ def test_user_specific_cache_isolated_by_user() -> None:
     assert cache.put_calls == 2
 
 
-def test_user_specific_cache_bypasses_anonymous_requests() -> None:
-    cache = _FakeCacheRepository()
+def test_user_specific_cache_bypasses_anonymous_requests(cache_repository_factory, tool_factory) -> None:
+    cache = cache_repository_factory()
     calls = 0
 
     def callback(_tool_input):
@@ -456,7 +380,7 @@ def test_user_specific_cache_bypasses_anonymous_requests() -> None:
 
     registry = ToolRegistry(cache_repository=cache, enable_cache=True)
     registry.register(
-        Tool(_FakeTool("private_search", callback), cache_policy=ToolCachePolicy(60, is_user_specific=True))
+        Tool(tool_factory("private_search", callback), cache_policy=ToolCachePolicy(60, is_user_specific=True))
     )
 
     with patch("capabilities.registry.global_registry.get_current_user_id", return_value=None):
@@ -476,9 +400,5 @@ def test_cache_policy_controls_cacheability() -> None:
     assert ToolCachePolicy(60, is_user_specific=True).is_cache_allowed_for_user(None) is False
     with pytest.raises(ValueError, match="cache_ttl_seconds must be positive"):
         ToolCachePolicy(0)
-
-
-
-
 
 

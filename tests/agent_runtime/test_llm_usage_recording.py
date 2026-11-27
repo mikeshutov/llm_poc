@@ -1,17 +1,10 @@
 from __future__ import annotations
 
 import sys
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 from unittest.mock import mock_open, patch
 from uuid import UUID, uuid4
 
-if 'yfinance' not in sys.modules:
-    sys.modules['yfinance'] = ModuleType('yfinance')
-
-if 'pycountry' not in sys.modules:
-    pycountry_module = ModuleType('pycountry')
-    pycountry_module.countries = SimpleNamespace(lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper()))
-    sys.modules['pycountry'] = pycountry_module
 
 from conversation.models.conversation_models import ConversationContext
 from integrations.brave.models import NewsResult
@@ -22,12 +15,9 @@ from agents.main.request import TOP_LEVEL_PROFILE
 from agents.profile_management.profile import build_profile_management_profile
 from agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from agent_runtime.models.agent_execution_context import AgentExecutionContext
-from agent_runtime.models.agent_prompt import PromptSectionKeys
 from agent_runtime.models.agent_state import AgentState
-from agent_runtime.models.agent_result import AgentResult
-from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agent_runtime.models.main_state import MainState
-from retrieval.evidence import EvidenceView, ToolResult
+from retrieval.evidence import ToolResult
 from agent_runtime.models.evaluation_result import EVALUATION_STATUS_RETRYABLE, EVALUATION_STATUS_TERMINAL
 from agent_runtime.models.plan import Plan
 from agent_runtime.evaluation.evaluator import run_evaluator
@@ -38,53 +28,8 @@ from retrieval.reranker_models import Candidate
 from retrieval.reranker import rerank_candidates
 
 
-class RecordingRepo:
-    def __init__(self) -> None:
-        self.llm_calls: list[dict] = []
-        self.conversation_events: list[dict] = []
-        self.messages: list[dict] = []
-
-    def record_llm_usage(self, **kwargs):
-        self.llm_calls.append(kwargs)
-        return kwargs
-
-    def append_node_log(self, scope_type, scope_id, **kwargs):
-        payload = kwargs.get("payload") or {}
-        node_name = kwargs.get("node_name") or payload.get("agent_name") or payload.get("source", "")
-        self.conversation_events.append({
-            "scope_type": scope_type,
-            "scope_id": scope_id,
-            "roundtrip_id": scope_id if scope_type == "roundtrip" else None,
-            "event_type": kwargs.get("event_type"),
-            "source": node_name,
-            "agent_name": node_name,
-            "node_name": node_name,
-            "payload": payload,
-        })
-        return type("RecordedLog", (), {"id": uuid4()})()
-
-    def append_message(self, roundtrip_id, **kwargs):
-        message = {"roundtrip_id": roundtrip_id, **kwargs}
-        self.messages.append(message)
-        payload = kwargs.get("payload") or {}
-        if payload.get("kind"):
-            self.conversation_events.append({
-                "roundtrip_id": roundtrip_id,
-                "event_type": payload["kind"],
-                "source": payload.get("source", ""),
-                "agent_name": payload.get("agent_name", ""),
-                "node_name": payload.get("node_name", ""),
-                "iteration": payload.get("iteration"),
-                "payload": payload,
-            })
-        return type("RecordedMessage", (), {"id": uuid4()})()
-
-    def create_roundtrip_prompt(self, *args, **kwargs):
-        return None
-
-
 def _latest_event_payload(
-    repo: RecordingRepo,
+    repo,
     *,
     event_type: str,
     agent_name: str,
@@ -96,39 +41,6 @@ def _latest_event_payload(
             continue
         return event['payload']
     raise AssertionError(f'No event found for type={event_type} agent={agent_name}')
-
-
-class FakeLangChainResponse:
-    def __init__(self, content: str, model_name: str = 'gpt-5.6-luna', tool_calls: list[dict] | None = None) -> None:
-        self.content = content
-        self.tool_calls = tool_calls or []
-        self.usage_metadata = {
-            'input_tokens': 100,
-            'output_tokens': 20,
-            'total_tokens': 120}
-        self.response_metadata = {'model_name': model_name}
-
-
-class FakeInvokeLLM:
-    def __init__(self, content: str, model_name: str = 'gpt-5.6-luna', tool_calls: list[dict] | None = None) -> None:
-        self.content = content
-        self.model_name = model_name
-        self.tool_calls = tool_calls or []
-
-    def bind_tools(self, tools, **kwargs):
-        return self
-
-    def invoke(self, prompt: str):
-        return FakeLangChainResponse(self.content, self.model_name, self.tool_calls)
-
-
-class FakeOpenAIClient:
-    def __init__(self) -> None:
-        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
-        self.responses: list[object] = []
-
-    def create(self, **kwargs):
-        return self.responses.pop(0)
 
 
 def _agent_profiles_for(user_profile: UserProfile) -> list:
@@ -158,52 +70,16 @@ def _bind_args_for_main_state(state: MainState) -> dict[str, object]:
     }
 
 
-def _set_agent_tool_results(
-    state: AgentState,
-    *,
-    plan: Plan | None = None,
-    results: dict[str, object] | None = None,
-    plan_count: int = 1,
-) -> None:
-    if plan is not None:
-        state.node_states.planner.plan = plan.model_copy(deep=True)
-        state.node_states.planner.plan_count = plan_count
-    step_by_local_id = {step.id: step for step in (plan.steps if plan is not None else [])}
-    normalized_tool_results: list[ToolResult] = []
-    for local_step_id, value in (results or {}).items():
-        step = step_by_local_id[local_step_id]
-        if isinstance(value, ToolResult):
-            normalized_tool_results.append(
-                value.model_copy(
-                    update={
-                        "tool_call_id": value.tool_call_id or uuid4(),
-                        "plan_step_id": value.plan_step_id or step.db_id,
-                        "tool_name": value.tool_name or step.tool,
-                    }
-                )
-            )
-            continue
-        normalized_tool_results.append(
-            ToolResult(
-                tool_call_id=uuid4(),
-                plan_step_id=step.db_id,
-                tool_name=step.tool,
-                result=value,
-            )
-        )
-    state.gather_tool_results = lambda: normalized_tool_results
-
-
-def test_run_planner_records_main_and_profile_scopes() -> None:
-    repo = RecordingRepo()
-    main_state = AgentState.new(
+def test_run_planner_records_main_and_profile_scopes(llm_factory, recording_conversation_repository_factory, agent_state_factory) -> None:
+    repo = recording_conversation_repository_factory()
+    main_state = agent_state_factory(
         task='Find me boots.',
         execution_context=AgentExecutionContext.new(
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM(
+        llm=llm_factory(
             'native response',
             tool_calls=[{
                 'id': 'call-1',
@@ -215,17 +91,17 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
                 },
             }],
         ),
-        agent_profile=TOP_LEVEL_PROFILE,
+        profile=TOP_LEVEL_PROFILE,
     )
-    profile_state = AgentState.new(
+    profile_state = agent_state_factory(
         task='Remember I like pizza.',
         execution_context=AgentExecutionContext.new(
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM('{"steps": [], "needs_replan": false}'),
-        agent_profile=PROFILE_MANAGEMENT_PROFILE,
+        llm=llm_factory('{"steps": [], "needs_replan": false}'),
+        profile=PROFILE_MANAGEMENT_PROFILE,
     )
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.message_trace_logger.get_conversation_repo',
@@ -257,19 +133,19 @@ def test_run_planner_records_main_and_profile_scopes() -> None:
     assert plan_log['data']['steps'][0]['args'] == {'query_text': 'boots'}
 
 
-def test_agent_log_persists_conversation_event_immediately() -> None:
-    repo = RecordingRepo()
+def test_agent_log_persists_conversation_event_immediately(llm_factory, recording_conversation_repository_factory, agent_state_factory) -> None:
+    repo = recording_conversation_repository_factory()
     conversation_id = uuid4()
     roundtrip_id = uuid4()
-    state = AgentState.new(
+    state = agent_state_factory(
         task='Find me boots.',
         execution_context=AgentExecutionContext.new(
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             conversation_id=str(conversation_id),
         ),
-        llm=FakeInvokeLLM('{"steps": [], "needs_replan": false}'),
-        agent_profile=TOP_LEVEL_PROFILE,
+        llm=llm_factory('{"steps": [], "needs_replan": false}'),
+        profile=TOP_LEVEL_PROFILE,
     )
 
     with patch('common.logging.message_trace_logger.get_conversation_repo', return_value=repo):
@@ -303,8 +179,8 @@ def test_agent_log_persists_conversation_event_immediately() -> None:
     assert event['payload']['data']['steps'] == []
 
 
-def test_agent_log_preserves_metadata_next_to_structured_data() -> None:
-    repo = RecordingRepo()
+def test_agent_log_preserves_metadata_next_to_structured_data(recording_conversation_repository_factory) -> None:
+    repo = recording_conversation_repository_factory()
     roundtrip_id = uuid4()
 
     with patch('common.logging.message_trace_logger.get_conversation_repo', return_value=repo):
@@ -325,17 +201,17 @@ def test_agent_log_preserves_metadata_next_to_structured_data() -> None:
     assert payload['steps'] == [{'tool': 'search'}]
 
 
-def test_run_planner_completes_when_no_native_tool_calls_are_returned() -> None:
-    repo = RecordingRepo()
-    state = AgentState.new(
+def test_run_planner_completes_when_no_native_tool_calls_are_returned(llm_factory, recording_conversation_repository_factory, agent_state_factory) -> None:
+    repo = recording_conversation_repository_factory()
+    state = agent_state_factory(
         task='Find me boots.',
         execution_context=AgentExecutionContext.new(
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM('no tool calls'),
-        agent_profile=TOP_LEVEL_PROFILE,
+        llm=llm_factory('no tool calls'),
+        profile=TOP_LEVEL_PROFILE,
     )
     with patch('llm.usage.get_conversation_repo', return_value=repo), patch(
         'common.logging.message_trace_logger.get_conversation_repo',
@@ -353,16 +229,16 @@ def test_run_planner_completes_when_no_native_tool_calls_are_returned() -> None:
     assert state.node_states.planner.plan.steps == []
 
 
-def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
-    repo = RecordingRepo()
-    state = MainState.new(
+def test_run_synthesis_records_llm_usage_after_tool_results(llm_factory, recording_conversation_repository_factory, main_state_factory) -> None:
+    repo = recording_conversation_repository_factory()
+    state = main_state_factory(
         task='Summarize this.',
         execution_context=AgentExecutionContext.new(
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM('{"result": [{"content": "done", "evidence_ids": []}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary"}', 'gpt-5.6-terra'),
+        llm=llm_factory('{"result": [{"content": "done", "evidence_ids": []}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary"}', 'gpt-5.6-terra'),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
 
@@ -385,8 +261,8 @@ def test_run_synthesis_records_llm_usage_after_tool_results() -> None:
     assert 'llm_usage' not in payload['data']
 
 
-def test_reranker_does_not_record_llm_usage_when_it_runs() -> None:
-    repo = RecordingRepo()
+def test_reranker_does_not_record_llm_usage_when_it_runs(recording_conversation_repository_factory) -> None:
+    repo = recording_conversation_repository_factory()
     candidates = [
             Candidate(id=f'c{i}', fields={'name': f'Item {i}'})
         for i in range(12)
@@ -411,9 +287,9 @@ def test_reranker_does_not_record_llm_usage_when_it_runs() -> None:
     assert repo.llm_calls == []
 
 
-def test_llm_client_records_tool_calling_and_image_caption_usage() -> None:
-    repo = RecordingRepo()
-    client = FakeOpenAIClient()
+def test_llm_client_records_tool_calling_and_image_caption_usage(openai_client_factory, recording_conversation_repository_factory) -> None:
+    repo = recording_conversation_repository_factory()
+    client = openai_client_factory()
     client.responses = [
         SimpleNamespace(
             usage=SimpleNamespace(prompt_tokens=100, completion_tokens=25, total_tokens=125),
@@ -435,19 +311,19 @@ def test_llm_client_records_tool_calling_and_image_caption_usage() -> None:
     assert all(isinstance(call['metadata']['latency_ms'], int) for call in repo.llm_calls)
 
 
-def test_run_evaluator_records_llm_usage_and_preserves_missing_information_for_replanning() -> None:
-    repo = RecordingRepo()
-    state = AgentState.new(
+def test_run_evaluator_records_llm_usage_and_preserves_missing_information_for_replanning(llm_factory, recording_conversation_repository_factory, set_plan_results, agent_state_factory, evidence_factory) -> None:
+    repo = recording_conversation_repository_factory()
+    state = agent_state_factory(
         task='Find current pricing for shortlisted products.',
         execution_context=AgentExecutionContext.new(
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM('{"status": "RETRYABLE", "relevant_evidence": ["25a4bcc1-2b18-5a36-940c-29c535bae654"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"]}', 'gpt-5.6-terra'),
-        agent_profile=TOP_LEVEL_PROFILE,
+        llm=llm_factory('{"status": "RETRYABLE", "relevant_evidence": ["25a4bcc1-2b18-5a36-940c-29c535bae654"], "missing_information": ["Need current pricing for the top two products", "Need shipping availability in Canada"]}', 'gpt-5.6-terra'),
+        profile=TOP_LEVEL_PROFILE,
     )
-    _set_agent_tool_results(
+    set_plan_results(
         state,
         plan=Plan.model_validate({
             'steps': [
@@ -462,7 +338,7 @@ def test_run_evaluator_records_llm_usage_and_preserves_missing_information_for_r
             'E1': ToolResult(
                 result={'items': ['result']},
                 evidence=[
-                    EvidenceView(
+                    evidence_factory(
                         id=UUID('25a4bcc1-2b18-5a36-940c-29c535bae654'),
                         summary='Current product search result.',
         data={
@@ -520,27 +396,20 @@ def test_news_result_model_dump_excludes_thumbnail_url() -> None:
     }
 
 
-def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None:
-    repo = RecordingRepo()
-    captured_prompt: dict[str, object] = {}
-
-    class CapturingLLM(FakeInvokeLLM):
-        def invoke(self, prompt: str):
-            captured_prompt['text'] = prompt
-            return super().invoke(prompt)
-
-    state = MainState.new(
+def test_run_synthesis_filters_to_relevant_evidence_ids_when_available(llm_factory, recording_conversation_repository_factory, set_plan_results, main_state_factory, evidence_factory) -> None:
+    repo = recording_conversation_repository_factory()
+    state = main_state_factory(
         task='Summarize this.',
         execution_context=AgentExecutionContext.new(
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=CapturingLLM('{"result": [{"content": "done", "evidence_ids": ["e5cf297f-8f55-55a7-b1b2-7fb389482919"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary"}', 'gpt-5.6-terra'),
+        llm=llm_factory('{"result": [{"content": "done", "evidence_ids": ["e5cf297f-8f55-55a7-b1b2-7fb389482919"]}], "next_question": "Do you want a deeper breakdown?", "roundtrip_summary": "summary"}', 'gpt-5.6-terra'),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
     main_agent_state = state.agent_states['request_orchestrator']
-    _set_agent_tool_results(
+    set_plan_results(
         main_agent_state,
         plan=Plan.model_validate({
             'steps': [
@@ -551,7 +420,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
             'E1': ToolResult(
                 result={'value': 'a'},
                 evidence=[
-                    EvidenceView(
+                    evidence_factory(
                         id=UUID('e5cf297f-8f55-55a7-b1b2-7fb389482919'),
                         summary='First item',
         data={
@@ -563,7 +432,7 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
             'E2': ToolResult(
                 result={'value': 'b'},
                 evidence=[
-                    EvidenceView(
+                    evidence_factory(
                         id=UUID('c8271821-2b18-5a36-940c-29c535bae654'),
                         summary='Second item',
         data={
@@ -588,29 +457,29 @@ def test_run_synthesis_filters_to_relevant_evidence_ids_when_available() -> None
         with bind_runtime_context(**_bind_args_for_main_state(state)):
             run_synthesis(state)
 
-    prompt_text = str(captured_prompt['text'])
+    prompt_text = str(state.llm.prompts[-1])
     payload = _latest_event_payload(repo, event_type='synthesis', agent_name='synthesize')
     assert payload['data']['relevant_evidence_ids'] == ['e5cf297f-8f55-55a7-b1b2-7fb389482919']
 
 
-def test_run_synthesis_uses_all_fed_evidence_when_citations_are_missing() -> None:
-    repo = RecordingRepo()
+def test_run_synthesis_uses_all_fed_evidence_when_citations_are_missing(llm_factory, recording_conversation_repository_factory, set_plan_results, main_state_factory, evidence_factory) -> None:
+    repo = recording_conversation_repository_factory()
     first_id = UUID('e5cf297f-8f55-55a7-b1b2-7fb389482919')
     second_id = UUID('c8271821-2d4c-51a1-bc00-1f4932d052d7')
-    state = MainState.new(
+    state = main_state_factory(
         task='Summarize this.',
         execution_context=AgentExecutionContext.new(
             conversation_context=ConversationContext(),
             user_profile=UserProfile(),
             conversation_id=str(uuid4()),
         ),
-        llm=FakeInvokeLLM(
+        llm=llm_factory(
             '{"result": [{"content": "done", "evidence_ids": []}], '
             '"next_question": "", "roundtrip_summary": "summary"}'
         ),
         agent_profiles=_agent_profiles_for(UserProfile()),
     )
-    _set_agent_tool_results(
+    set_plan_results(
         state.agent_states['request_orchestrator'],
         plan=Plan.model_validate({
             'steps': [{'id': 'E1', 'plan': 'Search', 'tool': 'generic_web_search', 'args': {}}]
@@ -619,12 +488,12 @@ def test_run_synthesis_uses_all_fed_evidence_when_citations_are_missing() -> Non
             'E1': ToolResult(
                 result={'value': 'results'},
                 evidence=[
-                    EvidenceView(id=first_id, summary='First item',
+                    evidence_factory(id=first_id, summary='First item',
         data={
             "item_id": 'item-a',
             "title": 'Item A',
         }),
-                    EvidenceView(id=second_id, summary='Second item',
+                    evidence_factory(id=second_id, summary='Second item',
         data={
             "item_id": 'item-b',
             "title": 'Item B',
@@ -646,7 +515,5 @@ def test_run_synthesis_uses_all_fed_evidence_when_citations_are_missing() -> Non
 
     assert state.result.result_blocks[0].evidence_ids == [str(first_id), str(second_id)]
     assert state.result.used_evidence_ids == [str(first_id), str(second_id)]
-
-
 
 

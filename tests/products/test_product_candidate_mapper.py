@@ -3,16 +3,14 @@ from products.candidate_mapper import (
     product_result_to_candidate,
     rerank_product_results,
 )
-from products.models.product_result import ProductResult
 from products.models.product_search_results import ProductSearchResults
 from products.models.product_source import ProductSource
 from products.repository.product_repository import ProductRepository
 from retrieval.reranker_constants import DEFAULT_TOP_K
-from tests.test_utilities.fake_reranker import FakeReranker
 
 
-def test_product_result_to_candidate_maps_product_fields() -> None:
-    product = ProductResult(
+def test_product_result_to_candidate_maps_product_fields(product_factory) -> None:
+    product = product_factory(
         id="sku-123",
         name="Trail Running Shoes",
         description="Men Blue Footwear Sport Spring. Year: 2026",
@@ -26,7 +24,6 @@ def test_product_result_to_candidate_maps_product_fields() -> None:
         url="https://example.com/products/sku-123",
         image_url="https://example.com/products/sku-123.jpg",
         score=0.87,
-        source=ProductSource.DB,
     )
 
     candidate = product_result_to_candidate(product)
@@ -38,34 +35,15 @@ def test_product_result_to_candidate_maps_product_fields() -> None:
     assert "url" not in candidate.fields
 
 
-def test_prepare_product_candidates_maps_multiple_products() -> None:
+def test_prepare_product_candidates_maps_multiple_products(product_factory) -> None:
     products = [
-        ProductResult(
+        product_factory(
             id="sku-1",
             name="Product One",
             description="First product description",
-            category=None,
-            color=None,
-            style=None,
-            gender=None,
-            season=None,
-            year=None,
-            price=None,
             source=ProductSource.WEB,
         ),
-        ProductResult(
-            id="sku-2",
-            name="Product Two",
-            description="Second product description",
-            category=None,
-            color=None,
-            style=None,
-            gender=None,
-            season=None,
-            year=None,
-            price=None,
-            source=ProductSource.DB,
-        ),
+        product_factory(id="sku-2", name="Product Two", description="Second product description"),
     ]
 
     candidates = prepare_product_candidates(products)
@@ -74,20 +52,8 @@ def test_prepare_product_candidates_maps_multiple_products() -> None:
     assert candidates[0].fields["description"] == "First product description"
 
 
-def test_product_search_results_exposes_retrieval_metadata() -> None:
-    product = ProductResult(
-        id="sku-1",
-        name="Product One",
-        description="First product description",
-        category=None,
-        color=None,
-        style=None,
-        gender=None,
-        season=None,
-        year=None,
-        price=None,
-        source=ProductSource.DB,
-    )
+def test_product_search_results_exposes_retrieval_metadata(product_factory) -> None:
+    product = product_factory(id="sku-1", name="Product One", description="First product description")
 
     results = ProductSearchResults(
         internal_results=[product],
@@ -119,35 +85,14 @@ def test_product_repository_selects_description_when_column_exists() -> None:
     assert "name, description," in sql
 
 
-def test_rerank_product_results_skips_llm_when_result_count_is_at_or_below_top_k() -> None:
-    llm = FakeReranker('{"ranked_ids": ["sku-2", "sku-1"]}')
+def test_rerank_product_results_skips_llm_when_result_count_is_at_or_below_top_k(
+    product_factory,
+    reranker_factory,
+) -> None:
+    llm = reranker_factory(ranked_ids=["sku-2", "sku-1"])
     products = [
-        ProductResult(
-            id="sku-1",
-            name="Product One",
-            description="First product description",
-            category=None,
-            color=None,
-            style=None,
-            gender=None,
-            season=None,
-            year=None,
-            price=None,
-            source=ProductSource.DB,
-        ),
-        ProductResult(
-            id="sku-2",
-            name="Product Two",
-            description="Second product description",
-            category=None,
-            color=None,
-            style=None,
-            gender=None,
-            season=None,
-            year=None,
-            price=None,
-            source=ProductSource.DB,
-        ),
+        product_factory(id="sku-1", name="Product One", description="First product description"),
+        product_factory(id="sku-2", name="Product Two", description="Second product description"),
     ]
 
     ranked_products = rerank_product_results(products, query="best product", llm=llm)
@@ -155,23 +100,16 @@ def test_rerank_product_results_skips_llm_when_result_count_is_at_or_below_top_k
     assert [product.id for product in ranked_products] == ["sku-1", "sku-2"]
 
 
-def test_rerank_product_results_returns_only_default_top_k_products() -> None:
+def test_rerank_product_results_returns_only_default_top_k_products(
+    product_factory,
+    reranker_factory,
+) -> None:
     product_ids = [f"sku-{index}" for index in range(1, 14)]
-    llm = FakeReranker('{"ranked_ids": ["sku-13", "sku-12", "sku-11", "sku-10", "sku-9", "sku-8", "sku-7", "sku-6", "sku-5", "sku-4", "sku-3", "sku-2", "sku-1"]}')
+    llm = reranker_factory(
+        ranked_ids=["sku-13", "sku-12", "sku-11", "sku-10", "sku-9", "sku-8", "sku-7", "sku-6", "sku-5", "sku-4", "sku-3", "sku-2", "sku-1"],
+    )
     products = [
-        ProductResult(
-            id=product_id,
-            name=product_id,
-            description=f"Description for {product_id}",
-            category=None,
-            color=None,
-            style=None,
-            gender=None,
-            season=None,
-            year=None,
-            price=None,
-            source=ProductSource.DB,
-        )
+        product_factory(id=product_id, name=product_id, description=f"Description for {product_id}")
         for product_id in product_ids
     ]
 

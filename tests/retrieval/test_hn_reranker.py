@@ -4,7 +4,6 @@ from capabilities.adapters.news.candidate_mapper import (
     rerank_hn_search_result,
 )
 from capabilities.adapters.news.constants import DEFAULT_HN_SEARCH_LIMIT
-from tests.test_utilities.fake_reranker import FakeReranker
 
 
 def test_hn_hit_to_candidate_maps_hit_fields() -> None:
@@ -36,8 +35,8 @@ def test_hn_hit_to_candidate_maps_hit_fields() -> None:
     assert candidate.fields["published"] == "2026-08-13T10:00:00Z"
 
 
-def test_rerank_hn_search_result_reorders_hits_and_preserves_metadata() -> None:
-    llm = FakeReranker('{"ranked_ids": ["7", "6", "5", "4", "3", "2"]}')
+def test_rerank_hn_search_result_reorders_hits_and_preserves_metadata(reranker_factory) -> None:
+    llm = reranker_factory(ranked_ids=["7", "6", "5", "4", "3", "2"])
     response = HnSearchResult.model_validate(
         {
             "nbHits": 7,
@@ -60,8 +59,8 @@ def test_rerank_hn_search_result_reorders_hits_and_preserves_metadata() -> None:
     assert reranked.reranked is True
 
 
-def test_rerank_hn_search_result_skips_llm_when_result_count_is_at_or_below_limit() -> None:
-    llm = FakeReranker('{"ranked_ids": ["2", "1"]}')
+def test_rerank_hn_search_result_skips_llm_when_result_count_is_at_or_below_limit(reranker_factory) -> None:
+    llm = reranker_factory(ranked_ids=["2", "1"])
     response = HnSearchResult.model_validate(
         {
             "nbHits": 2,

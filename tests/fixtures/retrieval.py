@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from retrieval.reranker_models import Candidate, RerankerScore
 
 
@@ -21,3 +23,28 @@ class FakeReranker:
             RerankerScore(id=candidate_id, score=float(len(ranked_ids) - index))
             for index, candidate_id in enumerate(ranked_ids)
         ]
+
+
+@pytest.fixture
+def reranker_factory():
+    def create(*, ranked_ids):
+        return FakeReranker(json.dumps({"ranked_ids": ranked_ids}))
+
+    return create
+
+
+class StaticBackend:
+    def __init__(self, results):
+        self.results = results
+        self.query = None
+        self.candidates = None
+
+    def rerank(self, query, candidates):
+        self.query = query
+        self.candidates = candidates
+        return self.results
+
+
+@pytest.fixture
+def static_reranker_factory():
+    return StaticBackend

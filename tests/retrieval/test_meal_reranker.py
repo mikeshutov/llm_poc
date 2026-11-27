@@ -1,7 +1,5 @@
 from integrations.meal_db.models import MealSearchResult
 from capabilities.adapters.food.candidate_mapper import meal_to_candidate, rerank_meal_search_result
-from capabilities.adapters.food.constants import DEFAULT_MEAL_RERANK_LIMIT
-from tests.test_utilities.fake_reranker import FakeReranker
 
 
 def test_meal_to_candidate_maps_meal_fields() -> None:
@@ -33,8 +31,8 @@ def test_meal_to_candidate_maps_meal_fields() -> None:
     assert candidate.fields["ingredients"] == ["Pasta", "Tomato"]
 
 
-def test_rerank_meal_search_result_reorders_and_limits_to_three() -> None:
-    llm = FakeReranker('{"ranked_ids": ["meal-5", "meal-4", "meal-3", "meal-2", "meal-1"]}')
+def test_rerank_meal_search_result_reorders_and_limits_to_three(reranker_factory) -> None:
+    llm = reranker_factory(ranked_ids=["meal-5", "meal-4", "meal-3", "meal-2", "meal-1"])
     response = MealSearchResult.model_validate(
         {
             "meals": [
@@ -54,8 +52,8 @@ def test_rerank_meal_search_result_reorders_and_limits_to_three() -> None:
     assert reranked.reranked is True
 
 
-def test_rerank_meal_search_result_skips_llm_when_result_count_is_at_or_below_limit() -> None:
-    llm = FakeReranker('{"ranked_ids": ["meal-2", "meal-1"]}')
+def test_rerank_meal_search_result_skips_llm_when_result_count_is_at_or_below_limit(reranker_factory) -> None:
+    llm = reranker_factory(ranked_ids=["meal-2", "meal-1"])
     response = MealSearchResult.model_validate(
         {
             "meals": [

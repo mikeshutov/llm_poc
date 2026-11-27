@@ -1,17 +1,7 @@
 from __future__ import annotations
 
 import importlib
-import sys
-from types import ModuleType, SimpleNamespace
 
-if "yfinance" not in sys.modules:
-    sys.modules["yfinance"] = ModuleType("yfinance")
-if "pycountry" not in sys.modules:
-    pycountry_module = ModuleType("pycountry")
-    pycountry_module.countries = SimpleNamespace(
-        lookup=lambda value: SimpleNamespace(alpha_2=str(value).upper())
-    )
-    sys.modules["pycountry"] = pycountry_module
 
 from agent_runtime.context import bind_runtime_context
 from agents.profile_management.profile import build_profile_management_profile

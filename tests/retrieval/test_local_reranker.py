@@ -6,23 +6,12 @@ from retrieval import Candidate, RerankerClient, RerankerUnavailableError, build
 from retrieval.reranker import CandidateReranker
 
 
-class StaticBackend:
-    def __init__(self, results):
-        self.results = results
-        self.query = None
-        self.candidates = None
-
-    def rerank(self, query, candidates):
-        self.query = query
-        self.candidates = candidates
-        return self.results
-
-
 @patch("retrieval.reranker.record_node_log")
 def test_reranker_records_debug_event(
     create_event: Mock,
+    static_reranker_factory,
 ) -> None:
-    backend = StaticBackend([{"id": "1", "score": 0.9}])
+    backend = static_reranker_factory([{"id": "1", "score": 0.9}])
     candidates = [
         Candidate(id="1", fields={"title": "Trail boots", "price": 80}),
         Candidate(id="2", fields={"title": "Dress shoes"}),
@@ -41,8 +30,8 @@ def test_reranker_records_debug_event(
     assert payload["limit"] == 1
 
 
-def test_reranker_sorts_by_backend_scores_and_appends_unscored_candidates() -> None:
-    backend = StaticBackend([
+def test_reranker_sorts_by_backend_scores_and_appends_unscored_candidates(static_reranker_factory) -> None:
+    backend = static_reranker_factory([
         {"id": "2", "score": 0.9},
         {"id": "unknown", "score": 1.0},
     ])
@@ -70,10 +59,8 @@ def test_query_composes_goal_and_profile_preferences() -> None:
     assert "blue" in query
 
 
-def test_reranker_client_applies_candidate_budget_before_serialization() -> None:
-    response = Mock()
-    response.raise_for_status.return_value = None
-    response.json.return_value = {"results": [{"id": "1", "score": 0.5}]}
+def test_reranker_client_applies_candidate_budget_before_serialization(http_response_factory) -> None:
+    response = http_response_factory(payload={"results": [{"id": "1", "score": 0.5}]})
 
     with patch("serviceclients.reranker.client.requests.post", return_value=response) as post:
         RerankerClient(base_url="http://reranker").rerank(
@@ -85,10 +72,8 @@ def test_reranker_client_applies_candidate_budget_before_serialization() -> None
     assert len(submitted) <= 384 * 4
 
 
-def test_reranker_client_rejects_invalid_response() -> None:
-    response = Mock()
-    response.raise_for_status.return_value = None
-    response.json.return_value = {"results": [{"id": "1", "score": "bad"}]}
+def test_reranker_client_rejects_invalid_response(http_response_factory) -> None:
+    response = http_response_factory(payload={"results": [{"id": "1", "score": "bad"}]})
 
     with patch("serviceclients.reranker.client.requests.post", return_value=response):
         with pytest.raises(RerankerUnavailableError):
