@@ -2,17 +2,16 @@ from __future__ import annotations
 
 import importlib
 
-from retrieval.evidence import EvidenceView
-from agent_runtime.context import bind_runtime_context
+from agent_runtime.context import bind_agent_context
 from capabilities.adapters.memories.lookup_evidence import lookup_evidence
 
 
-def test_lookup_evidence_returns_a_batch_in_request_order() -> None:
-    first = EvidenceView( summary="First summary",
+def test_lookup_evidence_returns_a_batch_in_request_order(agent_state_factory, evidence_factory) -> None:
+    first = evidence_factory( summary="First summary",
         data={
             "title": "First evidence",
         })
-    second = EvidenceView( summary="Second summary",
+    second = evidence_factory( summary="Second summary",
         data={
             "title": "Second evidence",
         })
@@ -29,12 +28,7 @@ def test_lookup_evidence_returns_a_batch_in_request_order() -> None:
     original_evidence_repository = module.EvidenceRepository
     module.EvidenceRepository = FakeEvidenceRepository
     try:
-        with bind_runtime_context(
-            conversation_id="conversation-1",
-            conversation_model_config=None,
-            roundtrip_id="roundtrip-1",
-            user_id="user-123",
-        ):
+        with bind_agent_context(agent_state_factory(user_id="user-123")):
             result = lookup_evidence.invoke(
                 {"evidence_ids": ["second", "missing", "first", "second", " "]}
             )

@@ -21,7 +21,7 @@ from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentName
 from retrieval.evidence import ToolOutcome, ToolOutcomeStatus, ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.models.plan import PlanStep
-from agent_runtime.context import bind_agent_context, bind_runtime_context
+from agent_runtime.context import bind_agent_context
 from capabilities.registry.global_registry import (
     GLOBAL_TOOL_REGISTRY,
     available_agent_tools,
@@ -30,6 +30,7 @@ from capabilities.registry.global_registry import (
 )
 from capabilities.registry.repository.message_repository import MessageToolRepository
 from agent_runtime.execution.message_history import append_execution_messages
+from capabilities.discovery.capability_discovery import capability_discovery
 
 MAX_IDENTICAL_TOOL_CALLS = 2
 
@@ -177,8 +178,17 @@ def execute_agent_tool(
             evidence_ids=args.get("evidence_ids", []),
         ),
     )
-    delegated_run.available_agent_states = delegated.available_agent_states
-    completed = agent_registry.get(delegated.agent_profile)(delegated_run)
+    delegated_run.available_agent_states = (
+        agent_state.available_agent_states if delegated_run.agent_profile.can_delegate_agents else None
+    )
+    delegated_run.inputs.discovered_attribute_types.clear()
+    with bind_agent_context(delegated_run):
+        if delegated_run.agent_profile.execution_strategy == AgentExecutionStrategy.REACT:
+            delegated_run.inputs.discovered_capabilities = capability_discovery(
+                delegated_run, include_agents=False, query=delegated_run.inputs.task,
+                allowed_tool_names=delegated_run.agent_profile.tool_names,
+            )
+        completed = agent_registry.get(delegated.agent_profile)(delegated_run)
     return _agent_completion_result(
         agent_name=agent_name,
         state=completed,
@@ -281,12 +291,7 @@ def run_executor(agent_state: AgentState) -> AgentState:
                 batch_counts[signature] = in_batch + 1
         pending.append((step, args, rejection))
 
-    with bind_runtime_context(
-        conversation_id=context.conversation_id,
-        conversation_model_config=context.model_config,
-        roundtrip_id=str(context.roundtrip_id) if context.roundtrip_id else None,
-        user_id=context.user_profile.user_id,
-    ), bind_agent_context(agent_name=agent_state.agent_profile.name, agent_state=agent_state):
+    with bind_agent_context(agent_state):
         register_default_tools()
         results: dict[int, StepExecutionResult] = {}
         concurrent_steps = []

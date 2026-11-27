@@ -11,7 +11,7 @@ from common.config import UTF8_ENCODING
 from conversation.models.conversation_models import LlmCallRecord, LlmUsage
 from conversation.repository.repo_factory import get_conversation_repo
 from llm.conversation_model_config import ConversationModelConfig
-from agent_runtime.context import get_current_agent_name
+from agent_runtime.context import current_agent_state
 from agent_runtime.constants import NodeName
 
 ONE_MILLION = Decimal("1000000")
@@ -324,7 +324,9 @@ def record_llm_call(
     total_cost = input_cost + output_cost
 
     repo = get_conversation_repo()
-    resolved_owner_agent_name = (owner_agent_name or get_current_agent_name() or "").strip() or None
+    active_state = current_agent_state.get()
+    active_agent_name = active_state.agent_profile.name if active_state is not None else None
+    resolved_owner_agent_name = (owner_agent_name or active_agent_name or "").strip() or None
     metadata_with_owner = {} if metadata is None else dict(metadata)
     if resolved_owner_agent_name:
         metadata_with_owner["owner_agent_name"] = resolved_owner_agent_name

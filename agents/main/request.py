@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-from capabilities.registry.constants import (
-    TOOL_CATEGORY_FILE_MANAGEMENT,
-    TOOL_CATEGORY_WRITING,
-)
-
 import re
 from pathlib import PurePosixPath
 from urllib.parse import unquote
@@ -16,19 +11,16 @@ from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.main_state import MainState
 from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agent_runtime.models.synthesized_result import SynthesisResult, SynthesisResultBlock
+from agent_runtime.context import bind_agent_context
 from agents.main.agent import MainReasonerStrategy
-from agents.profile_management.profile import build_profile_management_profile
 from capabilities.adapters.math import calculate
 from capabilities.adapters.profile import (
     USER_MANAGEMENT_TOOL,
 )
 from capabilities.discovery.discover_capabilities_tool import (
     CAPABILITY_DISCOVERY_TOOL,
-    bind_capability_discovery_agent_state,
-    bind_capability_discovery_state,
-    reset_capability_discovery_agent_state,
-    reset_capability_discovery_state,
 )
+from capabilities.registry.constants import TOOL_CATEGORY_FILE_MANAGEMENT, TOOL_CATEGORY_WRITING
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 from retrieval.evidence_store import (
     build_evidence_bundle_from_tool_results,
@@ -82,7 +74,8 @@ def _normalize_generated_file_links(
 TOP_LEVEL_PROFILE = AgentProfile(
     name=AgentName.REQUEST_ORCHESTRATOR,
     scope=MAIN_AGENT_MODEL_SCOPE,
-    description="Top-level request reasoner and executor.",
+    version=2,
+    description="Top-level request reasoner, coordinator, and executor.",
     excluded_categories={TOOL_CATEGORY_FILE_MANAGEMENT, TOOL_CATEGORY_WRITING},
     static_tools=[CAPABILITY_DISCOVERY_TOOL, USER_MANAGEMENT_TOOL, calculate],
     planner_instruction=(
@@ -94,27 +87,28 @@ TOP_LEVEL_PROFILE = AgentProfile(
 TOP_LEVEL_STRATEGY = MainReasonerStrategy()
 
 
+def initialize_request_agent_state(main_state: MainState) -> AgentState:
+    if main_state.main_agent_state is None:
+        main_state.main_agent_state = AgentState.new(
+            agent_profile=TOP_LEVEL_PROFILE,
+            inputs=AgentInputs.new(task=main_state.task, request_task=main_state.task),
+            execution_context=main_state.execution_context,
+            llm=main_state.llm,
+        )
+    return main_state.main_agent_state
+
+
 def run_main_request_strategy(main_state: MainState) -> MainState:
-    _ensure_static_agents(main_state)
-    execution_state = AgentState.new(
-        agent_profile=TOP_LEVEL_PROFILE,
-        inputs=AgentInputs.new(task=main_state.task, request_task=main_state.task),
-        execution_context=main_state.execution_context,
-        llm=main_state.llm,
-    )
+    execution_state = initialize_request_agent_state(main_state)
     execution_state.inputs.discovered_capabilities = main_state.discovered_capabilities
     execution_state.inputs.discovered_attribute_types = list(main_state.discovered_attribute_types)
     execution_state.available_agent_states = main_state.agent_states
-    token = bind_capability_discovery_state(main_state)
-    agent_token = bind_capability_discovery_agent_state(execution_state)
-    try:
+    with bind_agent_context(execution_state):
         execution_state = TOP_LEVEL_STRATEGY.run(
-            execution_state,
-            thread_id=main_state.execution_context.conversation_id or "",
+            execution_state, thread_id=execution_state.execution_context.conversation_id or "",
         )
-    finally:
-        reset_capability_discovery_agent_state(agent_token)
-        reset_capability_discovery_state(token)
+    main_state.discovered_capabilities = execution_state.inputs.discovered_capabilities
+    main_state.agent_states = execution_state.available_agent_states or {}
     main_state.main_agent_state = execution_state
     main_state.relevant_evidence_ids = list(execution_state.result.relevant_evidence_ids)
     main_state.plan = execution_state.node_states.planner.plan
@@ -155,11 +149,3 @@ def _is_uuid(value: str) -> bool:
         return True
     except (ValueError, AttributeError, TypeError):
         return False
-
-
-def _ensure_static_agents(main_state: MainState) -> None:
-    if AgentName.PROFILE_MANAGEMENT in main_state.agent_states:
-        return
-    profile = build_profile_management_profile(main_state.execution_context.user_profile)
-    main_state.agent_profiles.append(profile)
-    main_state.initialize_agent_states()

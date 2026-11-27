@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 
 
-from agent_runtime.context import bind_runtime_context
+from agent_runtime.context import bind_agent_context
 from agents.profile_management.profile import build_profile_management_profile
 from agents.profile_management.prompts import build_profile_management_rules
 from capabilities.adapters.profile.update_user_names import update_user_names
@@ -13,7 +13,7 @@ from personalization.tone.models import TonePreferences
 from retrieval.evidence import ToolResult
 
 
-def test_update_user_names_updates_supplied_fields_and_ignores_empty_fields() -> None:
+def test_update_user_names_updates_supplied_fields_and_ignores_empty_fields(agent_state_factory) -> None:
     class FakeProfileRepo:
         def __init__(self) -> None:
             self.profile = UserProfile(
@@ -42,12 +42,7 @@ def test_update_user_names_updates_supplied_fields_and_ignores_empty_fields() ->
     original_repo_getter = module.get_user_profile_repo
     module.get_user_profile_repo = lambda: fake_repo
     try:
-        with bind_runtime_context(
-            conversation_id="conversation-1",
-            conversation_model_config=None,
-            roundtrip_id="roundtrip-1",
-            user_id="user-123",
-        ):
+        with bind_agent_context(agent_state_factory(user_id="user-123")):
             result = update_user_names.invoke(
                 {"first_name": "Michael", "last_name": "", "display_name": ""}
             )
@@ -61,7 +56,7 @@ def test_update_user_names_updates_supplied_fields_and_ignores_empty_fields() ->
     assert fake_repo.update_calls == 1
 
 
-def test_update_user_tone_merges_with_existing_preferences() -> None:
+def test_update_user_tone_merges_with_existing_preferences(agent_state_factory) -> None:
     class FakeProfileRepo:
         def __init__(self) -> None:
             self.profile = UserProfile(
@@ -86,12 +81,7 @@ def test_update_user_tone_merges_with_existing_preferences() -> None:
     original_repo_getter = module.get_user_profile_repo
     module.get_user_profile_repo = lambda: fake_repo
     try:
-        with bind_runtime_context(
-            conversation_id="conversation-1",
-            conversation_model_config=None,
-            roundtrip_id="roundtrip-1",
-            user_id="user-123",
-        ):
+        with bind_agent_context(agent_state_factory(user_id="user-123")):
             result = update_user_tone.invoke(
                 {"confidence": 0.95, "directness": "high", "technical_depth": "high"}
             )

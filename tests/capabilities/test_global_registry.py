@@ -7,12 +7,11 @@ from unittest.mock import patch
 import pytest
 
 
-from agent_runtime.context import bind_runtime_context
-from agent_runtime.models.agent_profile import AgentKind
+from agent_runtime.context import bind_agent_context
 from capabilities.registry import global_registry
 from common.http import HttpClientError
 from requests.exceptions import Timeout
-from capabilities.registry.global_registry import ToolRegistry, ToolRegistryError, UnknownToolError
+from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY, ToolRegistry, ToolRegistryError, UnknownToolError, register_default_tools
 from common.cache.policy import ToolCachePolicy
 from capabilities.registry.models import RateLimitPolicy, Tool
 from capabilities.retry.policy import RetryPolicy
@@ -41,14 +40,17 @@ def test_registry_rejects_overwriting_an_existing_tool(tool_factory) -> None:
     assert registry.call_tool("shared") == "original"
 
 
-def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins(tool_factory) -> None:
+def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins(
+    tool_factory,
+    agent_state_factory,
+) -> None:
     registry = ToolRegistry()
     registry.register(tool_factory("assistant", lambda args: "Alice"), user_id="alice")
     registry.register(tool_factory("assistant", lambda args: "Bob"), user_id="bob")
     registry.register(tool_factory("builtin", lambda args: "shared"))
 
     for owner, expected in [("alice", "Alice"), ("bob", "Bob")]:
-        with bind_runtime_context(conversation_id=None, conversation_model_config=None, user_id=owner):
+        with bind_agent_context(agent_state_factory(user_id=owner)):
             assert registry.call_tool("assistant") == expected
             assert registry.call_tool("builtin") == "shared"
 
@@ -56,14 +58,17 @@ def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins(tool_fac
         registry.register(tool_factory("builtin", lambda args: "replacement"), user_id="alice")
 
 
-def test_agent_registration_is_idempotent_and_preserves_other_users(agent_profile_factory, registered_tool_registry) -> None:
+def test_agent_registration_is_idempotent_and_preserves_other_users(
+    user_agent_profile_factory,
+    registered_tool_registry,
+) -> None:
     registry = registered_tool_registry
     original = registry.get("coding")
     global_registry.register_default_tools()
     assert registry.get("coding") is original
 
-    alice = agent_profile_factory(name="assistant", scope="main_agent", kind=AgentKind.USER_AGENT, description="Alice's agent")
-    bob = agent_profile_factory(name="assistant", scope="main_agent", kind=AgentKind.USER_AGENT, description="Bob's agent")
+    alice = user_agent_profile_factory(description="Alice's agent")
+    bob = user_agent_profile_factory(description="Bob's agent")
     global_registry.register_agent_tools([alice], user_id="alice")
     alice_tool = registry.get("assistant", user_id="alice")
     global_registry.register_agent_tools([alice], user_id="alice")
@@ -73,7 +78,7 @@ def test_agent_registration_is_idempotent_and_preserves_other_users(agent_profil
     assert registry.get("assistant", user_id="bob").description == "Bob's agent"
     with pytest.raises(ToolRegistryError, match="reserved"):
         global_registry.register_agent_tools([
-            agent_profile_factory(name="coding", scope="main_agent", kind=AgentKind.USER_AGENT),
+            user_agent_profile_factory(name="coding"),
         ], user_id="alice")
 
 
@@ -114,7 +119,12 @@ def test_tool_registry_serializes_calls_for_shared_rate_limit_key(tool_factory) 
     assert abs(call_times[1][1] - call_times[0][1]) >= 0.045
 
 
-def test_tool_registry_retries_timeout_when_policy_allows(tool_factory) -> None:
+@pytest.mark.parametrize("error", [
+    pytest.param(Timeout("timed out"), id="timeout"),
+    pytest.param(HttpClientError("HTTP 429 on https://example.com: rate limited"), id="http-429"),
+    pytest.param(RuntimeError("HTTP 429 on https://api.search.brave.com/res/v1/web/search: rate limited"), id="wrapped-http-429"),
+])
+def test_tool_registry_retries_transient_errors_when_policy_allows(tool_factory, error) -> None:
     registry = ToolRegistry()
     attempts = 0
 
@@ -122,55 +132,7 @@ def test_tool_registry_retries_timeout_when_policy_allows(tool_factory) -> None:
         nonlocal attempts
         attempts += 1
         if attempts == 1:
-            raise Timeout("timed out")
-        return {"ok": True}
-
-    registry.register(
-        Tool(
-            tool_factory("retry_tool", callback),
-            retry_policy=RetryPolicy(max_attempts=2, backoff_seconds=0.0),
-        )
-    )
-
-    result = registry.call_tool("retry_tool", {})
-
-    assert result == {"ok": True}
-    assert attempts == 2
-
-
-def test_tool_registry_retries_http_429_when_policy_allows(tool_factory) -> None:
-    registry = ToolRegistry()
-    attempts = 0
-
-    def callback(_tool_input):
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise HttpClientError("HTTP 429 on https://example.com: rate limited")
-        return {"ok": True}
-
-    registry.register(
-        Tool(
-            tool_factory("retry_tool", callback),
-            retry_policy=RetryPolicy(max_attempts=2, backoff_seconds=0.0),
-        )
-    )
-
-    result = registry.call_tool("retry_tool", {})
-
-    assert result == {"ok": True}
-    assert attempts == 2
-
-
-def test_tool_registry_retries_wrapped_http_429_when_policy_allows(tool_factory) -> None:
-    registry = ToolRegistry()
-    attempts = 0
-
-    def callback(_tool_input):
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise RuntimeError("HTTP 429 on https://api.search.brave.com/res/v1/web/search: rate limited")
+            raise error
         return {"ok": True}
 
     registry.register(
@@ -342,7 +304,7 @@ def test_tool_registry_cache_store_error_does_not_fail_tool_request(cache_reposi
     assert calls == 1
 
 
-def test_user_specific_cache_isolated_by_user(cache_repository_factory, tool_factory) -> None:
+def test_user_specific_cache_isolated_by_user(cache_repository_factory, tool_factory, agent_state_factory) -> None:
     cache = cache_repository_factory()
     calls = 0
 
@@ -356,10 +318,10 @@ def test_user_specific_cache_isolated_by_user(cache_repository_factory, tool_fac
         Tool(tool_factory("private_search", callback), cache_policy=ToolCachePolicy(60, is_user_specific=True))
     )
 
-    with patch("capabilities.registry.global_registry.get_current_user_id", return_value="user-a"):
+    with bind_agent_context(agent_state_factory(user_id="user-a")):
         first = registry.call_tool("private_search", {"query": "chicken"})
         second = registry.call_tool("private_search", {"query": "chicken"})
-    with patch("capabilities.registry.global_registry.get_current_user_id", return_value="user-b"):
+    with bind_agent_context(agent_state_factory(user_id="user-b")):
         third = registry.call_tool("private_search", {"query": "chicken"})
 
     assert first == {"value": 1}
@@ -369,7 +331,7 @@ def test_user_specific_cache_isolated_by_user(cache_repository_factory, tool_fac
     assert cache.put_calls == 2
 
 
-def test_user_specific_cache_bypasses_anonymous_requests(cache_repository_factory, tool_factory) -> None:
+def test_user_specific_cache_bypasses_anonymous_requests(cache_repository_factory, tool_factory, agent_state_factory) -> None:
     cache = cache_repository_factory()
     calls = 0
 
@@ -383,7 +345,7 @@ def test_user_specific_cache_bypasses_anonymous_requests(cache_repository_factor
         Tool(tool_factory("private_search", callback), cache_policy=ToolCachePolicy(60, is_user_specific=True))
     )
 
-    with patch("capabilities.registry.global_registry.get_current_user_id", return_value=None):
+    with bind_agent_context(agent_state_factory()):
         first = registry.call_tool("private_search", {"query": "chicken"})
         second = registry.call_tool("private_search", {"query": "chicken"})
 
@@ -400,5 +362,4 @@ def test_cache_policy_controls_cacheability() -> None:
     assert ToolCachePolicy(60, is_user_specific=True).is_cache_allowed_for_user(None) is False
     with pytest.raises(ValueError, match="cache_ttl_seconds must be positive"):
         ToolCachePolicy(0)
-
 

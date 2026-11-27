@@ -3,7 +3,7 @@ from __future__ import annotations
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from agent_runtime.context import get_current_user_id
+from agent_runtime.context import current_agent_state
 from capabilities.adapters.profile.result_models import UserProfileUpdateResult
 from capabilities.registry.constants import TOOL_NAME_UPDATE_USER_NAMES, TOOL_RESULT_TYPE_PROFILE
 from personalization.profile.repository.repo_factory import get_user_profile_repo
@@ -38,7 +38,8 @@ def update_user_names(
     first_name: str = "",
     last_name: str = "",
 ) -> ToolResult:
-    user_id = get_current_user_id()
+    active_state = current_agent_state.get()
+    user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
     if user_id is None or not user_id.strip():
         raise ValueError("A current user_id is required to update the user profile.")
 

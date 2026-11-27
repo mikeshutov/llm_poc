@@ -10,6 +10,7 @@ from agent_runtime.models.orchestrator_graph_state import OrchestratorGraphState
 from capabilities.discovery.attribute_discovery import attribute_discovery
 from capabilities.discovery.capability_discovery import capability_discovery
 from agents.main.profile_loading import load_user_profile
+from agents.main.request import initialize_request_agent_state
 
 def enrich_state(
     main_state: MainState,
@@ -23,17 +24,18 @@ def enrich_state(
     try:
         with ThreadPoolExecutor(max_workers=2, thread_name_prefix="state-enrichment") as executor:
             attribute_future = executor.submit(attribute_lookup, main_state)
-            capability_state = main_state
-            if include_agents:
-                capability_future = executor.submit(capability_lookup, capability_state)
-            else:
-                capability_future = executor.submit(
-                    capability_lookup,
-                    capability_state,
-                    include_agents=False,
-                )
+            capability_state = initialize_request_agent_state(main_state)
+            capability_state.available_agent_states = main_state.agent_states
+            capability_future = executor.submit(
+                capability_lookup,
+                capability_state,
+                include_agents=include_agents,
+                allowed_tool_names=capability_state.agent_profile.tool_names,
+            )
             main_state.discovered_attribute_types = attribute_future.result()
             main_state.discovered_capabilities = capability_future.result()
+            capability_state.inputs.discovered_capabilities = main_state.discovered_capabilities
+            main_state.agent_states = capability_state.available_agent_states or {}
             load_user_profile(main_state)
     except Exception as exc:
         record_node_log(

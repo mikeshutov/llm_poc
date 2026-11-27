@@ -9,7 +9,7 @@ from assets.repository.asset_chunk_repository import AssetChunkRepository
 from assets.repository.asset_repository import AssetRepository
 from assets.files.urls import static_file_url
 from retrieval.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
-from agent_runtime.context import get_current_user_id
+from agent_runtime.context import current_agent_state
 from capabilities.adapters.files.result_models import GetFileByIdResult
 from capabilities.registry.constants import TOOL_NAME_GET_FILE_BY_ID
 from capabilities.registry.constants import TOOL_RESULT_TYPE_FILE
@@ -64,7 +64,9 @@ def get_file_by_id(file_id: str) -> ToolResult:
         parsed_id = UUID(file_id)
     except ValueError:
         return ToolResult.error(f"Invalid file_id '{file_id}'.")
-    file = AssetRepository().get_file(parsed_id, user_id=get_current_user_id())
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
+    file = AssetRepository().get_file(parsed_id, user_id=active_user_id)
     if not file:
         return ToolResult.error(f"No file found with id '{file_id}'.")
     return _tool_result(
@@ -74,7 +76,7 @@ def get_file_by_id(file_id: str) -> ToolResult:
             file_path=file.storage_path,
             file_type=file.mime_type,
             uploaded_at=file.created_at.isoformat(),
-            first_chunk=AssetChunkRepository().get_first(file.id, user_id=get_current_user_id()),
+            first_chunk=AssetChunkRepository().get_first(file.id, user_id=active_user_id),
         )
     )
 

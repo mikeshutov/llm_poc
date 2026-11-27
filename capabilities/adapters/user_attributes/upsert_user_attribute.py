@@ -9,7 +9,7 @@ from personalization.user_attributes.models.user_attribute_models import UserAtt
 from personalization.user_attributes.models.user_attribute_types import ATTRIBUTE_TYPE_COMPACT_DESCRIPTION, UserAttributeType
 from personalization.user_attributes.repository.repo_factory import get_user_attribute_repo
 from retrieval.evidence import EvidenceView, ToolResult
-from agent_runtime.context import get_current_user_id
+from agent_runtime.context import current_agent_state
 from capabilities.adapters.user_attributes.user_attribute_evidence_metadata import (
     USER_ATTRIBUTE_OPERATION_UPSERTED,
     UserAttributeEvidenceMetadata,
@@ -43,9 +43,11 @@ def upsert_user_attribute(
     importance: float | None = None,
 ) -> ToolResult:
     normalized_value = normalize_string_list(value)
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
     result: UserAttribute = get_user_attribute_repo().upsert_attribute(
         value=normalized_value,
-        user_id=get_current_user_id(),
+        user_id=active_user_id,
         attribute_embedding=embed_text("; ".join(normalized_value)),
         attribute_type=attribute_type,
         group_key=group_key,

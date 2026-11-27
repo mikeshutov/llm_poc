@@ -73,33 +73,21 @@ def _format_minimal_tool_schema(tool) -> str:
 
 def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext:
     allowed_categories = state.agent_profile.tool_categories
-    tools = []
-    rules = {}
-
-    agent_tool_categories = list(state.inputs.tool_category_names)
+    agent_tool_categories = set(state.inputs.tool_category_names)
     requested_tool_names = set(state.inputs.tool_names)
+    categories = {
+        name: category for name, category in allowed_categories.items()
+        if not agent_tool_categories or name in agent_tool_categories
+    }
+    rules = {name: category.rules for name, category in categories.items() if category.rules}
 
     if agent_tool_categories:
-        for category_name in agent_tool_categories:
-            category = allowed_categories.get(category_name)
-            if category is None:
-                continue
-            tools.extend(category.tools)
-            if category.rules:
-                rules[category_name] = category.rules
+        deduped_tools = {
+            tool.name: tool for category in categories.values() for tool in category.tools
+        }
+        deduped_tools.update({tool.name: tool for tool in state.agent_profile.static_tools})
     else:
-        for category in allowed_categories.values():
-            tools.extend(category.tools)
-            if category.rules:
-                rules_name = next((name for name, candidate in allowed_categories.items() if candidate is category), None)
-                if rules_name is not None:
-                    rules[rules_name] = category.rules
-
-    tools.extend(state.agent_profile.static_tools)
-
-    deduped_tools: dict[str, object] = {}
-    for tool in tools:
-        deduped_tools[getattr(tool, 'name')] = tool
+        deduped_tools = dict(state.agent_profile.tools_by_name)
 
     if requested_tool_names:
         deduped_tools = {
@@ -146,31 +134,6 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
     context = _compile_tools_rules_from_state(state)
     delegation_tools = available_agent_tools(state)
     delegated_capabilities = [AvailableTool.from_tool(tool, category="agents") for tool in delegation_tools]
-    if state.available_agent_states is not None:
-        capabilities = state.inputs.discovered_capabilities
-        prompt = AgentPrompt(
-            instruction=(
-                "You are the top-level planner. Use the available tools to complete the task. "
-                "Do not invent capabilities."
-            ),
-            user_profile=state.execution_context.user_profile,
-            conversation_context=state.execution_context.conversation_context,
-            task=state.inputs.task,
-            available_tools=(
-                [] if capabilities is None else list(capabilities.tools)
-            ) + _prompt_tools(list(state.agent_profile.static_tools)) + delegated_capabilities,
-            rules=f"{build_planner_rules(context.rules)}\n\n{BATCH_INDEPENDENT_TOOLS_RULE}",
-        )
-        for section in (
-            PromptSectionKeys.USER_PROFILE,
-            PromptSectionKeys.CONVERSATION_CONTEXT,
-            PromptSectionKeys.AVAILABLE_TOOLS,
-            PromptSectionKeys.RULES,
-            PromptSectionKeys.TASK,
-        ):
-            prompt.include_section(section)
-        return prompt, [*context.tools, *delegation_tools]
-
     tool_results = state.gather_tool_results()
     evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
     evidence_steps = build_evidence_steps_from_tool_results(

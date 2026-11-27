@@ -3,17 +3,40 @@ from __future__ import annotations
 import importlib
 from uuid import uuid4
 
-from agent_runtime.context import bind_runtime_context
+from agent_runtime.context import bind_agent_context
 from capabilities.adapters.memories.get_memory_detail import get_memory_detail
 
 
-def test_get_memory_detail_returns_typed_result(conversation_roundtrip_factory, conversation_message_factory) -> None:
+def test_get_memory_detail_returns_typed_result(
+    conversation_roundtrip_factory,
+    conversation_message_factory,
+    agent_state_factory,
+) -> None:
     class FakeConversationRepo:
         def __init__(self) -> None:
-            self.roundtrip = conversation_roundtrip_factory(id=uuid4(), conversation_id=uuid4(), message_index=7, roundtrip_summary="The conversation decided on a 30-day return policy.", roundtrip_summary_embedding=None, created_at="2026-08-01T12:00:00+00:00", metadata={"model": "gpt-5.6-terra"}, status="completed")
+            self.roundtrip = conversation_roundtrip_factory(
+                id=uuid4(),
+                conversation_id=uuid4(),
+                message_index=7,
+                roundtrip_summary="The conversation decided on a 30-day return policy.",
+                roundtrip_summary_embedding=None,
+                created_at="2026-08-01T12:00:00+00:00",
+                metadata={"model": "gpt-5.6-terra"},
+                status="completed",
+            )
             self.messages = [
-                conversation_message_factory(roundtrip_id=self.roundtrip.id, content="What did we decide about returns?"),
-                conversation_message_factory(roundtrip_id=self.roundtrip.id, sequence=1, kind="assistant", role="assistant", content="We said we would offer 30-day returns.", metadata={"stage": "synthesis", "model": "gpt-5.6-terra"}),
+                conversation_message_factory(
+                    roundtrip_id=self.roundtrip.id,
+                    content="What did we decide about returns?",
+                ),
+                conversation_message_factory(
+                    roundtrip_id=self.roundtrip.id,
+                    sequence=1,
+                    kind="assistant",
+                    role="assistant",
+                    content="We said we would offer 30-day returns.",
+                    metadata={"stage": "synthesis", "model": "gpt-5.6-terra"},
+                ),
             ]
 
         def get_roundtrip_for_user(self, roundtrip_id, user_id: str | None):
@@ -31,12 +54,7 @@ def test_get_memory_detail_returns_typed_result(conversation_roundtrip_factory, 
     original_repo_getter = module.get_conversation_repo
     module.get_conversation_repo = lambda: fake_repo
     try:
-        with bind_runtime_context(
-            conversation_id="conversation-1",
-            conversation_model_config=None,
-            roundtrip_id="roundtrip-1",
-            user_id="user-123",
-        ):
+        with bind_agent_context(agent_state_factory(user_id="user-123")):
             result = get_memory_detail.invoke({"roundtrip_id": str(fake_repo.roundtrip.id)})
     finally:
         module.get_conversation_repo = original_repo_getter

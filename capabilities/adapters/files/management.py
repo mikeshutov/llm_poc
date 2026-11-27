@@ -20,7 +20,7 @@ from assets.files.storage import scoped_file_path
 from assets.files.urls import static_file_url
 from assets.files.file_types import DOCUMENT_FILE_TYPES, DOCUMENT_FILE_TYPES_DESCRIPTION
 from assets.files.writer import normalize_file_format, write_file
-from agent_runtime.context import get_current_user_id
+from agent_runtime.context import current_agent_state
 from retrieval.evidence import ToolResult
 from capabilities.registry.constants import (
     TOOL_NAME_FILE_CREATE,
@@ -165,9 +165,11 @@ def file_create(
     format: str | None = None,
     title: str | None = None,
 ) -> ToolResult:
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
     try:
         file_name, file_format = normalize_file_format(file_name, format)
-        target = _safe_path(scoped_file_path(file_name, user_id=get_current_user_id()))
+        target = _safe_path(scoped_file_path(file_name, user_id=active_user_id))
         if target.exists():
             raise ValueError(f"A file already exists at '{file_name}'.")
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -182,7 +184,7 @@ def file_create(
                 if file_format == "svg"
                 else mimetypes.guess_type(target.name)[0] or "text/plain"
             ),
-            user_id=get_current_user_id(),
+            user_id=active_user_id,
             origin=AssetOrigin.GENERATED,
         )
         _index(file.id, content)
@@ -193,7 +195,9 @@ def file_create(
 
 @tool(TOOL_NAME_FILE_READ, args_schema=FileReadArgs, description="Retrieve the complete UTF-8 text content of a managed file when full content is needed.")
 def file_read(file_id: str, max_chars: int = _MAX_READ_CHARS) -> ToolResult:
-    row = AssetRepository().get_file(_parse_id(file_id), user_id=get_current_user_id())
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
+    row = AssetRepository().get_file(_parse_id(file_id), user_id=active_user_id)
     if not row:
         raise ValueError(f"No file found with id '{file_id}'.")
     file = row
@@ -209,7 +213,9 @@ def file_read(file_id: str, max_chars: int = _MAX_READ_CHARS) -> ToolResult:
 
 @tool(TOOL_NAME_FILE_EDIT, args_schema=FileEditArgs, description="Apply an exact targeted text replacement to a managed UTF-8 file.")
 def file_edit(file_id: str, find: str, replace: str = "", replace_all: bool = False) -> ToolResult:
-    row = AssetRepository().get_file(_parse_id(file_id), user_id=get_current_user_id())
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
+    row = AssetRepository().get_file(_parse_id(file_id), user_id=active_user_id)
     if not row:
         raise ValueError(f"No file found with id '{file_id}'.")
     file = row
@@ -237,7 +243,9 @@ def file_edit(file_id: str, find: str, replace: str = "", replace_all: bool = Fa
 @tool(TOOL_NAME_FILE_DELETE, args_schema=FileIdArgs, description="Delete a managed file and its indexed content.")
 def file_delete(file_id: str) -> ToolResult:
     parsed_id = _parse_id(file_id)
-    row = AssetRepository().get_file(parsed_id, user_id=get_current_user_id())
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
+    row = AssetRepository().get_file(parsed_id, user_id=active_user_id)
     if not row:
         raise ValueError(f"No file found with id '{file_id}'.")
     file = row
@@ -248,7 +256,7 @@ def file_delete(file_id: str) -> ToolResult:
     except OSError as exc:
         raise ValueError(f"Unable to delete file '{file.name}'.") from exc
     repository = AssetRepository()
-    deleted = repository.delete_file(parsed_id, user_id=get_current_user_id())
+    deleted = repository.delete_file(parsed_id, user_id=active_user_id)
     if not deleted:
         raise ValueError(f"No file found with id '{file_id}'.")
     return _file_result(row, "File deleted.", tool_name=TOOL_NAME_FILE_DELETE)
@@ -256,7 +264,9 @@ def file_delete(file_id: str) -> ToolResult:
 
 @tool(TOOL_NAME_FILE_LIST, args_schema=FileListArgs, description="List managed files visible to the current user.")
 def file_list(query: str | None = None) -> ToolResult:
-    files = AssetRepository().list_files(user_id=get_current_user_id(), query=query)
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
+    files = AssetRepository().list_files(user_id=active_user_id, query=query)
     return ToolResult(
         result=FileListResult(files=files),
         evidence=[
@@ -269,14 +279,16 @@ def file_list(query: str | None = None) -> ToolResult:
 @tool(TOOL_NAME_FILE_MOVE, args_schema=FileMoveArgs, description="Rename or relocate a managed file within the managed files directory.")
 def file_move(file_id: str, destination: str) -> ToolResult:
     parsed_id = _parse_id(file_id)
-    row = AssetRepository().get_file(parsed_id, user_id=get_current_user_id())
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
+    row = AssetRepository().get_file(parsed_id, user_id=active_user_id)
     if not row:
         raise ValueError(f"No file found with id '{file_id}'.")
     file = row
     source = _safe_path(file.storage_path)
     artifacts_root = scoped_file_path(
         ".managed-file-root",
-        user_id=get_current_user_id(),
+        user_id=active_user_id,
     ).parent.resolve()
     target = (artifacts_root / destination).resolve()
     if target != artifacts_root and artifacts_root not in target.parents:
@@ -293,12 +305,12 @@ def file_move(file_id: str, destination: str) -> ToolResult:
         parsed_id,
         storage_path=_stored_path(target),
         name=target.name,
-        user_id=get_current_user_id(),
+        user_id=active_user_id,
     )
     if not updated:
         raise ValueError(f"Unable to update metadata for file '{file.name}'.")
     return _file_result(
-        repository.get_file(parsed_id, user_id=get_current_user_id()),
+        repository.get_file(parsed_id, user_id=active_user_id),
         "File moved.",
         tool_name=TOOL_NAME_FILE_MOVE,
     )

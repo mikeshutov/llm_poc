@@ -45,7 +45,7 @@ def build_research_profile() -> AgentProfile:
     return AgentProfile(
         name=AgentName.RESEARCH,
         scope=MAIN_AGENT_MODEL_SCOPE,
-        version=3,
+        version=4,
         description=(
             "Research a topic by decomposing it into questions, selecting appropriate "
             "sources, gathering and checking evidence, and writing the final findings to a "
@@ -57,11 +57,13 @@ def build_research_profile() -> AgentProfile:
         required_completion_tools={TOOL_NAME_WORKSPACE_FILE_COMPLETE},
         execution_strategy=AgentExecutionStrategy.PLANNER_EXECUTOR_EVALUATOR,
         delegatable=True,
+        default_available_agent_names={AgentName.DELEGATE},
         max_turns=8,
         planner_instruction=(
             "Plan and execute a rigorous research workflow for the provided topic. "
-            "Decompose the request, gather diverse relevant evidence, and replan when "
-            "the evidence leaves an important gap. Write the final report using the supplied "
+            "Delegate independent research questions when useful. Give each delegate a focused task, "
+            "reconcile its findings, and avoid duplicating completed work. "
+            "Write the final report using the supplied "
             "template and make that workspace file the final evidence for downstream agents. "
             "Do not answer the user directly.\n\n"
             "Research template:\n"

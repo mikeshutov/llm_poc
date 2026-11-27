@@ -20,9 +20,10 @@ from capabilities.adapters.profile import (
 )
 from capabilities.adapters.user_attributes import upsert_user_attribute
 from common.cache.repository import InvalidCachePayloadError, ToolCacheRepository
-from agent_runtime.context import get_current_agent_state, get_current_user_id
+from agent_runtime.context import current_agent_state
 from agent_runtime.models.agent_profile import AgentKind, AgentProfile
 from agents.coding.profile import CODING_PROFILE
+from agents.delegate.profile import DELEGATE_PROFILE
 from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
 from agents.profile_management.profile import PROFILE_MANAGEMENT_PROFILE
 from agents.research.profile import RESEARCH_PROFILE
@@ -44,7 +45,7 @@ class DisallowedToolError(ToolRegistryError):
 def build_agent_tool(profile):
     """Build the registry tool whose implementation runs one agent."""
     def invoke_agent(**kwargs):
-        agent_state = get_current_agent_state()
+        agent_state = current_agent_state.get()
         if agent_state is None:
             raise ToolRegistryError(
                 f"Agent tool '{profile.name}' requires an active agent execution state."
@@ -102,7 +103,9 @@ class ToolRegistry:
         self._tools[key] = tool
 
     def get(self, name: str, *, user_id: str | None = None) -> Any:
-        owner = user_id if user_id is not None else get_current_user_id()
+        active_state = current_agent_state.get()
+        active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
+        owner = user_id if user_id is not None else active_user_id
         tool = self._tools.get((owner, name)) or self._tools.get((None, name))
         if tool is None:
             raise UnknownToolError(f"Unknown tool '{name}'.")
@@ -165,7 +168,9 @@ class ToolRegistry:
         cache_policy = getattr(tool, "cache_policy", None) if self._enable_cache else None
         cache_ttl_seconds = cache_policy.cache_ttl_seconds if cache_policy is not None else 0
         cache_repository = None
-        cache_user_id = get_current_user_id() if cache_policy and cache_policy.is_user_specific else None
+        active_state = current_agent_state.get()
+        active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
+        cache_user_id = active_user_id if cache_policy and cache_policy.is_user_specific else None
         if cache_policy is not None and cache_policy.is_cache_allowed_for_user(cache_user_id):
             try:
                 cache_repository = self._cache_repository or ToolCacheRepository()
@@ -256,6 +261,7 @@ REGISTERED_AGENTS: list[AgentProfile] = [
     DOCUMENT_WRITING_PROFILE,
     RESEARCH_PROFILE,
     CODING_PROFILE,
+    DELEGATE_PROFILE,
 ]
 _REGISTERED_DEFAULTS = False
 _REGISTRATION_LOCK = RLock()

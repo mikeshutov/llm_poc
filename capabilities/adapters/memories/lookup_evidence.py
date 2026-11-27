@@ -4,7 +4,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from retrieval.evidence import EvidenceView, ToolResult
-from agent_runtime.context import get_current_user_id
+from agent_runtime.context import current_agent_state
 from capabilities.registry.constants import TOOL_NAME_LOOKUP_EVIDENCE
 from capabilities.registry.repository.evidence_repository import EvidenceRepository
 
@@ -38,9 +38,11 @@ def lookup_evidence(evidence_ids: list[str]) -> ToolResult:
             if isinstance(evidence_id, str) and evidence_id.strip()
         )
     )
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
     evidence_by_id = EvidenceRepository().get_by_ids(
         normalized_ids,
-        user_id=get_current_user_id(),
+        user_id=active_user_id,
     )
     evidence = [evidence_by_id[evidence_id] for evidence_id in normalized_ids if evidence_id in evidence_by_id]
     return ToolResult(

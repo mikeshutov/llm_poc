@@ -3,7 +3,8 @@ from uuid import uuid4
 
 import pytest
 
-from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentProfile
+from agent_runtime.models.agent_execution_context import AgentExecutionContext
+from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentKind, AgentProfile
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.main_state import MainState
 from agents.models.agent import Agent
@@ -24,14 +25,41 @@ def agent_profile_factory():
 
 
 @pytest.fixture
+def user_agent_profile_factory(agent_profile_factory):
+    def create(**overrides):
+        return agent_profile_factory(**{
+            "name": "assistant", "kind": AgentKind.USER_AGENT, **overrides,
+        })
+
+    return create
+
+
+@pytest.fixture
+def execution_context_factory():
+    def create(*, user_id=None, **overrides):
+        context = AgentExecutionContext.new(**overrides)
+        if user_id is not None:
+            context.user_profile = context.user_profile.model_copy(update={"user_id": user_id}, deep=True)
+        return context
+
+    return create
+
+
+@pytest.fixture
 def agent_state_factory(agent_profile_factory):
-    def create(*, profile=None, profile_overrides=None, plan=None, task="", llm=None, **kwargs):
+    def create(*, profile=None, profile_overrides=None, plan=None, task="", llm=None, user_id=None, **kwargs):
         if profile is None:
             profile = agent_profile_factory(
                 static_tools=[_NamedTool(step.tool) for step in plan.steps] if plan else [],
             )
         if profile_overrides:
             profile = replace(profile, **profile_overrides)
+        if user_id is not None:
+            context = kwargs.get("execution_context") or AgentExecutionContext.new()
+            kwargs["execution_context"] = replace(
+                context,
+                user_profile=context.user_profile.model_copy(update={"user_id": user_id}, deep=True),
+            )
         state = AgentState.new(
             agent_profile=profile, task=task, llm=object() if llm is None else llm, **kwargs,
         )

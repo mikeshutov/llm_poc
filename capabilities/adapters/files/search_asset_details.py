@@ -10,7 +10,7 @@ from assets.models import AssetChunkResult, AssetType
 from assets.repository.asset_chunk_repository import AssetChunkRepository
 from llm.clients.embeddings import embed_text
 from retrieval.evidence import EvidenceUrl, EvidenceUrlType, EvidenceView, ToolResult
-from agent_runtime.context import get_current_user_id
+from agent_runtime.context import current_agent_state
 from capabilities.registry.constants import TOOL_NAME_SEARCH_ASSET_DETAILS, TOOL_RESULT_TYPE_ASSET_DETAILS
 
 
@@ -55,11 +55,13 @@ def search_asset_details(asset_id: str, query: str, asset_type: AssetType = Asse
         return ToolResult.error(f"Invalid asset_id '{asset_id}'. Use asset_search to obtain a valid asset_id first.")
 
     embedded_query = embed_text(query)
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
     results = AssetChunkRepository().search_assets(
         query_embedding=embedded_query,
         asset_id=parsed_id,
         asset_type=asset_type.value,
-        user_id=get_current_user_id(),
+        user_id=active_user_id,
     )
     return _tool_result([AssetChunkResult.model_validate(result) for result in results])
 

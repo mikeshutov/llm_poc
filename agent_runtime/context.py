@@ -1,70 +1,19 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from contextvars import ContextVar, Token
-from typing import Iterator
+from contextvars import ContextVar
+from typing import TYPE_CHECKING, Iterator
 
-from llm.conversation_model_config import ConversationModelConfig
+if TYPE_CHECKING:
+    from agent_runtime.models.agent_state import AgentState
 
-_current_conversation_id: ContextVar[str | None] = ContextVar("current_conversation_id", default=None)
-_current_roundtrip_id: ContextVar[str | None] = ContextVar("current_roundtrip_id", default=None)
-_current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
-_current_agent_name: ContextVar[str | None] = ContextVar("current_agent_name", default=None)
-_current_agent_state: ContextVar[object | None] = ContextVar("current_agent_state", default=None)
-_current_conversation_model_config: ContextVar[ConversationModelConfig | None] = ContextVar("current_conversation_model_config", default=None)
-
-
-def get_current_conversation_id() -> str | None:
-    return _current_conversation_id.get()
-
-
-def get_current_roundtrip_id() -> str | None:
-    return _current_roundtrip_id.get()
-
-
-def get_current_user_id() -> str | None:
-    return _current_user_id.get()
-
-
-def get_current_agent_name() -> str | None:
-    return _current_agent_name.get()
-
-
-def get_current_agent_state():
-    return _current_agent_state.get()
-
-
-def get_current_conversation_model_config() -> ConversationModelConfig | None:
-    return _current_conversation_model_config.get()
+current_agent_state: ContextVar[AgentState | None] = ContextVar("current_agent_state", default=None)
 
 
 @contextmanager
-def bind_agent_context(*, agent_name: str | None, agent_state=None) -> Iterator[None]:
-    agent_token: Token[str | None] = _current_agent_name.set(agent_name)
-    state_token = _current_agent_state.set(agent_state)
+def bind_agent_context(agent_state: AgentState) -> Iterator[None]:
+    token = current_agent_state.set(agent_state)
     try:
         yield
     finally:
-        _current_agent_state.reset(state_token)
-        _current_agent_name.reset(agent_token)
-
-
-@contextmanager
-def bind_runtime_context(
-    *,
-    conversation_id: str | None,
-    conversation_model_config: ConversationModelConfig | None,
-    roundtrip_id: str | None = None,
-    user_id: str | None = None,
-) -> Iterator[None]:
-    conversation_token: Token[str | None] = _current_conversation_id.set(conversation_id)
-    roundtrip_token: Token[str | None] = _current_roundtrip_id.set(roundtrip_id)
-    user_token: Token[str | None] = _current_user_id.set(user_id)
-    config_token: Token[ConversationModelConfig | None] = _current_conversation_model_config.set(conversation_model_config)
-    try:
-        yield
-    finally:
-        _current_conversation_id.reset(conversation_token)
-        _current_roundtrip_id.reset(roundtrip_token)
-        _current_user_id.reset(user_token)
-        _current_conversation_model_config.reset(config_token)
+        current_agent_state.reset(token)

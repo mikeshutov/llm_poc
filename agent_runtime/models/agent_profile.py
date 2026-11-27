@@ -15,6 +15,7 @@ class AgentName(StrEnum):
     PROFILE_MANAGEMENT = "profile_management"
     DOCUMENT_WRITING = "document_writing"
     RESEARCH = "research"
+    DELEGATE = "delegate"
     CODING = "coding"
 
 

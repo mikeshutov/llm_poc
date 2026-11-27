@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from llm.conversation_model_config import ConversationModelConfig
 from conversation.repository.repo_factory import get_conversation_repo
 from retrieval.evidence import EvidenceView, ToolResult
-from agent_runtime.context import get_current_user_id
+from agent_runtime.context import current_agent_state
 from capabilities.registry.constants import TOOL_NAME_GET_MEMORY_DETAIL
 from capabilities.registry.constants import TOOL_RESULT_TYPE_MEMORY_DETAIL
 
@@ -78,9 +78,11 @@ def get_memory_detail(roundtrip_id: str) -> ToolResult:
         )
 
     repo = get_conversation_repo()
+    active_state = current_agent_state.get()
+    active_user_id = active_state.execution_context.user_profile.user_id if active_state is not None else None
     roundtrip = repo.get_roundtrip_for_user(
         parsed_id,
-        user_id=get_current_user_id(),
+        user_id=active_user_id,
     )
     if roundtrip is None:
         return ToolResult(
