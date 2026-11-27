@@ -12,7 +12,7 @@ search this directory for the topic or fixture name.
 
 | Module | Fixtures |
 | --- | --- |
-| `agents.py` | `agent_profile_factory`, `agent_state_factory`, `react_agent_state_factory`, `main_state_factory`, `db_agent_factory`, `set_plan_results` |
+| `agents.py` | `agent_profile_factory`, `user_agent_profile_factory`, `agent_state_factory`, `react_agent_state_factory`, `main_state_factory`, `db_agent_factory`, `set_plan_results` |
 | `planning.py` | `plan_step_factory`, `plan_factory`, `default_plan`, `planning_result_factory` |
 | `capabilities.py` | `tool_factory`, `cache_repository_factory` |
 | `tools.py` | `registered_tool_registry`, `tool_repository_factory`, `recording_tool_repository` |
@@ -56,6 +56,11 @@ step indices or changing one plan's arguments does not mutate the caller's steps
 and `llm`; `profile_overrides` copies the supplied profile instead of mutating it.
 Without a profile, a supplied plan provides the static tool names. The default LLM
 is an inert object, so constructing a test state does not initialize a provider.
+Use `agent_state_factory(user_id="alice")` for user-scoped runtime context. When
+given an existing execution context, the owner override copies its user profile
+without changing the supplied context. `user_agent_profile_factory(name="helper",
+description="Research helper")` defaults to a user-agent profile in the main scope
+and accepts the same profile overrides as `agent_profile_factory`.
 `db_agent_factory` supplies an ID, name, and instruction; specify ownership fields
 explicitly, such as `user_id="alice"` or `agent_type=AgentType.SYSTEM`.
 

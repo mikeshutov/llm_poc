@@ -8,9 +8,6 @@ import pytest
 
 
 from agent_runtime.context import bind_agent_context
-from agent_runtime.models.agent_profile import AgentKind
-from agent_runtime.models.agent_execution_context import AgentExecutionContext
-from personalization.profile.models import UserProfile
 from capabilities.registry import global_registry
 from common.http import HttpClientError
 from requests.exceptions import Timeout
@@ -18,7 +15,7 @@ from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY, ToolRegi
 from common.cache.policy import ToolCachePolicy
 from capabilities.registry.models import RateLimitPolicy, Tool
 from capabilities.retry.policy import RetryPolicy
-from retrieval.evidence import EvidenceView, ToolResult
+from retrieval.evidence import ToolResult
 from capabilities.adapters.profile import USER_MANAGEMENT_TOOL
 
 
@@ -53,9 +50,7 @@ def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins(
     registry.register(tool_factory("builtin", lambda args: "shared"))
 
     for owner, expected in [("alice", "Alice"), ("bob", "Bob")]:
-        with bind_agent_context(agent_state_factory(
-            execution_context=AgentExecutionContext.new(user_profile=UserProfile(user_id=owner)),
-        )):
+        with bind_agent_context(agent_state_factory(user_id=owner)):
             assert registry.call_tool("assistant") == expected
             assert registry.call_tool("builtin") == "shared"
 
@@ -64,7 +59,7 @@ def test_same_named_user_tools_are_isolated_and_cannot_replace_builtins(
 
 
 def test_agent_registration_is_idempotent_and_preserves_other_users(
-    agent_profile_factory,
+    user_agent_profile_factory,
     registered_tool_registry,
 ) -> None:
     registry = registered_tool_registry
@@ -72,18 +67,8 @@ def test_agent_registration_is_idempotent_and_preserves_other_users(
     global_registry.register_default_tools()
     assert registry.get("coding") is original
 
-    alice = agent_profile_factory(
-        name="assistant",
-        scope="main_agent",
-        kind=AgentKind.USER_AGENT,
-        description="Alice's agent",
-    )
-    bob = agent_profile_factory(
-        name="assistant",
-        scope="main_agent",
-        kind=AgentKind.USER_AGENT,
-        description="Bob's agent",
-    )
+    alice = user_agent_profile_factory(description="Alice's agent")
+    bob = user_agent_profile_factory(description="Bob's agent")
     global_registry.register_agent_tools([alice], user_id="alice")
     alice_tool = registry.get("assistant", user_id="alice")
     global_registry.register_agent_tools([alice], user_id="alice")
@@ -93,7 +78,7 @@ def test_agent_registration_is_idempotent_and_preserves_other_users(
     assert registry.get("assistant", user_id="bob").description == "Bob's agent"
     with pytest.raises(ToolRegistryError, match="reserved"):
         global_registry.register_agent_tools([
-            agent_profile_factory(name="coding", scope="main_agent", kind=AgentKind.USER_AGENT),
+            user_agent_profile_factory(name="coding"),
         ], user_id="alice")
 
 
@@ -254,10 +239,11 @@ def test_tool_registry_cache_hit_skips_tool_invocation(cache_repository_factory,
 def test_search_meals_cache_hit_reconstructs_tool_result_with_evidence(
     cache_repository_factory,
     tool_factory,
+    evidence_factory,
 ) -> None:
     cache = cache_repository_factory()
     calls = 0
-    evidence = EvidenceView(
+    evidence = evidence_factory(
         summary="A chicken soup recipe.",
         source="search_meals",
         type="meal_results",

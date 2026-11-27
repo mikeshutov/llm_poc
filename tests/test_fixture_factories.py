@@ -4,6 +4,7 @@ import pytest
 from requests import HTTPError
 
 from agent_runtime.models.plan import Plan, PlanStep
+from agent_runtime.models.agent_profile import AgentKind
 from capabilities.adapters.writing.templates import load_writing_template_content, load_writing_templates
 
 
@@ -32,6 +33,29 @@ def test_state_factory_infers_tools_from_plan(agent_state_factory):
     assert state.node_states.planner.plan is plan
     assert state.node_states.planner.plan_count == 1
     assert [tool.name for tool in state.agent_profile.static_tools] == ["web_search"]
+
+
+def test_user_agent_profile_factory_supports_defaults_and_overrides(user_agent_profile_factory):
+    default = user_agent_profile_factory()
+    customized = user_agent_profile_factory(name="helper", description="Research helper", max_turns=2)
+
+    assert default.kind == customized.kind == AgentKind.USER_AGENT
+    assert default.name == "assistant"
+    assert customized.name == "helper"
+    assert customized.description == "Research helper"
+    assert customized.max_turns == 2
+    customized.static_tools.append(object())
+    assert default.static_tools == []
+
+
+def test_state_factory_sets_user_without_mutating_supplied_context(agent_state_factory):
+    alice = agent_state_factory(user_id="alice")
+    bob = agent_state_factory(user_id="bob", execution_context=alice.execution_context)
+
+    assert alice.execution_context.user_profile.user_id == "alice"
+    assert bob.execution_context.user_profile.user_id == "bob"
+    assert bob.execution_context is not alice.execution_context
+    assert bob.execution_context.user_profile is not alice.execution_context.user_profile
 
 
 def test_repository_factory_copies_seed_records(tool_repository_factory):
