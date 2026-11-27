@@ -27,7 +27,12 @@ from retrieval.evidence import ToolOutcome, ToolOutcomeStatus, ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.models.plan import PlanStep
 from agent_runtime.context import bind_agent_context, bind_runtime_context
-from capabilities.registry.global_registry import available_agent_tools, call_tool
+from capabilities.registry.global_registry import (
+    GLOBAL_TOOL_REGISTRY,
+    available_agent_tools,
+    call_tool,
+    register_default_tools,
+)
 from capabilities.registry.repository.message_repository import MessageToolRepository
 from agent_runtime.execution.message_history import append_execution_messages
 
@@ -249,7 +254,7 @@ def _record_step_result(
 
 @traceable(name="Executor Node", process_inputs=compact_trace_inputs, process_outputs=compact_trace_outputs)
 def run_executor(agent_state: AgentState) -> AgentState:
-    """Execute all planned registry tools and record their results in plan order."""
+    """Run serial tools first, then concurrent-safe tools; record in plan order."""
     planner_state = agent_state.node_states.planner
     plan = planner_state.plan
     if plan is None or not plan.steps:
@@ -287,19 +292,32 @@ def run_executor(agent_state: AgentState) -> AgentState:
         roundtrip_id=str(context.roundtrip_id) if context.roundtrip_id else None,
         user_id=context.user_profile.user_id,
     ), bind_agent_context(agent_name=agent_state.agent_profile.name, agent_state=agent_state):
-        with ThreadPoolExecutor(max_workers=len(pending)) as executor:
-            futures = [
-                executor.submit(
-                    copy_context().run, execute_step, step,
-                    tool_results_by_step_id=prior_results,
-                    allowed_tool_names=allowed,
-                    resolved_args=args,
-                    rejection_reason=rejection,
+        register_default_tools()
+        results: dict[int, StepExecutionResult] = {}
+        concurrent_steps = []
+        for index, (step, args, rejection) in enumerate(pending):
+            if not rejection and GLOBAL_TOOL_REGISTRY.can_run_concurrently(step.tool):
+                concurrent_steps.append((index, step, args))
+            else:
+                results[index] = execute_step(
+                    step, tool_results_by_step_id=prior_results, allowed_tool_names=allowed,
+                    resolved_args=args, rejection_reason=rejection,
                 )
-                for step, args, rejection in pending
-            ]
-            results = [future.result() for future in futures]
-        for (step, args, rejection), result in zip(pending, results):
+        if concurrent_steps:
+            with ThreadPoolExecutor(max_workers=len(concurrent_steps)) as executor:
+                futures = [
+                    executor.submit(
+                        copy_context().run, execute_step, step,
+                        tool_results_by_step_id=prior_results,
+                        allowed_tool_names=allowed,
+                        resolved_args=args,
+                    )
+                    for _, step, args in concurrent_steps
+                ]
+                for (index, _, _), future in zip(concurrent_steps, futures):
+                    results[index] = future.result()
+        for index, (step, args, rejection) in enumerate(pending):
+            result = results[index]
             if not rejection:
                 agent_state.executed_request_signatures.append(
                     build_signature({"tool_name": step.tool, "input": args})

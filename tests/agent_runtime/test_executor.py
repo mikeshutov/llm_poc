@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -14,7 +15,7 @@ from agent_runtime.models.agent_execution_context import AgentExecutionContext
 from retrieval.evidence import ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.execution.tool_executor import _agent_completion_result, _substitute_refs, run_executor
-from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY
+from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY, build_agent_tool
 from langchain_core.tools import StructuredTool
 from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
 from agent_runtime.strategies.single_pass.graph import DirectReturnStrategy
@@ -52,6 +53,10 @@ def test_subagent_execution_appends_tool_exchange_to_local_message_history(monke
 
 
 def test_run_executor_parallelizes_typed_plan_steps(agent_state_factory) -> None:
+    for name in ("tool_a", "tool_b"):
+        GLOBAL_TOOL_REGISTRY.register(StructuredTool.from_function(
+            lambda: None, name=name, description="Concurrent test read", metadata={"can_run_concurrently": True},
+        ))
     plan = Plan.model_validate(
         {
             "steps": [
@@ -95,6 +100,10 @@ def test_run_executor_parallelizes_typed_plan_steps(agent_state_factory) -> None
 
 
 def test_run_executor_propagates_runtime_context_to_worker_threads(agent_state_factory) -> None:
+    GLOBAL_TOOL_REGISTRY.register(StructuredTool.from_function(
+        lambda: None, name="tool_a", description="Concurrent read", metadata={"can_run_concurrently": True},
+    ))
+    caller_thread = threading.current_thread()
     plan = Plan.model_validate(
         {"steps": [{"id": "E1", "plan": "Run tool", "tool": "tool_a", "args": {}}]}
     )
@@ -105,6 +114,7 @@ def test_run_executor_propagates_runtime_context_to_worker_threads(agent_state_f
     seen_context: dict[str, str | None] = {}
 
     def fake_call_tool(name: str, tool_input=None, allowed_tool_names=None) -> ToolResult:
+        assert threading.current_thread() is not caller_thread
         seen_context.update(
             conversation_id=get_current_conversation_id(),
             roundtrip_id=get_current_roundtrip_id(),
@@ -189,7 +199,7 @@ def test_run_executor_exposes_only_final_subagent_evaluation(agent_profile_facto
     assert parent.direct_tool_results[0].result["status"] == "pending"
 
 
-def test_executor_runs_tools_and_agents_in_one_parallel_batch(monkeypatch, agent_state_factory) -> None:
+def test_executor_runs_explicitly_concurrent_tools_and_agents_together(monkeypatch, agent_state_factory) -> None:
     plan = Plan.model_validate({"steps": [
         {"id": "E1", "plan": "Run a function", "tool": "batch_function", "args": {}},
         {"id": "E2", "plan": "Run an agent", "tool": "document_writing", "args": {"task": "Create a document."}},
@@ -208,8 +218,13 @@ def test_executor_runs_tools_and_agents_in_one_parallel_batch(monkeypatch, agent
         state.direct_tool_results.append(ToolResult(result={"done": True}))
         return state
 
-    registered = StructuredTool.from_function(function, name="batch_function", description="Test function")
+    registered = StructuredTool.from_function(
+        function, name="batch_function", description="Test function", metadata={"can_run_concurrently": True},
+    )
     monkeypatch.setitem(GLOBAL_TOOL_REGISTRY._tools, (None, registered.name), registered)
+    monkeypatch.setitem(GLOBAL_TOOL_REGISTRY._tools, (None, "document_writing"), build_agent_tool(
+        replace(DOCUMENT_WRITING_PROFILE, can_run_concurrently=True),
+    ))
     monkeypatch.setattr("agents.registry.agent_registry.get", lambda profile: agent)
 
     run_executor(parent)
