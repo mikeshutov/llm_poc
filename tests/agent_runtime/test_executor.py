@@ -25,6 +25,7 @@ from retrieval.evidence import ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.execution.tool_executor import _substitute_refs, run_executor
 from agent_runtime.execution.message_history import append_execution_messages
+from capabilities.registry.global_registry import register_default_tools
 from agent_runtime.context import (
     get_current_conversation_id,
     get_current_roundtrip_id,
@@ -153,6 +154,7 @@ def test_run_executor_propagates_runtime_context_to_worker_threads() -> None:
 
 
 def test_run_executor_returns_standardized_subagent_result_without_merging_state(monkeypatch) -> None:
+    register_default_tools()
     parent = _state_for_plan(Plan.model_validate({
         "steps": [{
             "id": "E1",
@@ -192,6 +194,7 @@ def test_run_executor_returns_standardized_subagent_result_without_merging_state
 
 
 def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch) -> None:
+    register_default_tools()
     parent = _state_for_plan(Plan.model_validate({
         "steps": [{
             "id": "E1",
@@ -232,3 +235,111 @@ def test_run_executor_exposes_only_final_subagent_evaluation(monkeypatch) -> Non
     assert outcome.reason == "The annual wage series."
     assert outcome.missing_inputs == ["The annual wage series."]
     assert parent.direct_tool_results[0].result["status"] == "pending"
+
+
+def test_executor_runs_tools_and_agents_in_one_parallel_batch(monkeypatch) -> None:
+    from langchain_core.tools import StructuredTool
+    from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY
+    from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
+
+    register_default_tools()
+    plan = Plan.model_validate({"steps": [
+        {"id": "E1", "plan": "Run a function", "tool": "batch_function", "args": {}},
+        {"id": "E2", "plan": "Run an agent", "tool": "document_writing", "args": {"task": "Create a document."}},
+    ]})
+    parent = _state_for_plan(plan)
+    child = AgentState.new(agent_profile=DOCUMENT_WRITING_PROFILE, llm=object())
+    parent.available_agent_states = {"document_writing": child}
+    barrier = threading.Barrier(2)
+
+    def function():
+        barrier.wait(timeout=2)
+        return ToolResult(result={"value": "function output"})
+
+    def agent(state):
+        barrier.wait(timeout=2)
+        state.direct_tool_results.append(ToolResult(result={"done": True}))
+        return state
+
+    registered = StructuredTool.from_function(function, name="batch_function", description="Test function")
+    monkeypatch.setitem(GLOBAL_TOOL_REGISTRY._tools, registered.name, registered)
+    monkeypatch.setattr("agents.registry.agent_registry.get", lambda profile: agent)
+
+    run_executor(parent)
+
+    assert [result.tool_name for result in parent.direct_tool_results] == ["batch_function", "document_writing"]
+    assert [result.plan_step_id for result in parent.direct_tool_results] == [step.db_id for step in plan.steps]
+    assert all(result.iteration == 1 for result in parent.direct_tool_results)
+    assert not any(result.result.get("error") for result in parent.direct_tool_results)
+    assert len(parent.reasoner_message_history) == 4
+
+
+def test_executor_preserves_failures_and_duplicate_results(monkeypatch) -> None:
+    plan = Plan.model_validate({"steps": [
+        {"id": f"E{i}", "plan": "Run a tool", "tool": "broken", "args": {}}
+        for i in range(1, 4)
+    ]})
+    state = _state_for_plan(plan)
+    state.available_agent_states = {}
+    calls = []
+
+    def broken(**kwargs):
+        calls.append(kwargs)
+        raise RuntimeError("Provider unavailable")
+
+    monkeypatch.setattr("agent_runtime.execution.tool_executor.call_tool", broken)
+    run_executor(state)
+
+    assert len(calls) == 2
+    assert "Provider unavailable" in state.direct_tool_results[0].result["error"]
+    assert state.direct_tool_results[2].result["status"] == "duplicate"
+    assert [result.plan_step_id for result in state.direct_tool_results] == [step.db_id for step in plan.steps]
+    assert "Provider unavailable" in state.reasoner_message_history[1].content
+
+
+def test_executor_persists_agent_result_with_original_step_and_evidence(monkeypatch) -> None:
+    from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE
+    from retrieval.evidence import EvidenceView
+
+    register_default_tools()
+    plan = Plan.model_validate({"steps": [{
+        "id": "E1", "plan": "Write a document", "tool": "document_writing",
+        "args": {"task": "Write a document"},
+    }]})
+    parent = _state_for_plan(plan)
+    parent.execution_context.roundtrip_id = uuid4()
+    parent.agent_profile.name = "request_orchestrator"
+    child = AgentState.new(agent_profile=DOCUMENT_WRITING_PROFILE, llm=object())
+    parent.available_agent_states = {"document_writing": child}
+    evidence = EvidenceView(id=str(uuid4()), type="file", source="test", summary="Document saved")
+    recorded = []
+    call_id = uuid4()
+
+    class Repository:
+        def count_request_hash(self, *args):
+            return 0
+
+        def append_tool_call(self, roundtrip_id, current_plan, step, **kwargs):
+            recorded.append((step, kwargs))
+            return call_id
+
+        def get_tool_results(self, ids):
+            return [recorded[0][1]["output_payload"]]
+
+    def run_child(state):
+        state.direct_tool_results.append(ToolResult(result={"saved": True}, evidence=[evidence]))
+        return state
+
+    repo = Repository()
+    monkeypatch.setattr("agents.registry.agent_registry.get", lambda profile: run_child)
+    monkeypatch.setattr("agent_runtime.execution.tool_executor.MessageToolRepository", lambda: repo)
+    monkeypatch.setattr("agent_runtime.models.agent_state.message_repository.MessageToolRepository", lambda: repo)
+    run_executor(parent)
+
+    step, payload = recorded[0]
+    assert step is plan.steps[0]
+    assert payload["output_payload"].plan_step_id == step.db_id
+    assert payload["evidence"] == [evidence]
+    assert payload["is_subagent"] is False
+    assert parent.result.tool_call_ids == [call_id]
+    assert "Document saved" in parent.reasoner_message_history[1].content

@@ -11,10 +11,7 @@ from agent_runtime.planning.models.compiled_planner_context import CompiledPlann
 from agent_runtime.planning.prompts.planner_rules import build_planner_rules
 from capabilities.registry.tools import TOOLS_BY_NAME
 from capabilities.discovery.models import AvailableTool
-from agent_runtime.planning.agent_delegation import (
-    build_agent_delegation_tools,
-    delegated_agent_states,
-)
+from capabilities.registry.global_registry import available_agent_tools
 
 
 EMPTY_EXECUTION_REPLAN_RULE = (
@@ -147,17 +144,8 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     return CompiledPlannerContext(tools=list(deduped_tools.values()), compiled_tools=compiled_tools, rules=rules)
 def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]]:
     context = _compile_tools_rules_from_state(state)
-    delegated_states = delegated_agent_states(state)
-    delegation_tools = build_agent_delegation_tools(delegated_states)
-    delegated_capabilities = [
-        AvailableTool(
-            name=delegated.agent_profile.name,
-            title="Agent capability",
-            category="agents",
-            description=delegated.agent_profile.description,
-        )
-        for delegated in delegated_states
-    ]
+    delegation_tools = available_agent_tools(state)
+    delegated_capabilities = [AvailableTool.from_tool(tool, category="agents") for tool in delegation_tools]
     if state.available_agent_states is not None:
         capabilities = state.inputs.discovered_capabilities
         prompt = AgentPrompt(

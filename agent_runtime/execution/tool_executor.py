@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
+from contextlib import ExitStack
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any
@@ -27,7 +27,7 @@ from retrieval.evidence import ToolOutcome, ToolOutcomeStatus, ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.models.plan import PlanStep
 from agent_runtime.context import bind_agent_context, bind_runtime_context
-from capabilities.registry.global_registry import call_tool
+from capabilities.registry.global_registry import available_agent_tools, call_tool
 from capabilities.registry.repository.message_repository import MessageToolRepository
 from agent_runtime.execution.message_history import append_execution_messages
 
@@ -42,7 +42,6 @@ class StepExecutionResult:
     error_text: str = ""
     rejection_reason: str = ""
     latency_ms: int = 0
-    is_delegated: bool = False
 
 
 def _substitute_refs(obj, results: dict):
@@ -86,7 +85,6 @@ def _execute_step(
     allowed_tool_names: set[str] | None,
     resolved_args: dict[str, Any] | None = None,
     rejection_reason: str = "",
-    is_delegated: bool = False,
 ) -> StepExecutionResult:
     args = resolved_args if resolved_args is not None else _substitute_refs(step.args, tool_results_by_step_id)
     started_at = perf_counter()
@@ -101,6 +99,10 @@ def _execute_step(
         try:
             output = call_tool(name=step.tool, tool_input=args, allowed_tool_names=allowed_tool_names)
             error_text = ""
+            if isinstance(output, ToolResult) and isinstance(output.result, dict):
+                error_text = str(output.result.get("error") or "")
+                if output.result.get("status") == "rejected":
+                    rejection_reason = error_text
         except ValidationError as e:
             error_text = f"Invalid arguments for tool '{step.tool}': {e.errors(include_url=False)}"
             output = ToolResult(
@@ -122,92 +124,47 @@ def _execute_step(
         error_text=error_text,
         rejection_reason=rejection_reason,
         latency_ms=latency_ms,
-        is_delegated=is_delegated,
     )
 
 
-def _execute_agent_step(
-    agent_state: AgentState,
-    step: PlanStep,
-    *,
-    resolved_args: dict[str, Any],
-) -> StepExecutionResult:
-    """Run a delegated agent as an execution step."""
-    started_at = perf_counter()
+def execute_agent_tool(agent_state: AgentState, agent_name: str, args: dict[str, Any]) -> ToolResult:
+    """Run an agent-backed registry tool and return the common tool result."""
     if not agent_state.agent_profile.can_delegate_agents:
-        message = f"Agent '{agent_state.agent_profile.name}' is not allowed to delegate agents."
-        return StepExecutionResult(
-            step=step,
-            args=resolved_args,
-            output=ToolResult.error(message, status="error"),
-            error_text=message,
+        return ToolResult.error(
+            f"Agent '{agent_state.agent_profile.name}' is not allowed to delegate agents.",
+            status="rejected",
         )
-    if step.tool == agent_state.agent_profile.name:
-        message = f"Agent '{step.tool}' cannot delegate to itself."
-        return StepExecutionResult(
-            step=step,
-            args=resolved_args,
-            output=ToolResult.error(message, status="rejected"),
-            error_text=message,
-        )
+    if agent_name == agent_state.agent_profile.name:
+        return ToolResult.error(f"Agent '{agent_name}' cannot delegate to itself.", status="rejected")
 
-    delegated = (agent_state.available_agent_states or {}).get(step.tool)
-    if delegated is None:
-        message = f"Delegated agent '{step.tool}' is not available."
-        return StepExecutionResult(
-            step=step,
-            args=resolved_args,
-            output=ToolResult.error(message, status="error"),
-            error_text=message,
-        )
+    delegated = (agent_state.available_agent_states or {}).get(agent_name)
+    if delegated is None or agent_name not in {tool.name for tool in available_agent_tools(agent_state)}:
+        return ToolResult.error(f"Delegated agent '{agent_name}' is not available.", status="rejected")
 
     from agents.registry import agent_registry
     from agent_runtime.models.agent_inputs import AgentInputs
 
-    delegated_task = _delegated_task(step)
     delegated_run = AgentState.new(
         agent_profile=delegated.agent_profile,
         execution_context=delegated.execution_context,
         llm=delegated.llm,
         inputs=AgentInputs.new(
-            task=delegated_task,
+            task=args["task"],
             request_task=delegated.inputs.request_task,
             tool_names=delegated.inputs.tool_names,
             tool_category_names=delegated.inputs.tool_category_names,
             discovered_capabilities=delegated.inputs.discovered_capabilities,
             discovered_attribute_types=delegated.inputs.discovered_attribute_types,
-            evidence_ids=step.args.get("evidence_ids", []),
+            evidence_ids=args.get("evidence_ids", []),
         ),
     )
     delegated_run.available_agent_states = delegated.available_agent_states
     completed = agent_registry.get(delegated.agent_profile)(delegated_run)
-    output = _agent_completion_result(
-        agent_name=step.tool,
+    return _agent_completion_result(
+        agent_name=agent_name,
         state=completed,
-        plan_step_id=step.db_id,
-        task=delegated_task,
+        task=delegated_run.inputs.task,
     )
-    return StepExecutionResult(
-        step=step,
-        args=resolved_args,
-        output=output,
-        latency_ms=int((perf_counter() - started_at) * 1000),
-        is_delegated=True,
-    )
-
-
-def execute_agent_tool(agent_state: AgentState, agent_name: str, args: dict[str, Any]) -> ToolResult:
-    """Invoke a registered agent-backed tool from the common tool registry."""
-    step = PlanStep(
-        id=f"agent:{agent_name}",
-        tool=agent_name,
-        plan=str(args.get("task", "")),
-        args=args,
-    )
-    result = _execute_agent_step(agent_state, step, resolved_args=args)
-    output = result.output
-    return output if isinstance(output, ToolResult) else ToolResult(result=output, evidence=[])
-
 
 def execute_step(
     step: PlanStep,
@@ -218,49 +175,31 @@ def execute_step(
     execution_context=None,
     resolved_args: dict[str, Any] | None = None,
 ) -> StepExecutionResult:
-    """Execute one tool or delegated-agent step.
-
-    Top-level planner execution may omit an agent profile. In that case the
-    tool registry performs normal existence and input validation without an
-    agent-specific allowlist. Subagents should pass their profile so the
-    allowlist remains enforced.
-    """
-    args = resolved_args if resolved_args is not None else _substitute_refs(
-        step.args,
-        tool_results_by_step_id or {},
-    )
-    if agent_state is not None and agent_state.available_agent_states:
-        from capabilities.registry.global_registry import register_agent_tools
-
-        register_agent_tools(
-            delegated.agent_profile
-            for delegated in agent_state.available_agent_states.values()
-        )
-    allowed_tool_names = None if agent_profile is None else set(agent_profile.tool_names)
+    """Execute a registry tool with the caller's runtime context."""
+    profile = agent_profile or (agent_state.agent_profile if agent_state is not None else None)
+    allowed = None if profile is None else set(profile.tool_names)
     if agent_state is not None:
-        allowed_tool_names = (allowed_tool_names or set()) | set(agent_state.available_agent_states or {})
-    kwargs = {
-        "tool_results_by_step_id": tool_results_by_step_id or {},
-        "allowed_tool_names": allowed_tool_names,
-        "is_delegated": agent_state is not None and step.tool in (agent_state.available_agent_states or {}),
-    }
-    if resolved_args is not None:
-        kwargs["resolved_args"] = resolved_args
-    if execution_context is None:
-        if agent_state is None:
-            return _execute_step(step, **kwargs)
-        with bind_agent_context(agent_name=agent_state.agent_profile.name, agent_state=agent_state):
-            return _execute_step(step, **kwargs)
-    with bind_runtime_context(
-        conversation_id=execution_context.conversation_id,
-        conversation_model_config=execution_context.model_config,
-        roundtrip_id=str(execution_context.roundtrip_id) if execution_context.roundtrip_id else None,
-        user_id=execution_context.user_profile.user_id,
-    ):
-        if agent_state is None:
-            return _execute_step(step, **kwargs)
-        with bind_agent_context(agent_name=agent_state.agent_profile.name, agent_state=agent_state):
-            return _execute_step(step, **kwargs)
+        allowed.update((agent_state.available_agent_states or {}).keys())
+        execution_context = execution_context or agent_state.execution_context
+    with ExitStack() as stack:
+        if execution_context is not None:
+            stack.enter_context(bind_runtime_context(
+                conversation_id=execution_context.conversation_id,
+                conversation_model_config=execution_context.model_config,
+                roundtrip_id=str(execution_context.roundtrip_id) if execution_context.roundtrip_id else None,
+                user_id=execution_context.user_profile.user_id,
+            ))
+        if agent_state is not None:
+            stack.enter_context(bind_agent_context(
+                agent_name=agent_state.agent_profile.name,
+                agent_state=agent_state,
+            ))
+        return _execute_step(
+            step,
+            tool_results_by_step_id=tool_results_by_step_id or {},
+            allowed_tool_names=allowed,
+            resolved_args=resolved_args,
+        )
 
 
 def _record_step_result(
@@ -274,17 +213,18 @@ def _record_step_result(
     execution_context = agent_state.execution_context
     step = execution_result.step
     output = execution_result.output
-    if isinstance(output, ToolResult):
-        output = output.model_copy(
-            update={
-                "tool_name": step.tool,
-                "plan_step_id": step.db_id,
-                "iteration": iteration_number,
-                "hypothesis": step.hypothesis,
-                "call_metadata": step.metadata,
-            }
-        )
-    evidence_count = len(output.evidence) if isinstance(output, ToolResult) else 0
+    if not isinstance(output, ToolResult):
+        output = ToolResult(result=output, evidence=[])
+    output = output.model_copy(update={
+        "tool_name": step.tool,
+        "plan_step_id": step.db_id,
+        "iteration": iteration_number,
+        "hypothesis": step.hypothesis,
+        "call_metadata": step.metadata,
+    })
+    if tool_repo is None:
+        agent_state.direct_tool_results.append(output)
+    evidence_count = len(output.evidence)
     status = "rejected" if execution_result.rejection_reason else ("error" if execution_result.error_text else "completed")
     record_node_log(
         roundtrip_id=execution_context.roundtrip_id,
@@ -317,207 +257,83 @@ def _record_step_result(
             error_message=execution_result.error_text or None,
             duration_ms=execution_result.latency_ms,
             status="rejected" if execution_result.rejection_reason else None,
-            is_subagent=(
-                execution_result.is_delegated
-                or agent_state.agent_profile.name != AgentName.REQUEST_ORCHESTRATOR
-            ),
+            is_subagent=agent_state.agent_profile.name != AgentName.REQUEST_ORCHESTRATOR,
         )
         agent_state.result = agent_state.result.with_recorded_tool_call(tool_call_id)
 
 
 @traceable(name="Executor Node", process_inputs=compact_trace_inputs, process_outputs=compact_trace_outputs)
 def run_executor(agent_state: AgentState) -> AgentState:
+    """Execute all planned registry tools and record their results in plan order."""
     planner_state = agent_state.node_states.planner
     plan = planner_state.plan
-    if plan is None:
+    if plan is None or not plan.steps:
         return agent_state
-    if agent_state.available_agent_states is not None:
-        result = _run_top_level_executor(agent_state)
-        append_execution_messages(result)
-        return result
-    tool_repo = MessageToolRepository() if isinstance(agent_state.execution_context.roundtrip_id, UUID) else None
-    allowed_tool_names = set(agent_state.agent_profile.tool_names)
-    iteration_number = planner_state.plan_count
-    record_node_log(
-        roundtrip_id=agent_state.execution_context.roundtrip_id,
-        node_name=NodeName.EXECUTOR,
-        stage="start",
-        event_type="executor",
-        message="Executor started",
-        payload={"plan_step_count": len(plan.steps), "iteration": iteration_number},
-    )
+    context = agent_state.execution_context
+    tool_repo = MessageToolRepository() if isinstance(context.roundtrip_id, UUID) else None
+    allowed = set(agent_state.agent_profile.tool_names)
+    allowed.update((agent_state.available_agent_states or {}).keys())
+    prior_results = _tool_results_by_local_step_id(agent_state)
+    pending: list[tuple[PlanStep, dict[str, Any], str]] = []
+    batch_counts: dict[str, int] = {}
+    for step in plan.steps:
+        args = _substitute_refs(step.args, prior_results)
+        rejection = ""
+        if step.tool not in allowed:
+            rejection = f"Tool '{step.tool}' is not allowed for this agent."
+        else:
+            signature = build_signature({"tool_name": step.tool, "input": args})
+            count = (
+                tool_repo.count_request_hash(context.roundtrip_id, signature)
+                if tool_repo is not None
+                else agent_state.executed_request_signatures.count(signature)
+            )
+            # Reserve in-flight calls as well as previously completed calls.
+            in_batch = batch_counts.get(signature, 0)
+            if count + in_batch >= MAX_IDENTICAL_TOOL_CALLS:
+                rejection = f"Tool request for '{step.tool}' was already made in this roundtrip."
+            else:
+                batch_counts[signature] = in_batch + 1
+        pending.append((step, args, rejection))
 
     with bind_runtime_context(
-        conversation_id=agent_state.execution_context.conversation_id,
-        conversation_model_config=agent_state.execution_context.model_config,
-        roundtrip_id=str(agent_state.execution_context.roundtrip_id) if agent_state.execution_context.roundtrip_id else None,
-        user_id=agent_state.execution_context.user_profile.user_id,
-    ):
-        with bind_agent_context(agent_name=agent_state.agent_profile.name):
-            if plan is None or not plan.steps:
-                return agent_state
-            tool_results_by_step_id = _tool_results_by_local_step_id(agent_state)
-            resolved_args_by_step_id: dict[str, dict[str, Any]] = {}
-            rejection_reason_by_step_id: dict[str, str] = {}
-            request_counts: dict[str, int] = {}
-            for step in plan.steps:
-                resolved_args = _substitute_refs(
-                    step.args,
-                    tool_results_by_step_id,
+        conversation_id=context.conversation_id,
+        conversation_model_config=context.model_config,
+        roundtrip_id=str(context.roundtrip_id) if context.roundtrip_id else None,
+        user_id=context.user_profile.user_id,
+    ), bind_agent_context(agent_name=agent_state.agent_profile.name, agent_state=agent_state):
+        with ThreadPoolExecutor(max_workers=len(pending)) as executor:
+            futures = [
+                executor.submit(
+                    copy_context().run, _execute_step, step,
+                    tool_results_by_step_id=prior_results,
+                    allowed_tool_names=allowed,
+                    resolved_args=args,
+                    rejection_reason=rejection,
                 )
-                resolved_args_by_step_id[step.id] = resolved_args
-                if step.tool not in allowed_tool_names:
-                    rejection_reason_by_step_id[step.id] = f"Tool '{step.tool}' is not allowed for this agent."
-                    continue
-                request_hash = build_signature({"tool_name": step.tool, "input": resolved_args})
-                persisted_count = (
-                    tool_repo.count_request_hash(agent_state.execution_context.roundtrip_id, request_hash)
-                    if tool_repo is not None and agent_state.execution_context.roundtrip_id is not None
-                    else 0
+                for step, args, rejection in pending
+            ]
+            results = [future.result() for future in futures]
+        for (step, args, rejection), result in zip(pending, results):
+            if not rejection:
+                agent_state.executed_request_signatures.append(
+                    build_signature({"tool_name": step.tool, "input": args})
                 )
-                request_count = request_counts.get(request_hash, 0) + persisted_count
-                if request_count >= MAX_IDENTICAL_TOOL_CALLS:
-                    rejection_reason_by_step_id[step.id] = f"Tool request for '{step.tool}' was already made in this roundtrip."
-                    continue
-                request_counts[request_hash] = request_counts.get(request_hash, 0) + 1
-
-            with ThreadPoolExecutor(max_workers=len(plan.steps)) as executor:
-                futures_by_step_id = {
-                    step.id: executor.submit(
-                        copy_context().run,
-                        _execute_step,
-                        step,
-                        tool_results_by_step_id=tool_results_by_step_id,
-                        allowed_tool_names=allowed_tool_names,
-                        resolved_args=resolved_args_by_step_id[step.id],
-                        rejection_reason=rejection_reason_by_step_id.get(step.id, ""),
-                    )
-                    for step in plan.steps
-                }
-                execution_results = [
-                    futures_by_step_id[step.id].result()
-                    for step in plan.steps
-                ]
-
-            for execution_result in execution_results:
-                _record_step_result(
-                    agent_state,
-                    plan=plan,
-                    tool_repo=tool_repo,
-                    iteration_number=iteration_number,
-                    execution_result=execution_result,
-                )
-
-    append_execution_messages(agent_state)
-    return agent_state
-
-
-def _run_top_level_executor(agent_state: AgentState) -> AgentState:
-    """Execute a common-strategy plan as either a tool call or agent call."""
-    plan = agent_state.node_states.planner.plan
-    if plan is None:
-        return agent_state
-    tool_repo = MessageToolRepository() if isinstance(agent_state.execution_context.roundtrip_id, UUID) else None
-    iteration_number = agent_state.node_states.planner.plan_count
-    for step in plan.steps:
-        resolved_args = _substitute_refs(step.args, {})
-        request_signature = build_signature({
-            "tool_name": step.tool,
-            "input": resolved_args,
-        })
-        if agent_state.executed_request_signatures.count(request_signature) >= MAX_IDENTICAL_TOOL_CALLS:
-            record_node_log(
-                roundtrip_id=agent_state.execution_context.roundtrip_id,
-                node_name=NodeName.EXECUTOR,
-                stage="deduplication",
-                event_type="tool_execution",
-                level="warning",
-                message="Tool request skipped as duplicate",
-                payload={"tool_name": step.tool, "step_id": step.id, "status": "duplicate"},
-            )
-            agent_state.direct_tool_results.append(_duplicate_result(
-                capability_name=step.tool,
-                plan_step_id=step.db_id,
-            ))
-            continue
-        persisted_count = 0
-        if (
-            tool_repo is not None
-            and agent_state.execution_context.roundtrip_id is not None
-        ):
-            persisted_count = tool_repo.count_request_hash(
-                agent_state.execution_context.roundtrip_id,
-                request_signature,
-            )
-        if persisted_count + agent_state.executed_request_signatures.count(request_signature) >= MAX_IDENTICAL_TOOL_CALLS:
-            if persisted_count:
-                agent_state.executed_request_signatures.append(request_signature)
-            record_node_log(
-                roundtrip_id=agent_state.execution_context.roundtrip_id,
-                node_name=NodeName.EXECUTOR,
-                stage="deduplication",
-                event_type="tool_execution",
-                level="warning",
-                message="Tool request skipped because it was already persisted",
-                payload={"tool_name": step.tool, "step_id": step.id, "status": "duplicate"},
-            )
-            agent_state.direct_tool_results.append(_duplicate_result(
-                capability_name=step.tool,
-                plan_step_id=step.db_id,
-            ))
-            continue
-        agent_state.executed_request_signatures.append(request_signature)
-        execution_result = execute_step(
-            step,
-            tool_results_by_step_id={},
-            resolved_args=resolved_args,
-            agent_state=agent_state,
-            execution_context=agent_state.execution_context,
-        )
-        output = execution_result.output
-        if not isinstance(output, ToolResult):
-            output = ToolResult(result=output, evidence=[])
-        execution_result = StepExecutionResult(
-            step=step,
-            args=resolved_args,
-            output=output,
-        )
-        if tool_repo is not None:
             _record_step_result(
                 agent_state,
                 plan=plan,
                 tool_repo=tool_repo,
-                iteration_number=iteration_number,
-                execution_result=execution_result,
+                iteration_number=planner_state.plan_count,
+                execution_result=result,
             )
-        else:
-            agent_state.direct_tool_results.append(
-                output.model_copy(update={
-                    "tool_name": step.tool,
-                    "plan_step_id": step.db_id,
-                    "hypothesis": step.hypothesis,
-                    "call_metadata": step.metadata,
-                })
-            )
+    append_execution_messages(agent_state)
     return agent_state
-
-
-def _duplicate_result(*, capability_name: str, plan_step_id) -> ToolResult:
-    return ToolResult(
-        plan_step_id=plan_step_id,
-        tool_name=capability_name,
-        result={
-            "error": f"Request for '{capability_name}' was already completed in this roundtrip.",
-            "status": "duplicate",
-        },
-    )
 
 
 def _agent_completion_result(
     *,
     agent_name: str,
     state: AgentState,
-    plan_step_id,
     task: str,
 ) -> ToolResult:
     """Translate internal subagent state into the parent capability contract."""
@@ -534,7 +350,7 @@ def _agent_completion_result(
     status = state.result.answer_status.value
     if state.result.execution_status.value not in {"pending", "success"}:
         status = state.result.execution_status.value
-    summaries = [item.summary.strip() for item in evidence if item.summary.strip()]
+    summaries = [item.summary.strip() for item in evidence if item.summary and item.summary.strip()]
     summary = (
         f"{agent_name} completed the delegated task. " + " ".join(dict.fromkeys(summaries))
         if summaries
@@ -556,8 +372,6 @@ def _agent_completion_result(
             missing_inputs=missing_inputs,
         )
     return ToolResult(
-        tool_call_id=plan_step_id,
-        plan_step_id=plan_step_id,
         tool_name=agent_name,
         result={
             "agent": agent_name,
@@ -576,16 +390,3 @@ def _agent_completion_result(
         evidence=evidence,
         state=outcome,
     )
-
-
-def _delegated_task(step: PlanStep) -> str:
-    """Use the explicit delegation task, falling back only for legacy plans."""
-    explicit_task = step.args.get("task") if isinstance(step.args, dict) else None
-    if isinstance(explicit_task, str) and explicit_task.strip():
-        return explicit_task.strip()
-    if step.args:
-        return (
-            "Execute the delegated request using these parameters:\n"
-            + json.dumps(step.args, ensure_ascii=False, indent=2, default=str)
-        )
-    return step.plan or step.hypothesis

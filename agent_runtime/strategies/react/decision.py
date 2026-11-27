@@ -27,11 +27,8 @@ from agent_runtime.planning.prompts.planner_prompt import _compile_tools_rules_f
 from agent_runtime.planning.prompts.planner_rules import build_planner_rules
 from agent_runtime.planning.tool_call_parser import parse_tool_calls_to_plan_steps
 from agent_runtime.planning.tool_wrapper import build_tools
-from capabilities.discovery.models import AvailableAgent, AvailableTool
-from agent_runtime.planning.agent_delegation import (
-    build_agent_delegation_tools,
-    delegated_agent_states,
-)
+from capabilities.discovery.models import AvailableTool
+from capabilities.registry.global_registry import available_agent_tools
 
 
 @dataclass(frozen=True)
@@ -61,38 +58,11 @@ def build_decision_prompt(
             tool_results,
             build_evidence_bundle_from_tool_results(tool_results).evidence_views_by_tool_call_id,
         )
-    available_capabilities: list[AvailableTool] = [
-        AvailableTool.from_tool(tool)
-        for tool in context.tools
+    delegation_tools = available_agent_tools(state)
+    available_capabilities = [
+        *(AvailableTool.from_tool(tool) for tool in context.tools),
+        *(AvailableTool.from_tool(tool, category="agents") for tool in delegation_tools),
     ]
-    delegation_tools: list[BaseTool] = []
-    if state.available_agent_states is not None:
-        capabilities = state.inputs.discovered_capabilities
-        allowed_capability_names = {tool.name for tool in context.tools}
-        delegated_states = delegated_agent_states(state)
-        delegation_tools = build_agent_delegation_tools(delegated_states)
-        available_capabilities = [
-            *[
-                tool
-                for tool in (
-                    []
-                    if capabilities is None
-                    else capabilities.as_available_tools(include_agents=False)
-                )
-                if tool.name in allowed_capability_names
-            ],
-            *[
-                    AvailableAgent(
-                        agent=delegated.agent_profile.name,
-                        description=delegated.agent_profile.description,
-                    ).as_available_tool()
-                for delegated in delegated_states
-            ],
-            *[
-                AvailableTool.from_tool(tool)
-                for tool in state.agent_profile.static_tools
-            ],
-        ]
     prompt = AgentPrompt(
         instruction=instruction,
         schema=schema,

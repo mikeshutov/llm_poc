@@ -143,6 +143,9 @@ def test_main_reasoner_does_not_receive_planner_only_tool_constraints() -> None:
 
 
 def test_main_reasoner_represents_agents_as_tool_shaped_capabilities() -> None:
+    from capabilities.registry.global_registry import register_default_tools
+
+    register_default_tools()
     state = AgentState.new(
         agent_profile=AgentProfile(name="request_orchestrator", scope="main_agent"),
         task="Research this topic",

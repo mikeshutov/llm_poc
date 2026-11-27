@@ -262,12 +262,32 @@ def register_default_tools() -> None:
     for tool in AGENT_ONLY_TOOLS:
         GLOBAL_TOOL_REGISTRY.register(tool)
     _REGISTERED_DEFAULTS = True
+    from agents.seeder import SYSTEM_AGENT_PROFILES
+
+    for profile in SYSTEM_AGENT_PROFILES:
+        GLOBAL_TOOL_REGISTRY.register(build_agent_tool(profile))
 
 
 def register_agent_tools(profiles) -> None:
     register_default_tools()
     for profile in profiles:
         GLOBAL_TOOL_REGISTRY.register(build_agent_tool(profile))
+
+
+def available_agent_tools(state) -> list:
+    """Select registered agent tools available to this caller."""
+    if not state.agent_profile.can_delegate_agents:
+        return []
+    capabilities = state.inputs.discovered_capabilities
+    discovered = None if capabilities is None else {agent.agent for agent in capabilities.agents}
+    defaults = state.agent_profile.default_available_agent_names
+    return [
+        GLOBAL_TOOL_REGISTRY.get(name)
+        for name, target in (state.available_agent_states or {}).items()
+        if name != state.agent_profile.name
+        and target.agent_profile.delegatable
+        and (discovered is None or name in discovered or name in defaults)
+    ]
 
 
 def call_tool(name: str, tool_input: Any = None, allowed_tool_names: set[str] | None = None) -> Any:
@@ -285,5 +305,6 @@ __all__ = [
     "register_default_tools",
     "register_agent_tools",
     "build_agent_tool",
+    "available_agent_tools",
     "call_tool",
 ]

@@ -1,8 +1,10 @@
-from agent_runtime.execution.tool_executor import _delegated_task
+import pytest
+
 from agent_runtime.models.plan import PlanStep
 from agent_runtime.planning.tool_wrapper import build_tools
-from agent_runtime.planning.agent_delegation import build_agent_delegation_tools
-from agent_runtime.planning.agent_delegation import delegated_agent_states
+from capabilities.registry.global_registry import (
+    GLOBAL_TOOL_REGISTRY, available_agent_tools, register_agent_tools, register_default_tools,
+)
 from agent_runtime.execution.tool_executor import execute_step
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_profile import AgentProfile
@@ -11,19 +13,35 @@ from agents.document_writing.profile import DOCUMENT_WRITING_PROFILE, DocumentWr
 from capabilities.discovery.models import AvailableAgent, CapabilityDiscoveryResult
 
 
-def test_delegated_agent_receives_explicit_task_instead_of_hypothesis() -> None:
-    step = PlanStep(
-        id="E1",
-        tool="document_writing",
-        plan="The document will be created successfully.",
-        hypothesis="The document will be created successfully.",
-        args={"task": "Create short_computer_joke.docx as a DOCX containing the supplied joke."},
+@pytest.fixture(autouse=True)
+def initialize_registry():
+    register_default_tools()
+
+
+def test_agent_tool_receives_explicit_task_and_normalizes_evidence(monkeypatch) -> None:
+    parent = AgentState.new(
+        agent_profile=AgentProfile(name="parent", scope="main_agent"),
+        llm=object(),
     )
+    child = AgentState.new(agent_profile=DOCUMENT_WRITING_PROFILE, llm=object())
+    parent.available_agent_states = {"document_writing": child}
+    seen = []
 
-    delegated_task = _delegated_task(step)
+    def run_child(state):
+        seen.append(state)
+        return state
 
-    assert delegated_task == "Create short_computer_joke.docx as a DOCX containing the supplied joke."
-    assert "The document will be created successfully" not in delegated_task
+    monkeypatch.setattr("agents.registry.agent_registry.get", lambda profile: run_child)
+    step = PlanStep(
+        id="E1", tool="document_writing", plan="Expected outcome",
+        hypothesis="Expected outcome",
+        args={"task": "Create a document.", "evidence_ids": ["ev-1", " ev-1 ", "ev-2"]},
+    )
+    result = execute_step(step, agent_state=parent)
+    assert seen[0].inputs.task == "Create a document."
+    assert seen[0].inputs.evidence_ids == ["ev-1", "ev-2"]
+    assert child.inputs.task == ""
+    assert result.error_text == ""
 
 
 def test_agent_delegation_tool_keeps_explicit_task_schema() -> None:
@@ -32,11 +50,10 @@ def test_agent_delegation_tool_keeps_explicit_task_schema() -> None:
         execution_context=AgentExecutionContext.new(),
         llm=object(),
     )
-    tool = build_tools(build_agent_delegation_tools([state]))[0]
+    tool = build_tools([GLOBAL_TOOL_REGISTRY.get(state.agent_profile.name)])[0]
 
-    assert list(tool.args_schema.model_fields) == ["task", "evidence_ids"]
-    assert tool.args_schema is DocumentWritingDelegationArgs
-    assert tool.metadata["agent_delegation"] is True
+    assert list(tool.args_schema.model_fields) == ["parameters", "hypothesis", "evaluation_fields"]
+    assert tool.args_schema.model_fields["parameters"].annotation is DocumentWritingDelegationArgs
 
 
 def test_agent_delegation_tool_accepts_evidence_ids() -> None:
@@ -45,9 +62,9 @@ def test_agent_delegation_tool_accepts_evidence_ids() -> None:
         execution_context=AgentExecutionContext.new(),
         llm=object(),
     )
-    tool = build_tools(build_agent_delegation_tools([state]))[0]
+    tool = build_tools([GLOBAL_TOOL_REGISTRY.get(state.agent_profile.name)])[0]
 
-    parsed = tool.args_schema.model_validate({
+    parsed = tool.args_schema.model_fields["parameters"].annotation.model_validate({
         "task": "Create a research paper.",
         "evidence_ids": ["evidence-1", "evidence-1", "  evidence-2  "],
     })
@@ -87,9 +104,10 @@ def test_delegated_agent_states_honor_delegation_policy() -> None:
         agents=[AvailableAgent(agent="default_agent")]
     )
 
-    visible = delegated_agent_states(parent)
+    register_agent_tools([default_agent.agent_profile])
+    visible = available_agent_tools(parent)
 
-    assert [state.agent_profile.name for state in visible] == ["default_agent"]
+    assert [tool.name for tool in visible] == ["default_agent"]
 
 
 def test_non_delegating_agent_exposes_no_delegation_targets() -> None:
@@ -108,7 +126,7 @@ def test_non_delegating_agent_exposes_no_delegation_targets() -> None:
         )
     }
 
-    assert delegated_agent_states(parent) == []
+    assert available_agent_tools(parent) == []
 
 
 def test_delegated_agent_execution_rejects_self_delegation() -> None:
@@ -124,6 +142,7 @@ def test_delegated_agent_execution_rejects_self_delegation() -> None:
         args={"task": "Delegate this task."},
     )
 
+    register_agent_tools([parent.agent_profile])
     result = execute_step(step, agent_state=parent)
 
     assert result.output.result["status"] == "rejected"
