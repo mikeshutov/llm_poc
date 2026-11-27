@@ -5,7 +5,6 @@ import os
 import re
 from time import perf_counter
 from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
 from typing import Any
 
 from llm.clients.embeddings import embed_text
@@ -51,11 +50,6 @@ def _similarity(left: list[float], right: list[float]) -> float:
     if left_norm == 0 or right_norm == 0:
         return -1.0
     return dot / (left_norm * right_norm)
-
-
-@lru_cache(maxsize=256)
-def _cached_embed_text(text: str, embedder_key: int) -> tuple[float, ...]:
-    return tuple(embed_text(text))
 
 
 def _tokenize(text: str) -> list[str]:
@@ -104,7 +98,7 @@ def _semantic_rank(
     for index, (candidate_id, searchable_text, _) in enumerate(candidates):
         score = _similarity(
             query_embedding,
-            list(_cached_embed_text(searchable_text, id(embed_text))),
+            embed_text(searchable_text),
         )
         ranked.append((score, index, candidate_id))
     ranked.sort(key=lambda item: (-item[0], item[1]))
@@ -281,7 +275,6 @@ def capability_discovery(
     *,
     include_agents: bool = True,
     query: str | None = None,
-    query_embedding: list[float] | None = None,
     allowed_tool_names: set[str] | None = None,
 ) -> CapabilityDiscoveryResult:
     """Find concrete capabilities relevant to the current request.
@@ -293,20 +286,20 @@ def capability_discovery(
         conversation_context=state.execution_context.conversation_context,
     )).strip()
     embedding_started_at = perf_counter()
-    if query_embedding is None:
-        try:
-            query_embedding = embed_text(query)
-        except Exception as exc:
-            record_node_log(
-                node_name=NodeName.CAPABILITY_DISCOVERY,
-                stage="embedding",
-                event_type="capability_discovery",
-                level="warning",
-                message="Capability discovery embedding failed",
-                roundtrip_id=state.execution_context.roundtrip_id,
-                payload={"query": query, "error": str(exc)},
-                duration_ms=int((perf_counter() - embedding_started_at) * 1000),
-            )
+    try:
+        query_embedding = embed_text(query)
+    except Exception as exc:
+        query_embedding = None
+        record_node_log(
+            node_name=NodeName.CAPABILITY_DISCOVERY,
+            stage="embedding",
+            event_type="capability_discovery",
+            level="warning",
+            message="Capability discovery embedding failed",
+            roundtrip_id=state.execution_context.roundtrip_id,
+            payload={"query": query, "error": str(exc)},
+            duration_ms=int((perf_counter() - embedding_started_at) * 1000),
+        )
 
     tool_candidates = _build_tool_candidates()
     if allowed_tool_names is not None:

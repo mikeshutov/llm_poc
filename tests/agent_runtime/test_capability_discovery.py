@@ -15,9 +15,8 @@ from capabilities.registry.global_registry import GLOBAL_TOOL_REGISTRY
 discover_module = importlib.import_module("capabilities.discovery.capability_discovery")
 
 
-@pytest.mark.parametrize("embedding", [None, [1.0, 0.0], []])
-def test_discovery_reuses_supplied_embedding_or_embeds_the_query(
-    monkeypatch, agent_state_factory, embedding,
+def test_discovery_uses_shared_embedding_client(
+    monkeypatch, agent_state_factory,
 ):
     embed = Mock(return_value=[0.0, 1.0])
     persisted = Mock(return_value=[])
@@ -27,15 +26,12 @@ def test_discovery_reuses_supplied_embedding_or_embeds_the_query(
 
     capability_discovery(
         agent_state_factory(), include_agents=False,
-        query="Find a tool", query_embedding=embedding,
+        query="Find a tool",
     )
 
-    if embedding is None:
-        embed.assert_called_once_with("Find a tool")
-    else:
-        embed.assert_not_called()
+    embed.assert_called_once_with("Find a tool")
     persisted.assert_called_once_with(
-        "Find a tool", embed.return_value if embedding is None else embedding, None,
+        "Find a tool", embed.return_value, None,
     )
 
 
