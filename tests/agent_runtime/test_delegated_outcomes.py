@@ -31,6 +31,7 @@ def test_delegated_outcomes_follow_final_status_for_every_strategy(
     assert result.result["status"] == (
         execution.value if execution not in {ExecutionStatus.PENDING, ExecutionStatus.SUCCESS} else answer.value
     )
+    assert type(result.result["status"]) is str
 
 
 def test_delegated_outcome_preserves_failure_reason(agent_state_factory):
