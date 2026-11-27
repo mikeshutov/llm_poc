@@ -4,6 +4,7 @@ import pytest
 
 from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentKind
 from agents.registry import AgentRegistry
+from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.strategies.react.graph import ReactStrategy
 from agent_runtime.strategies.single_pass.graph import DirectReturnStrategy
 from agent_runtime.strategies.react.decision import DecisionResult
@@ -16,7 +17,12 @@ def test_react_strategy_is_registered_and_uses_planner_stage() -> None:
     assert AgentExecutionStrategy.REACT.required_model_stages() == ("planner",)
 
 
-def test_react_runs_initial_action_then_planner_decision(react_agent_state_factory, plan_factory, plan_step_factory, monkeypatch) -> None:
+def test_react_runs_initial_action_then_planner_decision(
+    plan_factory,
+    plan_step_factory,
+    react_agent_state_factory,
+    monkeypatch,
+) -> None:
     strategy = ReactStrategy()
     state = react_agent_state_factory()
     calls: list[str] = []
@@ -39,7 +45,12 @@ def test_react_runs_initial_action_then_planner_decision(react_agent_state_facto
     assert result.node_states.planner.plan_count == 2
 
 
-def test_react_stops_at_max_turns(react_agent_state_factory, plan_factory, plan_step_factory, monkeypatch) -> None:
+def test_react_stops_at_max_turns(
+    plan_factory,
+    plan_step_factory,
+    react_agent_state_factory,
+    monkeypatch,
+) -> None:
     strategy = ReactStrategy()
     state = react_agent_state_factory(max_turns=1)
     calls: list[str] = []
@@ -57,7 +68,11 @@ def test_react_stops_at_max_turns(react_agent_state_factory, plan_factory, plan_
     assert calls == ["planner"]
 
 
-def test_react_stops_when_latest_plan_is_entirely_duplicate_rejected(react_agent_state_factory, plan_factory, plan_step_factory) -> None:
+def test_react_stops_when_latest_plan_is_entirely_duplicate_rejected(
+    plan_factory,
+    plan_step_factory,
+    react_agent_state_factory,
+) -> None:
     strategy = ReactStrategy()
     state = react_agent_state_factory()
     step = plan_step_factory(id="E1", plan="lookup", tool="lookup", args={})
@@ -80,7 +95,42 @@ def test_react_stops_when_latest_plan_is_entirely_duplicate_rejected(react_agent
     assert state.result.execution_status.value == "no_new_work"
 
 
-def test_react_records_explicit_blocked_decision(react_agent_state_factory, plan_factory, monkeypatch) -> None:
+def test_react_stops_when_executor_reports_saved_completion(
+    plan_factory,
+    plan_step_factory,
+    react_agent_state_factory,
+) -> None:
+    strategy = ReactStrategy()
+    state = react_agent_state_factory()
+    step = plan_step_factory(
+        id="E1",
+        plan="Save final memory",
+        tool="update_memory_state",
+        args={"append": "done", "task_completed": True},
+    )
+    state.node_states.planner.plan = plan_factory(steps=[step])
+    state.node_states.planner.decision_status = DecisionStatus.SATISFIED
+    state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS, execution_status=ExecutionStatus.SUCCESS)
+    state.direct_tool_results.append(
+        ToolResult(
+            plan_step_id=step.db_id,
+            tool_name="update_memory_state",
+            result={"operation": "working_memory_appended", "task_completed": True},
+        )
+    )
+
+    route = strategy._route_after_execute(state)
+
+    assert route == "__end__"
+    assert state.node_states.planner.decision_status == DecisionStatus.SATISFIED
+    assert state.result.answer_status.value == "success"
+
+
+def test_react_records_explicit_blocked_decision(
+    plan_factory,
+    react_agent_state_factory,
+    monkeypatch,
+) -> None:
     strategy = ReactStrategy()
     state = react_agent_state_factory()
 
@@ -98,7 +148,12 @@ def test_react_records_explicit_blocked_decision(react_agent_state_factory, plan
     assert result.result.answer_status.value == "failed"
 
 
-def test_direct_return_reasons_once(react_agent_state_factory, plan_factory, plan_step_factory, monkeypatch) -> None:
+def test_direct_return_reasons_once(
+    plan_factory,
+    plan_step_factory,
+    react_agent_state_factory,
+    monkeypatch,
+) -> None:
     strategy = DirectReturnStrategy()
     state = react_agent_state_factory()
     calls: list[str] = []
@@ -129,7 +184,13 @@ def test_direct_return_reasons_once(react_agent_state_factory, plan_factory, pla
     ({"status": "failed"}, "failed"),
     ({"status": "duplicate"}, "failed"),
 ])
-def test_direct_return_classifies_in_memory_results(react_agent_state_factory, plan_factory, plan_step_factory, payload, expected) -> None:
+def test_direct_return_classifies_in_memory_results(
+    plan_factory,
+    plan_step_factory,
+    react_agent_state_factory,
+    payload,
+    expected,
+) -> None:
     state = react_agent_state_factory()
     step = plan_step_factory(id="E1", tool="lookup", plan="Look up data")
     state.node_states.planner.plan = plan_factory(steps=[step])
@@ -142,7 +203,13 @@ def test_direct_return_classifies_in_memory_results(react_agent_state_factory, p
 
 @pytest.mark.parametrize("kind", ["builtin", "user_agent"])
 @pytest.mark.parametrize("conversation_id", [None, "conversation-123"])
-def test_agent_registry_runs_profile_strategy_with_conversation_thread(agent_state_factory, agent_profile_factory, monkeypatch, kind, conversation_id) -> None:
+def test_agent_registry_runs_profile_strategy_with_conversation_thread(
+    agent_profile_factory,
+    agent_state_factory,
+    monkeypatch,
+    kind,
+    conversation_id,
+) -> None:
     profile = agent_profile_factory(
         name="custom_agent", scope="main_agent", kind=AgentKind(kind),
         execution_strategy=AgentExecutionStrategy.REACT,

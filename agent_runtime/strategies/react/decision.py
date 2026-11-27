@@ -80,7 +80,7 @@ def build_decision_prompt(
     prompt = AgentPrompt(
         instruction=instruction,
         schema=schema,
-        user_profile=state.execution_context.user_profile,
+        user_profile=(state.execution_context.user_profile if state.agent_profile.include_user_profile else None),
         conversation_context=state.execution_context.conversation_context,
         task=state.inputs.task,
         evidence_ids=state.inputs.evidence_ids,
@@ -88,9 +88,10 @@ def build_decision_prompt(
         rules=f"{build_planner_rules(context.rules)}\n\n{rules}",
         evidence=evidence,
         missing_information=state.node_states.evaluator.missing_information,
+        working_memory=state.render_working_memory(),
     )
     sections = (
-        PromptSectionKeys.USER_PROFILE,
+        *((PromptSectionKeys.USER_PROFILE,) if state.agent_profile.include_user_profile else ()),
         PromptSectionKeys.CONVERSATION_CONTEXT,
         PromptSectionKeys.AVAILABLE_TOOLS,
         PromptSectionKeys.RULES,
@@ -98,6 +99,7 @@ def build_decision_prompt(
         PromptSectionKeys.MISSING_INFORMATION,
         PromptSectionKeys.TASK,
         PromptSectionKeys.EVIDENCE_IDS,
+        PromptSectionKeys.WORKING_MEMORY,
     )
     if include_evidence:
         sections = (*sections[:4], PromptSectionKeys.EVIDENCE, *sections[4:])

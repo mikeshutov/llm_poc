@@ -37,7 +37,8 @@ class UpdateMemoryStateArgs(BaseModel):
     task_completed: bool = Field(
         default=False,
         description=(
-            "Mark the returned memory update as task-complete."
+            "Set true only on the final successful memory update when the assigned task is complete. "
+            "This signals the orchestrator to stop the agent after saving memory."
         ),
     )
 
@@ -64,7 +65,11 @@ class UpdateMemoryStateArgs(BaseModel):
         "A successful update automatically condenses previously viewed compactable tool exchanges in the "
         "current roundtrip. New results from the current batch remain for the next reasoning cycle. "
         "No source IDs are needed. Non-compactable results cannot be removed. "
-        "Set task_completed=true to mark the returned state as complete."
+        "Use this tool for both durable state updates and completion signaling. Set task_completed=true "
+        "on the final successful update to signal that the agent is finished; do not rely on an empty "
+        "tool-call response to indicate completion. A completion update must be the only call in its batch. "
+        "At each reasoning cycle, update memory with all tool results available since the previous "
+        "memory update before choosing the next action batch."
     ),
 )
 def update_memory_state(
@@ -81,6 +86,9 @@ def update_memory_state(
     target = working_memory_path(state)
     if target is None:
         raise ValueError("The active agent has no initialized working-memory file.")
+    plan = state.node_states.planner.plan
+    if task_completed and plan is not None and len(plan.steps) != 1:
+        raise ValueError("A completion memory update must run alone; review the other tool results first.")
     if not target.is_file():
         raise ValueError("The current working-memory file does not exist; the runtime must create it first.")
     original = "" if content is not None else target.read_text(encoding=UTF8_ENCODING)

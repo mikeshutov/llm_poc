@@ -74,6 +74,16 @@ def test_execution_context_factory_supports_ids_and_fresh_defaults(execution_con
     assert first.user_profile.user_id == "alice"
 
 
+def test_memory_factory_builds_independent_small_and_large_states(working_memory_state_factory):
+    small = working_memory_state_factory(task="Small")
+    large_content = "Checked finding\n" * 1000
+    large = working_memory_state_factory(content=large_content, file_name="memory/custom.md")
+
+    assert "Small" in small.read_working_memory()
+    assert large.read_working_memory() == large_content.strip()
+    assert small.working_memory_file_name != large.working_memory_file_name
+
+
 def test_repository_factory_copies_seed_records(tool_repository_factory):
     record_id = uuid4()
     records = {record_id: {"example": True}}
@@ -83,6 +93,7 @@ def test_repository_factory_copies_seed_records(tool_repository_factory):
 
     assert record_id in records
     assert empty.records == {}
+    assert seeded.compacted_ids is not empty.compacted_ids
 
 
 def test_plans_have_fresh_defaults_and_composable_overrides(default_plan, plan_factory, plan_step_factory):

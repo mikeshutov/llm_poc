@@ -39,6 +39,7 @@ class AgentState:
     reasoner_result: SynthesisResult | None = None
     reasoner_message_history: list[Any] = field(default_factory=list)
     working_memory_file_name: str | None = None
+    memory_task_completed: bool = False
     llm: Any = field(
         default_factory=lambda: build_chat_model(
             provider=ConversationModelConfig.build_default().main_agent.planner.provider,
@@ -97,6 +98,10 @@ class AgentState:
 
     def resolve_agent_scope(self) -> str:
         return self.agent_profile.scope
+
+    @property
+    def can_complete(self) -> bool:
+        return not self.agent_profile.uses_memory_state or self.memory_task_completed
 
     def render_working_memory(self) -> str:
         """Render the profile's runtime memory template for this task."""

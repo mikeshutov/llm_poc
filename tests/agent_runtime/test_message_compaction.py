@@ -177,6 +177,23 @@ def test_multiple_memory_writes_never_compact_current_batch_results(
     ]
 
 
+def test_completion_update_cannot_hide_unreviewed_batch_results(
+    update_memory_state,
+    recording_tool_repository,
+):
+    state, old_id = update_memory_state
+    state.node_states.planner.plan.steps[-1].args["task_completed"] = True
+
+    run_executor(state)
+
+    memory_result = state.gather_tool_results()[-1]
+    assert memory_result.status == "error"
+    assert "must run alone" in memory_result.result["error"]
+    assert not recording_tool_repository.compacted_ids
+    assert state.node_states.planner.decision_status != "satisfied"
+    assert "Old search results already viewed" in state.reasoner_message_history[1].content
+
+
 def test_agent_state_condenses_mixed_calls_but_retains_excluded_tools(agent_state_factory, tool_exchange_factory):
     state = agent_state_factory()
     user = HumanMessage(content="Find an answer")

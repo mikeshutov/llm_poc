@@ -5,6 +5,7 @@ from conversation.models.conversation_models import (
     ConversationMessage,
     ConversationContext,
 )
+from common.config import UTF8_ENCODING
 from conversation.repository.repo_factory import get_conversation_repo
 from common.data import bounded_json_value
 
@@ -13,8 +14,8 @@ MAX_CONTEXT_BYTES = 120_000
 
 
 def _project_context_message(message: ConversationMessage) -> dict:
-    kind = str(message.kind)
-    visibility = str(message.visibility)
+    kind = message.kind
+    visibility = message.visibility
     if message.is_subagent:
         return {}
     if visibility != "visible" and kind not in {"tool_call", "tool_result"}:
@@ -22,14 +23,6 @@ def _project_context_message(message: ConversationMessage) -> dict:
     if kind in {"tool_call", "tool_result"}:
         payload = dict(message.payload or {})
         payload.pop("output_payload", None)
-        if isinstance(payload.get("evidence"), list):
-            payload["evidence"] = [
-                bounded_json_value(
-                    item,
-                    max_bytes=8_000,
-                ) if isinstance(item, dict) else item
-                for item in payload["evidence"]
-            ]
     else:
         payload = {
             key: message.payload.get(key)
@@ -68,7 +61,7 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
         after_message_index=after_index,
         newest_first=True,
     )
-    # Keep the non-compacted ordered message stream for model callers.  The
+    # Keep the non-compacted ordered message stream for model callers. The
     # visible subset is derived separately for summaries and chat history.
     messages: list[dict] = []
     # list_roundtrips returns only completed roundtrips. ConversationRepository
@@ -89,13 +82,14 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
             if projected:
                 messages.append(projected)
 
-    while len(messages) > MAX_CONTEXT_MESSAGES:
-        messages.pop(0)
-    while messages:
-        rendered_size = len(json.dumps(messages, default=str).encode("utf-8"))
-        if rendered_size <= MAX_CONTEXT_BYTES:
-            break
-        messages.pop(0)
+    # Remove the oldest exchange as a unit, never just one half of a pair.
+    while messages and (
+        len(messages) > MAX_CONTEXT_MESSAGES
+        or len(json.dumps(messages, default=str).encode(UTF8_ENCODING)) > MAX_CONTEXT_BYTES
+    ):
+        omitted = messages.pop(0)
+        if omitted["kind"] == "tool_call":
+            messages = [message for message in messages if message["parent_message_id"] != omitted["id"]]
 
     return ConversationContext(
         conversation_summary=conversation.summary if conversation else "",

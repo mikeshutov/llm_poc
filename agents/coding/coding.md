@@ -20,7 +20,6 @@ Persist source code, data files, and documents through workspace files, then pro
 - Use workspace file tools for temporary source files and intermediate outputs; use relative file names only.
 - The workspace can be used as a scratchpad to generate to maintain your thoughts or to get context on previous executions.
 - You can create .md files in order to organize your thoughts or temporarily store evidence in an organized manner.
-- The recommendation is to create and utilize research-{topic}.md file and a notes.md file as scratch pads as you work on problems you may utilize a plan.md file to work on comprehensive tasks if needed.
 
 
 ### need to build out some templates for the LLM to utilize here for different coding tasks or for common workspace work.

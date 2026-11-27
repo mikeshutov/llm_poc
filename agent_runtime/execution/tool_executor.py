@@ -18,7 +18,8 @@ from agent_runtime.models.agent_inputs import AgentInputs
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.agent_memory import AgentMemoryResponse
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
-from agent_runtime.working_memory import initialize_working_memory_file
+from agent_runtime.models.decision import DecisionStatus
+from agent_runtime.working_memory import initialize_working_memory_file, task_completion_requested
 from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentName
 from retrieval.evidence import EvidenceView, ToolOutcome, ToolOutcomeStatus, ToolResult
 from agent_runtime.models.plan import Plan
@@ -278,6 +279,10 @@ def run_executor(agent_state: AgentState) -> AgentState:
     plan = planner_state.plan
     if plan is None or not plan.steps:
         return agent_state
+    agent_state.memory_task_completed = False
+    agent_state.result = agent_state.result.copy(
+        answer_status=AnswerStatus.PENDING, execution_status=ExecutionStatus.PENDING,
+    )
     context = agent_state.execution_context
     tool_repo = MessageToolRepository() if isinstance(context.roundtrip_id, UUID) else None
     allowed = set(agent_state.agent_profile.tool_names)
@@ -343,7 +348,13 @@ def run_executor(agent_state: AgentState) -> AgentState:
                 iteration_number=planner_state.plan_count,
                 execution_result=result,
             )
-    append_execution_messages(agent_state)
+        append_execution_messages(agent_state)
+    agent_state.memory_task_completed = any(task_completion_requested(result.output) for result in results.values())
+    if agent_state.memory_task_completed:
+        agent_state.node_states.planner.decision_status = DecisionStatus.SATISFIED
+        agent_state.result = agent_state.result.copy(
+            answer_status=AnswerStatus.SUCCESS, execution_status=ExecutionStatus.SUCCESS,
+        )
     return agent_state
 
 

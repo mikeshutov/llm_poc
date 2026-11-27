@@ -132,8 +132,6 @@ def _compile_tools_rules_from_state(state: AgentState) -> CompiledPlannerContext
     return CompiledPlannerContext(tools=list(deduped_tools.values()), compiled_tools=compiled_tools, rules=rules)
 def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]]:
     context = _compile_tools_rules_from_state(state)
-    delegation_tools = available_agent_tools(state)
-    delegated_capabilities = [AvailableTool.from_tool(tool, category="agents") for tool in delegation_tools]
     tool_results = state.gather_tool_results()
     evidence_bundle = build_evidence_bundle_from_tool_results(tool_results)
     evidence_steps = build_evidence_steps_from_tool_results(
@@ -146,37 +144,44 @@ def build_planner_prompt(state: AgentState) -> tuple[AgentPrompt, list[BaseTool]
         compiled_rules = f"{compiled_rules}\n\nExecution Feedback:\n- {EMPTY_EXECUTION_REPLAN_RULE}"
     if state.node_states.evaluator.missing_information:
         compiled_rules = f"{compiled_rules}\n\nReplanning Guidance:\n- {MISSING_INFORMATION_REPLAN_RULE}"
-    discovered_attribute_types = sorted({
-        attribute.attribute_type
-        for attribute in state.execution_context.user_profile.user_attributes.attributes
-    })
-    if discovered_attribute_types:
-        compiled_rules = (
-            f"{compiled_rules}\n\nRelevant user attribute types for this iteration:\n"
-            f"- {', '.join(discovered_attribute_types)}"
-        )
+    if state.agent_profile.include_user_profile:
+        discovered_attribute_types = sorted({
+            attribute.attribute_type
+            for attribute in state.execution_context.user_profile.user_attributes.attributes
+        })
+        if discovered_attribute_types:
+            compiled_rules = (
+                f"{compiled_rules}\n\nRelevant user attribute types for this iteration:\n"
+                f"- {', '.join(discovered_attribute_types)}"
+            )
 
+    delegation_tools = available_agent_tools(state)
+    delegated_capabilities = [AvailableTool.from_tool(tool, category="agents") for tool in delegation_tools]
     prompt = AgentPrompt(
         instruction=state.agent_profile.planner_instruction,
-        user_profile=state.execution_context.user_profile,
+        user_profile=state.execution_context.user_profile if state.agent_profile.include_user_profile else None,
         conversation_context=state.execution_context.conversation_context,
         task=state.inputs.task,
         available_tools=[*_prompt_tools(context.tools), *delegated_capabilities],
         rules=compiled_rules,
         evidence=evidence_steps,
         missing_information=state.node_states.evaluator.missing_information,
+        working_memory=state.render_working_memory(),
     )
-    prompt.include_section(
-        PromptSectionKeys.USER_PROFILE,
-        metadata={
-            "include_management_fields": _is_profile_management_agent(state),
-            "include_tone": True,
-        },
-    )
+    if state.agent_profile.include_user_profile:
+        prompt.include_section(
+            PromptSectionKeys.USER_PROFILE,
+            metadata={
+                "include_management_fields": _is_profile_management_agent(state),
+                "include_tone": True,
+            },
+        )
     prompt.include_section(PromptSectionKeys.CONVERSATION_CONTEXT)
     prompt.include_section(PromptSectionKeys.AVAILABLE_TOOLS)
     prompt.include_section(PromptSectionKeys.RULES)
     prompt.include_section(PromptSectionKeys.EVIDENCE)
     prompt.include_section(PromptSectionKeys.MISSING_INFORMATION)
     prompt.include_section(PromptSectionKeys.TASK)
+    if state.agent_profile.working_memory_template:
+        prompt.include_section(PromptSectionKeys.WORKING_MEMORY)
     return prompt, [*context.tools, *delegation_tools]

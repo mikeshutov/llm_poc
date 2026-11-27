@@ -13,4 +13,5 @@ def test_top_level_profile_exposes_static_capabilities() -> None:
         "discover_capabilities",
         "math_calculate",
         "user_management",
+        "update_memory_state",
     }

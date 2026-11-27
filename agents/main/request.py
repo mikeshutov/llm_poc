@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from urllib.parse import unquote
 from uuid import UUID
 
@@ -13,6 +13,7 @@ from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agent_runtime.models.synthesized_result import SynthesisResult, SynthesisResultBlock
 from agent_runtime.working_memory import initialize_working_memory_file
 from agent_runtime.context import bind_agent_context
+from agent_runtime.planning.prompts.planner_rules import WORKING_MEMORY_LIFECYCLE_RULE
 from agents.main.agent import MainReasonerStrategy
 from capabilities.adapters.math import calculate
 from capabilities.adapters.profile import (
@@ -21,6 +22,7 @@ from capabilities.adapters.profile import (
 from capabilities.discovery.discover_capabilities_tool import (
     CAPABILITY_DISCOVERY_TOOL,
 )
+from capabilities.registry.tools import WORKING_MEMORY_TOOLS
 from capabilities.registry.constants import TOOL_CATEGORY_FILE_MANAGEMENT, TOOL_CATEGORY_WRITING
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 from retrieval.evidence_store import (
@@ -30,6 +32,7 @@ from retrieval.evidence_store import (
 )
 from agent_runtime.synthesis.synthesis import _build_result_blocks
 from assets.files.urls import STATIC_FILES_URL_PREFIX
+from common.config import UTF8_ENCODING
 
 
 _GENERATED_FILE_LINK = re.compile(
@@ -37,6 +40,10 @@ _GENERATED_FILE_LINK = re.compile(
     r"(?P<path>[^)\s]+)\s*\)",
     re.IGNORECASE,
 )
+
+_TOP_LEVEL_WORKING_MEMORY_TEMPLATE = Path(__file__).with_name(
+    "working-memory.md"
+).read_text(encoding=UTF8_ENCODING).strip()
 
 
 def _file_name_key(value: str) -> str:
@@ -78,8 +85,11 @@ TOP_LEVEL_PROFILE = AgentProfile(
     version=2,
     description="Top-level request reasoner, coordinator, and executor.",
     excluded_categories={TOOL_CATEGORY_FILE_MANAGEMENT, TOOL_CATEGORY_WRITING},
-    static_tools=[CAPABILITY_DISCOVERY_TOOL, USER_MANAGEMENT_TOOL, calculate],
+    static_tools=[CAPABILITY_DISCOVERY_TOOL, USER_MANAGEMENT_TOOL, calculate, *WORKING_MEMORY_TOOLS],
+    working_memory_template=_TOP_LEVEL_WORKING_MEMORY_TEMPLATE,
+    include_user_profile=True,
     planner_instruction=(
+        f"{WORKING_MEMORY_LIFECYCLE_RULE}\n\n"
         "For straightforward arithmetic or percentage questions, call math_calculate "
         "directly when a calculation tool is available; do not delegate these requests "
         "to the coding agent or use code execution."

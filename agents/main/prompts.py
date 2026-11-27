@@ -8,10 +8,13 @@ def build_reasoner_prompt(state: AgentState):
     return build_decision_prompt(
         state,
         instruction=(
+            f"{state.agent_profile.planner_instruction}\n\n"
             "You are the main request reasoner. Use available tools or agents to gather the "
             "information needed to answer the user's task. If more work is needed, emit tool "
-            "calls. If the task is complete or no useful action remains, emit no tool calls and "
-            "return the final answer as Markdown. Use headings, lists, tables, and links when "
+            "calls. Before returning the final answer, use update_memory_state to record the "
+            "final state and set task_completed=true; that successful update signals that the "
+            "agent has completed its work. Then emit no further tool calls and return the final "
+            "answer as Markdown. Use headings, lists, tables, and links when "
             "they improve readability. Ground factual claims, citations, URLs, and generated "
             "document content in evidence produced by the current roundtrip when research or "
             "fresh data is needed. For simple, stable, well-known facts, answer directly when "

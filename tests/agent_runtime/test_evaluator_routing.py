@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from types import SimpleNamespace
 
 
@@ -19,7 +18,7 @@ from agent_runtime.models.evaluation_result import (
     EVALUATION_STATUS_SATISFIED,
     EVALUATION_STATUS_TERMINAL,
 )
-from retrieval.evidence import ToolResult
+from retrieval.evidence import EvidenceView, ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.evaluation import evaluator_router
 
@@ -57,7 +56,10 @@ def test_validator_routes_action_plan_to_execute(set_plan_results, agent_state_f
     assert validator(state) == EXECUTE_TOOLS_EDGE
 
 
-def test_validator_executes_new_action_plan_even_if_evaluator_is_terminal(set_plan_results, agent_state_factory) -> None:
+def test_validator_executes_new_action_plan_even_if_evaluator_is_terminal(
+    set_plan_results,
+    agent_state_factory,
+) -> None:
     state = agent_state_factory(task="Find something", llm=object(), profile=TOP_LEVEL_PROFILE)
     set_plan_results(
         state,
@@ -115,7 +117,10 @@ def test_router_routes_missing_results_back_to_plan(set_plan_results, agent_stat
     assert router(state) == PLAN_EDGE
 
 
-def test_execution_result_router_replans_once_after_an_empty_execution(set_plan_results, agent_state_factory) -> None:
+def test_execution_result_router_replans_once_after_an_empty_execution(
+    set_plan_results,
+    agent_state_factory,
+) -> None:
     state = agent_state_factory(task="Find something", llm=object(), profile=TOP_LEVEL_PROFILE)
     set_plan_results(
         state,
@@ -151,7 +156,10 @@ def test_execution_result_router_replans_once_after_an_empty_execution(set_plan_
     assert execution_result_router(state) == PLAN_EDGE
 
 
-def test_execution_result_router_evaluates_after_second_empty_execution(set_plan_results, agent_state_factory) -> None:
+def test_execution_result_router_evaluates_after_second_empty_execution(
+    set_plan_results,
+    agent_state_factory,
+) -> None:
     state = agent_state_factory(task="Find something", llm=object(), profile=TOP_LEVEL_PROFILE)
     set_plan_results(
         state,
@@ -187,7 +195,10 @@ def test_execution_result_router_evaluates_after_second_empty_execution(set_plan
     assert execution_result_router(state) == EVALUATE_EDGE
 
 
-def test_execution_result_router_replans_before_evaluation_when_results_exist(set_plan_results, agent_state_factory, evidence_factory) -> None:
+def test_execution_result_router_replans_before_evaluation_when_results_exist(
+    set_plan_results,
+    agent_state_factory,
+) -> None:
     state = agent_state_factory(task="Find something", llm=object(), profile=TOP_LEVEL_PROFILE)
     set_plan_results(
         state,
@@ -210,7 +221,7 @@ def test_execution_result_router_replans_before_evaluation_when_results_exist(se
             plan_step_id=state.node_states.planner.plan.steps[0].db_id,
             tool_name="generic_web_search",
             result={"results": ["evidence"]},
-            evidence=[evidence_factory(
+            evidence=[EvidenceView(
         data={
             "title": "Evidence",
         })],
@@ -222,18 +233,20 @@ def test_execution_result_router_replans_before_evaluation_when_results_exist(se
     assert execution_result_router(state) == PLAN_EDGE
 
 
-def test_evaluator_router_returns_synthesis_when_status_is_satisfied(agent_state_factory) -> None:
+def test_evaluator_router_requires_state_save_when_status_is_satisfied(agent_state_factory) -> None:
     state = agent_state_factory(task="Find something", llm=object(), profile=TOP_LEVEL_PROFILE)
     state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
 
-    assert evaluator_router(state) == SYNTHESIZE_EDGE
+    assert evaluator_router(state) == PLAN_EDGE
 
 
-def test_evaluator_router_returns_synthesis_when_status_is_partial_but_sufficient(agent_state_factory) -> None:
+def test_evaluator_router_requires_state_save_when_status_is_partial_but_sufficient(
+    agent_state_factory,
+) -> None:
     state = agent_state_factory(task="Find something", llm=object(), profile=TOP_LEVEL_PROFILE)
     state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT
 
-    assert evaluator_router(state) == SYNTHESIZE_EDGE
+    assert evaluator_router(state) == PLAN_EDGE
 
 
 def test_evaluator_router_returns_synthesis_when_status_is_terminal(agent_state_factory) -> None:
@@ -249,27 +262,5 @@ def test_evaluator_router_returns_plan_when_status_is_retryable(agent_state_fact
 
     assert evaluator_router(state) == PLAN_EDGE
     assert state.node_states.evaluator.evaluation_status == EVALUATION_STATUS_RETRYABLE
-
-
-def test_evaluator_router_requires_profile_completion_tools_before_synthesis(agent_state_factory) -> None:
-    profile = replace(TOP_LEVEL_PROFILE, required_completion_tools={"workspace_file_complete"})
-    state = agent_state_factory(task="Find something", llm=object(), profile=profile)
-    state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
-    state.gather_tool_results = lambda: [
-        ToolResult(tool_name="web_search", result={"results": ["evidence"]})
-    ]
-
-    assert evaluator_router(state) == PLAN_EDGE
-
-
-def test_evaluator_router_synthesizes_after_profile_completion_tool(agent_state_factory) -> None:
-    profile = replace(TOP_LEVEL_PROFILE, required_completion_tools={"workspace_file_complete"})
-    state = agent_state_factory(task="Find something", llm=object(), profile=profile)
-    state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
-    state.gather_tool_results = lambda: [
-        ToolResult(tool_name="workspace_file_complete", result={"operation": "completed"})
-    ]
-
-    assert evaluator_router(state) == SYNTHESIZE_EDGE
 
 

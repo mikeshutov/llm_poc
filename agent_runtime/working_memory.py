@@ -10,6 +10,8 @@ from assets.files.storage import (
     WORKING_MEMORY_DIRECTORY,
     conversation_working_memory_path,
 )
+from agent_runtime.compaction import is_successful_memory_update
+from retrieval.evidence import ToolResult
 
 if TYPE_CHECKING:
     from agent_runtime.models.agent_state import AgentState
@@ -45,6 +47,14 @@ def render_working_memory_template(state: AgentState) -> str:
     return state.agent_profile.working_memory_template.replace(
         "{{ objective }}", state.inputs.task or state.inputs.request_task,
     )
+
+
+def task_completion_requested(result: ToolResult | None) -> bool:
+    """Return whether a successful memory update requested agent completion."""
+    if result is None or not is_successful_memory_update(result):
+        return False
+    return isinstance(result.result, dict) and result.result.get("task_completed") is True
+
 
 def initialize_working_memory_file(state: AgentState) -> None:
     """Create a profile-driven private working-memory file before an agent runs."""

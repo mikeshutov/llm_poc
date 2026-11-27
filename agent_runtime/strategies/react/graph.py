@@ -97,6 +97,8 @@ class ReactStrategy:
         return EXECUTE_TOOLS_EDGE
 
     def _route_after_execute(self, state: AgentState) -> str:
+        if state.result.answer_status == AnswerStatus.SUCCESS and state.result.execution_status == ExecutionStatus.SUCCESS:
+            return END
         if _plan_was_entirely_duplicate_rejected(state):
             state.node_states.planner.decision_status = DecisionStatus.BLOCKED
             state.result = state.result.copy(

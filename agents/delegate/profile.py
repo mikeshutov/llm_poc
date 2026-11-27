@@ -6,6 +6,7 @@ from agent_runtime.models.agent_profile import (
     AgentProfile,
 )
 from capabilities.discovery.discover_capabilities_tool import CAPABILITY_DISCOVERY_TOOL
+from capabilities.registry.tools import WORKING_MEMORY_TOOLS
 from capabilities.registry.constants import (
     TOOL_CATEGORY_PRODUCTS,
     TOOL_CATEGORY_WEATHER,
@@ -25,6 +26,8 @@ from capabilities.registry.constants import (
     TOOL_CATEGORY_FILES,
     TOOL_CATEGORY_WORKSPACE,
 )
+from agent_runtime.strategies.working_memory import load_strategy_working_memory_template
+from agent_runtime.planning.prompts.planner_rules import WORKING_MEMORY_LIFECYCLE_RULE
 from llm.conversation_model_config import MAIN_AGENT_MODEL_SCOPE
 
 
@@ -58,15 +61,17 @@ def build_delegate_profile() -> AgentProfile:
             TOOL_CATEGORY_FILES,
             TOOL_CATEGORY_WORKSPACE,
         },
-        static_tools=[CAPABILITY_DISCOVERY_TOOL],
+        static_tools=[CAPABILITY_DISCOVERY_TOOL, *WORKING_MEMORY_TOOLS],
         execution_strategy=AgentExecutionStrategy.REACT,
         can_delegate_agents=False,
         delegatable=True,
         max_turns=10,
         planner_instruction=(
+            f"{WORKING_MEMORY_LIFECYCLE_RULE}\n\n"
             "Complete the assigned task using available tools. Stay within its scope and "
-            "ground findings in supporting evidence."
+            "ground findings in supporting evidence. Record the handoff for the parent in working memory."
         ),
+        working_memory_template=load_strategy_working_memory_template(AgentExecutionStrategy.REACT),
     )
 
 

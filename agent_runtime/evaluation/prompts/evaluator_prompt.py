@@ -21,15 +21,21 @@ def _build_instruction(state: AgentState) -> str:
 
 
 def build_evaluator_prompt(state: AgentState | MainState, evidence: list[EvidenceStep]) -> AgentPrompt:
+    working_memory = state.render_working_memory() if isinstance(state, AgentState) else ""
+    include_user_profile = not isinstance(state, AgentState) or state.agent_profile.include_user_profile
     prompt = AgentPrompt(
         instruction=_build_instruction(state),
-        user_profile=state.execution_context.user_profile,
+        user_profile=state.execution_context.user_profile if include_user_profile else None,
         task=(state.inputs.task if isinstance(state, AgentState) else state.task).strip(),
         evidence=evidence,
         schema=EVALUATOR_SCHEMA,
+        working_memory=working_memory,
     )
-    prompt.include_section(PromptSectionKeys.USER_PROFILE)
+    if include_user_profile:
+        prompt.include_section(PromptSectionKeys.USER_PROFILE)
     prompt.include_section(PromptSectionKeys.EVIDENCE)
     prompt.include_section(PromptSectionKeys.SCHEMA)
     prompt.include_section(PromptSectionKeys.TASK)
+    if working_memory.strip():
+        prompt.include_section(PromptSectionKeys.WORKING_MEMORY)
     return prompt

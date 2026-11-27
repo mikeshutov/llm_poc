@@ -132,3 +132,27 @@ def test_context_excludes_subagent_tool_entries(conversation_message_factory, co
         context = build_roundtrip_context(str(repository.roundtrip.conversation_id))
 
     assert [message.kind for message in context.messages] == ["user", "assistant"]
+
+
+@pytest.mark.parametrize("limit", ["count", "bytes"])
+def test_context_trimming_removes_entire_exchange(
+    conversation_tool_exchange_factory,
+    context_repository_factory,
+    monkeypatch,
+    limit,
+):
+    repository = context_repository_factory()
+    call, result = conversation_tool_exchange_factory(
+        roundtrip_id=repository.roundtrip.id,
+        call_overrides={"content": "x" * 2000},
+    )
+    final = repository.messages[-1]
+    repository.messages = [call, result, final]
+    if limit == "count":
+        monkeypatch.setattr("conversation.context_builder.MAX_CONTEXT_MESSAGES", 2)
+    else:
+        monkeypatch.setattr("conversation.context_builder.MAX_CONTEXT_BYTES", 1500)
+    with patch("conversation.context_builder.get_conversation_repo", return_value=repository):
+        context = build_roundtrip_context(str(repository.roundtrip.conversation_id))
+
+    assert [message.id for message in context.messages] == [final.id]
