@@ -11,7 +11,7 @@ from langchain_core.tools import StructuredTool
 from common.http import HttpClientError
 from common.logging import record_node_log
 from agent_runtime.constants import NodeName
-from capabilities.registry.tools import tools, WORKSPACE_MUTATION_TOOLS
+from capabilities.registry.tools import tools, WORKSPACE_MUTATION_TOOLS, WORKING_MEMORY_TOOLS
 from capabilities.discovery.discover_capabilities_tool import CAPABILITY_DISCOVERY_TOOL
 from capabilities.adapters.profile import (
     USER_MANAGEMENT_TOOL,
@@ -270,7 +270,7 @@ PROFILE_RUNTIME_TOOLS = (
     update_user_tone,
     upsert_user_attribute,
 )
-AGENT_ONLY_TOOLS = tuple(WORKSPACE_MUTATION_TOOLS)
+AGENT_ONLY_TOOLS = (*WORKSPACE_MUTATION_TOOLS, *WORKING_MEMORY_TOOLS)
 AGENT_ONLY_TOOL_NAMES = {tool.name for tool in AGENT_ONLY_TOOLS}
 
 

@@ -16,4 +16,5 @@ pytest_plugins = [
     "tests.fixtures.products",
     "tests.fixtures.retrieval",
     "tests.fixtures.tools",
+    "tests.fixtures.workspace",
 ]
