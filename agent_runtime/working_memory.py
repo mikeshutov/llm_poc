@@ -10,7 +10,7 @@ from assets.files.storage import (
     WORKING_MEMORY_DIRECTORY,
     conversation_working_memory_path,
 )
-from agent_runtime.compaction import is_successful_memory_update
+from capabilities.registry.constants import TOOL_NAME_UPDATE_MEMORY_STATE
 from retrieval.evidence import ToolResult
 
 if TYPE_CHECKING:
@@ -51,7 +51,7 @@ def render_working_memory_template(state: AgentState) -> str:
 
 def task_completion_requested(result: ToolResult | None) -> bool:
     """Return whether a successful memory update requested agent completion."""
-    if result is None or not is_successful_memory_update(result):
+    if result is None or result.tool_name != TOOL_NAME_UPDATE_MEMORY_STATE or result.status != "completed":
         return False
     return isinstance(result.result, dict) and result.result.get("task_completed") is True
 

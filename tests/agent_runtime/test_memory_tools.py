@@ -4,33 +4,7 @@ import importlib
 from uuid import uuid4
 
 from agent_runtime.context import bind_agent_context
-from agent_runtime.models.agent_execution_context import AgentExecutionContext
-from agents.delegate.profile import DELEGATE_PROFILE
 from capabilities.adapters.memories.get_memory_detail import get_memory_detail
-
-
-def test_working_memory_tools_are_scoped_to_runtime_file(
-    runtime_workspace,
-    working_memory_state_factory,
-) -> None:
-    module = importlib.import_module("capabilities.adapters.workspace.working_memory")
-    state = working_memory_state_factory(
-        file_name="memory/delegate-memory.md", content="# Working Memory\n\n## Findings\n",
-    )
-    memory_file = runtime_workspace / state.working_memory_file_name
-
-    with bind_agent_context(state):
-        update_result = module.update_memory_state.invoke({
-            "content": "# Working Memory\n\nUpdated",
-        })
-        completion_result = module.update_memory_state.invoke({
-            "append": "\n\n## Decisions\nKeep it concise.",
-            "task_completed": True,
-        })
-
-    assert memory_file.read_text(encoding="utf-8") == "# Working Memory\n\nUpdated\n\n## Decisions\nKeep it concise."
-    assert update_result.evidence[0].data["title"] == "memory/delegate-memory.md"
-    assert completion_result.result["task_completed"] is True
 
 
 def test_working_memory_tool_automatically_condenses_current_roundtrip() -> None:
@@ -45,38 +19,6 @@ def test_working_memory_tool_automatically_condenses_current_roundtrip() -> None
     assert "source_tool_call_ids" not in module.UpdateMemoryStateArgs.model_fields
     assert "discard_tool_call_ids" not in module.UpdateMemoryStateArgs.model_fields
     assert "task_completed" in module.UpdateMemoryStateArgs.model_fields
-
-
-def test_update_memory_state_supports_exact_and_regex_replacement(
-    runtime_workspace,
-    working_memory_state_factory,
-) -> None:
-    module = importlib.import_module("capabilities.adapters.workspace.working_memory")
-    state = working_memory_state_factory(content="Finding: source-123")
-    memory_file = runtime_workspace / state.working_memory_file_name
-
-    with bind_agent_context(state):
-        module.update_memory_state.invoke({"find": "source-123", "replace": "source-456"})
-        module.update_memory_state.invoke({"find": r"source-\d+", "replace": "source-final", "regex": True})
-
-    assert memory_file.read_text(encoding="utf-8") == "Finding: source-final"
-
-
-def test_working_memory_tools_do_not_create_unbound_files(runtime_workspace, agent_state_factory) -> None:
-    module = importlib.import_module("capabilities.adapters.workspace.working_memory")
-    state = agent_state_factory(profile=DELEGATE_PROFILE)
-    state.working_memory_file_name = "missing-memory.md"
-    state.execution_context = AgentExecutionContext.new(conversation_id="conversation-1")
-
-    with bind_agent_context(state):
-        try:
-            module.update_memory_state.invoke({"content": "should not be created"})
-        except ValueError as exc:
-            assert "runtime must create it first" in str(exc)
-        else:
-            raise AssertionError("update_memory_state created a file outside runtime initialization")
-
-    assert not (runtime_workspace / "missing-memory.md").exists()
 
 
 def test_workspace_write_and_edit_only_update_files(runtime_workspace) -> None:

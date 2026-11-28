@@ -45,41 +45,22 @@ def test_agent_prompt_builds_native_chat_messages(conversation_message_factory) 
     assert messages[3].content == "Find suitable options."
 
 
-def test_agent_prompt_sends_tool_result_as_native_tool_messages(conversation_message_factory) -> None:
+def test_agent_prompt_sends_tool_result_as_native_tool_messages(conversation_tool_exchange_factory) -> None:
     call_id, roundtrip_id = uuid4(), uuid4()
+    pair = conversation_tool_exchange_factory(
+        tool="products_search", roundtrip_id=roundtrip_id, call_overrides={"id": call_id},
+        result_overrides={
+            "content": "ignored hypothesis",
+            "payload": {
+                "tool_name": "products_search", "status": "completed",
+                "output_payload": {"raw": "do not send this"},
+                "evidence": [{"id": "evidence-1", "summary": "Waterproof boots", "data": {"title": "Boots"}}],
+            },
+        },
+    )
     prompt = AgentPrompt(
         instruction="",
-        conversation_context=ConversationContext(
-            messages=[
-                conversation_message_factory(
-                    id=call_id,
-                    roundtrip_id=roundtrip_id,
-                    kind="tool_call",
-                    visibility="internal",
-                    role="assistant",
-                    payload={"tool_name": "products_search", "input_payload": {}},
-                ),
-                conversation_message_factory(
-                    roundtrip_id=roundtrip_id,
-                    sequence=1,
-                    kind="tool_result",
-                    visibility="internal",
-                    role="tool",
-                    content="ignored hypothesis",
-                    payload={
-                        "tool_name": "products_search",
-                        "status": "completed",
-                        "output_payload": {"raw": "do not send this"},
-                        "evidence": [{
-                            "id": "evidence-1",
-                            "summary": "Waterproof boots",
-                                "data": {"title": "Boots"},
-                        }],
-                    },
-                    parent_message_id=call_id,
-                ),
-            ],
-        ),
+        conversation_context=ConversationContext(messages=list(pair)),
     )
     prompt.include_section(PromptSectionKeys.CONVERSATION_CONTEXT)
 
@@ -94,33 +75,20 @@ def test_agent_prompt_sends_tool_result_as_native_tool_messages(conversation_mes
     assert "do not send this" not in messages[1].content
 
 
-def test_agent_prompt_preserves_historical_tool_names(conversation_message_factory) -> None:
+def test_agent_prompt_preserves_historical_tool_names(conversation_tool_exchange_factory) -> None:
     tool_call_id = uuid4()
+    pair = conversation_tool_exchange_factory(
+        tool="products_search", args={"query": "boots"},
+        call_overrides={"id": tool_call_id, "payload": {
+            "tool_name": "products_search", "provider_tool_call_id": "call-1", "input_payload": {"query": "boots"},
+        }},
+        result_overrides={"payload": {
+            "tool_name": "products_search", "provider_tool_call_id": "call-1", "status": "completed", "evidence": [],
+        }},
+    )
     prompt = AgentPrompt(
         instruction="",
-        conversation_context=ConversationContext(
-            messages=[
-                conversation_message_factory(id=tool_call_id, kind="tool_call", visibility="internal", role="assistant", payload={
-                        "tool_name": "products_search",
-                        "provider_tool_call_id": "call-1",
-                        "input_payload": {"query": "boots"},
-                    },
-                ),
-                conversation_message_factory(
-                    sequence=1,
-                    kind="tool_result",
-                    visibility="internal",
-                    role="tool",
-                    payload={
-                        "tool_name": "products_search",
-                        "provider_tool_call_id": "call-1",
-                        "status": "completed",
-                        "evidence": [],
-                    },
-                    parent_message_id=tool_call_id,
-                ),
-            ],
-        ),
+        conversation_context=ConversationContext(messages=list(pair)),
     )
     prompt.include_section(PromptSectionKeys.CONVERSATION_CONTEXT)
 
@@ -132,29 +100,13 @@ def test_agent_prompt_preserves_historical_tool_names(conversation_message_facto
     assert messages[1].tool_call_id == str(tool_call_id)
 
 
-def test_replay_uses_canonical_pairs_even_when_stored_messages_are_interleaved(conversation_message_factory):
+def test_replay_uses_canonical_pairs_even_when_stored_messages_are_interleaved(conversation_tool_exchange_factory):
     roundtrip_id = uuid4()
-    calls = [
-        conversation_message_factory(
-            roundtrip_id=roundtrip_id,
-            sequence=index,
-            kind="tool_call",
-            visibility="internal",
-            role="assistant",
-            payload={"tool_name": name, "input_payload": {}},
-        ) for index, name in enumerate(["web_search", "math_calculate"])
-    ]
-    results = [
-        conversation_message_factory(
-            roundtrip_id=roundtrip_id,
-            sequence=index + 2,
-            kind="tool_result",
-            visibility="internal",
-            role="tool",
-            payload={"tool_name": call.payload["tool_name"], "evidence": []},
-            parent_message_id=call.id,
-        ) for index, call in enumerate(calls)
-    ]
+    pairs = [conversation_tool_exchange_factory(
+        tool=name, roundtrip_id=roundtrip_id, sequence=index,
+        result_overrides={"sequence": index + 2},
+    ) for index, name in enumerate(["web_search", "math_calculate"])]
+    calls, results = zip(*pairs)
     prompt = AgentPrompt(instruction="", conversation_context=ConversationContext(messages=[*calls, *results]))
     prompt.include_section(PromptSectionKeys.CONVERSATION_CONTEXT)
 

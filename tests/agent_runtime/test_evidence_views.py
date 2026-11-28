@@ -1,5 +1,4 @@
 from uuid import uuid4
-from types import SimpleNamespace
 
 
 from agent_runtime.models.agent_prompt import (
@@ -95,13 +94,12 @@ def test_agent_prompt_serializes_evaluator_evidence_view() -> None:
     ]
 
 
-def test_evaluator_evidence_is_not_duplicated_into_prompt_messages() -> None:
+def test_evaluator_evidence_is_not_duplicated_into_prompt_messages(agent_state_factory) -> None:
     evidence = EvidenceView( summary="Useful evidence.",
         data={
             "title": "Current result",
         })
-    state = SimpleNamespace(
-        execution_context=SimpleNamespace(user_profile=None),
+    state = agent_state_factory(
         task="Evaluate the current result.",
     )
     prompt = build_evaluator_prompt(

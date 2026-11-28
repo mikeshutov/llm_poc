@@ -48,7 +48,13 @@ def record_decision_status(state: AgentState, status: DecisionStatus) -> None:
     if state.node_states.planner.plan and state.node_states.planner.plan.steps:
         return
     if status == DecisionStatus.SATISFIED:
-        state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
+        if not state.can_complete:
+            state.node_states.planner.decision_status = DecisionStatus.BLOCKED
+            state.result = state.result.copy(
+                answer_status=AnswerStatus.FAILED, execution_status=ExecutionStatus.FAILED,
+            )
+        else:
+            state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
     elif status == DecisionStatus.BLOCKED:
         state.result = state.result.copy(
             answer_status=AnswerStatus.FAILED,

@@ -14,6 +14,7 @@ from common.data import bounded_json_value, is_meaningful_prompt_value, prune_em
 from personalization.profile.models import UserProfile
 from conversation.models.conversation_models import ConversationContext
 from retrieval.evidence import EvidenceView
+from agent_runtime.working_memory import bound_working_memory
 from capabilities.discovery.models import AvailableTool
 
 MESSAGE_TYPES_BY_ROLE = {
@@ -148,7 +149,7 @@ class AgentPrompt:
             elif key == PromptSectionKeys.EVIDENCE_IDS:
                 value = self.evidence_ids
             elif key == PromptSectionKeys.WORKING_MEMORY:
-                value = self.working_memory
+                value = bound_working_memory(self.working_memory)
             elif key == PromptSectionKeys.SCHEMA:
                 value = self.schema.strip()
             if is_meaningful_prompt_value(value):

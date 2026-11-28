@@ -12,7 +12,7 @@ from agent_runtime.models.evaluation_result import (
 def evaluator_router(state: AgentState) -> str:
     planner_state = state.node_states.planner
     evaluator_state = state.node_states.evaluator
-    if state.agent_profile.uses_memory_state and evaluator_state.evaluation_status in {
+    if not state.can_complete and evaluator_state.evaluation_status in {
         EVALUATION_STATUS_SATISFIED, EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT,
     }:
         if planner_state.plan_count < state.max_turns:

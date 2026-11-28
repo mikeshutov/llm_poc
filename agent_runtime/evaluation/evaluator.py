@@ -66,7 +66,7 @@ def _apply_evaluation(
     state.node_states.evaluator.missing_information = evaluation.missing_information
     if evaluation.status in TERMINAL_EVALUATION_STATUSES:
         sufficient = evaluation.status in {EVALUATION_STATUS_SATISFIED, EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT}
-        if state.agent_profile.uses_memory_state and sufficient:
+        if not state.can_complete and sufficient:
             # Evidence sufficiency is not completion until the final state save.
             exhausted = state.node_states.planner.plan_count >= state.max_turns
             state.result = state.result.copy(
