@@ -5,7 +5,7 @@ from contextvars import copy_context
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from langsmith import traceable
 from pydantic import ValidationError
@@ -16,9 +16,11 @@ from common.logging import compact_trace_inputs, compact_trace_outputs, record_n
 from agent_runtime.constants import NodeName
 from agent_runtime.models.agent_inputs import AgentInputs
 from agent_runtime.models.agent_state import AgentState
+from agent_runtime.models.agent_memory import AgentMemoryResponse
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
+from agent_runtime.working_memory import initialize_working_memory_file
 from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentName
-from retrieval.evidence import ToolOutcome, ToolOutcomeStatus, ToolResult
+from retrieval.evidence import EvidenceView, ToolOutcome, ToolOutcomeStatus, ToolResult
 from agent_runtime.models.plan import Plan
 from agent_runtime.models.plan import PlanStep
 from agent_runtime.context import bind_agent_context
@@ -29,6 +31,7 @@ from capabilities.registry.global_registry import (
     register_default_tools,
 )
 from capabilities.registry.repository.message_repository import MessageToolRepository
+from capabilities.registry.constants import TOOL_NAME_UPDATE_MEMORY_STATE
 from agent_runtime.execution.message_history import append_execution_messages
 from capabilities.discovery.capability_discovery import capability_discovery
 
@@ -181,14 +184,25 @@ def execute_agent_tool(
     delegated_run.available_agent_states = (
         agent_state.available_agent_states if delegated_run.agent_profile.can_delegate_agents else None
     )
+    initialize_working_memory_file(delegated_run)
     delegated_run.inputs.discovered_attribute_types.clear()
     with bind_agent_context(delegated_run):
-        if delegated_run.agent_profile.execution_strategy == AgentExecutionStrategy.REACT:
-            delegated_run.inputs.discovered_capabilities = capability_discovery(
-                delegated_run, include_agents=False, query=delegated_run.inputs.task,
-                allowed_tool_names=delegated_run.agent_profile.tool_names,
+        try:
+            if delegated_run.agent_profile.execution_strategy == AgentExecutionStrategy.REACT:
+                delegated_run.inputs.discovered_capabilities = capability_discovery(
+                    delegated_run, include_agents=False, query=delegated_run.inputs.task,
+                    allowed_tool_names=delegated_run.agent_profile.tool_names,
+                )
+            completed = agent_registry.get(delegated.agent_profile)(delegated_run)
+        except Exception as exc:
+            if not delegated_run.working_memory_file_name:
+                raise
+            delegated_run.result = delegated_run.result.copy(
+                answer_status=AnswerStatus.FAILED, execution_status=ExecutionStatus.FAILED,
             )
-        completed = agent_registry.get(delegated.agent_profile)(delegated_run)
+            return _agent_completion_result(
+                agent_name=agent_name, state=delegated_run, task=delegated_run.inputs.task, error=str(exc),
+            )
     return _agent_completion_result(
         agent_name=agent_name,
         state=completed,
@@ -341,20 +355,9 @@ def _agent_completion_result(
     error: str | None = None,
 ) -> ToolResult:
     """Translate internal subagent state into the parent capability contract."""
-    child_results = state.gather_tool_results()
-    evidence = []
-    seen_evidence_ids = set()
-    for child_result in child_results:
-        for item in child_result.evidence:
-            if item.id in seen_evidence_ids:
-                continue
-            seen_evidence_ids.add(item.id)
-            evidence.append(item)
-
     status = state.result.answer_status
     if state.result.execution_status not in {ExecutionStatus.PENDING, ExecutionStatus.SUCCESS}:
         status = state.result.execution_status
-    summaries = [item.summary.strip() for item in evidence if item.summary and item.summary.strip()]
     status_text = {
         AnswerStatus.SUCCESS: "completed the delegated task",
         AnswerStatus.PARTIAL_SUCCESS: "partially completed the delegated task",
@@ -363,7 +366,6 @@ def _agent_completion_result(
         AnswerStatus.FAILED: "failed to complete the delegated task",
         AnswerStatus.PENDING: "has not completed the delegated task",
     }[status]
-    summary = " ".join([f"{agent_name} {status_text}.", *dict.fromkeys(summaries)])
     outcome_status = {
         AnswerStatus.SUCCESS: ToolOutcomeStatus.COMPLETED,
         AnswerStatus.PARTIAL_SUCCESS: ToolOutcomeStatus.PARTIAL,
@@ -381,6 +383,35 @@ def _agent_completion_result(
         reason=error or ("; ".join(missing_inputs) if missing_inputs else None),
         missing_inputs=missing_inputs,
     )
+    if state.working_memory_file_name:
+        filename = state.working_memory_file_name
+        memory_evidence = next((
+            item for result in reversed(state.gather_tool_results()) for item in reversed(result.evidence)
+            if item.metadata.get("path") == filename or item.data.get("title") == filename
+        ), None)
+        if memory_evidence is None:
+            memory_evidence = EvidenceView(
+                id=str(uuid4()), type="workspace_file", source=TOOL_NAME_UPDATE_MEMORY_STATE,
+                summary=f"Agent working memory is available in {filename}.",
+                data={"title": filename, "path": filename},
+                metadata={"path": filename, "kind": "runtime_working_memory"},
+            )
+        return ToolResult(
+            tool_name=agent_name,
+            result=AgentMemoryResponse(
+                filename=filename, response=f"{agent_name} {status_text}. The working-memory file contains the current state.",
+                contents=state.read_working_memory(), status=status.value,
+                error=error or (outcome.reason if outcome.status == ToolOutcomeStatus.FAILED else None),
+            ).model_dump(mode="json"),
+            evidence=[memory_evidence], state=outcome,
+        )
+    evidence_by_id = {}
+    for result in state.gather_tool_results():
+        for item in result.evidence:
+            evidence_by_id.setdefault(item.id, item)
+    evidence = list(evidence_by_id.values())
+    summaries = dict.fromkeys(item.summary.strip() for item in evidence if item.summary and item.summary.strip())
+    summary = " ".join([f"{agent_name} {status_text}.", *summaries])
     return ToolResult(
         tool_name=agent_name,
         result={

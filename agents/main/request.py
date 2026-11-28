@@ -11,6 +11,7 @@ from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.main_state import MainState
 from agent_runtime.models.orchestrator_result import OrchestratorResult
 from agent_runtime.models.synthesized_result import SynthesisResult, SynthesisResultBlock
+from agent_runtime.working_memory import initialize_working_memory_file
 from agent_runtime.context import bind_agent_context
 from agents.main.agent import MainReasonerStrategy
 from capabilities.adapters.math import calculate
@@ -103,6 +104,7 @@ def run_main_request_strategy(main_state: MainState) -> MainState:
     execution_state.inputs.discovered_capabilities = main_state.discovered_capabilities
     execution_state.inputs.discovered_attribute_types = list(main_state.discovered_attribute_types)
     execution_state.available_agent_states = main_state.agent_states
+    initialize_working_memory_file(execution_state)
     with bind_agent_context(execution_state):
         execution_state = TOP_LEVEL_STRATEGY.run(
             execution_state, thread_id=execution_state.execution_context.conversation_id or "",
