@@ -26,6 +26,7 @@ search this directory for the topic or fixture name.
 | `personalization.py` | `user_attribute_factory` |
 | `attribute_classifier.py` | `attribute_classifier_factory` |
 | `assets.py` | `file_asset_factory`, `writing_catalog_factory` |
+| `workspace.py` | `runtime_workspace`, `working_memory_state_factory` |
 | `http.py` | `http_response_factory` |
 | `jobs.py` | `job_planner_factory` |
 | `games.py` | `commander_page_factory` |
@@ -78,3 +79,7 @@ install executor/state replacements make the latest created instance active.
 Keep constructor/default/validation tests explicit when that constructor is the
 behavior under test. Keep scenario-specific setup and assertions local; do not turn
 fixtures into a second implementation of production behavior. Path/security tests should exercise real path resolution.
+
+`working_memory_state_factory(task=..., content=..., file_name=..., history=...)` creates
+an isolated file-backed test state. Its default profile exposes only the memory tool
+explicitly; pass `profile` or state factory overrides for integration scenarios.

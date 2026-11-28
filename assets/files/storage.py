@@ -11,6 +11,8 @@ from common.config import (
     WORKSPACES_DIR,
 )
 
+WORKING_MEMORY_DIRECTORY = "memory"
+
 
 def _owner_segment(user_id: str | None) -> str:
     owner = user_id.strip() if isinstance(user_id, str) else ""
@@ -63,8 +65,31 @@ def conversation_workspace_path(conversation_id: str, *, user_id: str | None) ->
     )
 
 
+def conversation_working_memory_path(
+    conversation_id: str,
+    file_name: str,
+    *,
+    user_id: str | None,
+) -> Path:
+    """Resolve a runtime memory file inside the conversation memory directory."""
+    candidate = Path(file_name)
+    if (
+        not file_name
+        or candidate.is_absolute()
+        or any(part in {"", ".", ".."} for part in candidate.parts)
+    ):
+        raise ValueError("Invalid working-memory file name.")
+
+    workspace = conversation_workspace_path(conversation_id, user_id=user_id)
+    if candidate.parts[0] == WORKING_MEMORY_DIRECTORY:
+        return workspace.joinpath(*candidate.parts)
+
+    return workspace / WORKING_MEMORY_DIRECTORY / candidate
+
+
 __all__ = [
     "conversation_workspace_path",
+    "conversation_working_memory_path",
     "scoped_file_name",
     "scoped_file_path",
     "user_artifacts_path",

@@ -84,6 +84,7 @@ from capabilities.adapters.workspace import (
     workspace_file_read,
     workspace_file_write,
 )
+from capabilities.adapters.workspace.working_memory import update_memory_state
 from capabilities.registry.constants import TOOL_RESULT_TYPE_BOOK_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CALCULATION
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CODE_EXECUTION
@@ -216,6 +217,9 @@ WORKSPACE_READ_TOOLS = [
 ]
 WORKSPACE_MUTATION_TOOLS = [
     tool for tool in WORKSPACE_TOOLS if tool.name not in {item.name for item in WORKSPACE_READ_TOOLS}
+]
+WORKING_MEMORY_TOOLS = [
+    Tool(update_memory_state, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=7),
 ]
 PROFILE_TOOLS = [
     Tool(

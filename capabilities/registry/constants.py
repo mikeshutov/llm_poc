@@ -84,6 +84,8 @@ TOOL_NAME_WORKSPACE_FILE_COMPLETE = "workspace_file_complete"
 TOOL_NAME_UPDATE_USER_NAMES = "user_update_names"
 TOOL_NAME_UPDATE_USER_TONE = "user_update_tone"
 
+TOOL_NAME_UPDATE_MEMORY_STATE = "update_memory_state"
+
 # These tools may run during a turn but must not copy their evidence into its payload.
 EVIDENCE_PERSISTENCE_EXCLUDED_TOOL_NAMES = frozenset({TOOL_NAME_LOOKUP_EVIDENCE})
 

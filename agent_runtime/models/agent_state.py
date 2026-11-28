@@ -3,6 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from agent_runtime.working_memory import (
+    MAX_WORKING_MEMORY_BYTES,
+    bound_working_memory,
+    render_working_memory_template,
+    working_memory_path,
+)
+from common.config import UTF8_ENCODING
+
 from llm.chat_models import build_chat_model, resolve_stage_model_selection
 from llm.conversation_model_config import ConversationModelConfig
 from agent_runtime.models.agent_profile import AgentProfile
@@ -27,6 +35,7 @@ class AgentState:
     result: AgentResult = field(default_factory=AgentResult)
     reasoner_result: SynthesisResult | None = None
     reasoner_message_history: list[Any] = field(default_factory=list)
+    working_memory_file_name: str | None = None
     llm: Any = field(
         default_factory=lambda: build_chat_model(
             provider=ConversationModelConfig.build_default().main_agent.planner.provider,
@@ -85,6 +94,21 @@ class AgentState:
 
     def resolve_agent_scope(self) -> str:
         return self.agent_profile.scope
+
+    def render_working_memory(self) -> str:
+        """Render the profile's runtime memory template for this task."""
+        return bound_working_memory(self.read_working_memory() or render_working_memory_template(self))
+
+    def read_working_memory(self) -> str:
+        """Return the initialized runtime memory file without template decoration."""
+        path = working_memory_path(self)
+        if path is not None:
+            try:
+                with path.open(encoding=UTF8_ENCODING) as memory_file:
+                    return bound_working_memory(memory_file.read(MAX_WORKING_MEMORY_BYTES + 1)).strip()
+            except (OSError, UnicodeError):
+                return ""
+        return ""
 
     def gather_tool_results(self) -> list[ToolResult]:
         gathered = list(self.direct_tool_results)

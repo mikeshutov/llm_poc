@@ -81,6 +81,7 @@ class AgentProfile:
     required_completion_tools: set[str] = field(default_factory=set)
     planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
     synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION
+    working_memory_template: str = ""
     delegation_args_schema: type[BaseModel] = AgentDelegationArgs
 
     def __post_init__(self) -> None:
