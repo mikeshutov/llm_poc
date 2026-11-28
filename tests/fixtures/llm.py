@@ -1,8 +1,27 @@
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import Mock
+from uuid import uuid4
 
 import pytest
+from langchain_core.messages import AIMessage, ToolMessage
+
+
+@pytest.fixture
+def tool_exchange_factory():
+    def create(*, tool="web_search", call_id=None, args=None, content="Results", call_overrides=None, result_overrides=None):
+        call_id = str(uuid4()) if call_id is None else call_id
+        call = AIMessage(**{
+            "content": "", "tool_calls": [{"id": call_id, "name": tool, "args": deepcopy(args or {})}],
+            **deepcopy(call_overrides or {}),
+        })
+        result = ToolMessage(**{
+            "content": content, "tool_call_id": call.tool_calls[0]["id"], "name": call.tool_calls[0]["name"],
+            **deepcopy(result_overrides or {}),
+        })
+        return call, result
+
+    return create
 
 
 class FakeLangChainResponse:

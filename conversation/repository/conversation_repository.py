@@ -53,6 +53,7 @@ class ConversationRepository:
         parent_message_id: UUID | None = None,
         is_subagent: bool = False,
         subagent_name: str | None = None,
+        compacted: bool = False,
     ) -> ConversationMessage:
         message_embedding = None
         embedding_text = (content or "").strip()
@@ -68,14 +69,14 @@ class ConversationRepository:
                 """
                 INSERT INTO conversation_message (
                     roundtrip_id, sequence, kind, visibility, role, content,
-                    payload, metadata, parent_message_id, is_subagent, subagent_name, embedding
+                    payload, metadata, parent_message_id, is_subagent, subagent_name, compacted, embedding
                 )
-                SELECT %s, COALESCE(MAX(sequence), -1) + 1, %s, %s, %s, %s, %s, %s, %s, %s, %s, (%s)::vector
+                SELECT %s, COALESCE(MAX(sequence), -1) + 1, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, (%s)::vector
                 FROM conversation_message
                 WHERE roundtrip_id = %s
                 RETURNING id, roundtrip_id, sequence, kind, visibility, role,
                           content, payload, metadata, parent_message_id, is_subagent,
-                          subagent_name, created_at, embedding
+                          subagent_name, compacted, created_at, embedding
                 """,
                 (
                     roundtrip_id,
@@ -88,6 +89,7 @@ class ConversationRepository:
                     parent_message_id,
                     is_subagent,
                     subagent_name,
+                    compacted,
                     message_embedding,
                     roundtrip_id,
                 ),
@@ -184,12 +186,13 @@ class ConversationRepository:
         *,
         include_internal: bool = True,
         exclude_subagents: bool = False,
+        exclude_compacted: bool = False,
     ) -> list[ConversationMessage]:
         with self._conn.cursor(row_factory=dict_row) as cur:
             query = """
                 SELECT id, roundtrip_id, sequence, kind, visibility, role,
                        content, payload, metadata, parent_message_id, is_subagent,
-                       subagent_name, created_at, embedding
+                       subagent_name, compacted, created_at, embedding
                 FROM conversation_message
                 WHERE roundtrip_id = %s
             """
@@ -198,6 +201,8 @@ class ConversationRepository:
                 query += " AND visibility = 'visible'"
             if exclude_subagents:
                 query += " AND NOT is_subagent"
+            if exclude_compacted:
+                query += " AND NOT compacted"
             query += " ORDER BY sequence ASC"
             cur.execute(query, params)
             return [ConversationMessage(**row) for row in cur.fetchall()]
@@ -217,7 +222,7 @@ class ConversationRepository:
                 SELECT cm.id, cm.roundtrip_id, cm.sequence, cm.kind, cm.visibility,
                        cm.role, cm.content, cm.payload, cm.metadata,
                        cm.parent_message_id, cm.is_subagent, cm.subagent_name,
-                       cm.created_at, cm.embedding
+                       cm.compacted, cm.created_at, cm.embedding
                 FROM conversation_message cm
                 JOIN conversation_roundtrip rt ON rt.id = cm.roundtrip_id
                 WHERE rt.conversation_id = %s{visibility_clause}{subagent_clause}
@@ -655,6 +660,9 @@ class ConversationRepository:
                 visibility=message.visibility,
                 payload=message.payload,
                 metadata=message.metadata,
+                compacted=message.compacted,
+                is_subagent=message.is_subagent,
+                subagent_name=message.subagent_name,
                 parent_message_id=(
                     message_id_map.get(message.parent_message_id)
                     if message.parent_message_id is not None

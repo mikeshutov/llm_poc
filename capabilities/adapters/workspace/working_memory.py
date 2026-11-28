@@ -61,6 +61,9 @@ class UpdateMemoryStateArgs(BaseModel):
         f"Keep the saved memory within {MAX_WORKING_MEMORY_BYTES} UTF-8 bytes; consolidate it when needed. "
         "Use content for a full replacement, "
         "find/replace for exact or regex text replacement, or append to add text. "
+        "A successful update automatically condenses previously viewed compactable tool exchanges in the "
+        "current roundtrip. New results from the current batch remain for the next reasoning cycle. "
+        "No source IDs are needed. Non-compactable results cannot be removed. "
         "Set task_completed=true to mark the returned state as complete."
     ),
 )
@@ -107,6 +110,7 @@ def update_memory_state(
     )
     if task_completed and isinstance(result.result, dict):
         result.result["task_completed"] = True
+    state.condense_reasoner_history(state.gather_tool_results())
     return result
 
 
