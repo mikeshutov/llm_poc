@@ -2,6 +2,25 @@ from common.data import format_prompt_bullet_list
 
 DEFAULT_PLANNER_PROMPT_INSTRUCTION = "You are a planning agent."
 
+WORKING_MEMORY_LIFECYCLE_RULE = (
+    "Use update_memory_state to maintain your current task state and working memory: objective, "
+    "progress, findings, decisions, supporting evidence IDs, and remaining work. "
+    "At the start of every reasoning cycle, review every tool result available since "
+    "the previous working-memory update. Reconcile those results with the current "
+    "understanding, record relevant findings, decisions, gaps, and supporting evidence "
+    "IDs in working memory, and update working memory before choosing the next action "
+    "batch. Do not carry unprocessed tool results into another reasoning cycle. "
+    "Working-memory updates may be planned and executed alongside other independent "
+    "tool calls. Update working memory again after the final available tool-result batch "
+    "before finishing. A successful working-memory update retains the selected state "
+    "and automatically condenses previously viewed eligible tool exchanges from the current roundtrip. "
+    "State-changing tools run sequentially before concurrent-safe read tools; new batch results remain "
+    "available for the next reasoning cycle. "
+    "When the task is complete, make one final successful update_memory_state with "
+    "task_completed=true as the only tool call in its batch before returning the final response; do not rely on an empty "
+    "action set to indicate that state was saved."
+)
+
 BASE_PLANNER_RULES = [
     "Use the available tools to complete the task.",
     "Return tool steps only when they meaningfully advance the goal.",
@@ -15,7 +34,6 @@ BASE_PLANNER_RULES = [
 REACT_DECISION_RULES = [
     "Inspect the observed tool results before choosing the next action.",
     "Return only actions that materially advance the user's goal.",
-    "Return no tool calls when the goal is satisfied or no useful action remains.",
     "Do not repeat materially equivalent tool calls that have already been executed.",
 ]
 

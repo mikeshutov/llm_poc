@@ -14,6 +14,7 @@ from common.data import bounded_json_value, is_meaningful_prompt_value, prune_em
 from personalization.profile.models import UserProfile
 from conversation.models.conversation_models import ConversationContext
 from retrieval.evidence import EvidenceView
+from agent_runtime.working_memory import bound_working_memory
 from capabilities.discovery.models import AvailableTool
 
 MESSAGE_TYPES_BY_ROLE = {
@@ -43,6 +44,7 @@ class PromptSectionKeys:
     TASK = "task"
     SCHEMA = "schema"
     EVIDENCE_IDS = "evidence_ids"
+    WORKING_MEMORY = "working_memory"
 
 
 BUILTIN_SECTION_KEYS = (
@@ -56,6 +58,7 @@ BUILTIN_SECTION_KEYS = (
     PromptSectionKeys.TASK,
     PromptSectionKeys.SCHEMA,
     PromptSectionKeys.EVIDENCE_IDS,
+    PromptSectionKeys.WORKING_MEMORY,
 )
 
 ROLE_RULES_SECTION_KEYS = (PromptSectionKeys.RULES,)
@@ -68,6 +71,7 @@ INPUT_SECTION_KEYS = (
     PromptSectionKeys.MISSING_INFORMATION,
     PromptSectionKeys.TASK,
     PromptSectionKeys.EVIDENCE_IDS,
+    PromptSectionKeys.WORKING_MEMORY,
 )
 OUTPUT_CONTRACT_SECTION_KEYS = (PromptSectionKeys.SCHEMA,)
 
@@ -104,6 +108,7 @@ class AgentPrompt:
     evidence: list[EvidenceStep] | None = None
     missing_information: list[str] = field(default_factory=list)
     evidence_ids: list[str] = field(default_factory=list)
+    working_memory: str = ""
     _enabled_sections: dict[str, dict[str, Any]] = field(default_factory=dict, init=False, repr=False)
 
     def include_section(
@@ -128,9 +133,7 @@ class AgentPrompt:
                     include_tone=bool(metadata.get("include_tone", False)),
                 )
             elif key == PromptSectionKeys.CONVERSATION_CONTEXT and self.conversation_context is not None:
-                from conversation.utils import build_conversation_context_json
-
-                value = json.loads(build_conversation_context_json(self.conversation_context))
+                value = self.conversation_context.model_dump(mode="json")
             elif key == PromptSectionKeys.AVAILABLE_TOOL_CATEGORIES:
                 value = self._normalize_section_value(self.available_tool_categories)
             elif key == PromptSectionKeys.AVAILABLE_TOOLS:
@@ -145,6 +148,8 @@ class AgentPrompt:
                 value = self.task
             elif key == PromptSectionKeys.EVIDENCE_IDS:
                 value = self.evidence_ids
+            elif key == PromptSectionKeys.WORKING_MEMORY:
+                value = bound_working_memory(self.working_memory)
             elif key == PromptSectionKeys.SCHEMA:
                 value = self.schema.strip()
             if is_meaningful_prompt_value(value):
@@ -233,205 +238,66 @@ class AgentPrompt:
                 # caller. Do not duplicate the catalog as JSON system text.
                 PromptSectionKeys.AVAILABLE_TOOLS,
                 PromptSectionKeys.TASK,
+                # Working memory is a durable runtime instruction/state block;
+                # emit it as an explicit system section below.
+                PromptSectionKeys.WORKING_MEMORY,
             }
         })
         if context_sections:
             system_parts.append("CONTEXT\n" + self._serialize_json(context_sections))
 
+        working_memory = raw_sections.get(PromptSectionKeys.WORKING_MEMORY)
+        if isinstance(working_memory, str) and working_memory.strip():
+            system_parts.append("WORKING MEMORY\n" + working_memory.strip())
+
         schema = raw_sections.get(PromptSectionKeys.SCHEMA)
         if isinstance(schema, str) and schema.strip():
             system_parts.append("OUTPUT CONTRACT\n" + schema.strip())
 
-        conversation_context = raw_sections.get(PromptSectionKeys.CONVERSATION_CONTEXT, {})
-        history = conversation_context.get("messages", []) if isinstance(conversation_context, dict) else []
-
+        history = (
+            self.conversation_context.messages
+            if self.conversation_context is not None
+            and PromptSectionKeys.CONVERSATION_CONTEXT in self._enabled_sections
+            else []
+        )
+        results_by_call = {
+            message.parent_message_id: message
+            for message in history
+            if message.kind == "tool_result" and message.parent_message_id is not None
+        }
         messages: list[Any] = []
-        tool_call_ids_by_message_id: dict[str, str] = {}
-        emitted_tool_call_ids: set[str] = set()
-        orphan_result_payloads: dict[str, dict[str, Any]] = {}
-        orphan_result_messages: set[str] = set()
-        tool_result_parent_ids = {
-            str(message.get("parent_message_id"))
-            for message in history
-            if isinstance(message, dict)
-            and message.get("kind") == "tool_result"
-            and message.get("parent_message_id") is not None
-        }
-        tool_result_provider_ids = {
-            str(message.get("payload", {}).get("provider_tool_call_id"))
-            for message in history
-            if isinstance(message, dict)
-            and message.get("kind") == "tool_result"
-            and isinstance(message.get("payload"), dict)
-            and message.get("payload", {}).get("provider_tool_call_id")
-        }
         if system_parts:
             messages.append(SystemMessage(content="\n\n".join(system_parts)))
 
         for message in history:
-            if not isinstance(message, dict):
-                continue
-            kind = message.get("kind")
-            visibility = message.get("visibility", "visible")
-            role = message.get("role")
-            content = message.get("content")
-            if visibility == "internal" and kind not in {"tool_call", "tool_result"}:
-                continue
-            if kind == "tool_result":
-                # Tool output is sent as a native tool-role message, but the
-                # model-facing result is the normalized evidence projection,
-                # not the raw adapter response. Raw output remains available
-                # in persistence for replay/debugging.
-                payload = message.get("payload", {})
-                if not isinstance(payload, dict):
-                    payload = {}
-                evidence = []
-                for item in payload.get("evidence", []):
-                    if not isinstance(item, dict):
-                        continue
-                    evidence.append({
-                        key: item.get(key)
-                        for key in ("id", "type", "source", "summary", "data", "metadata")
-                        if item.get(key) not in (None, "", [], {})
-                    })
-                raw_output = payload.get("output_payload")
-                if isinstance(raw_output, dict) and "result" in raw_output:
-                    model_result = raw_output.get("result")
-                else:
-                    model_result = raw_output
-                result_payload = {
-                    "tool_name": payload.get("tool_name", ""),
-                    "status": payload.get("status", ""),
-                    "error_message": payload.get("error_message"),
-                    "duration_ms": payload.get("duration_ms"),
-                    "result": bounded_json_value(
-                        model_result, max_bytes=12_000
-                    ),
-                    "evidence": evidence,
-                    "tool_metadata": payload.get("tool_metadata", {}),
-                }
-                tool_content = self._serialize_json(result_payload)
-                # LangChain requires every ToolMessage to have a call ID.
-                # New records use the parent conversation message ID; older
-                # or externally-produced records may only have the provider
-                # ID, so retain deterministic fallbacks for replay/context.
-                parent_message_id = message.get("parent_message_id")
-                matched_tool_call_id = (
-                    tool_call_ids_by_message_id.get(str(parent_message_id))
-                    if parent_message_id is not None
-                    else None
-                ) or payload.get("provider_tool_call_id")
-                if matched_tool_call_id in emitted_tool_call_ids:
-                    messages.append(ToolMessage(
-                        content=tool_content,
-                        tool_call_id=matched_tool_call_id,
-                    ))
-                else:
-                    # A bounded/replayed context can contain results without
-                    # their originating assistant tool-call messages. Keep
-                    # the evidence, but consolidate these historical results
-                    # by tool instead of emitting one assistant message per
-                    # result.
-                    orphan_key = str(payload.get("tool_name") or "unknown_tool")
-                    aggregate = orphan_result_payloads.setdefault(
-                        orphan_key,
-                        {
-                            "tool_name": orphan_key,
-                            "status": "completed",
-                            "error_message": None,
-                            "duration_ms": None,
-                            "result": None,
-                            "evidence": [],
-                            "tool_metadata": {},
-                        },
-                    )
-                    if orphan_key not in orphan_result_messages:
-                        orphan_result_messages.add(orphan_key)
-                    if payload.get("status") not in (None, "", "completed"):
-                        aggregate["status"] = payload.get("status")
-                    if payload.get("error_message"):
-                        aggregate["error_message"] = payload.get("error_message")
-                    if payload.get("output_payload") is not None:
-                        aggregate["result"] = bounded_json_value(
-                            payload.get("output_payload"), max_bytes=12_000
-                        )
-                    if isinstance(payload.get("duration_ms"), (int, float)):
-                        aggregate["duration_ms"] = (
-                            (aggregate["duration_ms"] or 0) + payload["duration_ms"]
-                        )
-                    if isinstance(payload.get("tool_metadata"), dict):
-                        aggregate["tool_metadata"].update(payload["tool_metadata"])
-                    existing_evidence_ids = {
-                        str(item.get("id"))
-                        for item in aggregate["evidence"]
-                        if isinstance(item, dict)
-                        and item.get("id") is not None
-                    }
-                    for item in result_payload["evidence"]:
-                        item_id_value = item.get("id")
-                        item_id = str(item_id_value) if item_id_value is not None else None
-                        if item_id is not None and item_id in existing_evidence_ids:
-                            continue
-                        aggregate["evidence"].append(item)
-            elif kind == "tool_call":
-                payload = message.get("payload", {})
-                if not isinstance(payload, dict):
-                    payload = {}
-                # OpenAI requires the following tool result to reference this
-                # exact ID. Prefer the provider ID when it was persisted;
-                # otherwise use the stable conversation message ID.
-                tool_call_id = str(
-                    payload.get("provider_tool_call_id")
-                    or payload.get("tool_call_id")
-                    or message.get("id", "")
-                )
-                if message.get("id") is not None:
-                    tool_call_ids_by_message_id[str(message["id"])] = tool_call_id
-                has_result = (
-                    str(message.get("id")) in tool_result_parent_ids
-                    or tool_call_id in tool_result_provider_ids
-                )
-                if has_result:
-                    emitted_tool_call_ids.add(tool_call_id)
-                    messages.append(AIMessage(
-                        content=content if isinstance(content, str) else "",
-                        tool_calls=[{
-                            "id": tool_call_id,
-                            "type": "tool_call",
-                            "name": str(payload.get("tool_name", "")),
-                            "args": payload.get("input_payload", {}),
-                        }],
-                    ))
-                else:
-                    # Do not emit an orphaned tool-call hypothesis. OpenAI
-                    # rejects native calls without responses, and the paired
-                    # result/evidence (when present elsewhere in history) is
-                    # the useful context to retain.
+            if message.kind == "tool_call":
+                result = results_by_call.get(message.id)
+                if result is None:
                     continue
-            elif role in {ROLE_USER, ROLE_ASSISTANT, ROLE_TOOL} and isinstance(content, str) and content.strip():
-                if role == ROLE_TOOL:
-                    continue
-                messages.append(MESSAGE_TYPES_BY_ROLE[role](content=content))
-
-        for orphan_key in orphan_result_messages:
-            # Preserve valid tool-message sequencing even when a bounded
-            # historical context contains a result without its originating
-            # assistant tool-call message.
-            orphan_call_id = f"historical-{len(messages)}-{orphan_key}"
-            messages.append(AIMessage(
-                content="",
-                tool_calls=[{
-                    "id": orphan_call_id,
-                    "type": "tool_call",
-                    "name": orphan_key,
-                    "args": {},
-                }],
-            ))
-            messages.append(ToolMessage(
-                content=self._serialize_json(orphan_result_payloads[orphan_key]),
-                tool_call_id=orphan_call_id,
-                name=orphan_key,
-            ))
+                call_id = str(message.id)
+                messages.append(AIMessage(
+                    content=message.content,
+                    tool_calls=[{
+                        "id": call_id,
+                        "type": "tool_call",
+                        "name": message.payload["tool_name"],
+                        "args": message.payload.get("input_payload", {}),
+                    }],
+                ))
+                payload = result.payload
+                messages.append(ToolMessage(
+                    content=self._serialize_json({
+                        "tool_name": payload.get("tool_name", ""),
+                        "status": payload.get("status", ""),
+                        "error_message": payload.get("error_message"),
+                        "duration_ms": payload.get("duration_ms"),
+                        "evidence": payload.get("evidence", []),
+                    }),
+                    tool_call_id=call_id,
+                    name=message.payload["tool_name"],
+                ))
+            elif message.visibility == "visible" and message.role in {ROLE_USER, ROLE_ASSISTANT} and message.content.strip():
+                messages.append(MESSAGE_TYPES_BY_ROLE[message.role](content=message.content))
 
         task = raw_sections.get(PromptSectionKeys.TASK)
         if isinstance(task, str) and task.strip():

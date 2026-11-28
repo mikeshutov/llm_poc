@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from common.logging import record_node_log
 from rendering.debug import EXECUTION_RESULT_KIND
-from agent_runtime.constants import EVALUATE_EDGE, PLAN_EDGE, NodeName
+from agent_runtime.constants import EVALUATE_EDGE, PLAN_EDGE, SYNTHESIZE_EDGE, NodeName
 from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from agent_runtime.models.agent_state import AgentState
 
@@ -14,6 +14,8 @@ def run_execution_result_validator(state: AgentState) -> AgentState:
             answer_status=AnswerStatus.FAILED,
             execution_status=ExecutionStatus.FAILED,
         )
+        return state
+    if state.result.answer_status == AnswerStatus.SUCCESS and state.result.execution_status == ExecutionStatus.SUCCESS:
         return state
     step_ids = {step.db_id for step in plan.steps}
     calls = [call for call in state.gather_tool_calls() if call.plan_step_id in step_ids]
@@ -48,6 +50,8 @@ def run_execution_result_validator(state: AgentState) -> AgentState:
 
 
 def execution_result_router(state: AgentState) -> str:
+    if state.result.execution_status is ExecutionStatus.SUCCESS and state.result.answer_status is AnswerStatus.SUCCESS:
+        return SYNTHESIZE_EDGE
     if state.result.execution_status is ExecutionStatus.NO_NEW_WORK:
         plan = state.node_states.planner.plan
         rejected_call_count = len(plan.steps) if plan else 0

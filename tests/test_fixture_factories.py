@@ -74,6 +74,61 @@ def test_execution_context_factory_supports_ids_and_fresh_defaults(execution_con
     assert first.user_profile.user_id == "alice"
 
 
+def test_memory_factory_builds_independent_small_and_large_states(working_memory_state_factory):
+    small = working_memory_state_factory(task="Small")
+    large_content = "Checked finding\n" * 1000
+    large = working_memory_state_factory(content=large_content, file_name="memory/custom.md")
+
+    assert "Small" in small.read_working_memory()
+    assert large.read_working_memory() == large_content.strip()
+    assert small.working_memory_file_name != large.working_memory_file_name
+
+
+def test_tool_exchange_factories_pair_ids_and_copy_overrides(
+    tool_exchange_factory, conversation_tool_exchange_factory,
+):
+    args = {"queries": ["test"]}
+    call, result = tool_exchange_factory(tool="lookup", call_id="call-1", args=args)
+    assert call.tool_calls[0]["id"] == result.tool_call_id == "call-1"
+    call.tool_calls[0]["args"]["queries"].append("changed")
+    assert args == {"queries": ["test"]}
+
+    stored_call, stored_result = conversation_tool_exchange_factory(
+        tool="lookup", sequence=4, args=args, compacted=True, is_subagent=True, subagent_name="helper",
+    )
+    assert stored_result.parent_message_id == stored_call.id
+    assert stored_result.roundtrip_id == stored_call.roundtrip_id
+    assert (stored_call.sequence, stored_result.sequence) == (4, 5)
+    assert stored_call.compacted and stored_result.compacted
+    assert stored_call.is_subagent and stored_result.is_subagent
+    assert stored_call.subagent_name == stored_result.subagent_name == "helper"
+    stored_call.payload["input_payload"]["queries"].append("changed")
+    assert args == {"queries": ["test"]}
+
+
+def test_memory_state_factory_copies_seeded_history(working_memory_state_factory, tool_exchange_factory):
+    history = list(tool_exchange_factory(content="Viewed results"))
+    state = working_memory_state_factory(history=history)
+    state.reasoner_message_history[1].content = "Changed"
+    assert history[1].content == "Viewed results"
+
+
+def test_context_factory_supports_multiple_roundtrips(context_repository_factory, conversation_roundtrip_factory):
+    roundtrips = [conversation_roundtrip_factory(message_index=index) for index in (1, 2)]
+    repository = context_repository_factory(roundtrips=roundtrips, messages=[])
+    assert repository.list_roundtrips() == roundtrips
+    roundtrips.clear()
+    assert len(repository.list_roundtrips()) == 2
+
+
+def test_delegated_state_factory_reuses_child_and_context(delegated_agent_state_factory, agent_state_factory):
+    child = agent_state_factory(profile_overrides={"name": "helper"})
+    parent = delegated_agent_state_factory(child=child, task="Research", evidence_ids=["evidence-1"])
+    assert parent.available_agent_states == {"helper": child}
+    assert parent.execution_context is child.execution_context
+    assert parent.node_states.planner.plan.steps[0].args == {"task": "Research", "evidence_ids": ["evidence-1"]}
+
+
 def test_repository_factory_copies_seed_records(tool_repository_factory):
     record_id = uuid4()
     records = {record_id: {"example": True}}
@@ -83,6 +138,7 @@ def test_repository_factory_copies_seed_records(tool_repository_factory):
 
     assert record_id in records
     assert empty.records == {}
+    assert seeded.compacted_ids is not empty.compacted_ids
 
 
 def test_plans_have_fresh_defaults_and_composable_overrides(default_plan, plan_factory, plan_step_factory):

@@ -16,12 +16,18 @@ def test_document_writing_agent_exposes_safe_file_tools() -> None:
         "workspace_file_edit",
         "workspace_file_list",
         "workspace_file_promote",
+        "update_memory_state",
     }
     assert "file_delete" not in DOCUMENT_WRITING_PROFILE.tool_names
 
 
 def test_document_writing_agent_is_react() -> None:
     assert DOCUMENT_WRITING_PROFILE.execution_strategy.value == "react"
+
+
+def test_document_writing_description_distinguishes_supported_formats() -> None:
+    assert "TXT, Markdown (.md), DOCX, and PDF" in DOCUMENT_WRITING_PROFILE.description
+    assert "Do not use it for HTML pages, CSS, JavaScript" in DOCUMENT_WRITING_PROFILE.description
 
 
 def test_document_writing_react_prompt_exposes_file_creation_rules(agent_state_factory) -> None:

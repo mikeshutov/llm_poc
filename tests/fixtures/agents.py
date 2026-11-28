@@ -110,30 +110,6 @@ def main_state_factory():
 
 
 @pytest.fixture
-def set_plan_results():
-    """Attach a plan and its results, keyed by local step ID, without persistence."""
-    def update(state, *, plan=None, results=None, plan_count=1, needs_replan=False):
-        if plan is not None:
-            state.node_states.planner.plan = plan.model_copy(deep=True)
-            state.node_states.planner.plan_count = max(0, plan_count)
-        state.node_states.planner.needs_replan = needs_replan
-        steps = {step.id: step for step in (plan.steps if plan is not None else [])}
-        tool_results = []
-        for step_id, value in (results or {}).items():
-            step = steps[step_id]
-            result = value if isinstance(value, ToolResult) else ToolResult(result=value)
-            tool_results.append(result.model_copy(update={
-                "tool_call_id": result.tool_call_id or uuid4(),
-                "plan_step_id": result.plan_step_id or step.db_id,
-                "tool_name": result.tool_name or step.tool,
-            }))
-        state.direct_tool_results[:] = tool_results
-        return state
-
-    return update
-
-
-@pytest.fixture
 def delegated_agent_state_factory(agent_state_factory, agent_profile_factory, execution_context_factory,
                                   plan_factory, plan_step_factory):
     def create(*, child=None, child_profile=None, task="Delegated task", evidence_ids=(),
@@ -157,3 +133,27 @@ def delegated_agent_state_factory(agent_state_factory, agent_profile_factory, ex
         return parent
 
     return create
+
+
+@pytest.fixture
+def set_plan_results():
+    """Attach a plan and its results, keyed by local step ID, without persistence."""
+    def update(state, *, plan=None, results=None, plan_count=1, needs_replan=False):
+        if plan is not None:
+            state.node_states.planner.plan = plan.model_copy(deep=True)
+            state.node_states.planner.plan_count = max(0, plan_count)
+        state.node_states.planner.needs_replan = needs_replan
+        steps = {step.id: step for step in (plan.steps if plan is not None else [])}
+        tool_results = []
+        for step_id, value in (results or {}).items():
+            step = steps[step_id]
+            result = value if isinstance(value, ToolResult) else ToolResult(result=value)
+            tool_results.append(result.model_copy(update={
+                "tool_call_id": result.tool_call_id or uuid4(),
+                "plan_step_id": result.plan_step_id or step.db_id,
+                "tool_name": result.tool_name or step.tool,
+            }))
+        state.direct_tool_results[:] = tool_results
+        return state
+
+    return update

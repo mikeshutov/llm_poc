@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from llm.conversation_model_config import EVALUATOR_STAGE, ModelSelection, PLANNER_STAGE
 from capabilities.registry.tools import TOOL_CATEGORIES
+from capabilities.registry.constants import TOOL_NAME_UPDATE_MEMORY_STATE
 from agent_runtime.planning.prompts.planner_rules import DEFAULT_PLANNER_PROMPT_INSTRUCTION
 
 class AgentName(StrEnum):
@@ -23,8 +24,6 @@ DEFAULT_SYNTHESIS_INSTRUCTION = (
     "Solve the following task or problem using the provided evidence. "
 )
 DEFAULT_MAX_TURNS = 10
-
-
 class AgentDelegationArgs(BaseModel):
     """Default contract used when an agent does not define a custom one."""
 
@@ -78,7 +77,7 @@ class AgentProfile:
     default_available_agent_names: set[str] = field(default_factory=set)
     max_turns: int = DEFAULT_MAX_TURNS
     can_run_concurrently: bool = False
-    required_completion_tools: set[str] = field(default_factory=set)
+    include_user_profile: bool = False
     planner_instruction: str = DEFAULT_PLANNER_PROMPT_INSTRUCTION
     synthesis_instruction: str = DEFAULT_SYNTHESIS_INSTRUCTION
     working_memory_template: str = ""
@@ -122,3 +121,7 @@ class AgentProfile:
     @property
     def tool_names(self) -> set[str]:
         return set(self.tools_by_name.keys())
+
+    @property
+    def uses_memory_state(self) -> bool:
+        return bool(self.working_memory_template) and TOOL_NAME_UPDATE_MEMORY_STATE in self.tools_by_name

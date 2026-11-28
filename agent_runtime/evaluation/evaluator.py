@@ -20,7 +20,7 @@ from agent_runtime.models.evaluation_result import (
     EvaluationResult,
     TERMINAL_EVALUATION_STATUSES,
 )
-from agent_runtime.models.agent_result import AnswerStatus
+from agent_runtime.models.agent_result import AnswerStatus, ExecutionStatus
 from retrieval.evidence_store import (
     build_evidence_bundle_from_tool_results,
     build_evidence_steps_from_tool_results,
@@ -65,10 +65,19 @@ def _apply_evaluation(
     state.node_states.evaluator.evaluation_status = evaluation.status
     state.node_states.evaluator.missing_information = evaluation.missing_information
     if evaluation.status in TERMINAL_EVALUATION_STATUSES:
+        sufficient = evaluation.status in {EVALUATION_STATUS_SATISFIED, EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT}
+        if not state.can_complete and sufficient:
+            # Evidence sufficiency is not completion until the final state save.
+            exhausted = state.node_states.planner.plan_count >= state.max_turns
+            state.result = state.result.copy(
+                answer_status=AnswerStatus.FAILED if exhausted else AnswerStatus.PENDING,
+                execution_status=ExecutionStatus.FAILED if exhausted else state.result.execution_status,
+            )
+            return deduped_relevant_evidence
         state.result = state.result.copy(
             answer_status=(
                 AnswerStatus.SUCCESS
-                if evaluation.status in {EVALUATION_STATUS_SATISFIED, EVALUATION_STATUS_PARTIAL_BUT_SUFFICIENT}
+                if sufficient
                 else AnswerStatus.FAILED
             )
         )
@@ -105,13 +114,11 @@ def run_evaluator(state: AgentState) -> AgentState:
             for step in evidence_steps
             for evidence in step.evidence
         ]
-        deduped_relevant_evidence = _dedupe_evidence_ids(all_evidence_ids)
-        state.result = state.result.copy(
-            relevant_evidence_ids=deduped_relevant_evidence,
-            answer_status=AnswerStatus.SUCCESS,
+        deduped_relevant_evidence = _apply_evaluation(
+            state,
+            EvaluationResult(status=EVALUATION_STATUS_SATISFIED, relevant_evidence=all_evidence_ids),
+            evidence_steps,
         )
-        state.node_states.evaluator.evaluation_status = EVALUATION_STATUS_SATISFIED
-        state.node_states.evaluator.missing_information = []
         record_node_log(
             conversation_id=execution_context.conversation_id,
             roundtrip_id=execution_context.roundtrip_id,

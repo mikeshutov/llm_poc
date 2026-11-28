@@ -7,6 +7,40 @@ from agent_runtime.context import bind_agent_context
 from capabilities.adapters.memories.get_memory_detail import get_memory_detail
 
 
+def test_working_memory_tool_automatically_condenses_current_roundtrip() -> None:
+    module = importlib.import_module("capabilities.adapters.workspace.working_memory")
+    tool_description = module.update_memory_state.description
+
+    assert "task state and working memory" in tool_description
+    assert "objective, progress, findings" in tool_description
+    assert "remaining work" in tool_description
+    assert "automatically condenses previously viewed compactable tool exchanges" in tool_description
+    assert "current roundtrip" in tool_description
+    assert "source_tool_call_ids" not in module.UpdateMemoryStateArgs.model_fields
+    assert "discard_tool_call_ids" not in module.UpdateMemoryStateArgs.model_fields
+    assert "task_completed" in module.UpdateMemoryStateArgs.model_fields
+
+
+def test_workspace_write_and_edit_only_update_files(runtime_workspace) -> None:
+    module = importlib.import_module("capabilities.adapters.workspace.files")
+
+    write_result = module.workspace_file_write.invoke({
+        "file_name": "notes.md",
+        "content": "before",
+    })
+    assert "source_tool_call_ids" not in write_result.result
+    assert "condensed_tool_call_ids" not in write_result.result
+
+    edit_result = module.workspace_file_edit.invoke({
+        "file_name": "notes.md",
+        "find": "before",
+        "replace": "after",
+    })
+    assert "source_tool_call_ids" not in edit_result.result
+    assert "condensed_tool_call_ids" not in edit_result.result
+    assert (runtime_workspace / "notes.md").read_text(encoding="utf-8") == "after"
+
+
 def test_get_memory_detail_returns_typed_result(
     conversation_roundtrip_factory,
     conversation_message_factory,
@@ -76,5 +110,3 @@ def test_get_memory_detail_rejects_invalid_roundtrip_id() -> None:
         "roundtrip UUID returned in its evidence."
     )
     assert result.evidence == []
-    assert result.evidence == []
-

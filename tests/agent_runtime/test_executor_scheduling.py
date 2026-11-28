@@ -110,7 +110,7 @@ def test_registry_concurrency_policy_respects_user_scope(agent_state_factory):
 
 @pytest.mark.parametrize("name, concurrent", [
     ("web_search", True), ("workspace_file_read", True), ("file_list", True),
-    ("workspace_file_complete", False), ("workspace_file_write", False), ("file_edit", False),
+    ("update_memory_state", False), ("workspace_file_write", False), ("file_edit", False),
     ("code_execute", False), ("discover_capabilities", False), ("document_writing", False),
     ("unknown_tool", False),
 ])

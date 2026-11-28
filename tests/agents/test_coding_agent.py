@@ -30,4 +30,5 @@ def test_coding_profile_can_be_rebuilt() -> None:
         "workspace_file_list",
         "workspace_file_delete",
         "workspace_file_promote",
+        "update_memory_state",
     }

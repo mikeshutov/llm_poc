@@ -12,7 +12,7 @@ from agent_runtime.models.decision import DecisionStatus
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.synthesized_result import SynthesisResult, SynthesisResultBlock
 from agent_runtime.execution.tool_executor import run_executor
-from agent_runtime.strategies.react.decision import run_decision
+from agent_runtime.strategies.react.decision import record_decision_status, run_decision
 from agents.main.prompts import build_reasoner_prompt
 
 
@@ -61,13 +61,13 @@ def run_reasoner(state: AgentState) -> AgentState:
 
     state.node_states.planner.plan = decision.plan
     state.node_states.planner.plan_count += 1
-    state.node_states.planner.decision_status = decision.status
+    record_decision_status(state, decision.status)
     if decision.plan.steps:
         return state
-    if decision.status == DecisionStatus.SATISFIED:
+    if state.node_states.planner.decision_status == DecisionStatus.SATISFIED:
         state.reasoner_result = _parse_answer(decision.raw_content)
         state.result = state.result.copy(answer_status=AnswerStatus.SUCCESS)
-    elif decision.status == DecisionStatus.BLOCKED:
+    elif state.node_states.planner.decision_status == DecisionStatus.BLOCKED:
         state.reasoner_result = _parse_answer(decision.raw_content)
         state.result = state.result.copy(
             answer_status=AnswerStatus.FAILED,
@@ -89,7 +89,7 @@ def _route_after_reasoner(state: AgentState) -> str:
 
 
 def _route_after_execute(state: AgentState) -> str:
-    if state.node_states.planner.plan_count >= state.max_turns:
+    if state.node_states.planner.plan_count >= state.max_turns and not state.memory_task_completed:
         state.node_states.planner.decision_status = DecisionStatus.BLOCKED
         state.result = state.result.copy(
             answer_status=AnswerStatus.FAILED,

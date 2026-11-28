@@ -12,7 +12,7 @@ search this directory for the topic or fixture name.
 
 | Module | Fixtures |
 | --- | --- |
-| `agents.py` | `agent_profile_factory`, `user_agent_profile_factory`, `execution_context_factory`, `agent_state_factory`, `react_agent_state_factory`, `main_state_factory`, `db_agent_factory`, `delegated_agent_state_factory`, `set_plan_results` |
+| `agents.py` | `agent_profile_factory`, `user_agent_profile_factory`, `execution_context_factory`, `agent_state_factory`, `react_agent_state_factory`, `main_state_factory`, `delegated_agent_state_factory`, `db_agent_factory`, `set_plan_results` |
 | `planning.py` | `plan_step_factory`, `plan_factory`, `default_plan`, `planning_result_factory` |
 | `capabilities.py` | `tool_factory`, `cache_repository_factory` |
 | `tools.py` | `registered_tool_registry`, `tool_repository_factory`, `recording_tool_repository`, `message_tool_repository_factory` |
@@ -68,18 +68,29 @@ unset; user profiles and conversation contexts are fresh on every call.
 `db_agent_factory` supplies an ID, name, and instruction; specify ownership fields
 explicitly, such as `user_id="alice"` or `agent_type=AgentType.SYSTEM`.
 
-`llm_factory` accepts response content, tool calls, and token counts, and
+`working_memory_state_factory(task=..., content=..., file_name=..., history=..., **kwargs)`
+initializes memory for a minimal memory-enabled profile by default and accepts the state factory's
+overrides. `llm_factory` accepts response content, tool calls, and token counts, and
 records received prompts in `prompts`.
+
+`tool_exchange_factory(tool=..., call_id=..., args=..., content=...)` builds a linked
+LangChain call/result pair. `conversation_tool_exchange_factory` builds persisted
+messages, accepts roundtrip, sequence, compaction and subagent fields, and supports
+`call_overrides`/`result_overrides`. Both copy mutable inputs.
+
+`delegated_agent_state_factory(child=..., child_profile=..., task=..., evidence_ids=...)`
+builds a coordinator plan with a child sharing its execution context.
+`context_repository_factory(roundtrips=[...], messages=[...])` supports multi-turn
+history. `message_tool_repository_factory(repository=...)` injects a conversation
+repository into the real tool-message repository without bypassing its constructor.
 
 ## Scope and isolation
 
-All fixtures are function-scoped. Tool-registry isolation is automatic; repository, HTTP, and provider substitution is opt-in. Repository factories that
+All fixtures are function-scoped. Tool-registry isolation is automatic; workspace,
+repository, HTTP, and provider substitution is opt-in. Repository factories that
 install executor/state replacements make the latest created instance active.
 
 Keep constructor/default/validation tests explicit when that constructor is the
 behavior under test. Keep scenario-specific setup and assertions local; do not turn
-fixtures into a second implementation of production behavior. Path/security tests should exercise real path resolution.
-
-`working_memory_state_factory(task=..., content=..., file_name=..., history=...)` creates
-an isolated file-backed test state. Its default profile exposes only the memory tool
-explicitly; pass `profile` or state factory overrides for integration scenarios.
+fixtures into a second implementation of production behavior. Path/security tests
+should exercise real path resolution instead of using the runtime workspace patch.

@@ -363,3 +363,13 @@ def test_cache_policy_controls_cacheability() -> None:
     with pytest.raises(ValueError, match="cache_ttl_seconds must be positive"):
         ToolCachePolicy(0)
 
+
+def test_global_registry_registers_runtime_update_memory_state() -> None:
+    register_default_tools()
+
+    registered = GLOBAL_TOOL_REGISTRY.get("update_memory_state")
+    assert registered.name == "update_memory_state"
+    assert registered.version == 7
+    for old_name in ("memory_state", "working_memory_update"):
+        with pytest.raises(UnknownToolError):
+            GLOBAL_TOOL_REGISTRY.get(old_name)

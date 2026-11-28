@@ -55,6 +55,11 @@ class DirectReturnStrategy:
 
     @staticmethod
     def _route_after_execute(state: AgentState) -> str:
+        if not state.can_complete:
+            state.result = state.result.copy(
+                answer_status=AnswerStatus.FAILED, execution_status=ExecutionStatus.FAILED,
+            )
+            return END
         plan = state.node_states.planner.plan
         if plan is None or not plan.steps:
             state.result = state.result.copy(

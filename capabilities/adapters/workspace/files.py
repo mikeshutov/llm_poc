@@ -17,11 +17,10 @@ from assets.files.file_types import FileType, TEXT_CONTENT_FILE_TYPES, WORKSPACE
 from assets.files.writer import normalize_file_format, write_file
 from assets.models import AssetOrigin
 from assets.repository.asset_repository import AssetRepository
-from common.config import ANONYMOUS_OWNER
+from common.config import ANONYMOUS_OWNER, UTF8_ENCODING
 from capabilities.registry.constants import (
     TOOL_NAME_WORKSPACE_FILE_DELETE,
     TOOL_NAME_WORKSPACE_FILE_EDIT,
-    TOOL_NAME_WORKSPACE_FILE_COMPLETE,
     TOOL_NAME_WORKSPACE_FILE_LIST,
     TOOL_NAME_WORKSPACE_FILE_READ,
     TOOL_NAME_WORKSPACE_FILE_WRITE,
@@ -140,7 +139,7 @@ def _read_searchable_text(path: Path) -> str | None:
     extension = path.suffix.lstrip(".").casefold()
     if extension in {file_type.value for file_type in TEXT_CONTENT_FILE_TYPES}:
         try:
-            return path.read_text(encoding="utf-8")
+            return path.read_text(encoding=UTF8_ENCODING)
         except (OSError, UnicodeError):
             return None
     mime_type = mimetypes.guess_type(path.name)[0] or ""
@@ -154,12 +153,18 @@ def _read_searchable_text(path: Path) -> str | None:
         raw = path.read_bytes()
         if b"\x00" in raw:
             return None
-        return raw.decode("utf-8")
+        return raw.decode(UTF8_ENCODING)
     except (OSError, UnicodeError):
         return None
 
 
-def _result(path: Path, operation: str, *, content: str | None = None, items: list[str] | None = None) -> ToolResult:
+def _result(
+    path: Path,
+    operation: str,
+    *,
+    content: str | None = None,
+    items: list[str] | None = None,
+) -> ToolResult:
     relative = _relative(path) if path != _workspace_root() else ""
     summary = f"Workspace file {operation}: {relative}" if relative else f"Workspace files {operation}."
     payload = {"path": relative, "workspace": str(path.parent if path != _workspace_root() else path), "operation": operation}
@@ -179,7 +184,11 @@ def _result(path: Path, operation: str, *, content: str | None = None, items: li
 
 
 @tool(TOOL_NAME_WORKSPACE_FILE_WRITE, args_schema=WorkspaceWriteArgs, description="Write UTF-8 text to a file in the current conversation workspace, including arbitrary source-code extensions.")
-def workspace_file_write(file_name: str, content: str = "", overwrite: bool = False) -> ToolResult:
+def workspace_file_write(
+    file_name: str,
+    content: str = "",
+    overwrite: bool = False,
+) -> ToolResult:
     target = _safe_file_name(file_name)
     if target.exists() and not overwrite:
         raise ValueError(f"Workspace file already exists: '{file_name}'. Set overwrite=true to replace it.")
@@ -195,7 +204,10 @@ def workspace_file_write(file_name: str, content: str = "", overwrite: bool = Fa
             # language; unknown extensions such as .go remain UTF-8 text.
             file_format = FileType.TXT
     write_file(target, content, file_format)
-    return _result(target, "written")
+    return _result(
+        target,
+        "written",
+    )
 
 
 @tool(TOOL_NAME_WORKSPACE_FILE_READ, args_schema=WorkspaceReadArgs, description="Read UTF-8 text from a file in the current conversation workspace.")
@@ -213,7 +225,7 @@ def workspace_file_read(
         and read_options.end_line < read_options.start_line
     ):
         raise ValueError("end_line must be greater than or equal to start_line.")
-    lines = target.read_text(encoding="utf-8").splitlines(keepends=True)
+    lines = target.read_text(encoding=UTF8_ENCODING).splitlines(keepends=True)
     start = (read_options.start_line or 1) - 1
     end = read_options.end_line
     content = "".join(lines[start:end])[: read_options.max_chars]
@@ -221,18 +233,26 @@ def workspace_file_read(
 
 
 @tool(TOOL_NAME_WORKSPACE_FILE_EDIT, args_schema=WorkspaceEditArgs, description="Apply an exact text replacement to a named file in the root of the current conversation workspace.")
-def workspace_file_edit(file_name: str, find: str, replace: str = "", replace_all: bool = False) -> ToolResult:
+def workspace_file_edit(
+    file_name: str,
+    find: str,
+    replace: str = "",
+    replace_all: bool = False,
+) -> ToolResult:
     target = _safe_file_name(file_name)
     if not target.is_file():
         raise ValueError(f"Workspace file does not exist: '{file_name}'.")
-    original = target.read_text(encoding="utf-8")
+    original = target.read_text(encoding=UTF8_ENCODING)
     occurrences = original.count(find)
     if occurrences == 0:
         raise ValueError("The requested text was not found in the workspace file.")
     if occurrences > 1 and not replace_all:
         raise ValueError("The requested text occurs multiple times; set replace_all=true to edit all matches.")
-    target.write_text(original.replace(find, replace, -1 if replace_all else 1), encoding="utf-8")
-    return _result(target, "edited")
+    target.write_text(original.replace(find, replace, -1 if replace_all else 1), encoding=UTF8_ENCODING)
+    return _result(
+        target,
+        "edited",
+    )
 
 
 @tool(TOOL_NAME_WORKSPACE_FILE_LIST, args_schema=WorkspaceListArgs, description="Search and list files in the current conversation workspace using a name query or regular expression, with optional text-content search.")
@@ -284,20 +304,6 @@ def workspace_file_delete(file_name: str) -> ToolResult:
         raise ValueError(f"Workspace file does not exist: '{file_name}'.")
     target.unlink()
     return _result(target, "deleted")
-
-
-@tool(
-    TOOL_NAME_WORKSPACE_FILE_COMPLETE,
-    args_schema=WorkspaceFileNameArgs,
-    description="Mark a completed workspace file as the final artifact produced by the current agent.",
-)
-def workspace_file_complete(file_name: str) -> ToolResult:
-    target = _safe_file_name(file_name)
-    if not target.is_file():
-        raise ValueError(f"Workspace file does not exist: '{file_name}'.")
-    if not target.read_text(encoding="utf-8").strip():
-        raise ValueError(f"Workspace file is empty: '{file_name}'.")
-    return _result(target, "completed")
 
 
 @tool(
@@ -370,7 +376,6 @@ __all__ = [
     "workspace_file_edit",
     "workspace_file_list",
     "workspace_file_delete",
-    "workspace_file_complete",
     "workspace_file_promote",
 ]
 

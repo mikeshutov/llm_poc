@@ -1,3 +1,4 @@
+from common.config import get_env_bool, get_env_float, get_env_int
 from capabilities.registry.constants import (
     TOOL_CATEGORY_PRODUCTS,
     TOOL_CATEGORY_WEATHER,
@@ -19,7 +20,6 @@ from capabilities.registry.constants import (
     TOOL_CATEGORY_WRITING,
     TOOL_CATEGORY_WORKSPACE,
 )
-from common.config import get_env_bool, get_env_float, get_env_int
 from capabilities.adapters.books import search_books
 from capabilities.adapters.code import code_execute
 from capabilities.adapters.calendar import get_world_time, public_holidays_lookup
@@ -78,13 +78,14 @@ from capabilities.adapters.writing import writing_templates
 from capabilities.adapters.workspace import (
     workspace_file_delete,
     workspace_file_edit,
-    workspace_file_complete,
     workspace_file_list,
     workspace_file_promote,
     workspace_file_read,
     workspace_file_write,
 )
-from capabilities.adapters.workspace.working_memory import update_memory_state
+from capabilities.adapters.workspace.working_memory import (
+    update_memory_state,
+)
 from capabilities.registry.constants import TOOL_RESULT_TYPE_BOOK_RESULTS
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CALCULATION
 from capabilities.registry.constants import TOOL_RESULT_TYPE_CODE_EXECUTION
@@ -166,7 +167,8 @@ BOOKS_TOOLS = [Tool(search_books, can_run_concurrently=True, result_type=TOOL_RE
 LANGUAGE_TOOLS = [Tool(define_word, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_DEFINITION, cache_policy=ToolCachePolicy(86400))]
 FOOD_TOOLS = [
     Tool(
-        search_meals, can_run_concurrently=True,
+        search_meals,
+        can_run_concurrently=True,
         result_type=TOOL_RESULT_TYPE_MEAL_RESULTS,
         cache_policy=ToolCachePolicy(3600),
     ),
@@ -196,30 +198,36 @@ FILE_MANAGEMENT_TOOLS = [
 ]
 WRITING_TOOLS = [
     Tool(
-        writing_templates, can_run_concurrently=True,
+        writing_templates,
+        can_run_concurrently=True,
         result_type=TOOL_RESULT_TYPE_WRITING_TEMPLATES,
         version=1,
         cache_policy=ToolCachePolicy(3600),
     ),
 ]
-WORKSPACE_TOOLS = [
-    Tool(workspace_file_write, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
-    Tool(workspace_file_read, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=2),
-    Tool(workspace_file_edit, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
-    Tool(workspace_file_list, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=3),
-    Tool(workspace_file_delete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
-    Tool(workspace_file_complete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
-    Tool(workspace_file_promote, result_type=TOOL_RESULT_TYPE_FILE, version=2),
-]
 WORKSPACE_READ_TOOLS = [
     Tool(workspace_file_read, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=2),
     Tool(workspace_file_list, can_run_concurrently=True, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=3),
 ]
-WORKSPACE_MUTATION_TOOLS = [
-    tool for tool in WORKSPACE_TOOLS if tool.name not in {item.name for item in WORKSPACE_READ_TOOLS}
+
+# Ordinary workspace operations are safe for agents that need to inspect or
+# maintain workspace state. Promotion is intentionally kept out of
+# this group because it converts a workspace file into a managed artifact.
+WORKSPACE_COMMON_TOOLS = [
+    Tool(workspace_file_write, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=4),
+    *WORKSPACE_READ_TOOLS,
+    Tool(workspace_file_edit, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=4),
+    Tool(workspace_file_delete, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=1),
 ]
 WORKING_MEMORY_TOOLS = [
     Tool(update_memory_state, result_type=TOOL_RESULT_TYPE_WORKSPACE_FILE, version=7),
+]
+WORKSPACE_PROMOTION_TOOLS = [
+    Tool(workspace_file_promote, result_type=TOOL_RESULT_TYPE_FILE, version=2),
+]
+WORKSPACE_TOOLS = [*WORKSPACE_COMMON_TOOLS, *WORKSPACE_PROMOTION_TOOLS]
+WORKSPACE_MUTATION_TOOLS = [
+    tool for tool in WORKSPACE_COMMON_TOOLS if tool.name not in {item.name for item in WORKSPACE_READ_TOOLS}
 ]
 PROFILE_TOOLS = [
     Tool(
