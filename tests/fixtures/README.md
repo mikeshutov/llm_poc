@@ -12,7 +12,7 @@ search this directory for the topic or fixture name.
 
 | Module | Fixtures |
 | --- | --- |
-| `agents.py` | `agent_profile_factory`, `user_agent_profile_factory`, `execution_context_factory`, `agent_state_factory`, `react_agent_state_factory`, `main_state_factory`, `db_agent_factory`, `set_plan_results` |
+| `agents.py` | `agent_profile_factory`, `user_agent_profile_factory`, `execution_context_factory`, `agent_state_factory`, `react_agent_state_factory`, `main_state_factory`, `db_agent_factory`, `delegated_agent_state_factory`, `set_plan_results` |
 | `planning.py` | `plan_step_factory`, `plan_factory`, `default_plan`, `planning_result_factory` |
 | `capabilities.py` | `tool_factory`, `cache_repository_factory` |
 | `tools.py` | `registered_tool_registry`, `tool_repository_factory`, `recording_tool_repository` |

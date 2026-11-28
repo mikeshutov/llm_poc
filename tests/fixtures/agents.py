@@ -8,6 +8,7 @@ from agent_runtime.models.agent_profile import AgentExecutionStrategy, AgentKind
 from agent_runtime.models.agent_state import AgentState
 from agent_runtime.models.main_state import MainState
 from agents.models.agent import Agent
+from agents.delegate.profile import DELEGATE_PROFILE
 from retrieval.evidence import ToolResult
 
 
@@ -130,3 +131,29 @@ def set_plan_results():
         return state
 
     return update
+
+
+@pytest.fixture
+def delegated_agent_state_factory(agent_state_factory, agent_profile_factory, execution_context_factory,
+                                  plan_factory, plan_step_factory):
+    def create(*, child=None, child_profile=None, task="Delegated task", evidence_ids=(),
+               execution_context=None, parent_profile=None):
+        if child is None:
+            if child_profile is None:
+                child_profile = DELEGATE_PROFILE
+            child = agent_state_factory(
+                profile=child_profile,
+                execution_context=execution_context or execution_context_factory(conversation_id="conversation-test"),
+            )
+        parent = agent_state_factory(
+            profile=parent_profile or agent_profile_factory(name="coordinator"),
+            execution_context=child.execution_context,
+            plan=plan_factory(steps=[plan_step_factory(
+                tool=child.agent_profile.name, plan="Delegate the assigned task",
+                args={"task": task, "evidence_ids": list(evidence_ids)},
+            )]),
+        )
+        parent.available_agent_states = {child.agent_profile.name: child}
+        return parent
+
+    return create
