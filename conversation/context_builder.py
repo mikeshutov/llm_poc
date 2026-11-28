@@ -68,7 +68,7 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
         after_message_index=after_index,
         newest_first=True,
     )
-    # Keep the complete ordered message stream for model callers.  The
+    # Keep the non-compacted ordered message stream for model callers.  The
     # visible subset is derived separately for summaries and chat history.
     messages: list[dict] = []
     # list_roundtrips returns only completed roundtrips. ConversationRepository
@@ -80,6 +80,7 @@ def build_roundtrip_context(conversation_id: str, limit: int = 5) -> Conversatio
             roundtrip.id,
             include_internal=True,
             exclude_subagents=True,
+            exclude_compacted=True,
         )
         for message in roundtrip_messages:
             if not message.content.strip() and not message.payload:

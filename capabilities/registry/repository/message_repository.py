@@ -9,6 +9,7 @@ from common.config import ROLE_ASSISTANT, ROLE_TOOL
 from common.data import bounded_json_value
 from common.signatures import build_signature
 from retrieval.evidence import EvidenceView, ToolResult
+from agent_runtime.compaction import should_compact_tool
 from agent_runtime.models.plan import Plan, PlanStep
 from capabilities.registry.repository.models import ToolCall
 from conversation.models.conversation_models import ConversationMessage
@@ -26,9 +27,11 @@ def _optional_uuid(value: Any) -> UUID | None:
 class MessageToolRepository:
     """Access tool activity stored as ordered conversation messages."""
 
-    def __init__(self):
-        from conversation.repository.repo_factory import get_conversation_repo
-        self._repo = get_conversation_repo()
+    def __init__(self, repository=None):
+        if repository is None:
+            from conversation.repository.repo_factory import get_conversation_repo
+            repository = get_conversation_repo()
+        self._repo = repository
 
     @staticmethod
     def _sanitize_for_storage(value: Any) -> Any:
@@ -52,6 +55,7 @@ class MessageToolRepository:
         output = self._sanitize_for_storage(output_payload) if output_payload is not None else None
         if isinstance(output, dict):
             output.pop("evidence", None)
+        compactable = should_compact_tool(step.tool)
         request_hash = build_signature({"tool_name": step.tool, "input": sanitized_input})
         message_metadata = {"tool_name": step.tool}
         request_message = self._repo.append_message(
@@ -66,6 +70,7 @@ class MessageToolRepository:
                 "step_index": step.step_index,
                 "goal": step.plan, "hypothesis": step.hypothesis,
                 "call_metadata": self._sanitize_for_storage(step.metadata),
+                "compactable": compactable,
             }, metadata=message_metadata,
             is_subagent=is_subagent,
             subagent_name=subagent_name,
@@ -87,11 +92,36 @@ class MessageToolRepository:
                 "provider_tool_call_id": step.id,
                 "step_index": step.step_index, "goal": step.plan, "hypothesis": step.hypothesis,
                 "call_metadata": self._sanitize_for_storage(step.metadata),
+                "compactable": compactable,
             }, metadata=message_metadata, parent_message_id=request_message.id,
             is_subagent=is_subagent,
             subagent_name=subagent_name,
         )
         return result_message.id
+
+    def mark_compacted(self, tool_result_ids: list[UUID]) -> None:
+        """Keep tool records for audit, but omit their pairs from future prompts."""
+        if not tool_result_ids:
+            return
+        with self._repo._conn.cursor() as cur:
+            cur.execute(
+                """
+                WITH results AS (
+                    SELECT id, parent_message_id, roundtrip_id
+                    FROM conversation_message
+                    WHERE id = ANY(%s) AND kind = 'tool_result'
+                      AND payload->>'compactable' IS DISTINCT FROM 'false'
+                )
+                UPDATE conversation_message AS message
+                SET compacted = TRUE
+                FROM results
+                WHERE message.roundtrip_id = results.roundtrip_id
+                  AND message.kind IN ('tool_call', 'tool_result')
+                  AND (message.id = results.id OR message.id = results.parent_message_id)
+                  AND NOT message.compacted
+                """,
+                (tool_result_ids,),
+            )
 
     def _tool_messages_for_ids(self, message_ids: list[UUID]):
         if not message_ids:

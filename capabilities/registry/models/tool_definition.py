@@ -37,6 +37,7 @@ class Tool:
     rate_limit_policy: RateLimitPolicy | None = None
     version: int = 3
     cache_policy: ToolCachePolicy | None = None
+    compactable: bool = True
     can_run_concurrently: bool = False
 
     @property

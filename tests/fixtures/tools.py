@@ -4,6 +4,17 @@ import pytest
 
 from capabilities.registry import global_registry
 from common.signatures import build_signature
+from capabilities.registry.repository.message_repository import MessageToolRepository
+
+
+@pytest.fixture
+def message_tool_repository_factory(recording_conversation_repository_factory):
+    def create(*, repository=None):
+        return MessageToolRepository(
+            repository=recording_conversation_repository_factory() if repository is None else repository,
+        )
+
+    return create
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +31,7 @@ def registered_tool_registry(monkeypatch):
 class RecordingToolRepository:
     def __init__(self, *, records=None):
         self.records = dict(records or {})
+        self.compacted_ids = set()
 
     def count_request_hash(self, roundtrip_id, signature):
         return sum(
@@ -34,7 +46,13 @@ class RecordingToolRepository:
         return call_id
 
     def get_tool_results(self, ids):
-        return [self.records[call_id]["output_payload"] for call_id in ids]
+        return [
+            self.records[call_id]["output_payload"].model_copy(update={"tool_call_id": call_id})
+            for call_id in ids
+        ]
+
+    def mark_compacted(self, ids):
+        self.compacted_ids.update(ids)
 
 
 @pytest.fixture

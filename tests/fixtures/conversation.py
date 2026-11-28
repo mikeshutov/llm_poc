@@ -73,6 +73,31 @@ def conversation_message_factory():
 
 
 @pytest.fixture
+def conversation_tool_exchange_factory(conversation_message_factory):
+    def create(*, tool="web_search", roundtrip_id=None, sequence=0, args=None, compacted=False,
+               is_subagent=False, subagent_name=None, call_overrides=None, result_overrides=None):
+        common = {
+            "roundtrip_id": uuid4() if roundtrip_id is None else roundtrip_id,
+            "visibility": "internal", "compacted": compacted,
+            "is_subagent": is_subagent, "subagent_name": subagent_name,
+        }
+        call = conversation_message_factory(**{
+            **common, "kind": "tool_call", "role": "assistant", "sequence": sequence,
+            "payload": {"tool_name": tool, "input_payload": deepcopy(args or {})},
+            **deepcopy(call_overrides or {}),
+        })
+        result = conversation_message_factory(**{
+            **common, "roundtrip_id": call.roundtrip_id,
+            "kind": "tool_result", "role": "tool", "sequence": call.sequence + 1,
+            "payload": {"tool_name": tool}, "parent_message_id": call.id,
+            **deepcopy(result_overrides or {}),
+        })
+        return call, result
+
+    return create
+
+
+@pytest.fixture
 def conversation_roundtrip_factory():
     def create(**overrides):
         return ConversationRoundtrip(**deepcopy({
@@ -97,8 +122,9 @@ def conversation_repository_factory(database_connection_factory):
 
 
 class ContextConversationRepository:
-    def __init__(self, *, roundtrip, messages):
-        self.roundtrip = roundtrip
+    def __init__(self, *, roundtrips, messages):
+        self.roundtrips = list(roundtrips)
+        self.roundtrip = self.roundtrips[0]
         self.messages = list(messages)
         self.message_queries = []
 
@@ -109,22 +135,24 @@ class ContextConversationRepository:
         return ConversationSummary(uuid4(), conversation_id, "", 0, "")
 
     def list_roundtrips(self, *args, **kwargs):
-        return [self.roundtrip]
+        return list(self.roundtrips)
 
-    def list_messages(self, roundtrip_id, *, include_internal=True, exclude_subagents=False):
-        self.message_queries.append((roundtrip_id, exclude_subagents))
+    def list_messages(self, roundtrip_id, *, include_internal=True, exclude_subagents=False, exclude_compacted=False):
+        self.message_queries.append((roundtrip_id, exclude_subagents, exclude_compacted))
         return [
             message for message in self.messages
             if message.roundtrip_id == roundtrip_id
             and (include_internal or message.visibility == "visible")
             and (not exclude_subagents or not message.is_subagent)
+            and (not exclude_compacted or not message.compacted)
         ]
 
 
 @pytest.fixture
 def context_repository_factory(conversation_roundtrip_factory, conversation_message_factory):
-    def create(*, roundtrip=None, messages=None):
-        roundtrip = conversation_roundtrip_factory(roundtrip_summary="summary") if roundtrip is None else roundtrip
+    def create(*, roundtrips=None, messages=None):
+        roundtrips = [conversation_roundtrip_factory(roundtrip_summary="summary")] if roundtrips is None else roundtrips
+        roundtrip = roundtrips[0]
         if messages is None:
             messages = [
                 conversation_message_factory(roundtrip_id=roundtrip.id, content="Find boots."),
@@ -134,7 +162,7 @@ def context_repository_factory(conversation_roundtrip_factory, conversation_mess
                     metadata={"stage": "synthesis"},
                 ),
             ]
-        return ContextConversationRepository(roundtrip=roundtrip, messages=messages)
+        return ContextConversationRepository(roundtrips=roundtrips, messages=messages)
 
     return create
 

@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from langchain_core.messages import AIMessage, ToolMessage
+
+from agent_runtime.compaction import should_compact_tool
 from agent_runtime.working_memory import (
     MAX_WORKING_MEMORY_BYTES,
     bound_working_memory,
@@ -109,6 +112,49 @@ class AgentState:
             except (OSError, UnicodeError):
                 return ""
         return ""
+
+    def condense_reasoner_history(self, results: list[ToolResult]) -> None:
+        """Persist compaction and remove compactable exchanges from active history."""
+        omitted_call_ids = {
+            str(call.get("id", ""))
+            for message in self.reasoner_message_history
+            if isinstance(message, AIMessage)
+            for call in message.tool_calls or []
+            if (
+                call.get("id")
+                and should_compact_tool(str(call.get("name", "")))
+            )
+        }
+        if not omitted_call_ids:
+            return
+
+        if self.result.tool_call_ids:
+            repository = message_repository.MessageToolRepository()
+            repository.mark_compacted([
+                result.tool_call_id
+                for result in results
+                if result.tool_call_id is not None and should_compact_tool(result.tool_name)
+            ])
+
+        condensed_history: list = []
+        for message in self.reasoner_message_history:
+            if isinstance(message, ToolMessage):
+                if str(message.tool_call_id) in omitted_call_ids:
+                    continue
+                condensed_history.append(message)
+                continue
+            if isinstance(message, AIMessage) and message.tool_calls:
+                remaining_calls = [
+                    call for call in message.tool_calls
+                    if str(call.get("id", "")) not in omitted_call_ids
+                ]
+                if not remaining_calls:
+                    continue
+                if len(remaining_calls) != len(message.tool_calls):
+                    condensed_history.append(message.model_copy(update={"tool_calls": remaining_calls}))
+                    continue
+            condensed_history.append(message)
+        self.reasoner_message_history[:] = condensed_history
 
     def gather_tool_results(self) -> list[ToolResult]:
         gathered = list(self.direct_tool_results)

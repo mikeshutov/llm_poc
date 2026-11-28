@@ -15,10 +15,10 @@ search this directory for the topic or fixture name.
 | `agents.py` | `agent_profile_factory`, `user_agent_profile_factory`, `execution_context_factory`, `agent_state_factory`, `react_agent_state_factory`, `main_state_factory`, `db_agent_factory`, `delegated_agent_state_factory`, `set_plan_results` |
 | `planning.py` | `plan_step_factory`, `plan_factory`, `default_plan`, `planning_result_factory` |
 | `capabilities.py` | `tool_factory`, `cache_repository_factory` |
-| `tools.py` | `registered_tool_registry`, `tool_repository_factory`, `recording_tool_repository` |
-| `conversation.py` | `conversation_message_factory`, `conversation_roundtrip_factory`, `context_repository_factory`, `conversation_repository_factory`, `recording_conversation_repository_factory`, `request_conversation_repository_factory`, `conversation_model_config_repository_factory` |
+| `tools.py` | `registered_tool_registry`, `tool_repository_factory`, `recording_tool_repository`, `message_tool_repository_factory` |
+| `conversation.py` | `conversation_message_factory`, `conversation_tool_exchange_factory`, `conversation_roundtrip_factory`, `context_repository_factory`, `conversation_repository_factory`, `recording_conversation_repository_factory`, `request_conversation_repository_factory`, `conversation_model_config_repository_factory` |
 | `database.py` | `database_connection_factory` |
-| `llm.py` | `llm_factory`, `langchain_response_factory`, `openai_response_factory`, `openai_client_factory`, `embedding_client_factory`, `tracking_openai_model_factory`, `tracking_anthropic_model_factory` |
+| `llm.py` | `llm_factory`, `langchain_response_factory`, `tool_exchange_factory`, `openai_response_factory`, `openai_client_factory`, `embedding_client_factory`, `tracking_openai_model_factory`, `tracking_anthropic_model_factory` |
 | `evidence.py` | `evidence_factory`, `evidence_step_factory` |
 | `evaluation.py` | `completion_client_factory` |
 | `retrieval.py` | `reranker_factory`, `static_reranker_factory` |
